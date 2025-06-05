@@ -2486,9 +2486,9 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
-    public Boolean enablePartitionAggregation() {
+    public Boolean isFileBundling() {
         if (tableProperty != null) {
-            return tableProperty.enablePartitionAggregation();
+            return tableProperty.isFileBundling();
         }
         return false;
     }
@@ -2780,13 +2780,13 @@ public class OlapTable extends Table {
         tableProperty.buildDataCachePartitionDuration();
     }
 
-    public void setEnablePartitionAggregation(boolean enablePartitionAggregation) {
+    public void setFileBundling(boolean fileBundling) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION,
-                        Boolean.valueOf(enablePartitionAggregation).toString());
-        tableProperty.buildEnablePartitionAggregation();
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
+                        Boolean.valueOf(fileBundling).toString());
+        tableProperty.buildFileBundling();
     }
 
     public void setStorageCoolDownTTL(PeriodDuration duration) {
@@ -3468,8 +3468,8 @@ public class OlapTable extends Table {
             }
         }
 
-        if (enablePartitionAggregation()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, enablePartitionAggregation().toString());
+        if (isFileBundling()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, isFileBundling().toString());
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
@@ -3810,7 +3810,7 @@ public class OlapTable extends Table {
         return null;
     }
 
-    public boolean allowUpdatePartitionAggregation() {
+    public boolean allowUpdateFileBundling() {
         for (Partition partition : getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 if (physicalPartition.getMetadataSwitchVersion() != 0) {

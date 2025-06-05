@@ -103,10 +103,10 @@ public class Utils {
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                      long newVersion, ComputeResource computeResource, boolean enablePartitionAggregation)
+                                      long newVersion, ComputeResource computeResource, boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
-                null, enablePartitionAggregation);
+                null, useAggregatePublish);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
@@ -188,10 +188,10 @@ public class Utils {
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, Map<Long, Double> compactionScores,
                                       ComputeResource computeResource, Map<Long, Long> tabletRowNums,
-                                      boolean enablePartitionAggregation)
+                                      boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
-        if (!enablePartitionAggregation) {
+        if (!useAggregatePublish) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, 
                     computeResource, tabletRowNums);
         } else {

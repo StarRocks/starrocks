@@ -172,11 +172,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
         long preExtraFileSize = 0;
-        // if enable partition aggregation, there will be only one node (Aggregator).
+        // if enable file bundling, there will be only one node (Aggregator).
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-        boolean enablePartitionAggregation = table.enablePartitionAggregation();
+        boolean fileBundling = table.isFileBundling();
         try {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
@@ -189,8 +189,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
             preExtraFileSize = partition.getExtraFileSize();
             if (partition.getMetadataSwitchVersion() != 0) {
                 // If metadataSwitchVersion is not 0, it means that for versions prior to this, the value of 
-                // enablePartitionAggregation should be the ​​opposite​​ of the current value.
-                enablePartitionAggregation = !enablePartitionAggregation;
+                // fileBundling should be the ​​opposite​​ of the current value.
+                fileBundling = !fileBundling;
             }
 
         } finally {
@@ -203,8 +203,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
 
-            if (enablePartitionAggregation) {
-                // if enable partition aggregation, there will be only one node.
+            if (fileBundling) {
+                // if enable file bundling, there will be only one node.
                 if (pickNode == null) {
                     pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
                 }
@@ -241,7 +241,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
-            vacuumRequest.enablePartitionAggregation = enablePartitionAggregation;
+            vacuumRequest.enableFileBundling = fileBundling;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {

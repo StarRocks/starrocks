@@ -1758,7 +1758,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
         request.set_min_retain_version(3);
         request.set_grace_timestamp(grace_timestamp);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
@@ -1789,7 +1789,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
         // deleted
         request.set_grace_timestamp(grace_timestamp + 1);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
@@ -2032,7 +2032,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         request.set_min_retain_version(3);
         request.set_grace_timestamp(grace_timestamp);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
@@ -2061,7 +2061,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         // deleted
         request.set_grace_timestamp(grace_timestamp + 1);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
@@ -2100,7 +2100,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         request.set_min_retain_version(4);
         request.set_grace_timestamp(grace_timestamp + 1);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);

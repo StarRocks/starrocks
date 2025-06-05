@@ -460,14 +460,14 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateTableWithPartitionAggregation() throws Exception {
+    public void testCreateTableWithFileBundling() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table lake_test.dup_test_enable_partition_agg (key1 int, key2 varchar(10))\n" +
+                "create table lake_test.dup_test_file_bundling (key1 int, key2 varchar(10))\n" +
                         "distributed by hash(key1) buckets 3\n" +
-                        "properties('replication_num' = '1', 'enable_partition_aggregation' = 'true');"));
-        checkLakeTable("lake_test", "dup_test_enable_partition_agg");
+                        "properties('replication_num' = '1', 'file_bundling' = 'true');"));
+        checkLakeTable("lake_test", "dup_test_file_bundling");
 
-        String sql = "show create table lake_test.dup_test_enable_partition_agg";
+        String sql = "show create table lake_test.dup_test_file_bundling";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);

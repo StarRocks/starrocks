@@ -3243,7 +3243,7 @@ public class Config extends ConfigBase {
     public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
     @ConfField(mutable = true)
-    public static boolean enable_partition_aggregation = false;
+    public static boolean enable_file_bundling = false;
 
     @ConfField(mutable = true)
     public static int pipe_listener_interval_millis = 1000;
