@@ -62,21 +62,6 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-<<<<<<< HEAD
-    protected LakeTableAlterMetaJob getShadowCopy() {
-        return this;
-=======
-    protected boolean enableFileBundling() {
-        return metaType == TTabletMetaType.ENABLE_FILE_BUNDLING && enableFileBundling;
-    }
-
-    @Override
-    protected boolean disableFileBundling() {
-        return metaType == TTabletMetaType.ENABLE_FILE_BUNDLING && !enableFileBundling;
->>>>>>> 204d9dbf5f ([BugFix] Revert  Reduce the size of data written to edit log when schema changes in shared-data clusters with fast schema evolution enabled. (#55282) (#59640))
-    }
-
-    @Override
     protected void updateCatalog(Database db, LakeTable table) {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             // re-use ENABLE_PERSISTENT_INDEX for both enable index and index's type.
