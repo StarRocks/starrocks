@@ -360,6 +360,37 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 3 rows in set (0.34 sec)
 ```
 
+The following example creates an Iceberg catalog named `r2` that uses Cloudflare R2 Data Catalog as metastore:
+
+```SQL
+CREATE EXTERNAL CATALOG r2
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "<r2_catalog_uri>",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.token" = "<r2_api_token>",
+    "iceberg.catalog.warehouse" = "<r2_warehouse_name>"
+);
+
+SET CATALOG r2;
+
+CREATE DATABASE testdb;
+
+SHOW DATABASES FROM r2;
+
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| testdb             |
++--------------------+
+2 rows in set (0.66 sec)
+```
+
+The `<r2_warehouse_name>`,`<r2_api_token>`, and `<r2_catalog_uri>` values are obtained from the [Cloudflare Dashboard as detailed here](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites).
+
 </TabItem>
 
 <TabItem value="JDBC" label="JDBC">
