@@ -44,7 +44,7 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(
                 continue;
             }
 
-            auto* merged_driver_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool, driver_profiles);
+            auto* merged_driver_profile = RuntimeProfile::merge_isomorphic_profiles<true>(obj_pool, driver_profiles);
 
             // use the name of pipeline' profile as pipeline driver's
             merged_driver_profile->set_name(pipeline_profile->name());
@@ -89,12 +89,12 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(
 }
 
 profile_manager::profile_manager() {
-    int max_merger = config::async_profile_merge_thread_max_num == 0 ? CpuInfo::num_cores()
-                                                                     : config::async_profile_merge_thread_max_num;
-    auto status = ThreadPoolBuilder("query_profile_merge")
+    int max_reporter = config::async_profile_report_thread_max_num == 0 ? CpuInfo::num_cores() / 2
+                                                                        : config::async_profile_report_thread_max_num;
+
+    auto status = ThreadPoolBuilder("query_profile_report")
                           .set_min_threads(1)
-                          .set_max_threads(max_merger)
-                          .set_max_queue_size(100)
+                          .set_max_threads(max_reporter)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                           .build(&_report_thread_pool);
     if (!status.ok()) {
@@ -104,11 +104,12 @@ profile_manager::profile_manager() {
 
     REGISTER_THREAD_POOL_METRICS(async_profile_merge, _report_thread_pool);
 
-    int max_reporter = config::async_profile_report_thread_max_num == 0 ? CpuInfo::num_cores() / 2
-                                                                        : config::async_profile_report_thread_max_num;
-    status = ThreadPoolBuilder("query_profile_report")
+    int max_merger = config::async_profile_merge_thread_max_num == 0 ? CpuInfo::num_cores() / 2
+                                                                     : config::async_profile_merge_thread_max_num;
+    status = ThreadPoolBuilder("query_profile_merge")
                      .set_min_threads(1)
-                     .set_max_threads(max_reporter)
+                     .set_max_threads(max_merger)
+                     .set_max_queue_size(1000)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                      .build(&_merge_thread_pool);
     if (!status.ok()) {
