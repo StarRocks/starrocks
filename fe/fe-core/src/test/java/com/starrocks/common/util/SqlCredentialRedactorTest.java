@@ -79,9 +79,9 @@ public class SqlCredentialRedactorTest {
                 ")\n" +
                 "WITH BROKER hdfs_broker\n" +
                 "(\n" +
-                "    \"hadoop.username\" = \"hdfs_user\",\n" +
-                "    \"hadoop.password\" = \"hdfs_password123\",\n" +
-                "    \"password\" = \"broker_password456\"\n" +
+                "    \"hadoop.security.authentication\" = \"simple\",\n" +
+                "    \"username\" = \"hdfs_user\",\n" +
+                "    \"password\" = \"hdfs_password123\"\n" +
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);

@@ -61,15 +61,25 @@ public class SqlCredentialRedactor {
 
     // Pattern to match key-value pairs in SQL
     // This pattern handles cases like:
-    // "key" = "value"
     // "key"="value"
-    // key = "value"
-    // key="value"
+    // 'key'='value'
+    // key=value
+    // 'key='value
+    // "key="value
+    // 'key=value'
+    // "key=value"
+    // key'=value'
+    // key"=value"
+    // key'='value
+    // key"="value
+    // Values can contain spaces and span multiple lines, separated by commas
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
-            "\"?(" + String.join("|", CREDENTIAL_KEYS.stream()
+            "(?:([\"']?)(" + String.join("|", CREDENTIAL_KEYS.stream()
                     .map(Pattern::quote)
-                    .toArray(String[]::new)) + ")\"?\\s*=\\s*\"([^\"]+)\"",
-            Pattern.CASE_INSENSITIVE
+                    .toArray(String[]::new)) + ")([\"']?))\\s*=\\s*" +
+            "(?:([\"'])((?:[^\\\\]|\\\\.)*?)\\4|([^,]*?))" +
+            "(?=\\s*,|\\s*$|\\s*\\)|\\s*\\n)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
     private static final String REDACTED_VALUE = "***";
@@ -89,8 +99,21 @@ public class SqlCredentialRedactor {
         StringBuffer result = new StringBuffer();
 
         while (matcher.find()) {
-            String key = matcher.group(1);
-            String replacement = "\"" + key + "\" = \"" + REDACTED_VALUE + "\"";
+            String replacement;
+            String keyPrefix = matcher.group(1) != null ? matcher.group(1) : "";
+            String key = matcher.group(2);
+            String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
+
+            // Determine if value is quoted or unquoted
+            if (matcher.group(4) != null && matcher.group(5) != null) {
+                // Quoted value case
+                String valueQuote = matcher.group(4);
+                replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
+            } else {
+                // Unquoted value case
+                replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
+            }
+
             matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
 
