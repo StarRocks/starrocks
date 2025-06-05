@@ -739,7 +739,6 @@ TEST_F(LikeTest, escapeInData) {
     const auto pattern{ColumnHelper::create_const_column<TYPE_VARCHAR>("\\\\", 1)};
     const auto haystack{ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false)};
     haystack->append_datum("Take off");
-    // TODO: The next three rows should assert to true
     haystack->append_datum("Take\\off");
     haystack->append_datum("Take\\off\\");
     haystack->append_datum("Take\\off\\");
@@ -759,6 +758,7 @@ TEST_F(LikeTest, escapeInData) {
 
     ASSERT_EQ(result->size(), 4);
     ASSERT_FALSE(result_viewer.value(0));
+    // TODO: The next three rows should assert to true
     ASSERT_FALSE(result_viewer.value(1));
     ASSERT_FALSE(result_viewer.value(2));
     ASSERT_FALSE(result_viewer.value(3));
