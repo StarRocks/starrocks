@@ -137,12 +137,6 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                     job.getFeJournalId(), job.getStarMgrJournalId());
         } while (false);
 
-        if (!job.needClusterSnapshotInfo() &&
-                !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
-            errMsg = "Job: " + job.getSnapshotName()
-                    + " has been cancelled because automated cluster snapshot has been turn off";
-        }
-
         if (!errMsg.isEmpty()) {
             job.setErrMsg(errMsg);
             job.setState(ClusterSnapshotJobState.ERROR);
