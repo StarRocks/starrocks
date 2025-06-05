@@ -830,6 +830,7 @@ struct TMasterOpRequest {
     34: optional i32 forward_times
     35: optional string session_id
     36: optional i32 connectionId
+    37: optional i64 txn_id;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -862,6 +863,7 @@ struct TMasterOpResult {
     6: optional string resource_group_name;
     7: optional TAuditStatistics audit_statistics;
     8: optional string errorMsg;
+    9: optional i64 txn_id;
 }
 
 struct TIsMethodSupportedRequest {
@@ -1509,6 +1511,8 @@ struct TPartitionMetaInfo {
     26: optional i64 data_version
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
+    29: optional i64 storage_size
+    30: optional i64 metadata_switch_version
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1619,9 +1623,10 @@ struct TQueryStatisticsInfo {
     10: optional i64 memUsageBytes
     11: optional i64 spillBytes
     12: optional i64 execTime
-    13: optional string wareHouseName
-    14: optional string customQueryId
-    15: optional string resourceGroupName
+    13: optional string execProgress
+    14: optional string wareHouseName
+    15: optional string customQueryId
+    16: optional string resourceGroupName
 }
 
 struct TGetQueryStatisticsResponse {
@@ -1960,6 +1965,7 @@ struct TConnectionInfo {
     8: optional string state;
     9: optional string info;
     10: optional string isPending;
+    11: optional string warehouse;
 }
 
 struct TListConnectionResponse {
@@ -1989,6 +1995,7 @@ struct TGetWarehouseMetricsResponeItem {
     9: optional string sum_required_slots;
     10: optional string remain_slots;
     11: optional string max_slots;
+    12: optional string extra_message;
 }
 struct TGetWarehouseMetricsRespone {
     1:optional list<TGetWarehouseMetricsResponeItem> metrics;
@@ -2005,6 +2012,11 @@ struct TGetWarehouseQueriesResponseItem {
     5: optional string est_costs_slots;
     6: optional string allocate_slots;
     7: optional string queued_wait_seconds;
+    8: optional string query;
+    9: optional string query_start_time;
+    10: optional string query_end_time;
+    11: optional string query_duration;
+    12: optional string extra_message;
 }
 struct TGetWarehouseQueriesResponse {
     1: optional list<TGetWarehouseQueriesResponseItem> queries;
@@ -2102,6 +2114,27 @@ struct TGetApplicableRolesRequest {
 struct TGetApplicableRolesResponse {
     1: optional list<TApplicableRolesInfo> roles;
     2: optional i64 next_table_id_offset;
+}
+
+struct TUpdateFailPointRequest {
+    1: optional string name;
+    2: optional bool is_enable;
+    3: optional i32 times;
+    4: optional double probability;
+}
+
+struct TUpdateFailPointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TUpdateTabletVersionRequest {
+    1: optional Types.TBackend backend;
+    2: optional i64 signature;
+    3: optional list<MasterService.TTabletVersionPair> tablet_versions;
+}
+
+struct TUpdateTabletVersionResult {
+    1: optional Status.TStatus status;
 }
 
 service FrontendService {
@@ -2243,5 +2276,9 @@ service FrontendService {
     TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
 
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
+
+    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+
+    TUpdateTabletVersionResult updateTabletVersion(1: TUpdateTabletVersionRequest request)
 }
 

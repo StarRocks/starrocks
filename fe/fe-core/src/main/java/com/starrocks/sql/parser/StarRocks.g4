@@ -334,6 +334,13 @@ statement
     | showNodesStatement
     | alterWarehouseStatement
 
+    // CNGroup Statement
+    | createCNGroupStatement
+    | dropCNGroupStatement
+    | enableCNGroupStatement
+    | disableCNGroupStatement
+    | alterCNGroupStatement
+
     // Transaction Statement
     | beginStatement
     | commitStatement
@@ -346,6 +353,8 @@ statement
     | createBaselinePlanStatement
     | dropBaselinePlanStatement
     | showBaselinePlanStatement
+    | disableBaselinePlanStatement
+    | enableBaselinePlanStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -376,11 +385,11 @@ alterDbQuotaStatement
     ;
 
 createDbStatement
-    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? (catalog=identifier '.')? database=identifier charsetDesc? collateDesc? properties?
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? (catalog=identifier '.')? database=qualifiedName charsetDesc? collateDesc? properties?
     ;
 
 dropDbStatement
-    : DROP (DATABASE | SCHEMA) (IF EXISTS)? (catalog=identifier '.')? database=identifier FORCE?
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? (catalog=identifier '.')? database=qualifiedName FORCE?
     ;
 
 showCreateDbStatement
@@ -435,7 +444,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')')
     ;
 
 generatedColumnDesc
@@ -859,9 +868,9 @@ setDefaultStorageVolumeStatement
 // ------------------------------------------- FailPoint Statement -----------------------------------------------------
 
 updateFailPointStatusStatement
-    : ADMIN DISABLE FAILPOINT string (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH INTEGER_VALUE TIMES)? (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH DECIMAL_VALUE PROBABILITY)? (ON BACKEND string)?
+    : ADMIN (DISABLE | ENABLE) FAILPOINT string
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (ON (BACKEND string | FRONTEND))?
     ;
 
 showFailPointStatement
@@ -931,6 +940,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
@@ -972,11 +982,11 @@ modifyFrontendHostClause
   ;
 
 addBackendClause
-   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
+   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 dropBackendClause
-   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)? FORCE?
+   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)? FORCE?
    ;
 
 decommissionBackendClause
@@ -989,11 +999,11 @@ modifyBackendClause
    ;
 
 addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
+   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)?
+   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 modifyBrokerClause
@@ -1083,6 +1093,10 @@ dropColumnClause
 
 modifyColumnClause
     : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnCommentClause
+    : MODIFY COLUMN identifier comment
     ;
 
 columnRenameClause
@@ -1405,11 +1419,20 @@ createBaselinePlanStatement
     ;
 
 dropBaselinePlanStatement
-    : DROP BASELINE INTEGER_VALUE
+    : DROP BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 showBaselinePlanStatement
-    : SHOW BASELINE
+    : SHOW BASELINE (WHERE expression)?
+
+    ;
+
+disableBaselinePlanStatement
+    : DISABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+enableBaselinePlanStatement
+    : ENABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -1804,7 +1827,7 @@ privilegeType
     | ALTER | APPLY | BLACKLIST
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
-        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | PIPE )
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | CNGROUP | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
@@ -2156,16 +2179,37 @@ showWarehousesStatement
     ;
 
 showClustersStatement
-    : SHOW CLUSTERS FROM WAREHOUSE identifier
+    : SHOW (CLUSTERS | CNGROUPS) FROM WAREHOUSE identifier
     ;
 
 showNodesStatement
     : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
-    | SHOW NODES FROM WAREHOUSE identifier
+    | SHOW NODES FROM WAREHOUSE identifier (CNGROUP cngroupName=identifierOrString)?
     ;
 
 alterWarehouseStatement
     : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
+    ;
+
+createCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString ADD CNGROUP (IF NOT EXISTS)? cngroupName=identifierOrString
+    comment? properties?
+    ;
+
+dropCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString DROP CNGROUP (IF EXISTS)? cngroupName=identifierOrString FORCE?
+    ;
+
+enableCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString ENABLE CNGROUP cngroupName=identifierOrString
+    ;
+
+disableCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString DISABLE CNGROUP cngroupName=identifierOrString
+    ;
+
+alterCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString MODIFY CNGROUP cngroupName=identifierOrString modifyPropertiesClause
     ;
 
 // ------------------------------------------- Transaction Statement ---------------------------------------------------
@@ -2292,8 +2336,12 @@ setQuantifier
 
 selectItem
     : expression (AS? (identifier | string))?                                            #selectSingle
-    | qualifiedName '.' ASTERISK_SYMBOL                                                  #selectAll
-    | ASTERISK_SYMBOL                                                                    #selectAll
+    | qualifiedName '.' ASTERISK_SYMBOL excludeClause?                                   #selectAll
+    | ASTERISK_SYMBOL excludeClause?                                                     #selectAll
+    ;
+
+excludeClause
+    : ( EXCEPT | EXCLUDE ) '(' identifier (',' identifier)* ')'
     ;
 
 relations
@@ -2310,7 +2358,7 @@ relationPrimary
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
-    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
+    | ASSERT_ROWS? subquery (AS? alias=identifier columnAliases?)?                      #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' argumentList ')' ')'
@@ -2369,6 +2417,7 @@ outerAndSemiJoinType
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
+    | NULL AWARE LEFT ANTI JOIN
     ;
 
 bracketHint
@@ -2569,7 +2618,7 @@ functionCall
     | informationFunctionExpression                                                       #informationFunction
     | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
-    | aggregationFunction over?                                                           #aggregationFunctionCall
+    | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
@@ -2657,6 +2706,10 @@ windowFunction
 
 whenClause
     : WHEN condition=expression THEN result=expression
+    ;
+
+filter
+    : FILTER '(' WHERE booleanExpression ')'
     ;
 
 over
@@ -3041,10 +3094,10 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
-    | ARRAY_AGG | ARRAY_AGG_DISTINCT
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
-    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
@@ -3080,4 +3133,5 @@ nonReserved
     | FIELD
     | ARRAY_ELEMENT
     | PERSISTENT
+    | EXCLUDE | EXCEPT
     ;

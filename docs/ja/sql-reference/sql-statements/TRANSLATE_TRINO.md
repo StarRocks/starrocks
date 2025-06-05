@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
-# Translate Trino SQL
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# トリノ SQL を変換
+
+<Beta />
 
 v3.3.9 から、StarRocks は Trino SQL ステートメントを StarRocks SQL ステートメントに変換することをサポートしています。
 

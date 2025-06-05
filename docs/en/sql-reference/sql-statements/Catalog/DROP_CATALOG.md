@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP CATALOG
 
-## Description
-
-Deletes an external catalog. The internal catalog cannot be deleted. A StarRocks cluster has only one internal catalog named `default_catalog`.
+DROP CATALOG deletes an external catalog. The internal catalog cannot be deleted. A StarRocks cluster has only one internal catalog named `default_catalog`.
 
 ## Syntax
 

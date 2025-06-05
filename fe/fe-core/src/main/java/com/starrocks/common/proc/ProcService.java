@@ -57,7 +57,7 @@ public final class ProcService {
         root.register("statistic", new StatisticProcDir(GlobalStateMgr.getCurrentState()));
         root.register("tasks", new TasksProcDir());
         root.register("frontends", new FrontendsProcNode(GlobalStateMgr.getCurrentState()));
-        root.register("brokers", GlobalStateMgr.getCurrentState().getBrokerMgr().getProcNode());
+        root.register("brokers", new BrokerProcNode());
         root.register("resources", GlobalStateMgr.getCurrentState().getResourceMgr().getProcNode());
         root.register("load_error_hub", new LoadErrorHubProcNode(GlobalStateMgr.getCurrentState()));
         root.register("transactions", new TransDbProcDir());

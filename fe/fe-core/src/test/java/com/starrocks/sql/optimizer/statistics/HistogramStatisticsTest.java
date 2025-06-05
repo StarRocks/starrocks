@@ -182,7 +182,6 @@ public class HistogramStatisticsTest {
         leftMcv.put("59", 500L);
         leftMcv.put("38", 300L);
         leftMcv.put("17", 200L);
-        leftMcv.put("44", 120L);
         Histogram leftHistogram = new Histogram(leftBucketList, leftMcv);
 
         ColumnRefOperator rightColumnRefOperator = new ColumnRefOperator(1, Type.BIGINT, "v2", true);
@@ -199,7 +198,6 @@ public class HistogramStatisticsTest {
         rightMcv.put("99", 500L);
         rightMcv.put("16", 300L);
         rightMcv.put("17", 200L);
-        rightMcv.put("63", 150L);
         Histogram rightHistogram = new Histogram(rightBucketList, rightMcv);
 
         Statistics.Builder builder = Statistics.builder();
@@ -225,18 +223,23 @@ public class HistogramStatisticsTest {
                 leftColumnRefOperator, rightColumnRefOperator);
 
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(false);
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
+        Assert.assertEquals(2, estimated.getColumnStatistics().size());
         Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
         Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
         Assert.assertEquals(200000, estimated.getOutputRowCount(), 0.1);
 
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
         estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
-        Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
-        Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
-        Assert.assertEquals(76086.88, estimated.getOutputRowCount(), 0.1);
+        Assert.assertEquals(2, estimated.getColumnStatistics().size());
+        Assert.assertEquals(5, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getMCV().size());
+        Assert.assertEquals(15, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getBuckets().size());
+        Assert.assertEquals(5, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getMCV().size());
+        Assert.assertEquals(15, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getBuckets().size());
+        Assert.assertNotEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
+        Assert.assertNotEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
+        Assert.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
     }
 
     @Test
@@ -547,63 +550,7 @@ public class HistogramStatisticsTest {
         joinBucket = exist.get().getBuckets().get(0);
         Assert.assertEquals(joinBucket.getLower(), 5D, 0.001);
         Assert.assertEquals(joinBucket.getUpper(), 9D, 0.001);
-        Assert.assertEquals(joinBucket.getCount().longValue(), 714);
-        Assert.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
-
-        // bucket to MCV/bucket intersection with overlap (upper).
-        bucketListLeft = new ArrayList<>();
-        bucketListLeft.add(new Bucket(1D, 5D, 100L, 20L));
-        bucketListLeft.add(new Bucket(15D, 24D, 200L, 20L));
-        histogramLeft = new Histogram(bucketListLeft, new HashMap<>());
-        columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
-                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
-
-        bucketListRight = new ArrayList<>();
-        bucketListRight.add(new Bucket(5D, 11D, 100L, 20L));
-        bucketListRight.add(new Bucket(30D, 35D, 200L, 20L));
-        mcvRight = new HashMap<>();
-        mcvRight.put("5", 80L);
-        histogramRight = new Histogram(bucketListRight, mcvRight);
-        columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
-                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
-
-        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertTrue(exist.get().getBuckets().isEmpty());
-        Assert.assertEquals(exist.get().getMCV().size(), 1);
-        Assert.assertEquals(exist.get().getMCV().get("5").longValue(), 20 * 80);
-
-        // bucket to MCV/bucket intersection with overlap (not upper).
-        bucketListLeft = new ArrayList<>();
-        bucketListLeft.add(new Bucket(1D, 9D, 100L, 20L));
-        bucketListLeft.add(new Bucket(15D, 24D, 200L, 20L));
-        mcvLeft = new HashMap<>();
-        mcvLeft.put("8", 30L);
-        histogramLeft = new Histogram(bucketListLeft, mcvLeft);
-        columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
-                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
-
-        bucketListRight = new ArrayList<>();
-        bucketListRight.add(new Bucket(5D, 11D, 100L, 20L));
-        bucketListRight.add(new Bucket(30D, 35D, 200L, 20L));
-        mcvRight = new HashMap<>();
-        mcvRight.put("6", 20L);
-        histogramRight = new Histogram(bucketListRight, mcvRight);
-        columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
-                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
-
-        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertEquals(exist.get().getMCV().size(), 2);
-        Assert.assertEquals(exist.get().getMCV().get("8").longValue(), 30 * 14);
-        Assert.assertEquals(exist.get().getMCV().get("6").longValue(), 20 * 10);
-        Assert.assertEquals(exist.get().getBuckets().size(), 1);
-        joinBucket = exist.get().getBuckets().get(0);
-        Assert.assertEquals(joinBucket.getLower(), 5D, 0.001);
-        Assert.assertEquals(joinBucket.getUpper(), 9D, 0.001);
-        Assert.assertEquals(joinBucket.getCount().longValue(), 790);
+        Assert.assertEquals(joinBucket.getCount().longValue(), 833);
         Assert.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
     }
 }

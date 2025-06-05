@@ -42,17 +42,16 @@
 #include <cstdio>
 #include <memory>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "cache/object_cache/page_cache.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
-#include "storage/page_cache.h"
 #include "util/metrics.h"
 
 namespace starrocks {
@@ -273,6 +272,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
+    registry->register_metric("connector_scan_pool_mem_bytes", &_memory_metrics->connector_scan_pool_mem_bytes);
     registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
     registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
     registry->register_metric("tablet_metadata_mem_bytes", &_memory_metrics->tablet_metadata_mem_bytes);
@@ -302,9 +302,9 @@ void SystemMetrics::_update_datacache_mem_tracker() {
     int64_t datacache_mem_bytes = 0;
     auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
-        BlockCache* block_cache = BlockCache::instance();
-        if (block_cache != nullptr && block_cache->is_initialized()) {
-            auto datacache_metrics = block_cache->cache_metrics();
+        LocalCache* local_cache = DataCache::GetInstance()->local_cache();
+        if (local_cache != nullptr && local_cache->is_initialized()) {
+            auto datacache_metrics = local_cache->cache_metrics(0);
             datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
         }
 #ifdef USE_STAROS
@@ -367,6 +367,7 @@ void SystemMetrics::_update_memory_metrics() {
 
     SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)
     SET_MEM_METRIC_VALUE(query_pool_mem_tracker, query_mem_bytes)
+    SET_MEM_METRIC_VALUE(connector_scan_pool_mem_tracker, connector_scan_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(load_mem_tracker, load_mem_bytes)
     SET_MEM_METRIC_VALUE(metadata_mem_tracker, metadata_mem_bytes)
     SET_MEM_METRIC_VALUE(tablet_metadata_mem_tracker, tablet_metadata_mem_bytes)

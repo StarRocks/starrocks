@@ -10,6 +10,82 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.14
+
+发布日期：2025 年 5 月 14 日
+
+### 功能优化
+
+- 优化正则表达式解析失败时的报错信息。[#57904](https://github.com/StarRocks/starrocks/pull/57904)
+- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
+
+### 问题修复
+
+修复了如下问题：
+
+- JSON 数据类型在 `first_value`/`last_value`/`lead`/`lag` 窗口函数中的问题。[#58697](https://github.com/StarRocks/starrocks/pull/58697)
+- 物化视图写入时，使因使用基表的表级别锁而导致死锁（修复后使用 DB 锁）。[#58615](https://github.com/StarRocks/starrocks/pull/58615)
+- 因表被删除而导致 INSERT 任务卡住。[#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- 变更 List 分区的物化视图 active/inactive 状态失败。[#58575](https://github.com/StarRocks/starrocks/pull/58575)
+- `streaming_load_current_processing` 指标错误。[#58565](https://github.com/StarRocks/starrocks/pull/58565)
+- 持续的导入和副本克隆任务导致的数据版本更新错误。[#58513](https://github.com/StarRocks/starrocks/pull/58513)
+- 外表物化视图刷新失败。[#58506](https://github.com/StarRocks/starrocks/pull/58506)
+- ARM 架构下 `if()` 结果错误。[#58455](https://github.com/StarRocks/starrocks/pull/58455)
+- 物化视图改写生成错误的查询计划。[#58487](https://github.com/StarRocks/starrocks/pull/58487)
+- Iceberg 表元数据无法自动刷新。[#58490](https://github.com/StarRocks/starrocks/pull/58490)
+- `group_concat` 产生错误的查询计划。[#57908](https://github.com/StarRocks/starrocks/pull/57908)
+- 导入过程中异常未被正确处理而导致的大量 Tablet 加载失败。[#58393](https://github.com/StarRocks/starrocks/pull/58393)
+- 在生成列 List 分区裁剪中，因类型不匹配导致常量折叠失败（修复后添加隐式类型转换规则）。[#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- 聚合函数返回的数据类型和聚合列原始定义的数据类型不一致导致的问题（修复后将列类型 `cast` 为函数输出的类型）。[#58407](https://github.com/StarRocks/starrocks/pull/58407)
+- `broadcast_row_limit` 设置为 0 或者小于 0 时无法规避生成 BROADCAST JOIN。[#58307](https://github.com/StarRocks/starrocks/pull/58307)
+- Broker Load 会使用已被列入黑名单中的 BE 节点。[#58350](https://github.com/StarRocks/starrocks/pull/58350)
+- 手动取消物化视图刷新任务后，异步任务仍旧在后台，无法清除。[#58310](https://github.com/StarRocks/starrocks/pull/58310)
+- 月、年粒度的表达式分区创建失败。[#58182](https://github.com/StarRocks/starrocks/pull/58182)
+- `ngram_search` 生成无效查询计划。[#58190](https://github.com/StarRocks/starrocks/pull/58190)
+
+## 3.3.13
+
+发布日期：2025 年 4 月 22 日
+
+### 功能优化
+
+- 审计日志和 QueryDetail 接口中增加查询在 FE 的内存消耗指标。[#57731](https://github.com/StarRocks/starrocks/pull/57731)
+- 优化并发创建表达式分区时的策略。[#57899](https://github.com/StarRocks/starrocks/pull/57899)
+- 增加存活的 FE 节点数的监控指标。[#57857](https://github.com/StarRocks/starrocks/pull/57857)
+- `information_schema.task_runs` 视图支持 LIMIT 下推。[57404](https://github.com/StarRocks/starrocks/pull/57404)
+- 修复一些 CVE 问题。[#57705](https://github.com/StarRocks/starrocks/pull/57705) [#57620](https://github.com/StarRocks/starrocks/pull/57620)
+- 主键表在 PUBLISH 阶段支持 Retry，增强系统容灾能力。[#57354](https://github.com/StarRocks/starrocks/pull/57354)
+- 降低 Flat JSON 的内存占用。[#57357](https://github.com/StarRocks/starrocks/pull/57357)
+- `information_schema.routine_load_jobs` 视图增加 `timestamp_progress` 列，和 SHOW ROUTINE LOAD 语句返回保持一致。[#57123](https://github.com/StarRocks/starrocks/pull/57123)
+- 防止通过 StarRocks 向 LDAP 传递一些非授权行为。[#57131](https://github.com/StarRocks/starrocks/pull/57131)
+- 当 AVRO 文件的 Schema 和 Hive 表的 Schema 不同时报错。[#57296](https://github.com/StarRocks/starrocks/pull/57296)
+- 物化视图支持 `excluded_refresh_tables` 属性。[#56428](https://github.com/StarRocks/starrocks/pull/56428)
+
+### 问题修复
+
+修复了如下问题：
+
+- Flat JSON 不支持 `get_json_bool` 函数。[#58077](https://github.com/StarRocks/starrocks/pull/58077)
+- SHOW AUTHENTICATION 语句返回密码。[#58072](https://github.com/StarRocks/starrocks/pull/58072)
+- `percentile_count` 函数返回错误。[#58038](https://github.com/StarRocks/starrocks/pull/58038)
+- 大算子落盘策略导致的问题。[#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- BE 被加入黑名单后，Stream Load 依然会将任务分发该 BE 导致任务失败。[#57919](https://github.com/StarRocks/starrocks/pull/57919)
+- 基于半结构化数据类型使用 `cast` 函数时的问题。[#57804](https://github.com/StarRocks/starrocks/pull/57804)
+- `array_map` 函数返回错误。[#57756](https://github.com/StarRocks/starrocks/pull/57756)
+- 在单 Tablet 场景下，对同一列使用多个 `distinct` 函数并基于单列 GROUP BY 导致查询结果错误。[#57690](https://github.com/StarRocks/starrocks/pull/57690)
+- 大查询的 Query Profile 中的 MIN/MAX 值不准。[#57655](https://github.com/StarRocks/starrocks/pull/57655)
+- 基于 Delta Lake 数据的非分区物化视图无法改写查询。[#57686](https://github.com/StarRocks/starrocks/pull/57686)
+- Routine Load 死锁问题。[#57430](https://github.com/StarRocks/starrocks/pull/57430)
+- DATE/DATETIME 列的谓词下推错误。[#57576](https://github.com/StarRocks/starrocks/pull/57576)
+- `percentile_disc` 函数在空输入时导致的问题。[#57572](https://github.com/StarRocks/starrocks/pull/57572)
+- 通过 `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...` 语句修改表的分桶方式时，如果重复指定分区名，内部生成的临时分区无法删除。[#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- 基于 `str2date` 函数的表达式分区表 ALTER TABLE MODIFY COLUMN 失败。[#57487](https://github.com/StarRocks/starrocks/pull/57487)
+- 针对半结构化列的 CACHE SELECT 问题。[#57448](https://github.com/StarRocks/starrocks/pull/57448)
+- `hadoop-lib` 引入的升级兼容性问题。[#57436](https://github.com/StarRocks/starrocks/pull/57436)
+- 创建分区时大小写敏感的情况报错的问题。[#54867](https://github.com/StarRocks/starrocks/pull/54867)
+- 部分列更新生成错误的排序键。[#57375](https://github.com/StarRocks/starrocks/pull/57375)
+- 嵌套的窗口函数导致未知问题。[#57216](https://github.com/StarRocks/starrocks/pull/57216)
+
 ## 3.3.12
 
 发布日期：2025 年 4 月 3 日
@@ -66,7 +142,7 @@ displayed_sidebar: docs
 - 使用 `Files` 函数导出数据时，支持向 Parquet 文件导出 JSON 数据类型。[#56406](https://github.com/StarRocks/starrocks/pull/56406)
 - 提升存算分离集群中云原生表 Data Cache 预热性能。[#56190](https://github.com/StarRocks/starrocks/pull/56190)
 - Trino 语法兼容 AT TIME ZONE 表达式和 `from_iso8601_timestamp` 函数。[#56311](https://github.com/StarRocks/starrocks/pull/56311) [#55573](https://github.com/StarRocks/starrocks/pull/55573)
-- 存算分离集群中主键表的部份列更新支持条件更新。[#56132](https://github.com/StarRocks/starrocks/pull/56132)
+- 存算分离集群中主键表的部分列更新支持条件更新。[#56132](https://github.com/StarRocks/starrocks/pull/56132)
 - 进一步支持所有类型语句的统计信息收集。[#56257](https://github.com/StarRocks/starrocks/pull/56257)
 - `SHOW PROC '/transaction'` 语句支持配置返回的最大行数。[#55933](https://github.com/StarRocks/starrocks/pull/55933)
 - 支持基于 Oracle 类型 JDBC Catalog 表上创建异步物化视图。[#55372](https://github.com/StarRocks/starrocks/pull/55372)

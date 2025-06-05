@@ -207,6 +207,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
 
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_STRATEGY = "partition_refresh_strategy";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
@@ -254,7 +255,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
-    public static final String PROPERTIES_ENABLE_PARTITION_AGGREGATION = "enable_partition_aggregation";
+    public static final String PROPERTIES_FILE_BUNDLING = "file_bundling";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -443,7 +444,10 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
             if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
-                throw new SemanticException("Illegal partition retention condition: " + partitionRetentionCondition);
+                if (removeProperties) {
+                    properties.remove(PROPERTIES_PARTITION_RETENTION_CONDITION);
+                }
+                return partitionRetentionCondition;
             }
             // parse retention condition
             Expr whereExpr = null;
@@ -646,6 +650,21 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         return partitionRefreshNumber;
+    }
+
+    public static String analyzePartitionRefreshStrategy(Map<String, String> properties) {
+        String partitionRefreshStrategy = null;
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+            partitionRefreshStrategy = properties.get(PROPERTIES_PARTITION_REFRESH_STRATEGY);
+            try {
+                MaterializedView.PartitionRefreshStrategy.valueOf(partitionRefreshStrategy.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid partition_refresh_strategy: " + partitionRefreshStrategy +
+                        ". Only 'strict' or 'adaptive' are supported.");
+            }
+            properties.remove(PROPERTIES_PARTITION_REFRESH_STRATEGY);
+        }
+        return partitionRefreshStrategy;
     }
 
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
@@ -867,13 +886,13 @@ public class PropertyAnalyzer {
                 + " must be `true` or `false`");
     }
 
-    public static Boolean analyzeEnablePartitionAggregation(Map<String, String> properties) throws AnalysisException {
-        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
-        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            enablePartitionAggregation = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_PARTITION_AGGREGATION));
-            properties.remove(PROPERTIES_ENABLE_PARTITION_AGGREGATION);
+    public static Boolean analyzeFileBundling(Map<String, String> properties) throws AnalysisException {
+        boolean fileBundling = Config.enable_file_bundling;
+        if (properties != null && properties.containsKey(PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(properties.get(PROPERTIES_FILE_BUNDLING));
+            properties.remove(PROPERTIES_FILE_BUNDLING);
         }
-        return enablePartitionAggregation;
+        return fileBundling;
     }
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
@@ -1644,6 +1663,17 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().setPartitionRefreshNumber(number);
                 if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER
+                            + " does not support non-partitioned materialized view.");
+                }
+            }
+            // partition refresh strategy
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+                String strategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, strategy);
+                materializedView.getTableProperty().setPartitionRefreshStrategy(strategy);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY
                             + " does not support non-partitioned materialized view.");
                 }
             }

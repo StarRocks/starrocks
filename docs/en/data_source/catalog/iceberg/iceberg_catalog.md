@@ -239,6 +239,10 @@ For information about how to choose an authentication method for accessing AWS G
 
 ##### REST
 
+:::note
+For detailed instructions on creating an Iceberg REST catalog for S3 tables, see [Create Iceberg REST Catalog for AWS S3 tables](./iceberg_rest_s3.md).
+:::
+
 If you use REST as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
 
 ```SQL
@@ -260,6 +264,12 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 
 Required: Yes
 Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
+
+###### iceberg.catalog.view-endpoints-supported
+
+Required: No
+
+Description: Whether to use the view endpoints to support view-related operations when the REST service of earlier versions that does not return endpoints in `CatalogConfig`. This parameter is used for backwards compatibility with REST servers of early versions. Default: `false`.
 
 ###### iceberg.catalog.security
 
@@ -302,6 +312,11 @@ Description: Whether to use credentials provided by REST backend for file system
 Required: No
 Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
 
+##### iceberg.catalog.rest.nested-namespace-enabled
+
+Required: No
+
+Description: Whether to support querying objects under nested namespace. Default: `false`.
 
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
@@ -1151,7 +1166,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ### Create an Iceberg database
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../../administration/user_privs/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
 
 :::tip
 
@@ -1204,7 +1219,7 @@ The `prefix` varies based on the storage system you use:
 
 ### Drop an Iceberg database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
 
 When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
@@ -1218,7 +1233,7 @@ DROP DATABASE <database_name>;
 
 ### Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
@@ -1324,7 +1339,7 @@ Description: The compression algorithm used for the Iceberg table. The supported
 
 ### Sink data to an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
 
@@ -1431,7 +1446,7 @@ The partitions into which you want to load data. You must specify all partition 
 
 ### Drop an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../../administration/user_privs/authorization/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
 
 When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 

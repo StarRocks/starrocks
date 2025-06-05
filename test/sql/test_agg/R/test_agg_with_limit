@@ -1,0 +1,286 @@
+-- name: test_agg_with_limit
+create table t0 (
+    c0 STRING,
+    c1 STRING NOT NULL,
+    c2 int,
+    c3 int NOT NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+create table t1 (
+    c0 STRING NOT NULL,
+    c1 STRING,
+    c2 int,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+create table t2 (
+    c0 int NOT NULL,
+    c1 int,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+create table t3 (
+    c0 int,
+    c1 int NOT NULL,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t1 select * from t0;
+-- result:
+-- !result
+insert into t2 select * from t0;
+-- result:
+-- !result
+insert into t3 select * from t0;
+-- result:
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t1 group by c0 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t2 group by c0 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t3 group by c0 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t1 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t2 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t3 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c1 from t0 group by c1 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c1 from t0 group by c1 ) select count(*) from (select l.sc3, l.c1 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c1 <=> r.c1) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c1 from t1 group by c1 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c1 from t0 group by c1 ) select count(*) from (select l.sc3, l.c1 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c1 <=> r.c1) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c1 from t2 group by c1 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c1 from t0 group by c1 ) select count(*) from (select l.sc3, l.c1 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c1 <=> r.c1) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c1 from t3 group by c1 limit 10), cte1 as (select avg(c3), sum(c3) sc3, c1 from t0 group by c1 ) select count(*) from (select l.sc3, l.c1 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c1 <=> r.c1) t ;
+-- result:
+10
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t1 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t2 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t3 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t1 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t2 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+with cte0 as (select avg(c3), sum(c3) sc3, c0 from t3 group by c0 limit 10000), cte1 as (select avg(c3), sum(c3) sc3, c0 from t0 group by c0 ) select count(*) from (select l.sc3, l.c0 from cte0 l join cte1 r on l.sc3 <=> r.sc3 and l.c0 <=> r.c0) t ;
+-- result:
+10000
+-- !result
+create table t4 (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t4 SELECT generate_series % 4, generate_series % 9, generate_series % 9, generate_series %9 FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+insert into t4 SELECT generate_series % 4, null, null, null FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+create table t5 (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t5 select * from t4;
+-- result:
+-- !result
+set streaming_preaggregation_mode="auto";
+-- result:
+-- !result
+select * from (select max(c3), sum(c3) sc3, c0 from t5 group by c0 limit 10) t order by 3;
+-- result:
+8	100003	0
+8	100000	1
+8	99998	2
+8	99996	3
+-- !result
+select * from (select max(c3), sum(c3) sc3, c1 from t5 group by c1 limit 10) t order by 3;
+-- result:
+None	None	None
+0	0	0
+1	11112	1
+2	22222	2
+3	33333	3
+4	44444	4
+5	55555	5
+6	66666	6
+7	77777	7
+8	88888	8
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+select * from (select max(c3), sum(c3) sc3, c0 from t5 group by c0 limit 10) t order by 3;
+-- result:
+8	100003	0
+8	100000	1
+8	99998	2
+8	99996	3
+-- !result
+select * from (select max(c3), sum(c3) sc3, c1 from t5 group by c1 limit 10) t order by 3;
+-- result:
+None	None	None
+0	0	0
+1	11112	1
+2	22222	2
+3	33333	3
+4	44444	4
+5	55555	5
+6	66666	6
+7	77777	7
+8	88888	8
+-- !result
+[UC] analyze full table t5;
+-- result:
+-- !result
+function: wait_global_dict_ready('c2', 't5')
+-- result:
+
+-- !result
+select * from (select max(c3), sum(c3) sc3, c2 from t5 group by c2 limit 10) t order by 3;
+-- result:
+None	None	None
+0	0	0
+1	11112	1
+2	22222	2
+3	33333	3
+4	44444	4
+5	55555	5
+6	66666	6
+7	77777	7
+8	88888	8
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+create table t6 (
+    c0 int,
+    c1 float,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t6 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+select count(*) from (select sum(c3) from t6 group by c1, c2 limit 10) t;
+-- result:
+10
+-- !result
+select count(*) from (select sum(c3) from t6 group by c1, c2, c3 limit 10) t;
+-- result:
+10
+-- !result
+select count(*) from (select sum(c3) from t6 group by c2, c1 limit 10) t;
+-- result:
+10
+-- !result
+create table tempty (
+    c0 int,
+    c1 float,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+select sum(c3) from tempty group by c1, c2 limit 10;
+-- result:
+-- !result
+select sum(c3) from tempty group by c1, c2, c3 limit 10;
+-- result:
+-- !result
+select sum(c3) from tempty group by c2, c1 limit 10;
+-- result:
+-- !result
+create table tarray (
+    c0 int,
+    c1 array<int>,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into tarray SELECT generate_series, [generate_series], generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+select count(*) from (select sum(c3) from tarray group by c1, c3 limit 10) t;
+-- result:
+10
+-- !result
+select count(*) from (select sum(c3) from tarray group by c1 limit 10) t;
+-- result:
+10
+-- !result

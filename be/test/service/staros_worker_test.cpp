@@ -113,5 +113,19 @@ TEST(StarOSWorkerTest, test_fs_cache) {
     EXPECT_FALSE(worker->lookup_fs_cache(cache_key));
 }
 
+TEST(StarOSWorkerTest, test_build_scheme_from_shard_info) {
+    staros::starlet::ShardInfo shard_info;
+    shard_info.id = 1;
+
+    // Set the file system type to GS
+    auto fs_info = shard_info.path_info.mutable_fs_info();
+    fs_info->set_fs_type(staros::FileStoreType::GS);
+
+    // Call the function and verify the result
+    auto scheme_or = StarOSWorker::build_scheme_from_shard_info(shard_info);
+    EXPECT_TRUE(scheme_or.ok());
+    EXPECT_EQ("gs://", scheme_or.value());
+}
+
 } // namespace starrocks
 #endif

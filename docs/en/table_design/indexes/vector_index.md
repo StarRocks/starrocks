@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 60
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # Vector Index
+
+<Beta />
 
 This topic introduces the vector index feature of StarRocks and how to perform an approximate nearest neighbor search (ANNS) with it.
 

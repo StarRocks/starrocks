@@ -35,12 +35,12 @@ TabletSinkColocateSender::TabletSinkColocateSender(
 
 Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
                                             const std::vector<OlapTablePartition*>& partitions,
-                                            const std::vector<uint32_t>& tablet_indexes,
+                                            const std::vector<uint32_t>& record_hashes,
                                             const std::vector<uint16_t>& validate_select_idx,
                                             std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
                                             Chunk* chunk) {
     if (UNLIKELY(!_colocate_mv_index)) {
-        return TabletSinkSender::send_chunk(schema, partitions, tablet_indexes, validate_select_idx,
+        return TabletSinkSender::send_chunk(schema, partitions, record_hashes, validate_select_idx,
                                             index_id_partition_id, chunk);
     }
 
@@ -59,8 +59,10 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
             auto* index = schema->indexes()[i];
             for (size_t j = 0; j < selection_size; ++j) {
                 uint16_t selection = validate_select_idx[j];
-                index_id_partition_id[index->index_id].emplace(partitions[selection]->id);
-                _index_tablet_ids[i][selection] = partitions[selection]->indexes[i].tablets[tablet_indexes[selection]];
+                const auto* partition = partitions[selection];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
+                _index_tablet_ids[i][selection] = virtual_buckets[record_hashes[selection] % virtual_buckets.size()];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
@@ -71,8 +73,10 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
             auto* index = schema->indexes()[i];
             _index_tablet_ids[i].resize(num_rows);
             for (size_t j = 0; j < num_rows; ++j) {
-                index_id_partition_id[index->index_id].emplace(partitions[j]->id);
-                _index_tablet_ids[i][j] = partitions[j]->indexes[i].tablets[tablet_indexes[j]];
+                const auto* partition = partitions[j];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
+                _index_tablet_ids[i][j] = virtual_buckets[record_hashes[j] % virtual_buckets.size()];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
@@ -252,10 +256,10 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
         return TabletSinkColocateSender::close_wait(state, close_status, ts_profile, write_txn_log);
     }
     Status status = std::move(close_status);
+    // BE id -> add_batch method counter
+    std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
+    int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
     if (status.ok()) {
-        // BE id -> add_batch method counter
-        std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
-        int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
         {
             SCOPED_TIMER(ts_profile->close_timer);
             Status err_st = Status::OK();
@@ -285,33 +289,36 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
                 for_each_node_channel(merge_txn_log);
                 status.update(_write_combined_txn_log());
             }
-            // only if status is ok can we call this _profile->total_time_counter().
-            // if status is not ok, this sink may not be prepared, so that _profile is null
-            SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
-            COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
-            COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
-            COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
-            COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
-
-            int64_t total_server_rpc_time_us = 0;
-            int64_t total_server_wait_memtable_flush_time_us = 0;
-            // print log of add batch time of all node, for tracing load performance easily
-            std::stringstream ss;
-            ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
-               << ", add chunk time(ms)/wait lock time(ms)/num: ";
-            for (auto const& pair : node_add_batch_counter_map) {
-                total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
-                total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
-                ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
-                   << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
-            }
-            ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
-            ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
-            LOG(INFO) << ss.str();
         }
     } else {
-        for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
+        for_each_index_channel(
+                [&status, &node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns](NodeChannel* ch) {
+                    ch->cancel(status);
+                    ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
+                });
     }
+
+    SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
+    COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
+    COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+    COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
+    COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+
+    int64_t total_server_rpc_time_us = 0;
+    int64_t total_server_wait_memtable_flush_time_us = 0;
+    // print log of add batch time of all node, for tracing load performance easily
+    std::stringstream ss;
+    ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+       << ", add chunk time(ms)/wait lock time(ms)/num: ";
+    for (auto const& pair : node_add_batch_counter_map) {
+        total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
+        total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
+        ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
+           << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
+    }
+    ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
+    ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
+    LOG(INFO) << ss.str();
 
     Expr::close(_output_expr_ctxs, state);
     if (_partition_params) {

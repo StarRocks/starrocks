@@ -122,7 +122,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         }
 
         if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
-            scanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
+            scanOperator.getScanOptimizeOption().setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             try {
@@ -137,7 +137,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                                 scanOperator.getColumnMetaToColRefMap(),
                                 scanOperator.getLimit(),
                                 scanOperator.getPredicate());
-                newScanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
+                newScanOperator.getScanOptimizeOption().setCanUseAnyColumn(canUseAnyColumn);
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
                 newScanOperator.setTableVersionRange(scanOperator.getTableVersionRange());
 
@@ -165,7 +165,12 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                 scanColumnRefOperators.stream().map(col -> context.getColumnRefFactory().getColumn(col)).
                         collect(Collectors.toList());
         partitionColumns.retainAll(scanColumns);
-        if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
+        if (table.isIcebergTable()) {
+            if (partitionColumns.stream().map(Column::getType).anyMatch(this::icebergNotSupportedPartitionColumnType)) {
+                throw new StarRocksPlannerException("Iceberg table partition by float/double/decimalV2 datatype is not supported",
+                        ErrorType.UNSUPPORTED);
+            }
+        } else if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
             throw new StarRocksPlannerException("Table partition by float/double/decimal datatype is not supported",
                     ErrorType.UNSUPPORTED);
         }
@@ -173,6 +178,10 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
 
     private boolean notSupportedPartitionColumnType(Type type) {
         return type.isFloat() || type.isDouble() || type.isDecimalOfAnyVersion();
+    }
+
+    private boolean icebergNotSupportedPartitionColumnType(Type type) {
+        return type.isFloat() || type.isDouble() || type.isDecimalV2();
     }
 
     private boolean containsMaterializedColumn(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumns) {

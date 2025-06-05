@@ -44,6 +44,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -364,7 +365,7 @@ public class StarOSAgentTest {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
         Assert.assertEquals(Lists.newArrayList(10L, 11L),
                 starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
-                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+                Collections.EMPTY_MAP, WarehouseManager.DEFAULT_RESOURCE));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();

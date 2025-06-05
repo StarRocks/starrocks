@@ -705,13 +705,13 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
 
                 RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
                                                                                    CompoundNodeType::AND));
-                size_t prev_size = _scan_range.span_size();
+                size_t prev_size = _range_iter.remaining_rows();
                 SparseRange<> res;
                 res.set_sorted(_scan_range.is_sorted());
                 _range_iter = _range_iter.intersection(r, &res);
                 std::swap(res, _scan_range);
                 _range_iter.set_range(&_scan_range);
-                _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+                _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
                 return Status::OK();
             },
             false, _opts.stats->raw_rows_read);
@@ -804,7 +804,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         if (encryption_info) {
             opts.encryption_info = *encryption_info;
         }
-        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
@@ -2184,7 +2184,6 @@ Status SegmentIterator::_apply_data_sampling() {
 IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
     IndexReadOptions opts;
     opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
-    opts.kept_in_memory = false;
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _column_files.at(cid).get();
     opts.stats = _opts.stats;
@@ -2206,29 +2205,27 @@ Status SegmentIterator::_apply_bitmap_index() {
             cid_2_ucid[field->id()] = field->uid();
         }
 
-        RETURN_IF_ERROR(
-                _bitmap_index_evaluator.init([&cid_2_ucid, this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
-                    const ColumnUID ucid = cid_2_ucid[cid];
-                    // the column's index in this segment file
-                    ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
-                    if (segment_ptr == nullptr) {
-                        // find segment from delta column group failed, using main segment
-                        segment_ptr = _segment;
-                    }
+        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
+                                                      this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            const ColumnUID ucid = cid_2_ucid[cid];
+            // the column's index in this segment file
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+            }
 
-                    IndexReadOptions opts;
-                    opts.use_page_cache =
-                            !_opts.temporary_data && _opts.use_page_cache &&
-                            (config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache);
-                    opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
-                    opts.lake_io_opts = _opts.lake_io_opts;
-                    opts.read_file = _column_files[cid].get();
-                    opts.stats = _opts.stats;
+            IndexReadOptions opts;
+            opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
+                                  !config::disable_storage_page_cache && config::enable_bitmap_index_memory_page_cache;
+            opts.lake_io_opts = _opts.lake_io_opts;
+            opts.read_file = _column_files[cid].get();
+            opts.stats = _opts.stats;
 
-                    BitmapIndexIterator* bitmap_iter = nullptr;
-                    RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
-                    return bitmap_iter;
-                }));
+            BitmapIndexIterator* bitmap_iter = nullptr;
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+            return bitmap_iter;
+        }));
 
         RETURN_IF(!_bitmap_index_evaluator.has_bitmap_index(), Status::OK());
     }

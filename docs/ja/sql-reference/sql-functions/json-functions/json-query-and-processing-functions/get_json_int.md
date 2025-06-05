@@ -4,7 +4,13 @@ displayed_sidebar: docs
 
 # get_json_int
 
-この関数は、指定されたパスから JSON 文字列の整数値を解析して取得します。
+この関数は、指定されたパスから JSON 文字列内の整数値を解析して取得します。
+
+:::tip
+すべての JSON 関数と Operator は、ナビゲーションおよび [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 json_path は `$` で始まり、パスの区切りとして `.` を使用する必要があります。
 
@@ -12,7 +18,7 @@ json_path は `$` で始まり、パスの区切りとして `.` を使用する
 
 `[ ]` は配列の添字として使用され、0 から始まります。
 
-パスの内容には `"` 、`[` 、および `]` を含めないでください。
+パスの内容には `"` 、`[` 、`]` を含めることはできません。
 
 json_string または json_path の形式が間違っている場合、この関数は NULL を返します。
 

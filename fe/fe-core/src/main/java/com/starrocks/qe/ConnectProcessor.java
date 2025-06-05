@@ -74,12 +74,16 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -118,7 +122,6 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
-
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -372,13 +375,23 @@ public class ConnectProcessor {
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
 
+                if (ctx.getTxnId() != 0 &&
+                        !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
+                                parsedStmt instanceof BeginStmt ||
+                                parsedStmt instanceof CommitStmt ||
+                                parsedStmt instanceof RollbackStmt)) {
+                    ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
+                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                    return;
+                }
+
                 if (ctx.getOAuth2Context() != null && ctx.getAuthToken() == null) {
                     OAuth2Context oAuth2Context = ctx.getOAuth2Context();
                     String authUrl = oAuth2Context.authServerUrl() +
                             "?response_type=code" +
                             "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
                             "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
-                            "?connectionId=" + ctx.getConnectionId() +
+                            "&state=" + ctx.getConnectionId() +
                             "&scope=openid";
 
                     ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
@@ -835,6 +848,14 @@ public class ConnectProcessor {
             ctx.setForwardTimes(request.getForward_times());
         }
 
+        if (request.isSetConnectionId()) {
+            ctx.setConnectionId(request.getConnectionId());
+        }
+
+        if (request.isSetTxn_id()) {
+            ctx.setTxnId(request.getTxn_id());
+        }
+
         ctx.setThreadLocalInfo();
 
         if (ctx.getCurrentUserIdentity() == null) {
@@ -911,6 +932,9 @@ public class ConnectProcessor {
         result.setPacket(getResultPacket());
         result.setState(ctx.getState().getStateType().toString());
         result.setErrorMsg(ctx.getState().getErrorMessage());
+        //Put the txnId in connectContext into result and pass it back to the follower node
+        result.setTxn_id(ctx.getTxnId());
+
         if (executor != null) {
             if (executor.getProxyResultSet() != null) {  // show statement
                 result.setResultSet(executor.getProxyResultSet().tothrift());

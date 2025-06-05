@@ -72,6 +72,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -230,6 +231,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (volume.equals(StorageVolumeMgr.LOCAL)) {
                     throw new DdlException("Cannot create table " +
                             "without persistent volume in current run mode \"" + runMode + "\"");
+                }
+                if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR))) {
+                    throw new DdlException("Cannot create table " +
+                            "with flat json config in current run mode \"" + runMode + "\"");
                 }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
                 StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
@@ -475,12 +483,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
             
             try {
-                boolean enablePartitionAggregation = PropertyAnalyzer.analyzeEnablePartitionAggregation(properties);
-                // Not support primary key yet
-                if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    enablePartitionAggregation = false;
-                }
-                table.setEnablePartitionAggregation(enablePartitionAggregation);
+                boolean fileBundling = PropertyAnalyzer.analyzeFileBundling(properties);
+                table.setFileBundling(fileBundling);
             } catch (Exception e) {
                 throw new DdlException(e.getMessage());
             }
@@ -739,9 +743,10 @@ public class OlapTableFactory implements AbstractTableFactory {
             // if failed in any step, use this set to do clear things
             Set<Long> tabletIdSet = new HashSet<Long>();
 
-            long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
             if (ConnectContext.get() != null) {
-                warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                ConnectContext connectContext = ConnectContext.get();
+                computeResource = connectContext.getCurrentComputeResource();
             }
 
             // do not create partition for external table
@@ -755,9 +760,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
                     Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet,
-                            warehouseId);
+                            computeResource);
                     metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()),
-                            warehouseId);
+                            computeResource);
                     table.addPartition(partition);
                 } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                     try {
@@ -793,12 +798,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
                         Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
-                                tabletIdSet, warehouseId);
+                                tabletIdSet, computeResource);
                         partitions.add(partition);
                     }
                     // It's ok if partitions is empty.
                     metastore.buildPartitions(db, table, partitions.stream().map(Partition::getSubPartitions)
-                            .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
+                            .flatMap(p -> p.stream()).collect(Collectors.toList()), computeResource);
                     for (Partition partition : partitions) {
                         table.addPartition(partition);
                     }

@@ -298,6 +298,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
+### enable_parquet_reader_bloom_filter
+
+* **Description**: Whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on system level using the BE configuration `parquet_reader_bloom_filter_enable`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
+* **Default**: true
+* **Introduced in**: v3.5
+
 ### enable_plan_advisor
 
 * **Description**: Whether to enable Query Feedback feature for slow queries and manually marked queries.
@@ -309,6 +315,26 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable Query Feedback feature for all queries. This variable takes effect only when `enable_plan_advisor` is set to `true`.
 * **Default**: false
 * **Introduced in**: v3.4.0
+
+### enable_parquet_reader_bloom_filter
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable Bloom Filter optimization when reading Parquet files.
+  * `true` (Default): Enable Bloom Filter optimization when reading Parquet files.
+  * `false`: Disable Bloom Filter optimization when reading Parquet files.
+* **Introduced in**: v3.5.0
+
+### enable_parquet_reader_page_index
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable Page Index optimization when reading Parquet files.
+  * `true` (Default): Enable Page Index optimization when reading Parquet files.
+  * `false`: Disable Page Index optimization when reading Parquet files.
+* **Introduced in**: v3.5.0
 
 ### follower_query_forward_mode
 
@@ -755,6 +781,36 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
 ### lower_case_table_names (global)
 
 Used for MySQL client compatibility. No practical usage. Table names in StarRocks are case-sensitive.
+
+### lower_upper_support_utf8
+
+* **Default**: false
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to support case conversion for UTF-8 characters in `lower` and `upper` functions. Valid values:
+  * `true`: Support case conversion for UTF-8 characters.
+  * `false` (Default): Not to support case conversion for UTF-8 characters.
+* **Introduced in**: v3.5.0
+
+### low_cardinality_optimize_on_lake
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable low cardinality optimization on data lake queries. Valid values:
+  * `true` (Default): Enable low cardinality optimization on data lake queries.
+  * `false`: Disable low cardinality optimization on data lake queries.
+* **Introduced in**: v3.5.0
+
+<!--
+### always_collect_low_card_dict_on_lake
+
+* **Default**: false
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to collect low cardinality information via statistics.
+* **Introduced in**: v3.5.0
+-->
 
 ### materialized_view_rewrite_mode (v3.2 and later)
 

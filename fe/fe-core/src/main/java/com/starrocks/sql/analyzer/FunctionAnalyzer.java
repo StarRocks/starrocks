@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -40,6 +39,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
@@ -179,6 +179,19 @@ public class FunctionAnalyzer {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
             }
+        } else if (fn instanceof AggStateIf) {
+            FunctionName argFuncNameWithoutIf =
+                    new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            FunctionParams params = functionCallExpr.getParams();
+            FunctionParams functionParamsWithOutIf =
+                    new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
+                            params.getExprsNames() == null ? null :
+                                    params.getExprsNames().subList(0, params.getExprsNames().size() - 1),
+                            params.isDistinct(), params.getOrderByElements() == null ? null :
+                            params.getOrderByElements().subList(0, params.getOrderByElements().size() - 1));
+            FunctionCallExpr functionCallWithoutIf =
+                    new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
+            analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
         }
     }
 
@@ -542,14 +555,18 @@ public class FunctionAnalyzer {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException(fnName + " requires two parameters");
             }
-            if (!(functionCallExpr.getChild(1) instanceof DecimalLiteral) &&
-                    !(functionCallExpr.getChild(1) instanceof IntLiteral)) {
-                throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+            Expr child1 = functionCallExpr.getChild(1);
+            if (!child1.isConstant() || !child1.getType().isNumericType()) {
+                throw new SemanticException(fnName + " 's second parameter should be constant and its type should be numeric",
+                        functionCallExpr.getPos());
             }
-            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
-            if (rate < 0 || rate > 1) {
-                throw new SemanticException(
-                        fnName + " second parameter'value should be between 0 and 1");
+            // If the input parameter is literal, check its range is [0, 1]; otherwise it will be checked in the be's implement.
+            if (child1 instanceof LiteralExpr) {
+                double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+                if (rate < 0 || rate > 1) {
+                    throw new SemanticException(
+                            fnName + " second parameter'value should be between 0 and 1",  functionCallExpr.getChild(1).getPos());
+                }
             }
         }
 
@@ -592,7 +609,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(fnName + " function 's args must be column");
+                throw new SemanticException(fnName + " function 's args must be constant");
             }
         }
 
@@ -717,7 +734,7 @@ public class FunctionAnalyzer {
             return fn;
         }
 
-        fn = SPMFunctions.getSPMFunction(node.getFnName().getFunction());
+        fn = SPMFunctions.getSPMFunction(node, Arrays.stream(argumentTypes).toList());
         if (fn != null) {
             return fn;
         }
@@ -1076,7 +1093,8 @@ public class FunctionAnalyzer {
             }
         } else if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)
                 || fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
+                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
+                || fnName.endsWith(FunctionSet.IF)) {
             Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW FRONTENDS
 
-## Description
-
-This statement is used to view FE nodes.
+SHOW FRONTENDS is used to view FE nodes.
 
 :::tip
 

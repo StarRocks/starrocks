@@ -35,29 +35,21 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.ModifyBrokerInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ModifyBrokerClause;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
@@ -66,11 +58,6 @@ import java.util.concurrent.locks.ReentrantLock;
  * Broker manager
  */
 public class BrokerMgr implements GsonPostProcessable {
-    public static final ImmutableList<String> BROKER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Name").add("IP").add("Port").add("Alive")
-            .add("LastStartTime").add("LastUpdateTime").add("ErrMsg")
-            .build();
-
     // { BrokerName -> { list of FsBroker }
     @SerializedName(value = "bm")
     private final Map<String, List<FsBroker>> brokerListMap = Maps.newHashMap();
@@ -79,7 +66,6 @@ public class BrokerMgr implements GsonPostProcessable {
     // { BrokerName -> { IP -> [FsBroker] } }
     private final Map<String, ArrayListMultimap<String, FsBroker>> brokersMap = Maps.newHashMap();
     private final ReentrantLock lock = new ReentrantLock();
-    private BrokerProcNode procNode = null;
 
     public BrokerMgr() {
     }
@@ -99,22 +85,6 @@ public class BrokerMgr implements GsonPostProcessable {
             lock.unlock();
         }
         return brokers;
-    }
-
-    public void execute(ModifyBrokerClause clause) throws DdlException {
-        switch (clause.getOp()) {
-            case OP_ADD:
-                addBrokers(clause.getBrokerName(), clause.getHostPortPairs());
-                break;
-            case OP_DROP:
-                dropBrokers(clause.getBrokerName(), clause.getHostPortPairs());
-                break;
-            case OP_DROP_ALL:
-                dropAllBroker(clause.getBrokerName());
-                break;
-            default:
-                break;
-        }
     }
 
     public boolean containsBroker(String brokerName) {
@@ -322,25 +292,10 @@ public class BrokerMgr implements GsonPostProcessable {
         }
     }
 
-    public List<List<String>> getBrokersInfo() {
+    public Map<String, ArrayListMultimap<String, FsBroker>> getBrokersMap() {
         lock.lock();
         try {
-            if (procNode == null) {
-                procNode = new BrokerProcNode();
-            }
-            return procNode.fetchResult().getRows();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public BrokerProcNode getProcNode() {
-        lock.lock();
-        try {
-            if (procNode == null) {
-                procNode = new BrokerProcNode();
-            }
-            return procNode;
+            return new HashMap<>(brokersMap);
         } finally {
             lock.unlock();
         }
@@ -358,74 +313,6 @@ public class BrokerMgr implements GsonPostProcessable {
             for (FsBroker address : brokers.getValue()) {
                 brokerAddrsMap.put(address.ip, address);
             }
-        }
-    }
-
-    public class BrokerProcNode implements ProcNodeInterface {
-        @Override
-        public ProcResult fetchResult() {
-            BaseProcResult result = new BaseProcResult();
-            result.setNames(BROKER_PROC_NODE_TITLE_NAMES);
-
-            lock.lock();
-            try {
-                for (Map.Entry<String, ArrayListMultimap<String, FsBroker>> entry : brokersMap.entrySet()) {
-                    String brokerName = entry.getKey();
-                    for (FsBroker broker : entry.getValue().values()) {
-                        List<String> row = Lists.newArrayList();
-                        row.add(brokerName);
-                        row.add(broker.ip);
-                        row.add(String.valueOf(broker.port));
-                        row.add(String.valueOf(broker.isAlive));
-                        row.add(TimeUtils.longToTimeString(broker.lastStartTime));
-                        row.add(TimeUtils.longToTimeString(broker.lastUpdateTime));
-                        row.add(broker.heartbeatErrMsg);
-                        result.addRow(row);
-                    }
-                }
-            } finally {
-                lock.unlock();
-            }
-            return result;
-        }
-    }
-
-    public static class ModifyBrokerInfo implements Writable {
-        @SerializedName("bn")
-        public String brokerName;
-        @SerializedName("ba")
-        public List<FsBroker> brokerAddresses;
-
-        public ModifyBrokerInfo() {
-        }
-
-        public ModifyBrokerInfo(String brokerName, List<FsBroker> brokerAddresses) {
-            this.brokerName = brokerName;
-            this.brokerAddresses = brokerAddresses;
-        }
-
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, brokerName);
-            out.writeInt(brokerAddresses.size());
-            for (FsBroker address : brokerAddresses) {
-                address.write(out);
-            }
-        }
-
-        public void readFields(DataInput in) throws IOException {
-            brokerName = Text.readString(in);
-            int size = in.readInt();
-            brokerAddresses = Lists.newArrayList();
-            for (int i = 0; i < size; ++i) {
-                brokerAddresses.add(FsBroker.readIn(in));
-            }
-        }
-
-        public static ModifyBrokerInfo readIn(DataInput in) throws IOException {
-            ModifyBrokerInfo info = new ModifyBrokerInfo();
-            info.readFields(in);
-            return info;
         }
     }
 }

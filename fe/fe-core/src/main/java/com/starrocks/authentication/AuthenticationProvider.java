@@ -15,27 +15,19 @@
 package com.starrocks.authentication;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
 
     /**
-     * valid authentication info, and initialize the UserAuthenticationInfo structure
-     * used when creating a user or modifying user's authentication information
+     * Attempt to authentication
+     *
+     * @param context      connection context
+     * @param userIdentity best matched user
+     * @param authResponse auth response received by mysql protocol
+     * @throws AuthenticationException when authentication fail
      */
-    UserAuthenticationInfo analyzeAuthOption(
-            UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException;
-
-    /**
-     * login authentication
-     */
-    void authenticate(
-            ConnectContext context,
-            String user,
-            String host,
-            byte[] password,
-            UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+    void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse) throws AuthenticationException;
 
     /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.

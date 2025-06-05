@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,6 +65,12 @@ public class ExecuteExceptionHandler {
         } else {
             throw e;
         }
+    }
+
+    public static boolean isRetryableStatus(TStatusCode statusCode) {
+        return statusCode == TStatusCode.REMOTE_FILE_NOT_FOUND
+                || statusCode == TStatusCode.THRIFT_RPC_ERROR
+                || statusCode == TStatusCode.GLOBAL_DICT_NOT_MATCH;
     }
 
     // If modifications are made to the partition files of a Hive table by user,
@@ -170,7 +177,7 @@ public class ExecuteExceptionHandler {
                 }
             }
             // if it is cancelled due to backend not alive, rebuild the plan and retry again
-            if (e.getErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
+            if (e.getInternalErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
                 rebuildExecPlan(e, context);
                 return;
             }

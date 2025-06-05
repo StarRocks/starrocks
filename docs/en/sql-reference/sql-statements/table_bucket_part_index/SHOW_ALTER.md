@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW ALTER TABLE
 
-## Description
-
-Shows the execution of the ongoing ALTER TABLE operations, including:
+SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, including:
 
 - Modify columns.
 - Optimize table schema (from v3.2), including modifying the bucketing method and the number of buckets.

@@ -32,7 +32,27 @@ displayed_sidebar: docs
 
 ### 1.1
 
-### 1.1.2
+#### 1.1.3
+
+このリリースでは、いくつかの新機能と改善を含んでいます。
+
+**新機能**
+
+- Sink が LZ4 圧縮をサポートしました。[#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**改善**
+
+- マイクロ秒を含む StarRocks の DATETIME 型の読み書きに対応しました。[#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- 書き込み処理のソケットタイムアウトを設定できるようになりました。[#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- `jackson-core` の最大文字列長を拡張しました。[#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**バグ修正**
+
+- カラム名にキーワードが使用されたことで発生する解析エラーを修正しました。（修正後、BuildScan ではカラム名に引用符が付加されます。）[#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- `java.lang.String` が DATE/TIMESTAMP の有効な外部型でないことによって発生する例外を修正しました。[#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- JSON 型の書き込みに関する誤りを修正しました。[#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
 
 **機能**
 

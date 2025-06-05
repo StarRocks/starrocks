@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW FUNCTIONS
 
-## Description
-
-Queries all the custom (or built-in) functions under a database. If no database is specified, the current database is used by default.
+SHOW FUNCTIONS queries all the custom (or built-in) functions under a database. If no database is specified, the current database is used by default.
 
 ## Syntax
 

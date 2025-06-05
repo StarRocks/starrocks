@@ -237,16 +237,34 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     _tablet->updates()->stop_apply(true);
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+
+    auto tablet1 = create_tablet(rand(), rand());
+    {
+        auto rs0 = create_rowset(tablet1, keys);
+        ASSERT_TRUE(tablet1->rowset_commit(2, rs0).ok());
+        auto rs1 = create_rowset(tablet1, keys);
+        ASSERT_TRUE(tablet1->rowset_commit(3, rs1).ok());
+    }
+
     std::vector<TFinishTaskRequest> finish_task_requests;
     auto& finish_task_request = finish_task_requests.emplace_back();
     finish_task_request.signature = 2222;
     auto& tablet_publish_versions = finish_task_request.tablet_publish_versions;
-    auto& pair = tablet_publish_versions.emplace_back();
-    pair.__set_tablet_id(_tablet->tablet_id());
-    pair.__set_version(3);
+    {
+        auto& pair1 = tablet_publish_versions.emplace_back();
+        pair1.__set_tablet_id(_tablet->tablet_id());
+        pair1.__set_version(3);
+
+        auto& pair2 = tablet_publish_versions.emplace_back();
+        pair2.__set_tablet_id(tablet1->tablet_id());
+        pair2.__set_version(3);
+    }
+
+    config::max_update_tablet_version_internal_ms = 1000;
     _publish_version_manager->wait_publish_task_apply_finish(std::move(finish_task_requests));
     _finish_publish_version_cv.notify_one();
 
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     ASSERT_EQ(0, _publish_version_manager->finish_task_requests_size());
     ASSERT_EQ(1, _publish_version_manager->waitting_finish_task_requests_size());
     _tablet->updates()->stop_apply(false);

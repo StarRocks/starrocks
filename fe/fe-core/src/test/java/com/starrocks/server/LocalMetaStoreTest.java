@@ -102,7 +102,7 @@ public class LocalMetaStoreTest {
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
                     olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
-                    null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    null, WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
         Assert.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);
@@ -113,7 +113,7 @@ public class LocalMetaStoreTest {
         partitionInfo.addPartition(newPartition.getId(), partitionInfo.getDataProperty(sourcePartition.getId()),
                     partitionInfo.getReplicationNum(sourcePartition.getId()),
                     partitionInfo.getIsInMemory(sourcePartition.getId()));
-        olapTable.replacePartition("t1", "t1_100");
+        olapTable.replacePartition(db.getId(), "t1", "t1_100");
 
         Assert.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
     }

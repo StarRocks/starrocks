@@ -54,6 +54,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
@@ -238,14 +239,6 @@ public class AstToStringBuilder {
                 return sb;
             }
 
-            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
-                if (authOption.isPasswordPlain()) {
-                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
-                } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
-                }
-            }
-
             if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
                 sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
                 if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
@@ -255,6 +248,14 @@ public class AstToStringBuilder {
                         sb.append(" AS '");
                     }
                     sb.append(authOption.getAuthString()).append("'");
+                }
+            } else {
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
+                        sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                    } else {
+                        sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                    }
                 }
             }
             return sb;
@@ -325,8 +326,9 @@ public class AstToStringBuilder {
             } else {
                 sqlBuilder.append("FROM ");
             }
-            if (statement.getRole() != null) {
-                sqlBuilder.append(" ROLE ").append(statement.getRole());
+
+            if (statement.getGrantType().equals(GrantType.ROLE)) {
+                sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
             } else {
                 sqlBuilder.append(statement.getUserIdentity());
             }
@@ -608,8 +610,17 @@ public class AstToStringBuilder {
                 } else {
                     selectItemLabel = "*";
                 }
-
                 sqlBuilder.append(selectItemLabel);
+
+                if (item.isStar() && !item.getExcludedColumns().isEmpty()) {
+                    sqlBuilder.append(" EXCLUDE ( ");
+                    sqlBuilder.append(
+                            item.getExcludedColumns().stream()
+                            .map(col -> "`" + col + "`")
+                            .collect(Collectors.joining(","))
+                    );
+                    sqlBuilder.append(" ) ");
+                }
             }
 
             String fromClause = visit(stmt.getRelation());

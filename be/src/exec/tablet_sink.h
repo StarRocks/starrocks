@@ -187,6 +187,7 @@ private:
     int _num_senders = -1;
     bool _is_lake_table = false;
     bool _write_txn_log = false;
+    bool _enable_data_file_bundling = false;
 
     TKeysType::type _keys_type;
 
@@ -211,7 +212,7 @@ private:
     std::vector<std::unique_ptr<IndexChannel>> _channels;
     std::vector<OlapTablePartition*> _partitions;
     std::unordered_map<int64_t, std::set<int64_t>> _index_id_partition_ids;
-    std::vector<uint32_t> _tablet_indexes;
+    std::vector<uint32_t> _record_hashes;
     // Store the output expr comput result column
     std::unique_ptr<Chunk> _output_chunk;
     bool _open_done{false};

@@ -59,6 +59,15 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _child_expr_lists.push_back(ctxs);
     }
 
+    if (tnode.union_node.__isset.local_partition_by_exprs) {
+        auto& local_partition_by_exprs = tnode.union_node.local_partition_by_exprs;
+        for (auto& texprs : local_partition_by_exprs) {
+            std::vector<ExprContext*> ctxs;
+            RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state));
+            _local_partition_by_exprs.push_back(ctxs);
+        }
+    }
+
     if (tnode.union_node.__isset.pass_through_slot_maps) {
         for (const auto& item : tnode.union_node.pass_through_slot_maps) {
             _convert_pass_through_slot_map(item);
@@ -354,7 +363,12 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
         auto child_ops = child(i)->decompose_to_pipeline(context);
-        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        if (!_local_partition_by_exprs.empty()) {
+            child_ops = context->maybe_interpolate_local_bucket_shuffle_exchange(
+                    context->runtime_state(), _id, child_ops, _local_partition_by_exprs[i]);
+        } else {
+            child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        }
         operators_list.emplace_back(child_ops);
 
         UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
@@ -380,6 +394,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     // ProjectOperatorFactory is used for the materialized sub-node.
     for (; i < _children.size(); i++) {
         auto child_ops = child(i)->decompose_to_pipeline(context);
+        std::vector<ExprContext*> partition_by_exprs;
         child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
         operators_list.emplace_back(child_ops);
 

@@ -11,7 +11,9 @@
             "items": [
                 "introduction/what_is_starrocks",
                 "introduction/Architecture",
-                "introduction/Features"
+                "introduction/Features",
+                "introduction/versioning",
+                "introduction/maturity"
             ]
         },
         {
@@ -188,9 +190,11 @@
                     ]
                 },
                 "loading/InsertInto",
+                "loading/SQL_transaction",
                 "loading/Stream_Load_transaction_interface",
                 "loading/Flink_cdc_load",
                 "loading/Flink-connector-starrocks",
+                "loading/load_from_pulsar",
                 "loading/Load_to_Primary_Key_tables",
                 "loading/Etl_in_loading",
                 "loading/loading_tools",
@@ -240,7 +244,8 @@
                             },
                             "items": [
                                 "data_source/catalog/iceberg/iceberg_timetravel",
-                                "data_source/catalog/iceberg/iceberg_meta_table"
+                                "data_source/catalog/iceberg/iceberg_meta_table",
+                                "data_source/catalog/iceberg/iceberg_rest_s3"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -265,7 +270,8 @@
                     "items": [
                         "data_source/data_cache",
                         "data_source/data_cache_warmup",
-                        "data_source/data_cache_observe"
+                        "data_source/data_cache_observe",
+                        "data_source/data_cache_troubleshooting"
                     ]
                 },
                 "data_source/External_table",

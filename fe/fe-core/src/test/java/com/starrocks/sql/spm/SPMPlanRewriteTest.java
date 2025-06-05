@@ -32,23 +32,17 @@ public class SPMPlanRewriteTest extends PlanTestBase {
     public static void beforeAll() throws Exception {
         PlanTestBase.beforeAll();
         connectContext.getSessionVariable().setEnableSPMRewrite(true);
+        connectContext.getSessionVariable().setSpmRewriteTimeoutMs(-1);
     }
 
     @BeforeEach
     public void before() {
         SPMFunctions.enableSPMParamsPrint = true;
+        connectContext.getSqlPlanStorage().dropAllBaselinePlans();
     }
 
     public CreateBaselinePlanStmt createBaselinePlanStmt(String sql) {
         String createSql = "create baseline using " + sql;
-        List<StatementBase> statements = SqlParser.parse(createSql, connectContext.getSessionVariable());
-        Preconditions.checkState(statements.size() == 1);
-        Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
-        return (CreateBaselinePlanStmt) statements.get(0);
-    }
-
-    public CreateBaselinePlanStmt createBaselinePlanStmt(String bind, String sql) {
-        String createSql = "create baseline on " + bind + " using " + sql;
         List<StatementBase> statements = SqlParser.parse(createSql, connectContext.getSessionVariable());
         Preconditions.checkState(statements.size() == 1);
         Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
@@ -85,13 +79,107 @@ public class SPMPlanRewriteTest extends PlanTestBase {
         Assertions.assertTrue(planner.getBaseline().getId() > 1);
         Assertions.assertNotEquals(query, statements.get(0));
         assertContains(planner.getBaseline().getPlanSql(),
-                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] " +
-                        "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
-        assertContains(AstToSQLBuilder.toSQL(query), "SELECT `v2`, `v4`\n" +
-                "FROM (SELECT *\n" +
-                "FROM `t0`\n" +
-                "WHERE `v2` = 2) `t_0` INNER JOIN [SHUFFLE] (SELECT *\n" +
-                "FROM `t1`\n" +
-                "WHERE `v6` IS NOT NULL) `t_1` ON `v3` = `v6`");
+                "SELECT v4, v2 FROM (SELECT v2, v4 FROM "
+                        + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] t1 ON v3 = v6) t2");
+        assertContains(AstToSQLBuilder.toSQL(query), "SELECT `v4`, `v2`\n"
+                + "FROM (SELECT `v2`, `v4`\n"
+                + "FROM (SELECT *\n"
+                + "FROM `t0`\n"
+                + "WHERE `v2` = 2) `t_0` INNER JOIN [SHUFFLE] `t1` ON `v3` = `v6`) `t2`");
+    }
+
+    @Test
+    public void testSPMFunctionRangePlan() throws Exception {
+        SPMFunctions.enableSPMParamsPrint = false;
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                        + "where t0.v2 = _spm_const_range(1, 1, 10000)");
+        BaselinePlan base1 = SPMStmtExecutor.execute(connectContext, stmt);
+
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 123");
+            assertContains(plan, "Using baseline plan[" + base1.getId() + "]");
+        }
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = -12313");
+            assertNotContains(plan, "Using baseline");
+        }
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 10001");
+            assertNotContains(plan, "Using baseline");
+        }
+        stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                        + "where t0.v2 = _spm_const_range(1, 10000, 20000)");
+        BaselinePlan b2 = SPMStmtExecutor.execute(connectContext, stmt);
+        stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                        + "where t0.v2 = _spm_const_range(1, 30000, 40000)");
+        BaselinePlan b3 = SPMStmtExecutor.execute(connectContext, stmt);
+        stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                        + "where t0.v2 = _spm_const_var(1)");
+        BaselinePlan b4 = SPMStmtExecutor.execute(connectContext, stmt);
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 15000");
+            assertContains(plan, "Using baseline plan[" + b2.getId() + "]");
+        }
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 35000");
+            assertContains(plan, "Using baseline plan[" + b3.getId() + "]");
+        }
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 46001");
+            assertContains(plan, "Using baseline plan[" + b4.getId() + "]");
+        }
+    }
+
+    @Test
+    public void testSPMFunctionEnumPlan() throws Exception {
+        SPMFunctions.enableSPMParamsPrint = false;
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                        + "where t0.v2 = _spm_const_enum(1, 1, 2, 3, 4)");
+        BaselinePlan base1 = SPMStmtExecutor.execute(connectContext, stmt);
+
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 2");
+            assertContains(plan, "Using baseline plan[" + base1.getId() + "]");
+        }
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 5");
+            assertNotContains(plan, "Using baseline");
+        }
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 10");
+            assertNotContains(plan, "Using baseline");
+        }
+        stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                        + "where t0.v2 = _spm_const_range(1, 5, 10)");
+        BaselinePlan b2 = SPMStmtExecutor.execute(connectContext, stmt);
+        stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                        + "where t0.v2 = _spm_const_var(1)");
+        BaselinePlan b4 = SPMStmtExecutor.execute(connectContext, stmt);
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 6");
+            assertContains(plan, "Using baseline plan[" + b2.getId() + "]");
+        }
+        {
+            String plan = getFragmentPlan("select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = 46001");
+            assertContains(plan, "Using baseline plan[" + b4.getId() + "]");
+        }
     }
 }

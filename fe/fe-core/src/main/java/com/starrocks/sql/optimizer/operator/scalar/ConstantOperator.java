@@ -602,6 +602,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
             } else if (desc.isChar() || desc.isVarchar()) {
                 res =  ConstantOperator.createChar(childString, desc);
+            } else if (desc.isScalarType(PrimitiveType.BINARY) || desc.isScalarType(PrimitiveType.VARBINARY)) {
+                res = ConstantOperator.createBinary(childString.getBytes(), desc);
             }
         } catch (Exception e) {
             return Optional.empty();

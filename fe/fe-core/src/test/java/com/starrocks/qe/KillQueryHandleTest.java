@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,8 +33,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.xnio.StreamConnection;
-
-import java.util.UUID;
 
 public class KillQueryHandleTest {
 
@@ -196,7 +195,7 @@ public class KillQueryHandleTest {
         ctx1.setQualifiedUser("root");
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
-        ctx1.setQueryId(UUID.randomUUID());
+        ctx1.setQueryId(UUIDUtil.genUUID());
 
         ExecuteEnv.getInstance().getScheduler().registerConnection(ctx1);
         return ctx1;

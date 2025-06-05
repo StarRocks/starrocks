@@ -630,7 +630,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
         bool need_output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
         if (need_output) {
             ColumnPtr& column = _table_items->build_chunk->columns()[i];
-            if (!column->is_nullable()) {
+            if (!column->is_nullable() && !column->is_nullable_view()) {
                 _copy_build_column(column, chunk, slot, to_nullable);
             } else {
                 _copy_build_nullable_column(column, chunk, slot);

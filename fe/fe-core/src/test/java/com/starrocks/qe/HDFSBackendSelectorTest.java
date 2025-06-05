@@ -139,7 +139,7 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 computeNodes,
                 true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID
+                WarehouseManager.DEFAULT_RESOURCE
         );
 
         HDFSBackendSelector selector =
@@ -162,7 +162,7 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 ImmutableMap.of(),
                 true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID
+                WarehouseManager.DEFAULT_RESOURCE
         );
         selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
@@ -206,7 +206,7 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 computeNodes,
                 true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID
+                WarehouseManager.DEFAULT_RESOURCE
         );
 
         HDFSBackendSelector selector =
@@ -253,7 +253,7 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 computeNodes,
                 true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID
+                WarehouseManager.DEFAULT_RESOURCE
         );
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
@@ -315,7 +315,7 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 computeNodes,
                 true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID
+                WarehouseManager.DEFAULT_RESOURCE
         );
 
         HDFSBackendSelector selector =
@@ -360,7 +360,7 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 computeNodes,
                 true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID
+                WarehouseManager.DEFAULT_RESOURCE
         );
 
         HDFSBackendSelector selector =
@@ -419,7 +419,7 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 computeNodes,
                 true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID
+                WarehouseManager.DEFAULT_RESOURCE
         );
 
         ImmutableMap.Entry<Long, ComputeNode> candidateNode = computeNodes.entrySet().asList().get(0);

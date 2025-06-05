@@ -122,7 +122,7 @@ select * from tab3;
 200	k2_200	200	200	200	v4_200	v5_200
 300	k3_300	300	300	300	v4_300	v5_300
 -- !result
-update tab3 set v1 = 1111, v2 = (select sum(tab2.v2) from tab2);
+[UC]update tab3 set v1 = 1111, v2 = (select sum(tab2.v2) from tab2);
 -- result:
 [REGEX].*column mode partial update on table with sort key cannot update sort key column.*
 -- !result

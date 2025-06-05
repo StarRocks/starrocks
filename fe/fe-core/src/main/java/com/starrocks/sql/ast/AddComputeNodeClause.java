@@ -20,14 +20,20 @@ import java.util.List;
 
 public class AddComputeNodeClause extends ComputeNodeClause {
     private final String warehouse;
+    private final String cngroupName;
 
-    public AddComputeNodeClause(List<String> hostPorts, String warehouse, NodePosition pos) {
+    public AddComputeNodeClause(List<String> hostPorts, String warehouse, String cngroupName, NodePosition pos) {
         super(hostPorts, pos);
         this.warehouse = warehouse;
+        this.cngroupName = cngroupName;
     }
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    public String getCNGroupName() {
+        return cngroupName;
     }
 
     @Override

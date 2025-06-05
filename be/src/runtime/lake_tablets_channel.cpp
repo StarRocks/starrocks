@@ -25,6 +25,7 @@
 #include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
+#include "fs/bundle_file.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/descriptors.h"
@@ -234,6 +235,7 @@ private:
     mutable bthreads::BThreadSharedMutex _rw_mtx;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+    std::unique_ptr<BundleWritableFileContext> _bundle_writable_file_context;
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
@@ -329,6 +331,10 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
         }
     }
 
+    if (params.has_lake_tablet_params() && params.lake_tablet_params().has_enable_data_file_bundling() &&
+        params.lake_tablet_params().enable_data_file_bundling()) {
+        _bundle_writable_file_context = std::make_unique<BundleWritableFileContext>();
+    }
     RETURN_IF_ERROR(_create_delta_writers(params, false));
 
     for (auto& [id, writer] : _delta_writers) {
@@ -520,6 +526,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     auto start_wait_writer_ts = watch.elapsed_time();
     // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
     count_down_latch.wait();
+
     auto finish_wait_writer_ts = watch.elapsed_time();
 
     if (request.eos() || context->_response->status().status_code() == TStatusCode::OK) {
@@ -563,6 +570,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+            wait_memtable_flush_time_ns / NANOSECS_PER_USEC);
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns /
+                                                                                            NANOSECS_PER_USEC);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
     size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
@@ -712,6 +723,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_column_to_expr_value(&_column_to_expr_value)
                                               .set_load_id(params.id())
                                               .set_profile(_profile)
+                                              .set_bundle_writable_file_context(_bundle_writable_file_context.get())
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
@@ -728,6 +740,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
             _tablet_id_to_sorted_indexes[tablet_ids[i]] = i;
         }
     }
+
     return Status::OK();
 }
 
@@ -840,12 +853,13 @@ void LakeTabletsChannel::update_profile() {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, tablets_profile);
         RuntimeProfile* final_profile = _profile->create_child("PeerReplicas");
         auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_UPDATE(tablets_counter, tablets_profile.size());
+        COUNTER_SET(tablets_counter, static_cast<int64_t>(tablets_profile.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
 }
 
+#define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
 #define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
 #define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
 #define DEFAULT_IF_NULL(ptr, value, default_value) ((ptr) ? (value) : (default_value))
@@ -870,10 +884,10 @@ void LakeTabletsChannel::_update_tablet_profile(DeltaWriter* writer, RuntimeProf
     const FlushStatistic* flush_stat = writer->get_flush_stats();
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
                            DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count, 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count, 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count, 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns, 0));
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
                            DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));

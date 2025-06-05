@@ -20,7 +20,6 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
-import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
@@ -108,6 +107,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_RENAME_PARTITION_V2, TableInfo.class)
             .put(OperationType.OP_RENAME_COLUMN_V2, ColumnRenameInfo.class)
             .put(OperationType.OP_MODIFY_VIEW_DEF, AlterViewInfo.class)
+            .put(OperationType.OP_SET_VIEW_SECURITY_LOG, AlterViewInfo.class)
             .put(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_RENAME_MATERIALIZED_VIEW, RenameMaterializedViewLog.class)
             .put(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, AlterMaterializedViewStatusLog.class)
@@ -135,8 +135,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_RESET_FRONTENDS, Frontend.class)
             .put(OperationType.OP_LEADER_INFO_CHANGE_V2, LeaderInfo.class)
             .put(OperationType.OP_TIMESTAMP_V2, Timestamp.class)
-            .put(OperationType.OP_ADD_BROKER_V2, BrokerMgr.ModifyBrokerInfo.class)
-            .put(OperationType.OP_DROP_BROKER_V2, BrokerMgr.ModifyBrokerInfo.class)
+            .put(OperationType.OP_ADD_BROKER_V2, ModifyBrokerInfo.class)
+            .put(OperationType.OP_DROP_BROKER_V2, ModifyBrokerInfo.class)
             .put(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, TransactionState.class)
             .put(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, TransactionStateBatch.class)
             .put(OperationType.OP_CREATE_REPOSITORY_V2, Repository.class)
@@ -215,6 +215,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
             .put(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
             .put(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, ModifyTableColumnOperationLog.class)
+            .put(OperationType.OP_MODIFY_COLUMN_COMMENT, ModifyColumnCommentLog.class)
             .put(OperationType.OP_CREATE_CATALOG, Catalog.class)
             .put(OperationType.OP_DROP_CATALOG, DropCatalogLog.class)
             .put(OperationType.OP_ALTER_CATALOG, AlterCatalogLog.class)
@@ -256,8 +257,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_CREATE_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
-            .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.class)
-            .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.class)
+            .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

@@ -54,17 +54,17 @@ public class AlterTableTest extends TableTestBase {
     public void testCreateBranch() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
 
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tblName) {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
                 return mockedNativeTableB;
             }
 
             @Mock
-            boolean tableExists(String dbName, String tblName) {
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
                 return true;
             }
         };
@@ -136,17 +136,17 @@ public class AlterTableTest extends TableTestBase {
     public void testCreateTag() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
 
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tblName) {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
                 return mockedNativeTableB;
             }
 
             @Mock
-            boolean tableExists(String dbName, String tblName) {
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
                 return true;
             }
         };
@@ -204,17 +204,17 @@ public class AlterTableTest extends TableTestBase {
     public void testDropBranch() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
 
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tblName) {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
                 return mockedNativeTableB;
             }
 
             @Mock
-            boolean tableExists(String dbName, String tblName) {
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
                 return true;
             }
         };
@@ -246,17 +246,17 @@ public class AlterTableTest extends TableTestBase {
     public void testDropTag() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
 
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tblName) {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
                 return mockedNativeTableB;
             }
 
             @Mock
-            boolean tableExists(String dbName, String tblName) {
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
                 return true;
             }
         };
@@ -288,17 +288,17 @@ public class AlterTableTest extends TableTestBase {
     public void testAlterView() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
 
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tblName) {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
                 return mockedNativeTableB;
             }
 
             @Mock
-            boolean tableExists(String dbName, String tblName) {
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
                 return true;
             }
         };

@@ -17,9 +17,16 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
+import com.google.api.client.util.Lists;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TGetWarehouseMetricsResponeItem;
+
+import java.util.List;
+import java.util.Optional;
 
 public class WarehouseMetrics {
     private final long warehouseId;
@@ -33,10 +40,12 @@ public class WarehouseMetrics {
     private final int sumRequiredSlots;
     private final long remainSlots;
     private final long maxSlots;
+    private final Optional<BaseSlotTracker.ExtraMessage> extraMessage;
 
     public WarehouseMetrics(long warehouseId, String warehouseName, long queuePendingLength, long queueRunningLength,
                             long maxQueueQueueLength, double earliestQueryWaitTime, long maxQueuePendingTimeSecond,
-                            int maxRequiredSlots, int sumRequiredSlots, long remainSlots, long maxSlots) {
+                            int maxRequiredSlots, int sumRequiredSlots, long remainSlots, long maxSlots,
+                            Optional<BaseSlotTracker.ExtraMessage> extraMessage) {
         this.warehouseId = warehouseId;
         this.warehouseName = warehouseName;
         this.queuePendingLength = queuePendingLength;
@@ -48,10 +57,12 @@ public class WarehouseMetrics {
         this.sumRequiredSlots = sumRequiredSlots;
         this.remainSlots = remainSlots;
         this.maxSlots = maxSlots;
+        this.extraMessage = extraMessage;
     }
 
     public static WarehouseMetrics empty() {
-        return new WarehouseMetrics(0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        return new WarehouseMetrics(0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                Optional.empty());
     }
 
     public static WarehouseMetrics create(BaseSlotTracker tracker) {
@@ -60,10 +71,11 @@ public class WarehouseMetrics {
         // to avoid negative remain slots
         long remainSlots = QueryQueueOptions.correctSlotNum(tracker.getRemainSlots().orElse(0));
         long maxSlots = tracker.getMaxSlots().map(s -> QueryQueueOptions.correctSlotNum(s)).orElse(0);
+        final Optional<BaseSlotTracker.ExtraMessage> extraMessage = tracker.getExtraMessage();
         return new WarehouseMetrics(tracker.getWarehouseId(), tracker.getWarehouseName(),
-                tracker.getQueuePendingLength(), tracker.getAllocatedLength(), tracker.getMaxQueueQueueLength(),
+                tracker.getQueuePendingLength(), tracker.getCurrentCurrency(), tracker.getMaxQueueQueueLength(),
                 tracker.getEarliestQueryWaitTimeSecond(), tracker.getMaxQueuePendingTimeSecond(),
-                maxRequestSlots, sumRequestSlots, remainSlots, maxSlots);
+                maxRequestSlots, sumRequestSlots, remainSlots, maxSlots, extraMessage);
     }
 
     public TGetWarehouseMetricsResponeItem toThrift() {
@@ -79,6 +91,30 @@ public class WarehouseMetrics {
         item.setSum_required_slots(String.valueOf(sumRequiredSlots));
         item.setRemain_slots(String.valueOf(remainSlots));
         item.setMax_slots(String.valueOf(maxSlots));
+        if (extraMessage != null && extraMessage.isPresent()) {
+            item.setExtra_message(GsonUtils.GSON.toJson(extraMessage.get()));
+        }
         return item;
+    }
+
+    public List<ScalarOperator> toConstantOperators() {
+        List<ScalarOperator> result = Lists.newArrayList();
+        result.add(ConstantOperator.createVarchar(String.valueOf(warehouseId)));
+        result.add(ConstantOperator.createVarchar(warehouseName));
+        result.add(ConstantOperator.createVarchar(String.valueOf(queuePendingLength)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(queueRunningLength)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(maxQueueQueueLength)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(maxQueuePendingTimeSecond)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(earliestQueryWaitTime)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(maxRequiredSlots)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(sumRequiredSlots)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(remainSlots)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(maxSlots)));
+        if (extraMessage.isPresent()) {
+            result.add(ConstantOperator.createVarchar(GsonUtils.GSON.toJson(extraMessage.get())));
+        } else {
+            result.add(ConstantOperator.createVarchar(""));
+        }
+        return result;
     }
 }
