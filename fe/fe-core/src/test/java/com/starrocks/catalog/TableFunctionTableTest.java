@@ -80,6 +80,24 @@ public class TableFunctionTableTest {
     }
 
     @Test
+    public void testDuplicateColumnsInSchema() {
+        Map<String, String> properties = newProperties();
+
+        // duplicate with file schema
+        properties.put("columns_from_path", "col_int");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Duplicate column name 'col_int' in files table schema [col_int, col_string, col_int]",
+                () -> new TableFunctionTable(properties));
+
+        // duplicate in columns from path
+        properties.put("columns_from_path", "col_path, col_path");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Duplicate column name 'col_path' in files table schema [col_int, col_string, col_path, col_path]",
+                () -> new TableFunctionTable(properties));
+
+    }
+
+    @Test
     public void testGetFileSchema(@Mocked GlobalStateMgr globalStateMgr,
                                   @Mocked SystemInfoService systemInfoService) throws Exception {
         new Expectations() {

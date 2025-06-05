@@ -246,8 +246,28 @@ public class TableFunctionTable extends Table {
         } else {
             columns = getFileSchema();
         }
+
+        // get columns from path
         columns.addAll(getSchemaFromPath());
+
+        // check duplicate columns
+        checkDuplicateColumns(columns);
+
+        // set schema
         setNewFullSchema(columns);
+    }
+
+    private void checkDuplicateColumns(List<Column> columns) throws DdlException {
+        Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (Column col : columns) {
+            String colName = col.getName();
+            if (!colNameSet.add(colName)) {
+                List<String> colNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+                String msg = String.format("%s in files table schema [%s]", ErrorCode.ERR_DUP_FIELDNAME.formatErrorMsg(colName),
+                        String.join(", ", colNames));
+                throw new DdlException(msg);
+            }
+        }
     }
 
     private void setSchemaForListFiles() {
@@ -665,17 +685,11 @@ public class TableFunctionTable extends Table {
         }
         return columns;
     }
-    private List<Column> getSchemaFromPath() throws DdlException {
+
+    private List<Column> getSchemaFromPath() {
         List<Column> columns = new ArrayList<>();
-        if (!columnsFromPath.isEmpty()) {
-            for (String colName : columnsFromPath) {
-                Optional<Column> column =  columns.stream().filter(col -> col.nameEquals(colName, false)).findFirst();
-                if (column.isPresent()) {
-                    throw new DdlException("duplicated name in columns from path, " +
-                            "a column with same name already exists in the file table: " + colName);
-                }
-                columns.add(new Column(colName, ScalarType.createDefaultString(), true));
-            }
+        for (String colName : columnsFromPath) {
+            columns.add(new Column(colName, ScalarType.createDefaultString(), true));
         }
         return columns;
     }
