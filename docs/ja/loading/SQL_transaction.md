@@ -52,11 +52,15 @@ v3.5.0 から、StarRocks は SQL トランザクションをサポートし、�
 
 ```SQL
 BEGIN WORK;
+-- ネイティブ・テーブルから別のテーブルにデータをインサートする。
+INSERT INTO insert_wiki_edit_backup
+    SELECT * FROM insert_wiki_edit;
+-- 指定された値のデータをインサートする。
 INSERT INTO source_wiki_edit
-WITH LABEL insert_load_wikipedia
 VALUES
     ("2015-09-12 00:00:00","#en.wikipedia","AustinFF",0,0,0,0,0,21,5,0),
     ("2015-09-12 00:00:00","#ca.wikipedia","helloSR",0,1,0,1,0,3,23,0);
+-- リモートストレージからデータをインサートする。
 INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -72,7 +76,8 @@ COMMIT WORK;
 
 - 現在、StarRocks は SQL トランザクションで INSERT および SELECT ステートメントのみをサポートしています。
 - トランザクション内の DML ステートメントのすべての対象テーブルは、同じデータベース内になければなりません。
-- トランザクション内で同じテーブルに対する複数の INSERT ステートメントは許可されていません。
+- トランザクション内で同じテーブルに対する複数の INSERT ステートメントは許可されていません。そうでない場合、システムはエラーを返す。
+- 先行する INSERT ステートメントのターゲットテーブルを、後続のステートメントのソーステーブルにすることはできません。そうでない場合、システムはエラーを返す。
 - トランザクションのネストは許可されていません。BEGIN-COMMIT/ROLLBACK ペア内で BEGIN WORK を指定することはできません。
 - 進行中のトランザクションが属するセッションが終了または閉じられた場合、トランザクションは自動的にロールバックされます。
 - StarRocks は、上記のようにトランザクション分離レベルとして限定された READ COMMITTED のみをサポートしています。
