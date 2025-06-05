@@ -1,5 +1,5 @@
 -- name: test_partitions_scan_statistics
-create database test_db;
+create database test_partitions_scan_db;
 -- result:
 -- !result
 CREATE TABLE test_partitions_scan_db.test_partitions_scan_tab (
