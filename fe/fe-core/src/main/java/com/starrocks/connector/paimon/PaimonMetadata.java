@@ -114,6 +114,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -429,7 +430,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
             List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
-            traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
+            traceScanMetrics(paimonMetricRegistry, splits, ((PaimonTable) table).getTableName(), predicates,
+                    String.valueOf(Objects.hash(predicate)));
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
@@ -448,7 +450,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     private void traceScanMetrics(PaimonMetricRegistry metricRegistry,
                                   List<Split> splits,
                                   String tableName,
-                                  List<Predicate> predicates) {
+                                  List<Predicate> predicates,
+                                  String predicateHash) {
         // Don't need scan metrics when selecting system table, in which metric group is null.
         if (metricRegistry.getMetricGroup() == null) {
             return;
@@ -469,8 +472,9 @@ public class PaimonMetadata implements ConnectorMetadata {
                     String.valueOf(cacheSizes.partitionCacheSize()));
         }
 
+        String tableIdentifier = tableName + "-" + predicateHash;
         for (int i = 0; i < predicates.size(); i++) {
-            Tracers.record(EXTERNAL, prefix + tableName + ".filter." + i, predicates.get(i).toString());
+            Tracers.record(EXTERNAL, prefix + tableIdentifier + ".filter." + i, predicates.get(i).toString());
         }
 
         Map<String, Metric> metrics = metricRegistry.getMetrics();
@@ -481,13 +485,14 @@ public class PaimonMetadata implements ConnectorMetadata {
         long manifestNumReadFromCache = (long) ((Gauge<?>) metrics.get(ScanMetrics.MANIFEST_HIT_CACHE)).getValue();
         long manifestNumReadFromRemote = (long) ((Gauge<?>) metrics.get(ScanMetrics.MANIFEST_MISSED_CACHE)).getValue();
 
-        Tracers.record(EXTERNAL, prefix + tableName + "." + "manifestFileReadTime", manifestFileReadTime + "ms");
-        Tracers.record(EXTERNAL, prefix + tableName + "." + "scannedManifestFileNum", String.valueOf(scannedManifestFileNum));
-        Tracers.record(EXTERNAL, prefix + tableName + "." + "skippedDataFilesNum", String.valueOf(skippedDataFilesNum));
-        Tracers.record(EXTERNAL, prefix + tableName + "." + "resultedDataFilesNum", String.valueOf(resultedDataFilesNum));
-        Tracers.record(EXTERNAL, prefix + tableName + "." + "manifestNumReadFromCache",
+        Tracers.record(EXTERNAL, prefix + tableIdentifier + "." + "manifestFileReadTime", manifestFileReadTime + "ms");
+        Tracers.record(EXTERNAL, prefix + tableIdentifier + "." + "scannedManifestFileNum",
+                String.valueOf(scannedManifestFileNum));
+        Tracers.record(EXTERNAL, prefix + tableIdentifier + "." + "skippedDataFilesNum", String.valueOf(skippedDataFilesNum));
+        Tracers.record(EXTERNAL, prefix + tableIdentifier + "." + "resultedDataFilesNum", String.valueOf(resultedDataFilesNum));
+        Tracers.record(EXTERNAL, prefix + tableIdentifier + "." + "manifestNumReadFromCache",
                 String.valueOf(manifestNumReadFromCache));
-        Tracers.record(EXTERNAL, prefix + tableName + "." + "manifestNumReadFromRemote",
+        Tracers.record(EXTERNAL, prefix + tableIdentifier + "." + "manifestNumReadFromRemote",
                 String.valueOf(manifestNumReadFromRemote));
         Tracers.record(EXTERNAL, prefix + "total.resultSplitsNum", String.valueOf(splits.size()));
 
@@ -496,7 +501,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             List<DataFileMeta> dataFileMetas = ((DataSplit) split).dataFiles();
             dataFileMetas.forEach(dataFileMeta -> resultedTableFilesSize.addAndGet(dataFileMeta.fileSize()));
         }
-        Tracers.record(EXTERNAL, prefix + tableName + "." + "resultedDataFilesSize", resultedTableFilesSize.get() + " B");
+        Tracers.record(EXTERNAL, prefix + tableIdentifier + "." + "resultedDataFilesSize", resultedTableFilesSize.get() + " B");
     }
 
     @Override

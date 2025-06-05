@@ -72,7 +72,9 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -197,11 +199,11 @@ public class PaimonScanNode extends ScanNode {
 
         }
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
-        traceJniMetrics();
-        traceDeletionVectorMetrics();
+        traceJniMetrics(String.valueOf(Objects.hash(predicate)));
+        traceDeletionVectorMetrics(String.valueOf(Objects.hash(predicate)));
     }
 
-    private void traceJniMetrics() {
+    private void traceJniMetrics(String predicateHash) {
         int totalReaderCount = 0, jniReaderCount = 0;
         long totalReaderLength = 0, jniReaderLength = 0;
 
@@ -214,16 +216,15 @@ public class PaimonScanNode extends ScanNode {
             totalReaderCount++;
             totalReaderLength += hdfsScanRange.length;
         }
-
-        String prefix = "Paimon.metadata.reader." + paimonTable.getCatalogTableName() + ".";
+        String prefix = "Paimon.metadata.reader." + paimonTable.getTableName() + "-" + predicateHash + ".";
         Tracers.record(EXTERNAL, prefix + "nativeReaderReadNum", String.valueOf(totalReaderCount - jniReaderCount));
         Tracers.record(EXTERNAL, prefix + "nativeReaderReadBytes", (totalReaderLength - jniReaderLength) + " B");
         Tracers.record(EXTERNAL, prefix + "jniReaderReadNum", String.valueOf(jniReaderCount));
         Tracers.record(EXTERNAL, prefix + "jniReaderReadBytes", jniReaderLength + " B");
     }
 
-    private void traceDeletionVectorMetrics() {
-        String prefix = "Paimon.metadata.deletionVector." + paimonTable.getCatalogTableName() + ".";
+    private void traceDeletionVectorMetrics(String predicateHash) {
+        String prefix = "Paimon.metadata.deletionVector." + paimonTable.getTableName() + "-" + predicateHash + ".";
         int deletionVectorCount = 0;
         long deletionVectorReaderScanRange = 0;
         for (TScanRangeLocations rangeLocation : scanRangeLocationsList) {
