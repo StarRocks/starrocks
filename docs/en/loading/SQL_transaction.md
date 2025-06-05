@@ -52,11 +52,15 @@ A transaction is associated with a single session. Multiple sessions cannot shar
 
 ```SQL
 BEGIN WORK;
+-- Insert data from a native table to another.
+INSERT INTO insert_wiki_edit_backup
+    SELECT * FROM insert_wiki_edit;
+-- Insert data with specified values.
 INSERT INTO source_wiki_edit
-WITH LABEL insert_load_wikipedia
 VALUES
     ("2015-09-12 00:00:00","#en.wikipedia","AustinFF",0,0,0,0,0,21,5,0),
     ("2015-09-12 00:00:00","#ca.wikipedia","helloSR",0,1,0,1,0,3,23,0);
+-- Insert data from remote storage.
 INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -72,7 +76,8 @@ COMMIT WORK;
 
 - Currently, StarRocks only supports INSERT and SELECT statements in SQL transactions.
 - All target tables of the DML statements in a transaction must be within the same database.
-- Multiple INSERT statements against the same table within a transaction are not allowed.
+- Multiple INSERT statements against the same table within a transaction are not allowed. Otherwise, the system returns an error.
+- The target table of the preceding INSERT statement cannot be the source table of subsequent statements. Otherwise, the system returns an error.
 - Nesting transactions are not allowed. You cannot specify BEGIN WORK within a BEGIN-COMMIT/ROLLBACK pair.
 - If the session where an on-going transaction belongs is terminated or closed, the transaction is automatically rolled back.
 - StarRock only supports limited READ COMMITTED for Transaction Isolation Level as described above.
