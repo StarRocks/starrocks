@@ -6,9 +6,12 @@ displayed_sidebar: docs
 
 本文介绍如何为 StarRocks 启用和可视化 Jemalloc 堆内存分析。
 
-## 适用于 StarRocks v3.1.6 及更高版本
+:::note
+- 启用 Jemalloc 堆内存分析可能会影响 StarRocks 的性能。
+- 该方案仅适用于 StarRocks v3.1.6 及更高版本。
+:::
 
-### 启用 Jemalloc 堆内存分析
+## 启用 Jemalloc 堆内存分析
 
 语法：
 
@@ -66,7 +69,7 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().disable_prof(
 1 row in set (0.00 sec)
 ```
 
-### 收集 Jemalloc 堆内存分析
+## 收集 Jemalloc 堆内存分析
 
 语法：
 
@@ -114,7 +117,7 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().dump_dot_snap
 29 rows in set (30.22 sec)
 ```
 
-### 可视化 Jemalloc 堆内存分析
+## 可视化 Jemalloc 堆内存分析
 
 将上一步收集的分析文本复制并粘贴到 [GraphvizOnline](https://dreampuf.github.io/GraphvizOnline/)。
 
@@ -122,55 +125,4 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().dump_dot_snap
 
 示例：
 
-![Example - Visualized Heap Profile - New](../_assets/visualized_heap_profile-new.png)
-
-## 适用于 StarRocks v3.1.6 之前的版本
-
-按照以下步骤为 StarRocks v3.1.6 之前的版本启用和可视化 Jemalloc 堆内存分析：
-
-1. 安装 jemalloc v5.2.0 并启用 Jemalloc 堆内存分析。
-
-   ```Bash
-   wget https://github.com/jemalloc/jemalloc/archive/5.2.0.tar.gz
-   tar xf 5.2.0.tar.gz
-   cd jemalloc-5.2.0/
-   sh autogen.sh --enable-prof
-   ```
-
-2. 修改 BE 节点的 **be/bin/start_backend.sh** 文件。在 `export JEMALLOC_CONF` 行的末尾添加一个额外的选项 `prof:true`。**记得用逗号分隔选项。**
-
-   示例：
-
-   ```Bash
-   export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true"
-   ```
-
-3. 重启 BE 节点。
-
-4. 输出内存快照。
-
-   ```Bash
-   curl http://{$be_ip}:{$be_http_port}/pprof/heap >a.heap
-   ```
-
-   **几小时后**输出另一个堆快照。
-
-   ```Bash
-   curl http://{$be_ip}:{$be_http_port}/pprof/heap >b.heap
-   ```
-
-5. 计算快照之间的变化并生成 DOT 文件。
-
-   ```Bash
-   jeprof --dot /{$path_to_be}/lib/starrocks_be --base=a.heap b.heap >a.dot
-   ```
-
-6. 根据 DOT 文件生成 PDF 文件。
-
-   ```Bash
-   dot -Tpdf a.dot -o a.pdf
-   ```
-
-示例：
-
-![Example - Visualized Heap Profile - Old](../_assets/visualized_heap_profile-old.png)
+![Example - Visualized Heap Profile](../_assets/visualized_heap_profile.png)

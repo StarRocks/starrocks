@@ -6,9 +6,12 @@ displayed_sidebar: docs
 
 This topic describes how to enable and visualize the Jemalloc Heap Profile for StarRocks.
 
-## For StarRocks v3.1.6 and later
+:::note
+- Enabling Jemalloc Heap Profiling may have an impact on StarRocks' performance.
+- This solution is available only for StarRocks v3.1.6 and later.
+:::
 
-### Enable Jemalloc Heap Profile
+## Enable Jemalloc Heap Profile
 
 Syntax:
 
@@ -66,7 +69,7 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().disable_prof(
 1 row in set (0.00 sec)
 ```
 
-### Collect Jemalloc Heap Profile
+## Collect Jemalloc Heap Profile
 
 Syntax:
 
@@ -114,7 +117,7 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().dump_dot_snap
 29 rows in set (30.22 sec)
 ```
 
-### Visualize Jemalloc Heap Profile
+## Visualize Jemalloc Heap Profile
 
 Copy the profile text you collected in the last step, and paste it to [GraphvizOnline](https://dreampuf.github.io/GraphvizOnline/).
 
@@ -122,55 +125,4 @@ You can then download the visualized Heap Profile.
 
 Example:
 
-![Example - Visualized Heap Profile - New](../_assets/visualized_heap_profile-new.png)
-
-## For StarRocks earlier than v3.1.6
-
-Follow these steps to enable and visualize Jemalloc Heap Profiles for StarRocks earlier than v3.1.6:
-
-1. Install jemalloc v5.2.0 and enable Jemalloc Heap Profile.
-
-   ```Bash
-   wget https://github.com/jemalloc/jemalloc/archive/5.2.0.tar.gz
-   tar xf 5.2.0.tar.gz
-   cd jemalloc-5.2.0/
-   sh autogen.sh --enable-prof
-   ```
-
-2. Modify the **be/bin/start_backend.sh** file of the BE node. Add an extra option `prof:true` to the end of the `export JEMALLOC_CONF` line. **Remember to separate the option with a comma.**
-
-   Example:
-
-   ```Bash
-   export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true"
-   ```
-
-3. Restart the BE node.
-
-4. Output a memory snapshot.
-
-   ```Bash
-   curl http://{$be_ip}:{$be_http_port}/pprof/heap >a.heap
-   ```
-
-   Output another heap snapshot **after a few hours**.
-
-   ```Bash
-   curl http://{$be_ip}:{$be_http_port}/pprof/heap >b.heap
-   ```
-
-5. Calculate the changes between the snapshots and generate the DOT file.
-
-   ```Bash
-   jeprof --dot /{$path_to_be}/lib/starrocks_be --base=a.heap b.heap >a.dot
-   ```
-
-6. Generate the PDF file based on the DOT file.
-
-   ```Bash
-   dot -Tpdf a.dot -o a.pdf
-   ```
-
-Example:
-
-![Example - Visualized Heap Profile - Old](../_assets/visualized_heap_profile-old.png)
+![Example - Visualized Heap Profile](../_assets/visualized_heap_profile.png)

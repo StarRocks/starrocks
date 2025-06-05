@@ -6,9 +6,12 @@ displayed_sidebar: docs
 
 このトピックでは、StarRocks の Jemalloc ヒーププロファイルを有効にし、可視化する方法について説明します。
 
-## StarRocks v3.1.6 以降
+:::note
+- Jemalloc ヒーププロファイルを有効にすると、StarRocks のパフォーマンスに影響を与える可能性があります。
+- このソリューションは、StarRocks v3.1.6以降でのみ利用可能です。
+:::
 
-### Jemalloc ヒーププロファイルを有効にする
+## Jemalloc ヒーププロファイルを有効にする
 
 構文:
 
@@ -66,7 +69,7 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().disable_prof(
 1 row in set (0.00 sec)
 ```
 
-### Jemalloc ヒーププロファイルを収集する
+## Jemalloc ヒーププロファイルを収集する
 
 構文:
 
@@ -114,7 +117,7 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().dump_dot_snap
 29 rows in set (30.22 sec)
 ```
 
-### Jemalloc ヒーププロファイルを可視化する
+## Jemalloc ヒーププロファイルを可視化する
 
 前のステップで収集したプロファイルテキストをコピーし、[GraphvizOnline](https://dreampuf.github.io/GraphvizOnline/) に貼り付けます。
 
@@ -122,55 +125,4 @@ mysql> admin execute on 10001 'System.print(HeapProf.getInstance().dump_dot_snap
 
 例:
 
-![Example - Visualized Heap Profile - New](../_assets/visualized_heap_profile-new.png)
-
-## StarRocks v3.1.6 より前
-
-StarRocks v3.1.6 より前のバージョンで Jemalloc ヒーププロファイルを有効にし、可視化する手順は次のとおりです。
-
-1. jemalloc v5.2.0 をインストールし、Jemalloc ヒーププロファイルを有効にします。
-
-   ```Bash
-   wget https://github.com/jemalloc/jemalloc/archive/5.2.0.tar.gz
-   tar xf 5.2.0.tar.gz
-   cd jemalloc-5.2.0/
-   sh autogen.sh --enable-prof
-   ```
-
-2. BE ノードの **be/bin/start_backend.sh** ファイルを修正します。`export JEMALLOC_CONF` 行の末尾に追加オプション `prof:true` を追加します。**オプションはカンマで区切ることを忘れないでください。**
-
-   例:
-
-   ```Bash
-   export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true"
-   ```
-
-3. BE ノードを再起動します。
-
-4. メモリスナップショットを出力します。
-
-   ```Bash
-   curl http://{$be_ip}:{$be_http_port}/pprof/heap >a.heap
-   ```
-
-   **数時間後**に別のヒープスナップショットを出力します。
-
-   ```Bash
-   curl http://{$be_ip}:{$be_http_port}/pprof/heap >b.heap
-   ```
-
-5. スナップショット間の変化を計算し、DOT ファイルを生成します。
-
-   ```Bash
-   jeprof --dot /{$path_to_be}/lib/starrocks_be --base=a.heap b.heap >a.dot
-   ```
-
-6. DOT ファイルに基づいて PDF ファイルを生成します。
-
-   ```Bash
-   dot -Tpdf a.dot -o a.pdf
-   ```
-
-例:
-
-![Example - Visualized Heap Profile - Old](../_assets/visualized_heap_profile-old.png)
+![Example - Visualized Heap Profile](../_assets/visualized_heap_profile.png)
