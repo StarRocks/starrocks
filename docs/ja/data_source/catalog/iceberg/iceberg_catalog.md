@@ -239,6 +239,10 @@ AWS Glue へのアクセス認証方法の選択方法および AWS IAM コン�
 
 ##### REST
 
+:::note
+S3テーブル用のIceberg RESTカタログの作成方法の詳細については、[AWS S3テーブル用のIceberg REST Catalog](./iceberg_rest_s3.md) を参照してください。
+:::
+
 メタストアとして REST を使用する場合、メタストアのタイプを REST (`"iceberg.catalog.type" = "rest"`) として指定する必要があります。`MetastoreParams` を次のように設定します。
 
 ```SQL
@@ -354,14 +358,6 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 +------+
 3 rows in set (0.34 sec)
 ```
-
-</TabItem>
-
-<TabItem value="S3 Tables" label="S3 Tables">
-
-#### S3 Tables
-
-詳細な手順については、[AWS S3テーブル用のIceberg REST Catalog](./iceberg_rest_s3.md) を作成するを参照してください。
 
 </TabItem>
 
