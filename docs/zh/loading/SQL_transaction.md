@@ -52,11 +52,15 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 ```SQL
 BEGIN WORK;
+-- 从一个本地表向另一个本地表中插入数据。
+INSERT INTO insert_wiki_edit_backup
+    SELECT * FROM insert_wiki_edit;
+-- 插入指定数值的数据。
 INSERT INTO source_wiki_edit
-WITH LABEL insert_load_wikipedia
 VALUES
     ("2015-09-12 00:00:00","#en.wikipedia","AustinFF",0,0,0,0,0,21,5,0),
     ("2015-09-12 00:00:00","#ca.wikipedia","helloSR",0,1,0,1,0,3,23,0);
+-- 从远端存储中插入数据。
 INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -72,7 +76,8 @@ COMMIT WORK;
 
 - 目前，StarRocks 的 SQL 事务仅支持 INSERT 和 SELECT 语句。
 - 事务中 DML 语句的所有目标表必须在同一个数据库中。
-- 不允许在事务中对同一表执行多个 INSERT 语句。
+- 不允许在事务中对同一表执行多个 INSERT 语句。否则系统报错。
+- 前一条 INSERT 语句的目标表不能作为后续语句的源表。否则系统报错。
 - 不允许嵌套事务，即不能在一对 BEGIN-COMMIT/ROLLBACK 之间再次指定 BEGIN WORK。
 - 如果执行事务的会话被终止或关闭，事务会自动回滚。
 - 如上所述，StarRocks 仅支持有限的 READ COMMITTED 事务隔离级别。
