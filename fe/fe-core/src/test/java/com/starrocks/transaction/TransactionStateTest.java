@@ -26,6 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
@@ -149,11 +150,9 @@ public class TransactionStateTest {
 
     @Test
     public void testCheckReplicaNeedSkip() {
-        UUID uuid = UUID.randomUUID();
-        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
-                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
+        TransactionState state = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L), 3000, "label123",
+                UUIDUtil.genTUniqueId(), LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"),
+                50000L, 60 * 1000L);
 
         PartitionCommitInfo pcInfo = new PartitionCommitInfo(1L, 100L, 1L);
 
