@@ -113,7 +113,7 @@ public class LocalMetaStoreTest {
         partitionInfo.addPartition(newPartition.getId(), partitionInfo.getDataProperty(sourcePartition.getId()),
                     partitionInfo.getReplicationNum(sourcePartition.getId()),
                     partitionInfo.getIsInMemory(sourcePartition.getId()));
-        olapTable.replacePartition("t1", "t1_100");
+        olapTable.replacePartition(db.getId(), "t1", "t1_100");
 
         Assert.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
     }

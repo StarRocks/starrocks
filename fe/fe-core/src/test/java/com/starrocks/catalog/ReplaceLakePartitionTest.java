@@ -170,7 +170,7 @@ public class ReplaceLakePartitionTest {
     @Test
     public void testUnPartitionedLakeTableReplacePartition() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
-        tbl.replacePartition(partitionName, tempPartitionName);
+        tbl.replacePartition(dbId, partitionName, tempPartitionName);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
@@ -180,7 +180,7 @@ public class ReplaceLakePartitionTest {
     public void testUnPartitionedLakeTableReplacePartitionForTruncateTable() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
         Partition newPartition = buildPartitionForTruncateTable();
-        tbl.replacePartition(newPartition);
+        tbl.replacePartition(dbId, newPartition);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
@@ -190,7 +190,7 @@ public class ReplaceLakePartitionTest {
     public void testListPartitionedLakeTableReplacePartitionForTruncateTable() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
         Partition newPartition = buildPartitionForTruncateTable();
-        tbl.replacePartition(newPartition);
+        tbl.replacePartition(dbId, newPartition);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
@@ -200,7 +200,7 @@ public class ReplaceLakePartitionTest {
     public void testRangePartitionedLakeTableReplacePartitionForTruncateTable() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
         Partition newPartition = buildPartitionForTruncateTable();
-        tbl.replacePartition(newPartition);
+        tbl.replacePartition(dbId, newPartition);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
