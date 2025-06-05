@@ -272,15 +272,6 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-StatusOr<int64_t> CacheEnv::get_storage_page_cache_limit() {
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), _global_env->process_mem_limit());
-}
-
-StatusOr<int64_t> CacheEnv::get_data_cache_mem_limit() {
-    ASSIGN_OR_RETURN(auto mem_limit, ParseUtil::parse_mem_spec(config::datacache_mem_size, _global_env->process_mem_limit()));
-    return check_storage_page_cache_limit(mem_limit);
-}
-
 Status CacheEnv::adjust_capacity(int64_t delta, size_t min_capacity) {
     if (config::datacache_engine == "starcache") {
         return _local_cache->adjust_capacity(delta, min_capacity);
@@ -289,22 +280,6 @@ Status CacheEnv::adjust_capacity(int64_t delta, size_t min_capacity) {
     } else {
         return Status::NotSupported(fmt::format("not support cache engine: {}", config::datacache_engine));
     }
-}
-
-int64_t CacheEnv::check_storage_page_cache_limit(int64_t storage_cache_limit) {
-    if (storage_cache_limit > _global_env->process_mem_limit()) {
-        LOG(WARNING) << "Config storage_page_cache_limit is greater process memory limit, config="
-                     << config::storage_page_cache_limit.value() << ", memory=" << _global_env->process_mem_limit();
-        storage_cache_limit = _global_env->process_mem_limit();
-    }
-    if (!config::disable_storage_page_cache) {
-        if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, use default size.";
-            storage_cache_limit = kcacheMinSize;
-        }
-        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
-    }
-    return storage_cache_limit;
 }
 
 std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent) {

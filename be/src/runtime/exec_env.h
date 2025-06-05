@@ -255,10 +255,6 @@ public:
 
     Status adjust_capacity(int64_t delta, size_t min_capacity = 0);
 
-    StatusOr<int64_t> get_storage_page_cache_limit();
-    StatusOr<int64_t> get_data_cache_mem_limit();
-    int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
-
 private:
 #if defined(WITH_STARCACHE)
     StatusOr<CacheOptions> _init_cache_options();
