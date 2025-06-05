@@ -4420,7 +4420,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             // replace
-            truncateTableInternal(olapTable, newPartitions, truncateEntireTable, false);
+            truncateTableInternal(db.getId(), olapTable, newPartitions, truncateEntireTable, false);
 
             try {
                 colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
@@ -4469,12 +4469,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
+    private void truncateTableInternal(long dbId, OlapTable olapTable, List<Partition> newPartitions,
                                        boolean isEntireTable, boolean isReplay) {
         // use new partitions to replace the old ones.
         Set<Tablet> oldTablets = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
-            Partition oldPartition = olapTable.replacePartition(newPartition);
+            Partition oldPartition = olapTable.replacePartition(dbId, newPartition);
             for (PhysicalPartition physicalPartition : oldPartition.getSubPartitions()) {
                 // save old tablets to be removed
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
@@ -4509,7 +4509,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTblId());
-            truncateTableInternal(olapTable, info.getPartitions(), info.isEntireTable(), true);
+            truncateTableInternal(info.getDbId(), olapTable, info.getPartitions(), info.isEntireTable(), true);
 
             if (!GlobalStateMgr.isCheckpointThread()) {
                 // add tablet to inverted index
@@ -4658,7 +4658,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             partitionNames.stream().forEach(e ->
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(olapTable.getPartition(e).getId()));
-            olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
+            olapTable.replaceTempPartitions(db.getId(), partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
 
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), olapTable.getId(),
@@ -4684,11 +4684,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 return;
             }
             if (replaceTempPartitionLog.isUnPartitionedTable()) {
-                olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
+                olapTable.replacePartition(db.getId(), replaceTempPartitionLog.getPartitions().get(0),
                         replaceTempPartitionLog.getTempPartitions().get(0));
                 return;
             }
-            olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
+            olapTable.replaceTempPartitions(db.getId(), replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),
                     replaceTempPartitionLog.useTempPartitionName());
