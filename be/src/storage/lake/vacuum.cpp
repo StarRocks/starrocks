@@ -563,7 +563,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
         for (auto v = vacuum_version_range->min_version; v < vacuum_version_range->max_version; v++) {
-            if (std::find(retain_versions.begin(), retain_versions.end(), v) != retain_versions.end()){
+            if (std::find(retain_versions.begin(), retain_versions.end(), v) != retain_versions.end()) {
                 continue;
             }
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));

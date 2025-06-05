@@ -67,17 +67,11 @@ public:
         return Status::OK();
     }
 
-    bool filter_by_file_name(const std::string& file_name) const {
-        return _files.find(file_name) != _files.end();
-    }
+    bool filter_by_file_name(const std::string& file_name) const { return _files.find(file_name) != _files.end(); }
 
-    bool filter_by_version(int64_t version) const {
-        return _versions.find(version) != _versions.end();
-    }
+    bool filter_by_version(int64_t version) const { return _versions.find(version) != _versions.end(); }
 
-    bool filter_by_rowset_id(uint32_t rowset_id) const {
-        return _rowset_ids.find(rowset_id) != _rowset_ids.end();
-    }
+    bool filter_by_rowset_id(uint32_t rowset_id) const { return _rowset_ids.find(rowset_id) != _rowset_ids.end(); }
 
 private:
     std::unordered_set<int64_t> _versions;
