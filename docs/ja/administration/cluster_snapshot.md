@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: クラスタースナップショット
-keywords: ['backup', 'restore', 'shared data', 'snapshot']
+keywords: ['バックアップ', '復元', '共有データ', 'スナップショット']
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>
@@ -21,6 +21,10 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 共有データクラスタの災害復旧の基本的な考え方は、クラスタの全状態（データとメタデータを含む）をオブジェクトストレージに保存することです。これにより、クラスタが障害に遭遇した場合でも、データとメタデータが無事であれば、オブジェクトストレージから復元できます。さらに、クラウドプロバイダーが提供するバックアップやクロスリージョンレプリケーションなどの機能を利用して、リモート復旧やクロスリージョン災害復旧を実現できます。
 
 共有データクラスタでは、CN 状態（データ）はオブジェクトストレージに保存されますが、FE 状態（メタデータ）はローカルに残ります。オブジェクトストレージに復元のためのすべてのクラスタ状態を確保するために、StarRocks はデータとメタデータの両方をオブジェクトストレージに保存する自動クラスタースナップショットをサポートしています。
+
+### ワークフロー
+
+![Workflow](../_assets/cluster_snapshot_workflow.png)
 
 ### 用語
 
@@ -53,13 +57,13 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 パラメータ:
 
-`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。
+`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。ストレージボリュームの作成の詳細については、[CREATE STORAGE VOLUME](../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) を参照してください。
 
 FE がメタデータチェックポイントを完了した後に新しいメタデータイメージを作成するたびに、自動的にスナップショットが作成されます。スナップショットの名前は、`automated_cluster_snapshot_{timestamp}` という形式でシステムによって生成されます。
 
 メタデータスナップショットは `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` に保存されます。データスナップショットは元のデータと同じ場所に保存されます。
 
-FE の設定項目 `automated_cluster_snapshot_interval_seconds` はスナップショットの自動化サイクルを制御します。デフォルト値は 1800 秒（30 分）です。
+FE の設定項目 `automated_cluster_snapshot_interval_seconds` はスナップショットの自動化サイクルを制御します。デフォルト値は 600 秒（10 分）です。
 
 ### 自動クラスタースナップショットを無効にする
 
@@ -205,3 +209,7 @@ storage_volumes:
       - key: username
         value: starrocks
 ```
+
+:::note
+AWS の認証情報の詳細については、[AWS リソースへの認証](../integrations/authenticate_to_aws_resources.md)を参照してください。
+:::
