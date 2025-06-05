@@ -436,7 +436,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "\"replication_num\" = \"%s\",\n" +
                     "\"partition_live_number\" = \"%s\"\n" +
                     ")\n", tableName.toSql(), defaultReplicationNum, GlobalVariable.partitionsScanKeepDays);
-            LOG.info("hmx" + sql);
             CreateTableStmt stmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
                     .parse(sql, context.getSessionVariable().getSqlMode()).get(0);
 
