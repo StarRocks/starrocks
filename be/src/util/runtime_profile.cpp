@@ -966,20 +966,24 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     auto pair_it = profile->_counter_map.find(name);
                     DCHECK(pair_it != profile->_counter_map.end());
                     const auto& pair = pair_it->second;
-                    const auto* counter = pair.first;
+                    auto* counter = pair.first;
                     const auto& parent_name = pair.second;
 
                     // add the counter into merged_profile if not exsited
                     Counter* merged_counter = nullptr;
-                    if (ROOT_COUNTER != parent_name && merged_profile->get_counter(parent_name) != nullptr) {
-                        merged_counter = merged_profile->add_child_counter(name, counter->type(), counter->strategy(),
-                                                                           parent_name);
+                    if (i == 0) {
+                        merged_counter = counter;
                     } else {
-                        if (ROOT_COUNTER != parent_name) {
-                            LOG(WARNING) << "missing parent counter, profile_name=" << merged_profile->name()
-                                         << ", counter_name=" << name << ", parent_counter_name=" << parent_name;
+                        if (ROOT_COUNTER != parent_name && merged_profile->get_counter(parent_name) != nullptr) {
+                            merged_counter = merged_profile->add_child_counter(name, counter->type(),
+                                                                               counter->strategy(), parent_name);
+                        } else {
+                            if (ROOT_COUNTER != parent_name) {
+                                LOG(WARNING) << "missing parent counter, profile_name=" << merged_profile->name()
+                                             << ", counter_name=" << name << ", parent_counter_name=" << parent_name;
+                            }
+                            merged_counter = merged_profile->add_counter(name, counter->type(), counter->strategy());
                         }
-                        merged_counter = merged_profile->add_counter(name, counter->type(), counter->strategy());
                     }
 
                     // if this counter first appears, set it value and min/max
