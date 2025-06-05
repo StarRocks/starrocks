@@ -25,7 +25,6 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -608,9 +607,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                 .max(Long::compareTo).orElse(0L);
 
-        if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
-            return DecodeInfo.EMPTY;
-        }
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }

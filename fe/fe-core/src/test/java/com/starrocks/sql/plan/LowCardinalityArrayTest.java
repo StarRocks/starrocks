@@ -104,12 +104,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `s4` (    \n" +
-                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v1` bigint(20) NOT NULL COMMENT \"\",    \n" +
                 "  `v2` int NULL,    \n" +
                 "  `a1` array<string> NULL COMMENT \"\",    \n" +
                 "  `a2` array<string> NULL COMMENT \"\"    \n" +
                 ") ENGINE=OLAP    \n" +
-                "UNIQUE KEY(`v1`)    \n" +
+                "PRIMARY KEY(`v1`)    \n" +
                 "COMMENT \"OLAP\"    \n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
                 "PROPERTIES (    \n" +
