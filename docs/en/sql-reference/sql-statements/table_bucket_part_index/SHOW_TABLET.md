@@ -56,9 +56,14 @@ SHOW TABLET <tablet_id>
 ### Query information of tablets in a table or a partition
 
 ```plain
+-- In shared-nothing cluster
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
 | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  | DiskRootPath  |
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
+-- In shared-data cluster
++----------+-----------+----------+----------+------------+
+| TabletId | BackendId | DataSize | RowCount | MinVersion |
++----------+-----------+----------+----------+------------+
 ```
 
 | **Field**                | **Description**                        |
@@ -85,6 +90,7 @@ SHOW TABLET <tablet_id>
 | MetaUrl                 | The URL used to query more meta information.     |
 | CompactionStatus        | The URL used to query data version compaction status.    |
 | DiskRootPath            | The disk where the replica is located.    |
+| MinVersion              | The minimum data version retained for the tablet. For shared-data clusters only. |
 
 ### Query information of a specific tablet
 
