@@ -506,10 +506,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                targetTable.replaceTempPartitions(db.getId(), sourcePartitionNames, tmpPartitionNames, true, false);
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 Preconditions.checkState(sourcePartitionNames.size() == 1 && tmpPartitionNames.size() == 1);
-                targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+                targetTable.replacePartition(db.getId(), sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
             }
