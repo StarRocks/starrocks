@@ -2,17 +2,17 @@
 displayed_sidebar: docs
 ---
 
-# Data Cache常见问题
+# Data Cache 常见问题解答
 
-本文介绍 Data Cache 使用过程中遇到的一些常见问题和排查步骤，帮助用户快速定位相关问题。
+本主题描述了一些关于 Data Cache 的常见问题 (FAQ) ，并提供了这些问题的故障排除步骤和解决方案。
 
-## 缓存开启
+## 启用 Data Cache
 
-###如何确认当前缓存是否成功开启？
+### 如何确认 Data Cache 是否成功启用？
 
-通常可以通过以下几种方式（任选其一）来判断当前系统是否成功启用Data Cache：
+在大多数情况下，您可以通过以下任一方法检查 Data Cache 是否成功启用：
 
-* 在SQL客户端执行`show backends`（或者`show compute nodes`)，查看`DataCacheMetrics`指标，确认磁盘或者内存缓存的quota是否大于0。
+- 从您的 SQL 客户端执行 `SHOW BACKENDS`（或 `SHOW COMPUTE NODES`），并检查 `DataCacheMetrics` 的值。如果磁盘或内存缓存配额大于 0，则可以确认 Data Cache 已启用。
 
 ```SQL
 mysql> show backends \G
@@ -50,44 +50,46 @@ ClusterDecommissioned: false
 1 row in set (0.00 sec)
 ```
 
-在上面例子中，Data Cache中磁盘缓存quota为1TB，当前使用44MB；内存缓存quota为0B，未启用内存缓存。
+在上述示例中，Data Cache 的磁盘缓存配额为 1TB，当前使用了 44MB；而内存缓存配额为 0B，因此内存缓存未启用。
 
-* 可以通过访问`http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat`接口来显示当前Data Cache的quota、命中率等状态信息，检查`disk_quota_bytes`和`mem_quota_bytes`是否大于0。如图：
+- 您可以访问 BE Web 控制台 (`http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat`) 来检查当前的 Data Cache 配额、命中率和其他指标。如果 `disk_quota_bytes` 或 `mem_quota_bytes` 大于 0，则可以确认 Data Cache 已启用。
 
-![](https://docs.starrocks.io/zh/assets/images/data_cache_observe-dba68d3bcfbe64559d30787e5d09ff43.png)
+![Data Cache FAQ - Web Console](../assets/images/data_cache_be_web_console.png)
 
-###为什么Data Cache没有默认开启？
+### 为什么 Data Cache 在默认情况下未启用？
 
-从3.3版本开始，BE会尝试默认Data Cache。然而，如果当前磁盘剩余空间不足时，则不会默认开启Data Cache。
+从 v3.3 开始，BE 会在启动时尝试启用 Data Cache。然而，如果当前磁盘上的可用空间不足，Data Cache 将不会自动启用。
 
-这里的剩余磁盘空间不足会包括以下情况：
+这可能由以下情况导致：
 
-* 百分比：磁盘当前使用率较高。
+- **百分比**：当前磁盘使用率较高。
 
-* 绝对值：磁盘剩余空间较小。
+- **剩余空间**：剩余磁盘空间较小。
 
-因此，在遇到Data Cache没有默认启用的情况下，可以先检查当前磁盘的使用情况，必要时增加磁盘容量。
+因此，如果默认情况下未启用 Data Cache，您可以先检查当前磁盘使用情况，并在必要时增加磁盘容量。
 
-另外，也可以根据当前磁盘剩余空间，通过配置缓存quota来手动启用Data Cache：
+或者，您可以根据当前可用磁盘空间手动配置缓存配额以启用 Data Cache。
 
 ```
-# disable datacache automatic adjustment
+# 禁用 Data Cache 自动调整
 datacache_auto_adjust_enable = false
-# set datacache disk quota manually
+# 手动设置 Data Cache 磁盘配额
 datacache_disk_size = 1T
 ```
 
-##缓存生效
+## 使用 Data Cache
 
-###Data Cache当前支持哪些Catalog类型？
+### Data Cache 支持哪些 Catalog 类型？
 
-Data Cache当前支持使用了StarRocks Native File Reader（如Parquet/ORC/CSV Reader）的External Catalog类型，包Hive、Iceberg、Hudi、Delta Lake、Paimon等Catalog类型，暂不支持基于JNI访问数据的Catalog（如JDBC Catalog）。
+Data Cache 目前支持使用 StarRocks Native File Reader 的 External Catalog 类型（如 Parquet/ORC/CSV Reader），包括 Hive、Iceberg、Hudi、Delta Lake 和 Paimon。基于 JNI 访问数据的 Catalog（如 JDBC Catalog）尚不支持。
 
-**注意**：有些Catalog可能会根据一定条件（如文件类型、数据状态等）来选择不同的数据访问方式，比如对于Paimon Catalog，可能会根据当前数据的compaction状态由StarRocks自动选择是使用Native File Reader还是JNI来访问数据，当使用JNI方式访问Paimon数据时，同样不支持Data Cache加速。
+:::note
+某些 Catalog 可能会根据特定条件（如文件类型和数据状态）使用不同的数据访问方法。例如，对于 Paimon Catalog，StarRocks 可能会根据当前数据的 Compaction 状态自动选择使用 Native File Reader 或 JNI 访问数据。当使用 JNI 访问 Paimon 数据时，不支持 Data Cache 加速。
+:::
 
-###如何确认当前查询是否命中缓存？
+### 如何知道查询命中了缓存？
 
-可以通过该查询的profile来查看DataCache相关的指标，检查`DataCacheReadBytes`和`DataCacheReadCounter`确定本地缓存读取情况，比如：
+您可以在相应的 Query Profile 中查看与 Data Cache 相关的指标。指标 `DataCacheReadBytes` 和 `DataCacheReadCounter` 表示本地缓存的命中状态。
 
 ```
  - DataCacheReadBytes: 518.73 MB
@@ -108,16 +110,18 @@ Data Cache当前支持使用了StarRocks Native File Reader（如Parquet/ORC/CSV
    - __MIN_OF_DataCacheWriteTimer: 0ns
 ```
 
-###缓存已经启用，为何当前查询没有命中缓存？
+### 为什么在启用 Data Cache 时查询未命中缓存？
 
-1. 检查Data Cache是否支持当前catalog类型。
-2. 确认当前查询语句是否满足缓存填充条件。默认情况下，Data Cache会通过一定规则拒绝掉部分查询的缓存填充，避免缓存污染。详情见[Data Cache填充规则](https://docs.starrocks.io/zh/docs/data_source/data_cache/#%E5%A1%AB%E5%85%85%E8%A7%84%E5%88%99 "Data Cache填充规则")。
+请按照以下步骤进行故障排除：
 
-用户可以通过`EXPLAIN VERBOSE` 命令来确认当前语句是否触发缓存填充。
+1. 检查 Data Cache 是否支持当前的 Catalog 类型。
+2. 确认查询语句是否符合缓存填充条件。在某些情况下，Data Cache 会拒绝为某些查询填充缓存。详情请参见 [Data Cache 填充规则](./data_cache.md#填充规则)。
+
+可以使用 `EXPLAIN VERBOSE` 命令检查查询是否触发了缓存填充。
 示例：
 
 ```sql
-mysql> explain verbose select col1 from hudi_table;
+mysql> EXPLAIN VERBOSE SELECT col1 FROM hudi_table;
 |   0:HudiScanNode                        |
 |      TABLE: hudi_table                  |
 |      partitions=3/3                     |
@@ -128,47 +132,51 @@ mysql> explain verbose select col1 from hudi_table;
 +-----------------------------------------+
 ```
 
-上面例子中`dataCacheOptions`的`populate`字段为`false`，因此，当前查询并不会进行缓存填充。
+在上述示例中，`dataCacheOptions` 部分的 `populate` 字段为 `false`，表示该查询不会填充缓存。
 
-如果确实需要对该查询进行缓存，可以通过设置`populate_datacache_mode='always'`来修改默认填充行为。
+要为此类查询启用 Data Cache，您可以通过设置系统变量 `populate_datacache_mode` 为 `always` 来修改默认填充行为。
 
-##缓存命中
+## Data Cache 命中
 
-###为什么同一条查询需要执行许多次才能完全命中缓存？
+### 为什么有时同一个查询需要执行多次才能完全命中缓存？
 
-当前版本中，Data Cache默认采用异步填充方式来减少缓存填充对查询性能影响。使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存，因此，通常单次查询只能填充一部分缓存数据到本地，需要多次执行才能缓存该查询所需全部数据。
+在当前版本中，Data Cache 默认使用异步填充以减少对查询性能的影响。使用异步填充时，系统会尝试在后台缓存访问的数据，尽可能不影响读取性能。因此，单次执行查询只能缓存部分数据。您需要多次运行查询以缓存查询所需的所有数据。
 
-用户也可通过设置`enable_datacache_async_populate_mode=false`来使用同步缓存方式，或者通过`CACHE SELECT`对目标数据进行提前预热。
+您还可以通过设置 `enable_datacache_async_populate_mode=false` 使用同步缓存填充，或通过 `CACHE SELECT` 预先热身目标数据。
 
-###为什么当前查询所有数据都已经被缓存，但查询还有少量数据访问了远端？
+### 为什么当前查询中的所有数据都已缓存，但仍有少量数据被远程访问？
 
-当前版本中默认启用IO自适应来优化当磁盘IO负载较高时的缓存性能，可能会导致某些情况下少量请求直接访问远端。
+在当前版本中，默认启用了 I/O 适配功能，以在磁盘 I/O 负载较高时优化缓存性能，这可能导致在某些情况下少量请求直接访问远端存储。
 
-用户也可以通过设置`enable_datacache_io_adaptor=false`来关闭IO自适应功能。
+您可以通过设置 `enable_datacache_io-adapter` 为 `false` 来禁用 I/O 适配功能。
 
-##其他
+## 其他
 
-###如何清空当前缓存数据？
+### 如何清除缓存的数据？
 
-当前Data Cache并没有提供直接的clear接口来清空缓存数据，不过用户可以通过以下方式来清理缓存数据：
+目前，Data Cache 不提供直接清除缓存数据的接口，但您可以选择以下方法之一来清除它：
 
-* 可以通过删除BE/CN节点上datacache目录下的所有数据（包括block文件和meta目录），然后重启BE/CN节点，从而清理缓存数据。（推荐）
+- 您可以通过删除 BE/CN 节点上的 `datacache` 目录中的所有数据（包括块文件和元数据目录），然后重启节点来清理缓存数据。（推荐）
 
-* 如果不方便重启BE/CN节点，也可以通过在线扩缩容的方式来间接实现缓存清理，假设用户早期磁盘缓存quota配置了2T，可以先缩容为0（系统自动清理缓存数据），再恢复到2T即可。如：
+- 如果您想避免重启 BE/CN 节点，也可以在运行时通过缩小缓存配额间接清理缓存数据。例如，如果您之前将磁盘缓存配额设置为 2TB，您可以先将其缩小到 0（系统会自动清理缓存数据），然后再将其重置为 2TB。
+
+示例：
 
 ```SQL
 UPDATE be_configs SET VALUE="0" WHERE NAME="datacache_disk_size" and BE_ID=10005;
 UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size" and BE_ID=10005;
 ```
 
-**注意**：使用扩缩容方式在线清理缓存时，一定要注意语句中的WHERE条件，避免误伤到其他的无关参数或节点。
+:::note
+在运行时清理缓存数据时，请谨慎使用语句中的 `WHERE` 条件，以避免意外损坏其他不相关的参数或节点。
+:::
 
-###如何提升缓存性能？
+### 如何提高 Data Cache 性能？
 
-缓存本质上是通过访问本地内存或磁盘来代替远端存储系统访问，因此，缓存性能和本地缓存介质直接相关。当发现由于磁盘负载较高导致缓存访问延时较大时，需要考虑提升本地缓存介质性能：
+使用 Data Cache 时，StarRocks 本质上是访问本地内存或磁盘而不是远端存储。因此，性能直接与本地缓存介质相关。如果您发现由于磁盘负载高导致缓存访问延迟较高，您可以考虑提高本地缓存介质的性能：
 
-* 尽量使用高性能NVME盘来作为缓存盘。
+- 优先使用高性能 NVME 磁盘作为缓存磁盘。
 
-* 如果条件有限，没法选择高性能磁盘，也可以通过增加多块磁盘来分摊单盘IO压力。
+- 如果没有高性能磁盘，您也可以增加磁盘数量以分担 I/O 压力。
 
-* 增加节点内存（这里指增加机器内存，而非调大Data Cache内存quota），借助于操作系统page cache来减少直接访问磁盘的次数，降低磁盘压力。
+- 增加 BE/CN 节点的服务器内存（而非 Data Cache 内存配额），使用操作系统的 Page Cache 来减少直接磁盘访问次数和磁盘 I/O 压力。
