@@ -54,7 +54,7 @@ In the above example, the disk cache quota of Data Cache is 1TB, and 44MB is cur
 
 - You can access the BE Web Console (`http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat`) to check the current Data Cache quota, hit rate and other metrics. You can confirm that Data Cache is enbaled if `disk_quota_bytes` or `mem_quota_bytes` is greater than 0.
 
-![Data Cache FAQ - Web Console](../assets/images/data_cache_be_web_console.png)
+![Data Cache FAQ - Web Console](../_assets/data_cache_be_web_console.png)
 
 ### Why is Data Cache not enabled by default?
 
