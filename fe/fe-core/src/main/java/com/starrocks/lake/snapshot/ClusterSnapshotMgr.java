@@ -239,9 +239,6 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public void resetSnapshotJobsStateAfterRestarted(RestoredSnapshotInfo restoredSnapshotInfo) {
-        if (!isAutomatedSnapshotOn()) {
-            return;
-        }
         setLastJobFinishedAfterRestored(restoredSnapshotInfo);
         resetLastUnFinishedAutomatedSnapshotJob();
         clearFinishedAutomatedClusterSnapshotExceptLast();
