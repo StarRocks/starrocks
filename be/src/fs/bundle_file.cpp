@@ -35,6 +35,7 @@ Status BundleWritableFileContext::try_create_bundle_file(
 Status BundleWritableFileContext::_close() {
     if (_bundle_file) {
         RETURN_IF_ERROR(_bundle_file->close());
+        LOG(INFO) << "BundleWritableFileContext: closed shared file, filename: " << _bundle_file->filename();
     }
     return Status::OK();
 }
@@ -42,6 +43,8 @@ Status BundleWritableFileContext::_close() {
 void BundleWritableFileContext::increase_active_writers() {
     std::lock_guard<std::mutex> l(_bundle_file_mutex);
     _active_writers++;
+    LOG(INFO) << "BundleWritableFileContext: active writers increased to " << _active_writers
+              << ", filename: " << _filename;
 }
 
 Status BundleWritableFileContext::decrease_active_writers() {
@@ -50,6 +53,8 @@ Status BundleWritableFileContext::decrease_active_writers() {
         std::lock_guard<std::mutex> l(_bundle_file_mutex);
         _active_writers--;
         is_last_writer = (_active_writers == 0);
+        LOG(INFO) << "BundleWritableFileContext: active writers decreased to " << _active_writers
+                  << ", filename: " << _filename;
     }
     if (is_last_writer) {
         // If there are no active writers, we can close the shared file.
@@ -66,6 +71,8 @@ StatusOr<int64_t> BundleWritableFileContext::appendv(const std::vector<Slice>& s
     // Append the slices to the shared file.
     _bundle_file->set_encryption_info(info);
     RETURN_IF_ERROR(_bundle_file->appendv(slices.data(), slices.size()));
+    LOG(INFO) << "BundleWritableFileContext: appended " << slices.size() << " slices to shared file, "
+              << "filename: " << _bundle_file->filename() << ", offset: " << bundle_file_offset;
     return bundle_file_offset;
 }
 
@@ -99,6 +106,8 @@ Status BundleWritableFile::close() {
 Status BundleSeekableInputStream::init() {
     // Initialize the stream.
     RETURN_IF_ERROR(_stream->seek(_offset));
+    LOG(INFO) << "BundleSeekableInputStream initialized with offset: " << _offset << ", size: " << _size
+              << ", filename: " << _stream->filename();
     return Status::OK();
 }
 
