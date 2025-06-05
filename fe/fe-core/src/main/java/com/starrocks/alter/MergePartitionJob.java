@@ -16,18 +16,22 @@ package com.starrocks.alter;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -35,15 +39,17 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
@@ -53,32 +59,47 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
-import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.OptimizeRange;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
-    private static final Logger LOG = LogManager.getLogger(OptimizeJobV2.class);
+public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(MergePartitionJob.class);
 
-    // The optimize job will wait all transactions before this txn id finished, then send the optimize tasks.
+    // The merge partition job will wait all transactions before this txn id finished, then send the merge partition tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
 
     private String postfix;
 
-    @SerializedName(value = "tmpPartitionIds")
-    private List<Long> tmpPartitionIds = Lists.newArrayList();
+    @SerializedName(value = "tmpPartitionIdToSourcePartitionIds")
+    Multimap<Long, Long> tempPartitionIdToSourcePartitionIds = ArrayListMultimap.create();
+
+    @SerializedName(value = "tempPartitionNameToSourcePartitionNames")
+    Multimap<String, String> tempPartitionNameToSourcePartitionNames = ArrayListMultimap.create();
 
     private OptimizeClause optimizeClause;
 
@@ -89,15 +110,6 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private List<OptimizeTask> rewriteTasks = Lists.newArrayList();
     private int progress = 0;
 
-    @SerializedName(value = "sourcePartitionNames")
-    private List<String> sourcePartitionNames = Lists.newArrayList();
-
-    @SerializedName(value = "tmpPartitionNames")
-    private List<String> tmpPartitionNames = Lists.newArrayList();
-
-    @SerializedName(value = "allPartitionOptimized")
-    private Boolean allPartitionOptimized = false;
-
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
 
@@ -105,33 +117,33 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private String optimizeOperation = "";
 
     // for deserialization
-    public OptimizeJobV2() {
+    public MergePartitionJob() {
         super(JobType.OPTIMIZE);
     }
 
-    public OptimizeJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
+    public MergePartitionJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                          OptimizeClause optimizeClause) {
         this(jobId, dbId, tableId, tableName, timeoutMs);
 
         this.optimizeClause = optimizeClause;
     }
 
-    public OptimizeJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
+    public MergePartitionJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.OPTIMIZE, dbId, tableId, tableName, timeoutMs);
 
-        this.postfix = "_" + jobId;
+        this.postfix = "job" + jobId;
     }
 
     public List<Long> getTmpPartitionIds() {
-        return tmpPartitionIds;
+        return tempPartitionIdToSourcePartitionIds.keySet().stream().collect(Collectors.toList());
     }
 
-    public void setTmpPartitionIds(List<Long> tmpPartitionIds) {
-        this.tmpPartitionIds = tmpPartitionIds;
+    public Multimap<Long, Long> getTempPartitionIdToSourcePartitionIds() {
+        return tempPartitionIdToSourcePartitionIds;
     }
 
     public String getName() {
-        return "optimize-" + this.postfix;
+        return "merge-partition-" + this.postfix;
     }
 
     public Map<String, String> getProperties() {
@@ -151,6 +163,153 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return (OlapTable) table;
     }
 
+    public void filterPartitionIds(OlapTable olapTable) throws AlterCancelException {
+        ArrayList<Long> filterdPartitionIds = Lists.newArrayList();
+        LocalDateTime startTime = null;
+        LocalDateTime endTime = null;
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        ExpressionRangePartitionInfo sourcePartitionInfo;
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            sourcePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        } else {
+            throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
+        }
+
+        if (optimizeClause.getRange() != null) {
+            OptimizeRange range = optimizeClause.getRange();
+            String start = range.getStart().getStringValue();
+            String end = range.getEnd().getStringValue();
+            DateTimeFormatter startDateTimeFormat;
+            DateTimeFormatter endDateTimeFormat;
+            try {
+                startDateTimeFormat = DateUtils.probeFormat(start);
+                startTime = DateUtils.parseStringWithDefaultHSM(start, startDateTimeFormat);
+                endDateTimeFormat = DateUtils.probeFormat(end);
+                endTime = DateUtils.parseStringWithDefaultHSM(end, startDateTimeFormat);
+                // if end time is date, add one day
+                if (endDateTimeFormat == DateUtils.DATEKEY_FORMATTER || endDateTimeFormat == DateUtils.DATE_FORMATTER_UNIX) {
+                    endTime = endTime.plusDays(1);
+                }
+            } catch (DateTimeParseException e) {
+                LOG.warn(e);
+                throw new AlterCancelException("parse start or end time failed: " + e.getMessage());
+            }
+        }
+        for (long partitionId : optimizeClause.getSourcePartitionIds()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                throw new AlterCancelException("partition " + partitionId + " does not exist in table " + tableName);
+            }
+            if (optimizeClause.getRange() == null) {
+                filterdPartitionIds.add(partitionId);
+                continue;
+            }
+            Range<PartitionKey> range = sourcePartitionInfo.getRange(partitionId);
+            try {
+                String rangeStart = range.lowerEndpoint().getKeys().get(0).getStringValue();
+                String rangeEnd = range.upperEndpoint().getKeys().get(0).getStringValue();
+                LocalDateTime rangeStartTime = DateUtils.parseStringWithDefaultHSM(
+                        rangeStart, DateUtils.probeFormat(rangeStart));
+                LocalDateTime rangeEndTime = DateUtils.parseStringWithDefaultHSM(
+                        rangeEnd, DateUtils.probeFormat(rangeEnd));
+                if (!rangeStartTime.isBefore(startTime) && !rangeEndTime.isAfter(endTime)) {
+                    // Partition range is a subset of filter range
+                    filterdPartitionIds.add(partitionId);
+                } else if (rangeStartTime.isBefore(startTime) && rangeEndTime.isAfter(startTime)) {
+                    // Partition range intersects with filter range but is not a subset
+                    throw new AlterCancelException("Partition range intersects with filter range but is not a subset: "
+                            + "partition " + partitionId + " with range [" + rangeStart + ", " + rangeEnd 
+                            + "] intersects with filter range [" + startTime + ", " + endTime + "]");
+                } else if (rangeStartTime.isBefore(endTime) && rangeEndTime.isAfter(endTime)) {
+                    // Partition range intersects with filter range but is not a subset
+                    throw new AlterCancelException("Partition range intersects with filter range but is not a subset: "
+                            + "partition " + partitionId + " with range [" + rangeStart + ", " + rangeEnd 
+                            + "] intersects with filter range [" + startTime + ", " + endTime + "]");
+                } else {
+                    LOG.info("Partition range is not in filter range: partition {} [{}, {}] is not in filter range [{}, {}]",
+                            partitionId, rangeStart, rangeEnd, startTime, endTime);
+                }
+            } catch (DateTimeParseException e) {
+                LOG.warn(e);
+                throw new AlterCancelException("parse partition range start or end time failed: " + e.getMessage());
+            }
+        }
+
+        optimizeClause.setSourcePartitionIds(filterdPartitionIds);
+    }
+
+    public void createMergedTempPartitionsFromPartitions(
+            Database db, OlapTable olapTable, String namePostfix, List<Long> sourcePartitionIds,
+            DistributionDesc distributionDesc, long warehouseId) throws DdlException {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);  
+        ExpressionRangePartitionInfo sourcePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo; 
+        for (int i = 0; i < sourcePartitionIds.size(); ++i) {
+            long sourcePartitionId = sourcePartitionIds.get(i);
+
+            Range<PartitionKey> range = sourcePartitionInfo.getRange(sourcePartitionId);
+
+            List<String> partitionValues = Lists.newArrayList();
+            partitionValues.add(range.lowerEndpoint().getKeys().get(0).getStringValue());
+            LOG.info("create temp partition with partition values: {} {}",
+                    partitionValues, olapTable.getPartition(sourcePartitionId).getName());
+            
+            AddPartitionClause addPartitionClause;
+            try (AutoCloseableLock ignore = new AutoCloseableLock(
+                    new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+                addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                        olapTable, optimizeClause.getPartitionDesc(), List.of(partitionValues), true, namePostfix);
+            } catch (AnalysisException ex) {
+                LOG.warn(ex);
+                throw new DdlException(ex.getMessage());
+            }
+
+            PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
+            List<String> partitionNames;
+            if (partitionDesc instanceof RangePartitionDesc) {
+                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+            } else {
+                throw new DdlException("Unsupported partitionDesc");
+            }
+
+            boolean isPartitionExist = false;
+            for (String partitionName : partitionNames) {
+                Partition partition = olapTable.getPartition(partitionName, true);
+                if (partition != null) {
+                    tempPartitionIdToSourcePartitionIds.put(partition.getId(), sourcePartitionId);
+                    isPartitionExist = true;
+                }
+            }
+
+            if (isPartitionExist) {
+                continue;
+            }
+            
+            ConnectContext context = Util.getOrCreateInnerContext();
+            context.setCurrentWarehouseId(warehouseId);
+            try {
+                try (AutoCloseableLock ignore = new AutoCloseableLock(
+                        new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+                    AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                    analyzer.analyze(context, addPartitionClause);
+                }
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
+                        context, db, olapTable.getName(), addPartitionClause);
+            } catch (Exception ex) {
+                LOG.warn(ex);
+                throw new DdlException(ex.getMessage());
+            }
+            for (String partitionName : partitionNames) {
+                Partition partition = olapTable.getPartition(partitionName, true);
+                if (partition == null) {
+                    throw new DdlException("Partition " + partitionName
+                            + " does not exist in table " + olapTable.getName());
+                }
+                tempPartitionIdToSourcePartitionIds.put(partition.getId(), sourcePartitionId);
+            }
+        }
+    }
+
     /**
      * runPendingJob():
      * 1. Create all temp partitions and wait them finished.
@@ -159,6 +318,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @Override
     protected void runPendingJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
+        if (optimizeClause == null) {
+            throw new AlterCancelException("optimize clause is null since FE restart, job: " + jobId);
+        }
+        this.optimizeOperation = optimizeClause.toString();
 
         LOG.info("begin to send create temp partitions. job: {}", jobId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -170,22 +333,22 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
 
-        if (optimizeClause == null) {
-            throw new AlterCancelException("optimize clause is null since FE restart, job: " + jobId);
-        }
-
-        // 1. create temp partitions
-        for (int i = 0; i < optimizeClause.getSourcePartitionIds().size(); ++i) {
-            tmpPartitionIds.add(GlobalStateMgr.getCurrentState().getNextId());
-        }
-
-        long createPartitionStartTimestamp = System.currentTimeMillis();
         OlapTable targetTable = checkAndGetTable(db, tableId);
+        // 1. filter merge partitions
         try {
-            PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                        optimizeClause.getSourcePartitionIds(), getTmpPartitionIds(), optimizeClause.getDistributionDesc(),
-                        warehouseId);
-            LOG.debug("create temp partitions {} success. job: {}", getTmpPartitionIds(), jobId);
+            filterPartitionIds(targetTable);
+        } catch (Exception e) {
+            LOG.warn("filter merge partitions failed", e);
+            throw new AlterCancelException("filter merge partitions failed " + e.getMessage());
+        }
+
+        // 1 temporary(merged) partition -> n source partitions
+        // 2. create temp partitions
+        long createPartitionStartTimestamp = System.currentTimeMillis();
+        try {
+            createMergedTempPartitionsFromPartitions(db, targetTable, null,
+                        optimizeClause.getSourcePartitionIds(), optimizeClause.getDistributionDesc(), warehouseId);
+            LOG.info("create temp partitions {} success. job: {}", tempPartitionIdToSourcePartitionIds, jobId);
         } catch (Exception e) {
             LOG.warn("create temp partitions failed", e);
             throw new AlterCancelException("create temp partitions failed " + e);
@@ -196,14 +359,13 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.watershedTxnId =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
-        this.optimizeOperation = optimizeClause.toString();
         span.setAttribute("createPartitionElapse", createPartitionElapse);
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-        LOG.info("transfer optimize job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
+        LOG.info("transfer merge partition job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
     /**
@@ -222,18 +384,17 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         try {
             if (!isPreviousLoadFinished()) {
-                LOG.info("wait transactions before {} to be finished, optimize job: {}", watershedTxnId, jobId);
+                LOG.info("wait transactions before {} to be finished, merge partition job: {}", watershedTxnId, jobId);
                 return;
             }
         } catch (AnalysisException e) {
             throw new AlterCancelException(e.getMessage());
         }
 
-        LOG.info("previous transactions are all finished, begin to optimize table. job: {}", jobId);
+        LOG.info("previous transactions are all finished, begin to merge partition table. job: {}", jobId);
 
-        List<String> tmpPartitionNames;
-        List<String> partitionNames = Lists.newArrayList();
-        List<Long> partitionLastVersion = Lists.newArrayList();
+        // Changed from List to Map
+        Map<String, Long> partitionLastVersion = Maps.newHashMap();
         List<String> tableColumnNames = Lists.newArrayList();
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -251,46 +412,69 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             if (getTmpPartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
                 throw new AlterCancelException("partitions changed during insert");
             }
-            tmpPartitionNames = getTmpPartitionIds().stream()
-                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
-                    .collect(Collectors.toList());
-            optimizeClause.getSourcePartitionIds().stream()
-                    .map(partitionId -> targetTable.getPartition(partitionId)).forEach(
-                        partition -> {
-                            partitionNames.add(partition.getName());
-                            partitionLastVersion.add(partition.getSubPartitions().stream()
-                                    .mapToLong(PhysicalPartition::getVisibleVersion).sum());
-                        }
-            );
+            for (Map.Entry<Long, Collection<Long>> entry : tempPartitionIdToSourcePartitionIds.asMap().entrySet()) {
+                Long targetPartitionId = entry.getKey();
+                Collection<Long> sourcePartitionIds = entry.getValue();
+
+                // Get the target partition
+                Partition targetPartition = targetTable.getPartition(targetPartitionId);
+                if (targetPartition == null) {
+                    continue; // Target partition does not exist, skip it
+                }
+
+                String targetPartitionName = targetPartition.getName();
+                long versionSum = 0; // Calculate the version sum of sourcePartitions
+
+                // Iterate through all source partition IDs
+                for (Long sourcePartitionId : sourcePartitionIds) {
+                    Partition sourcePartition = targetTable.getPartition(sourcePartitionId);
+                    if (sourcePartition != null) {
+                        String sourcePartitionName = sourcePartition.getName();
+                        tempPartitionNameToSourcePartitionNames.put(targetPartitionName, sourcePartitionName);
+
+                        // Calculate the sum of VisibleVersion for all subpartitions of sourcePartition
+                        versionSum += sourcePartition.getSubPartitions().stream()
+                                .mapToLong(PhysicalPartition::getVisibleVersion)
+                                .sum();
+                    }
+                }
+
+                // Use put instead of add
+                partitionLastVersion.put(targetPartitionName, versionSum);
+            }
             tableColumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
                         .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
+        final List<String> finalTableColumnNames = tableColumnNames;
         // start insert job
-        for (int i = 0; i < tmpPartitionNames.size(); ++i) {
-            String tmpPartitionName = tmpPartitionNames.get(i);
-            String partitionName = partitionNames.get(i);
+        tempPartitionNameToSourcePartitionNames.keySet().forEach(tmpPartitionName -> {
+            Collection<String> sourcePartitionNames = tempPartitionNameToSourcePartitionNames.get(tmpPartitionName);
+            final String finalPartitionName = tmpPartitionName;
             String rewriteSql = "insert into " + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
-                        + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
-                        + " from " + ParseUtil.backquote(tableName) + " partition (" + ParseUtil.backquote(partitionName) + ")";
+                        + ParseUtil.backquote(finalPartitionName) + ") select " + Joiner.on(", ").join(finalTableColumnNames)
+                        + " from " + ParseUtil.backquote(tableName) + " partition (" 
+                        + Joiner.on(", ").join(sourcePartitionNames.stream()
+                            .map(name -> ParseUtil.backquote(name))
+                            .collect(Collectors.toList())) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName, warehouseId);
-            rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
-            rewriteTask.setLastVersion(partitionLastVersion.get(i));
+            // Use map key access instead of list index
+            rewriteTask.setLastVersion(partitionLastVersion.get(tmpPartitionName));
             // use half of the alter timeout as rewrite task timeout
             rewriteTask.getProperties().put(SessionVariable.INSERT_TIMEOUT, String.valueOf(timeoutMs / 2000));
             rewriteTasks.add(rewriteTask);
-        }
+        });
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             try {
                 taskManager.createTask(rewriteTask, false);
                 taskManager.executeTask(rewriteTask.getName());
-                LOG.debug("create rewrite task {}", rewriteTask.toString());
+                LOG.info("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
                 LOG.warn("create rewrite task failed", e);
@@ -301,7 +485,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         span.addEvent("setRunning");
 
         // DO NOT write edit log here, tasks will be send again if FE restart or master changed.
-        LOG.info("transfer optimize job {} state to {}", jobId, this.jobState);
+        LOG.info("transfer merge partition job {} state to {}", jobId, this.jobState);
     }
 
     /**
@@ -378,14 +562,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         if (!allFinished) {
-            LOG.debug("wait insert tasks to be finished, optimize job: {}", jobId);
+            LOG.info("wait insert tasks to be finished, merge partition job: {}", jobId);
             this.progress = progress;
             return;
         }
 
         this.progress = 99;
 
-        LOG.debug("all insert overwrite tasks finished, optimize job: {}", jobId);
+        LOG.info("all insert overwrite tasks finished, merge partition job: {}", jobId);
 
         // replace partition
         try (AutoCloseableLock ignore =
@@ -409,114 +593,89 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
         try {
-            tmpPartitionNames = getTmpPartitionIds().stream()
-                        .map(partitionId -> targetTable.getPartition(partitionId).getName())
-                        .collect(Collectors.toList());
-
             Map<String, Long> partitionLastVersion = Maps.newHashMap();
-            optimizeClause.getSourcePartitionIds().stream()
-                    .map(partitionId -> targetTable.getPartition(partitionId)).forEach(
-                        partition -> {
-                            sourcePartitionNames.add(partition.getName());
-                            partitionLastVersion.put(partition.getName(), partition.getSubPartitions().stream()
-                                    .mapToLong(PhysicalPartition::getVisibleVersion).sum());
-                        }
+            tempPartitionNameToSourcePartitionNames.asMap().forEach((key, sourcePartitionIds) -> 
+                    partitionLastVersion.put(
+                        key, 
+                        sourcePartitionIds.stream()
+                            .mapToLong(sourcePartitionId -> 
+                                (targetTable.getPartition(sourcePartitionId) != null) 
+                                    ? targetTable.getPartition(sourcePartitionId)
+                                        .getSubPartitions()
+                                        .stream()
+                                        .mapToLong(PhysicalPartition::getVisibleVersion)
+                                        .sum() 
+                                    : 0
+                            )
+                            .sum()
+                    )
             );
 
             boolean hasFailedTask = false;
             String errMsg = "";
             for (OptimizeTask rewriteTask : rewriteTasks) {
                 if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
-                            || partitionLastVersion.get(rewriteTask.getPartitionName()) != rewriteTask.getLastVersion()) {
-                    LOG.info("optimize job {} rewrite task {} state {} failed or partition {} version {} change to {}",
-                                jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(), rewriteTask.getPartitionName(),
-                                rewriteTask.getLastVersion(), partitionLastVersion.get(rewriteTask.getPartitionName()));
-                    sourcePartitionNames.remove(rewriteTask.getPartitionName());
-                    tmpPartitionNames.remove(rewriteTask.getTempPartitionName());
+                            || partitionLastVersion.get(rewriteTask.getTempPartitionName()) != rewriteTask.getLastVersion()) {
+                    LOG.info("merge partitions job {} rewrite task {} state {} failed or partition {} version {} change to {}",
+                                jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(),
+                                rewriteTask.getTempPartitionName(), rewriteTask.getLastVersion(),
+                                partitionLastVersion.get(rewriteTask.getTempPartitionName()));
+                    tempPartitionNameToSourcePartitionNames.removeAll(rewriteTask.getTempPartitionName());
                     targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true);
                     hasFailedTask = true;
                     if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
-                        errMsg += rewriteTask.getPartitionName() + " rewrite task execute failed, ";
+                        errMsg += rewriteTask.getTempPartitionName() + " rewrite task execute failed, ";
                     } else {
-                        errMsg += rewriteTask.getPartitionName() + " has ingestion during optimize, ";
+                        errMsg += rewriteTask.getTempPartitionName() + " has ingestion during optimize, ";
                     }
                 }
             }
 
-            if (sourcePartitionNames.isEmpty()) {
+            if (hasFailedTask && tempPartitionNameToSourcePartitionNames.isEmpty()) {
                 throw new AlterCancelException("all partitions rewrite failed [" + errMsg + "]");
             }
 
-            if (hasFailedTask && (optimizeClause.getKeysDesc() != null || optimizeClause.getSortKeys() != null)) {
-                rewriteTasks.forEach(
-                            rewriteTask -> targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true));
-                throw new AlterCancelException(
-                            "optimize keysType or sort keys failed since some partitions rewrite failed [" + errMsg + "]");
-            }
-
-            allPartitionOptimized = false;
-            if (!hasFailedTask && optimizeClause.getDistributionDesc() != null) {
-                Set<String> targetPartitionNames = targetTable.getPartitionNames();
-                long targetPartitionNum = targetPartitionNames.size();
-                targetPartitionNames.retainAll(sourcePartitionNames);
-
-                if (optimizeClause.isTableOptimize()) {
-                    if (optimizeClause.getDistributionDesc().getType() != targetTable.getDefaultDistributionInfo().getType()) {
-                        if (targetPartitionNames.size() != targetPartitionNum
-                                    || targetPartitionNum != sourcePartitionNames.size()) {
-                            // partial partitions of target table are optimized
-                            throw new AlterCancelException("can not change distribution type of target table" +
-                                        " since partial partitions are not optimized [" + errMsg + "]");
-                        }
-                    }
-                    allPartitionOptimized = true;
-                }
-            } else {
-                if (optimizeClause.getDistributionDesc() != null) {
-                    // hasFailedTask == true
-                    DistributionDesc optimizeDistributionDesc = optimizeClause.getDistributionDesc();
-                    DistributionDesc tableDistributionDesc = targetTable.getDefaultDistributionInfo().toDistributionDesc(
-                            targetTable.getIdToColumn());
-                    if (tableDistributionDesc.getType() != optimizeDistributionDesc.getType()) {
-                        throw new AlterCancelException("can not change distribution type of target table" +
-                                    " since some partitions rewrite failed [" + errMsg + "]");
-                    }
-                    if (tableDistributionDesc instanceof HashDistributionDesc) {
-                        HashDistributionDesc tableHashDistributionDesc = (HashDistributionDesc) tableDistributionDesc;
-                        HashDistributionDesc optimizeHashDistributionDesc = (HashDistributionDesc) optimizeDistributionDesc;
-                        if (!tableHashDistributionDesc.getDistributionColumnNames()
-                                .equals(optimizeHashDistributionDesc.getDistributionColumnNames())) {
-                            throw new AlterCancelException("can not change distribution column of target table" +
-                                        " from " + tableHashDistributionDesc.getDistributionColumnNames() + " to " +
-                                        optimizeHashDistributionDesc.getDistributionColumnNames() +
-                                        " since some partitions rewrite failed [" + errMsg + "]");
-                        }
-                    }
-                }
-            }
-
             Set<Tablet> sourceTablets = Sets.newHashSet();
-            sourcePartitionNames.forEach(name -> {
-                Partition partition = targetTable.getPartition(name);
-                for (MaterializedIndex index
-                        : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    sourceTablets.addAll(index.getTablets());
+            tempPartitionNameToSourcePartitionNames.values().forEach(sourcePartitionName -> {
+                Partition partition = targetTable.getPartition(sourcePartitionName);
+                if (partition != null) {
+                    for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        sourceTablets.addAll(index.getTablets());
+                    }
                 }
             });
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
-            if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                targetTable.replaceTempPartitions(db.getId(), sourcePartitionNames, tmpPartitionNames, true, false);
-            } else if (partitionInfo instanceof SinglePartitionInfo) {
-                Preconditions.checkState(sourcePartitionNames.size() == 1 && tmpPartitionNames.size() == 1);
-                targetTable.replacePartition(db.getId(), sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+            if (partitionInfo.isRangePartition()) {
+                for (Map.Entry<String, Collection<String>> entry : tempPartitionNameToSourcePartitionNames.asMap().entrySet()) {
+                    String tmpPartitionName = entry.getKey();
+                    Collection<String> sourcePartitionNames = entry.getValue();
+                    
+                    LOG.info("merge partitions job {} replace partition dbId:{}, tableId:{},"
+                            + "source partitions:{}, target partition:{}",
+                            jobId, dbId, tableId, sourcePartitionNames, tmpPartitionName);
+                    targetTable.replaceTempPartitions(
+                            db.getId(),
+                            new ArrayList<>(sourcePartitionNames), 
+                            Collections.singletonList(tmpPartitionName), 
+                            false, true);
+                    
+                    // write log
+                    ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(
+                            db.getId(), 
+                            targetTable.getId(),
+                            new ArrayList<>(sourcePartitionNames), 
+                            Collections.singletonList(tmpPartitionName),
+                            false, 
+                            true, 
+                            partitionInfo instanceof SinglePartitionInfo);
+                    
+                    GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+                }
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
             }
-            // write log
-            ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), targetTable.getId(),
-                        sourcePartitionNames, tmpPartitionNames, true, false, partitionInfo instanceof SinglePartitionInfo);
-            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
             sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
@@ -530,18 +689,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
             targetTable.lastSchemaUpdateTime.set(System.nanoTime());
 
-            if (allPartitionOptimized && optimizeClause.getDistributionDesc() != null) {
-                this.distributionInfo = optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns());
-                targetTable.setDefaultDistributionInfo(distributionInfo);
-            }
             targetTable.setState(OlapTableState.NORMAL);
 
-            LOG.info("optimize job {} finish replace partitions dbId:{}, tableId:{},"
-                                    + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
-                        jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
+            LOG.info("merge partitions job {} finish replace partitions dbId:{}, tableId:{},"
+                                    + "partitions:{}",
+                        jobId, dbId, tableId, tempPartitionNameToSourcePartitionNames);
         } catch (Exception e) {
-            LOG.warn("optimize table failed dbId:{}, tableId:{} exception: {}", dbId, tableId, e);
-            throw new AlterCancelException("optimize table failed " + e.getMessage());
+            LOG.warn("merge partitions failed dbId:{}, tableId:{} exception: {}", dbId, tableId, e);
+            throw new AlterCancelException("merge partitions failed " + e.getMessage());
         }
     }
 
@@ -595,7 +750,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             Set<Tablet> sourceTablets = Sets.newHashSet();
             if (getTmpPartitionIds() != null) {
                 for (long pid : getTmpPartitionIds()) {
-                    LOG.info("optimize job {} drop temp partition:{}", jobId, pid);
+                    LOG.info("merge partitions job {} drop temp partition:{}", jobId, pid);
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
@@ -615,7 +770,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
             targetTable.setState(OlapTableState.NORMAL);
         } catch (Exception e) {
-            LOG.warn("exception when cancel optimize job.", e);
+            LOG.warn("exception when cancel merge partition job.", e);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
@@ -631,7 +786,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Replay job in PENDING state.
      * Should replay all changes before this job's state transfer to PENDING.
      */
-    private void replayPending(OptimizeJobV2 replayedJob) {
+    private void replayPending(MergePartitionJob replayedJob) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
@@ -652,14 +807,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.watershedTxnId = replayedJob.watershedTxnId;
         this.optimizeOperation = replayedJob.optimizeOperation;
 
-        LOG.info("replay pending optimize job: {}", jobId);
+        LOG.info("replay pending merge partition job: {}", jobId);
     }
 
     /**
      * Replay job in WAITING_TXN state.
      * Should replay all changes in runPendingJob()
      */
-    private void replayWaitingTxn(OptimizeJobV2 replayedJob) {
+    private void replayWaitingTxn(MergePartitionJob replayedJob) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
@@ -671,8 +826,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
 
-        for (long id : replayedJob.getTmpPartitionIds()) {
-            tmpPartitionIds.add(id);
+        for (Entry<Long, Collection<Long>> entry : replayedJob.getTempPartitionIdToSourcePartitionIds().asMap().entrySet()) {
+            long tempPartitionId = entry.getKey();
+            Collection<Long> sourcePartitionIds = entry.getValue();
+            tempPartitionIdToSourcePartitionIds.putAll(tempPartitionId, sourcePartitionIds);
         }
 
         // should still be in WAITING_TXN state, so that the alter tasks will be resend again
@@ -680,13 +837,11 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.watershedTxnId = replayedJob.watershedTxnId;
         this.optimizeOperation = replayedJob.optimizeOperation;
 
-        LOG.info("replay waiting txn optimize job: {}", jobId);
+        LOG.info("replay waiting txn merge partition job: {}", jobId);
     }
 
-    private void onReplayFinished(OptimizeJobV2 replayedJob, OlapTable targetTable) {
-        this.sourcePartitionNames = replayedJob.sourcePartitionNames;
-        this.tmpPartitionNames = replayedJob.tmpPartitionNames;
-        this.allPartitionOptimized = replayedJob.allPartitionOptimized;
+    private void onReplayFinished(MergePartitionJob replayedJob, OlapTable targetTable) {
+        this.tempPartitionNameToSourcePartitionNames = replayedJob.tempPartitionNameToSourcePartitionNames;
         this.optimizeOperation = replayedJob.optimizeOperation;
 
         Set<Tablet> sourceTablets = Sets.newHashSet();
@@ -702,23 +857,17 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
 
-        if (allPartitionOptimized) {
-            this.distributionInfo = replayedJob.distributionInfo;
-            LOG.debug("set distribution info to table: {}", distributionInfo);
-            targetTable.setDefaultDistributionInfo(distributionInfo);
-        }
         targetTable.setState(OlapTableState.NORMAL);
 
-        LOG.info("finish replay optimize job {} dbId:{}, tableId:{},"
-                                + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
-                    jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
+        LOG.info("finish replay merge partition job {} dbId:{}, tableId:{}, partitions:{}",
+                    jobId, dbId, tableId, tempPartitionNameToSourcePartitionNames);
     }
 
     /**
      * Replay job in FINISHED state.
      * Should replay all changes in runRuningJob()
      */
-    private void replayFinished(OptimizeJobV2 replayedJob) {
+    private void replayFinished(MergePartitionJob replayedJob) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -733,23 +882,23 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.jobState = JobState.FINISHED;
         this.finishedTimeMs = replayedJob.finishedTimeMs;
 
-        LOG.info("replay finished optimize job: {}", jobId);
+        LOG.info("replay finished merge partition job: {}", jobId);
     }
 
     /**
      * Replay job in CANCELLED state.
      */
-    private void replayCancelled(OptimizeJobV2 replayedJob) {
+    private void replayCancelled(MergePartitionJob replayedJob) {
         cancelInternal();
         this.jobState = JobState.CANCELLED;
         this.finishedTimeMs = replayedJob.finishedTimeMs;
         this.errMsg = replayedJob.errMsg;
-        LOG.info("replay cancelled optimize job: {}", jobId);
+        LOG.info("replay cancelled merge partition job: {}", jobId);
     }
 
     @Override
     public void replay(AlterJobV2 replayedJob) {
-        OptimizeJobV2 replayedOptimizeJob = (OptimizeJobV2) replayedJob;
+        MergePartitionJob replayedOptimizeJob = (MergePartitionJob) replayedJob;
         switch (replayedJob.jobState) {
             case PENDING:
                 replayPending(replayedOptimizeJob);
@@ -791,13 +940,13 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, OptimizeJobV2.class);
+        String json = GsonUtils.GSON.toJson(this, MergePartitionJob.class);
         Text.writeString(out, json);
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
-        this.postfix = "_" + jobId;
+        this.postfix = "job" + jobId;
     }
 
     @Override
