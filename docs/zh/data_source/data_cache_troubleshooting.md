@@ -54,7 +54,7 @@ ClusterDecommissioned: false
 
 - 您可以访问 BE Web 控制台 (`http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat`) 来检查当前的 Data Cache 配额、命中率和其他指标。如果 `disk_quota_bytes` 或 `mem_quota_bytes` 大于 0，则可以确认 Data Cache 已启用。
 
-![Data Cache FAQ - Web Console](../assets/images/data_cache_be_web_console.png)
+![Data Cache FAQ - Web Console](../_assets/data_cache_be_web_console.png)
 
 ### 为什么 Data Cache 在默认情况下未启用？
 
