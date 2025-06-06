@@ -344,6 +344,10 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
     }
 
+    public void executePartitionTTLForTable(Long dbId, Long tableId) {
+        ttlPartitionScheduler.executePartitionTTLForTable(dbId, tableId);
+    }
+
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {

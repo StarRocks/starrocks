@@ -342,7 +342,7 @@ public class ListPartitionPruner implements PartitionPruner {
         List<ScalarOperator> extraConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : partitionConjuncts) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(conjunct);
-            if (!checkDeduceConjunct(conjunct, columnRefOperatorList)) {
+            if (!checkDeduceConjunct(partitionColumnRefs, conjunct, columnRefOperatorList)) {
                 continue;
             }
 
@@ -378,7 +378,8 @@ public class ListPartitionPruner implements PartitionPruner {
         partitionConjuncts.addAll(extraConjuncts);
     }
 
-    private boolean checkDeduceConjunct(ScalarOperator conjunct, List<ColumnRefOperator> columnRefs) {
+    public static boolean checkDeduceConjunct(List<ColumnRefOperator> partitionColumnRefs,
+                                              ScalarOperator conjunct, List<ColumnRefOperator> columnRefs) {
         // The conjunct should not contain partition-column
         if (partitionColumnRefs.containsAll(columnRefs)) {
             return false;
@@ -407,9 +408,9 @@ public class ListPartitionPruner implements PartitionPruner {
      * <p>
      * Deducted result: c3 >= date_trunc('MONTH', '2024-01-02')
      */
-    private ScalarOperator buildDeducedConjunct(ScalarOperator conjunct,
-                                                ScalarOperator monoExpr,
-                                                ColumnRefOperator generatedColumn) {
+    public static ScalarOperator buildDeducedConjunct(ScalarOperator conjunct,
+                                                      ScalarOperator monoExpr,
+                                                      ColumnRefOperator generatedColumn) {
         ScalarOperatorVisitor<ScalarOperator, Void> visitor = new ScalarOperatorVisitor<>() {
 
             private ScalarOperator replaceExpr(int index) {
