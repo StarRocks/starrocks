@@ -141,6 +141,11 @@ while true; do
     esac
 done
 
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
+
 if [ ${HELP} -eq 1 ]; then
     usage
     exit 0
