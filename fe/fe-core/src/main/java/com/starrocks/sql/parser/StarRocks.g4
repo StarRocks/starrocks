@@ -1424,7 +1424,7 @@ dropBaselinePlanStatement
 
 showBaselinePlanStatement
     : SHOW BASELINE (WHERE expression)?
-
+    | SHOW BASELINE ON queryRelation
     ;
 
 disableBaselinePlanStatement

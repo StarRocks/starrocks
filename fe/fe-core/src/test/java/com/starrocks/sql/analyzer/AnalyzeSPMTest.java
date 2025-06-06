@@ -48,6 +48,7 @@ public class AnalyzeSPMTest {
         analyzeSuccess("show baseline where id = 2 and bindSQLDigest = 'asdf'");
         analyzeSuccess("show baseline where bindSQLDigest = 'asdf' or updateTime <= now()");
         analyzeSuccess("show baseline where bindSQLDigest like 'asdf' or updateTime <= now()");
+        analyzeSuccess("show baseline on select * from tb1");
 
         // error field
         analyzeFail("show baseline where xxx = 'asdf'");

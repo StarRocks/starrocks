@@ -104,9 +104,9 @@ public class SPMTPCDSUseTest extends TPCDS1TTestBase {
             sql = "select ss_ticket_number from store_sales "
                     + "where ss_ticket_number = _spm_const_var(1, -78);";
             plan = getCostExplain(sql);
-            assertContains(plan, "cardinality: 12\n"
+            assertContains(plan, "cardinality: 1\n"
                     + "     column statistics: \n"
-                    + "     * ss_ticket_number-->[NaN, NaN, 0.0, 4.0, 0.0] ESTIMATE");
+                    + "     * ss_ticket_number-->[NaN, NaN, 0.0, 4.0, 1.0] ESTIMATE");
 
             sql = "select ss_ticket_number from store_sales "
                     + "where ss_ticket_number = _spm_const_enum(1, -1, 1, -2, 2);";
