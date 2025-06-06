@@ -21,6 +21,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -59,9 +60,22 @@ public class ShowBaselinePlanStmt extends ShowStmt {
     // save where clause
     private final Expr where;
 
+    private final QueryRelation query;
+
     public ShowBaselinePlanStmt(NodePosition pos, Expr where) {
         super(pos);
         this.where = where;
+        this.query = null;
+    }
+
+    public ShowBaselinePlanStmt(NodePosition pos, QueryRelation query) {
+        super(pos);
+        this.where = null;
+        this.query = query;
+    }
+
+    public QueryRelation getQuery() {
+        return query;
     }
 
     public Expr getWhere() {

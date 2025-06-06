@@ -8606,6 +8606,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr where = null;
         if (ctx.WHERE() != null) {
             where = (Expr) visit(ctx.expression());
+            return new ShowBaselinePlanStmt(createPos(ctx), where);
+        }
+        if (ctx.ON() != null) {
+            QueryRelation queryRelation = (QueryRelation) visit(ctx.queryRelation());
+            return new ShowBaselinePlanStmt(createPos(ctx), queryRelation);
         }
         return new ShowBaselinePlanStmt(createPos(ctx), where);
     }
