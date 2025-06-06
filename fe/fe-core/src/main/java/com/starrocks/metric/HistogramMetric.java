@@ -39,6 +39,19 @@ public final class HistogramMetric extends Histogram {
     }
 
     public void addLabel(MetricLabel label) {
+        if (labels.contains(label)) {
+            return;
+        }
+        for (int i = 0; i < labels.size(); i++) {
+            if (!labels.get(i).getKey().equals(label.getKey())) {
+                continue;
+            }
+            // update the label instead of adding, cuz renaming operations will result in duplicate labels
+            // for instance: after running `alter table t1 rename t2`
+            // labels should change from [{ key: "tbl_name", value: "t1" }] to [{ key: "tbl_name", value: "t2" }]
+            labels.set(i, label);
+            return;
+        }
         labels.add(label);
     }
 
