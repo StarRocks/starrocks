@@ -132,6 +132,7 @@ public class StarMgrMetaSyncerTest {
         long tableId = 2L;
         long partitionId = 3L;
         long physicalPartitionId = 4L;
+        long indexId = 5L;
 
 
         new Expectations() {
@@ -246,7 +247,10 @@ public class StarMgrMetaSyncerTest {
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
                     .setGroupId(groupId)
-                    .putLabels("tableId", String.valueOf(tableId))
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build();
             shardGroupInfos.add(info);
@@ -486,7 +490,10 @@ public class StarMgrMetaSyncerTest {
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
                     .setGroupId(groupId)
-                    .putLabels("tableId", String.valueOf(tableId))
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                     .addAllShardIds(allShardIds)
                     .build();
@@ -576,7 +583,10 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
-                .putLabels("tableId", String.valueOf(tableId))
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(666L))
+                .putLabels("indexId", String.valueOf(6666L))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -623,7 +633,10 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
-                .putLabels("tableId", String.valueOf(tableId))
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(666L))
+                .putLabels("indexId", String.valueOf(6666L))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -688,7 +701,10 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
-                .putLabels("tableId", String.valueOf(tableId))
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(666L))
+                .putLabels("indexId", String.valueOf(6666L))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -766,7 +782,10 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
-                .putLabels("tableId", String.valueOf(tableId))
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(666L))
+                .putLabels("indexId", String.valueOf(6666L))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -967,12 +986,18 @@ public class StarMgrMetaSyncerTest {
 
         ShardGroupInfo info1 = ShardGroupInfo.newBuilder()
                 .setGroupId(99L)
-                .putLabels("tableId", String.valueOf(100L))
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(666L))
+                .putLabels("indexId", String.valueOf(6666L))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                 .build();
         ShardGroupInfo info2 = ShardGroupInfo.newBuilder()
                 .setGroupId(100L)
-                .putLabels("tableId", String.valueOf(111L))
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(666L))
+                .putLabels("indexId", String.valueOf(6666L))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                 .build();
         List<ShardGroupInfo> shardGroupsInfo = new ArrayList();
@@ -1057,7 +1082,12 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>(baseSize + 100);
         for (long i = 1; i <= baseSize; ++i) {
             shardGroupInfos.add(
-                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", strNow).build());
+                    ShardGroupInfo.newBuilder().setGroupId(i)
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
+                    .putProperties("createTime", strNow).build());
         }
 
         // 2. add a few numbers in shardGroupInfos but not in groupIdsInFE abd the creation timestamp is NOT expired.
@@ -1066,7 +1096,12 @@ public class StarMgrMetaSyncerTest {
         for (long i = baseSize + offset; i < baseSize + offset + 10; ++i) {
             shardGroupSet1.add(i);
             shardGroupInfos.add(
-                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", str4HrsAgo).build());
+                    ShardGroupInfo.newBuilder().setGroupId(i)
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
+                    .putProperties("createTime", str4HrsAgo).build());
         }
 
         // 3. add a few numbers in shardGroupInfos but not in groupIdsInFE and the creation timestamp is expired.
@@ -1075,7 +1110,12 @@ public class StarMgrMetaSyncerTest {
         for (long i = baseSize + offset; i < baseSize + offset + 10; ++i) {
             shardGroupSet2.add(i);
             shardGroupInfos.add(
-                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", str2HrsAgo).build());
+                    ShardGroupInfo.newBuilder().setGroupId(i)
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
+                    .putProperties("createTime", str2HrsAgo).build());
         }
 
         List<Long> cleanedGroupIds = new ArrayList<>();
@@ -1083,6 +1123,9 @@ public class StarMgrMetaSyncerTest {
             {
                 GlobalStateMgr.getCurrentState().getStarOSAgent();
                 result = starosAgent;
+
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
@@ -1161,7 +1204,12 @@ public class StarMgrMetaSyncerTest {
         for (long i = 1; i <= size; ++i) {
             groupIds.add(i);
             shardGroupInfos.add(
-                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", str2secsAgo).build());
+                    ShardGroupInfo.newBuilder().setGroupId(i)
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
+                    .putProperties("createTime", str2secsAgo).build());
         }
 
         AtomicLong delayMs = new AtomicLong();
@@ -1172,6 +1220,9 @@ public class StarMgrMetaSyncerTest {
             {
                 GlobalStateMgr.getCurrentState().getStarOSAgent();
                 result = starosAgent;
+
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
