@@ -94,6 +94,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
     const auto& query_options = request.common().query_options;
+    const auto& t_desc_tbl = request.common().desc_tbl;
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
@@ -103,10 +104,8 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         }
     }
 
-    _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
-    if (_query_ctx == nullptr) {
-        return Status::Cancelled("Query has been cancelled");
-    }
+    const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
+    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
