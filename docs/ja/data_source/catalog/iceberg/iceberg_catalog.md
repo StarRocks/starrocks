@@ -156,15 +156,13 @@ Iceberg データをクエリする前に、Hive metastore ノードのホスト
 
 次の表は、`MetastoreParams` で構成する必要があるパラメーターを説明しています。
 
-##### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - 必須: はい
+  - 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `hive` に設定します。
 
-必須: はい
-説明: Iceberg クラスターに使用するメタストアのタイプです。値を `hive` に設定します。
-
-##### hive.metastore.uris
-
-必須: はい
-説明: Hive metastore の URI です。形式: `thrift://<metastore_IP_address>:<metastore_port>`。<br />Hive metastore に高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
+- `hive.metastore.uris`
+  - 必須: はい
+  - 説明: Hive metastore の URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。<br />Hive metastore に高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
 
 </TabItem>
 <TabItem value="GLUE" label="AWS Glue">
@@ -202,35 +200,29 @@ Iceberg データをクエリする前に、Hive metastore ノードのホスト
 
 AWS Glue 用の `MetastoreParams`:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - 必須: はい
+  - 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `glue` に設定します。
 
-必須: はい
-説明: Iceberg クラスターに使用するメタストアのタイプです。値を `glue` に設定します。
+- `aws.glue.use_instance_profile`
+  - 必須: はい
+  - 説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。デフォルト値: `false`。
 
-###### aws.glue.use_instance_profile
+- `aws.glue.iam_role_arn`
+  - 必須: いいえ
+  - 説明: AWS Glue Data Catalog に対する権限を持つ IAM ロールの ARN。想定ロールベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
 
-必須: はい
-説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。 デフォルト値: `false`。
+- `aws.glue.region`
+  - 必須: はい
+  - 説明: AWS Glue Data Catalog が存在するリージョン。例: `us-west-1`。
 
-###### aws.glue.iam_role_arn
+- `aws.glue.access_key`
+  - 必須: いいえ
+  - 説明: AWS IAM ユーザーのアクセスキー。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
 
-必須: いいえ
-説明: AWS Glue Data Catalog に対する権限を持つ IAM ロールの ARN です。想定ロールベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメーターを指定する必要があります。
-
-###### aws.glue.region
-
-必須: はい
-説明: AWS Glue Data Catalog が存在するリージョンです。例: `us-west-1`。
-
-###### aws.glue.access_key
-
-必須: いいえ
-説明: AWS IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメーターを指定する必要があります。
-
-###### aws.glue.secret_key
-
-必須: いいえ
-説明: AWS IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメーターを指定する必要があります。
+- `aws.glue.secret_key`
+  - 必須: いいえ
+  - 説明: AWS IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
 
 AWS Glue へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [AWS Glue へのアクセス認証パラメーター](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
 
@@ -255,68 +247,49 @@ S3 テーブル用の Iceberg REST catalog の作成に関する詳細な手順�
 
 REST catalog 用の `MetastoreParams`:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - 必須: はい
+  - 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `rest` に設定します。
 
-必須: はい
-説明: Iceberg クラスターに使用するメタストアのタイプです。値を `rest` に設定します。
+- `iceberg.catalog.uri`
+  - 必須: はい
+  - 説明: REST サービスエンドポイントの URI。例: `https://api.tabular.io/ws`。
 
-###### iceberg.catalog.uri
+- `iceberg.catalog.view-endpoints-supported`
+  - 必須: いいえ
+  - 説明: 以前のバージョンの REST サービスが `CatalogConfig` でエンドポイントを返さない場合に、ビュー関連の操作をサポートするためにビューエンドポイントを使用するかどうか。このパラメータは初期のバージョンの REST サーバとの下位互換性のために使用される。デフォルト: `false`。
 
-必須: はい
-説明: REST サービスエンドポイントの URI です。例: `https://api.tabular.io/ws`。
+- `iceberg.catalog.security`
+  - 必須: いいえ
+  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。
 
-###### iceberg.catalog.view-endpoints-supported
+- `iceberg.catalog.oauth2.token`
+  - 必須: いいえ
+  - 説明: サーバーとのやり取りに使用されるベアラートークン。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。例: `AbCdEf123456`。
 
-必須: いいえ
+- `iceberg.catalog.oauth2.credential`
+  - 必須: いいえ
+  - 説明: サーバーとの OAuth2 クライアント資格情報フローでトークンと交換するための資格情報。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。例: `AbCdEf123456`。
 
-説明: REST サービスの以前のバージョンで `CatalogConfig` にエンドポイントを返さない場合に、ビュー関連の操作をサポートするためにビューエンドポイントを使用するかどうか。このパラメーターは、初期バージョンの REST サーバーとの互換性のために使用されます。デフォルト: `false`。
+- `iceberg.catalog.oauth2.scope`
+  - 必須: いいえ
+  - 説明: REST Catalog と通信する際に使用するスコープ。`credential` を使用する場合にのみ適用されます。
 
-###### iceberg.catalog.security
+- `iceberg.catalog.oauth2.server-uri`
+  - 必須: いいえ
+  - 説明: OAuth2 サーバーからアクセストークンを取得するためのエンドポイント。
 
-必須: いいえ
+- `iceberg.catalog.vended-credentials-enabled`
+  - 必須: いいえ
+  - 説明: ファイルシステムアクセスのために REST バックエンドによって提供される資格情報を使用するかどうか。デフォルト: `true`。
 
-説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`。`OAUTH2` には `token` または `credential` が必要です。
+- `iceberg.catalog.warehouse`
+  - 必須: いいえ
+  - 説明: Iceberg catalog のウェアハウスの場所または識別子。例: `s3://my_bucket/warehouse_location` または `sandbox`。
 
-###### iceberg.catalog.oauth2.token
-
-必須: いいえ
-
-説明: サーバーとのやり取りに使用されるベアラートークン。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。例: `AbCdEf123456`。
-
-###### iceberg.catalog.oauth2.credential
-
-必須: いいえ
-
-説明: サーバーとの OAuth2 クライアント資格情報フローでトークンと交換するための資格情報。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。例: `AbCdEf123456`。
-
-###### iceberg.catalog.oauth2.scope
-
-必須: いいえ
-
-説明: REST Catalog と通信する際に使用されるスコープ。`credential` が使用される場合にのみ適用されます。
-
-###### iceberg.catalog.oauth2.server-uri
-
-必須: いいえ
-
-説明: OAuth2 サーバーからアクセストークンを取得するためのエンドポイント。
-
-###### iceberg.catalog.vended-credentials-enabled
-
-必須: いいえ
-
-説明: ファイルシステムアクセスのために REST バックエンドによって提供される資格情報を使用するかどうか。デフォルト: `true`。
-
-###### iceberg.catalog.warehouse
-
-必須: いいえ
-説明: Iceberg catalog のウェアハウスの場所または識別子。例: `s3://my_bucket/warehouse_location` または `sandbox`。
-
-##### iceberg.catalog.rest.nested-namespace-enabled
-
-必須: いいえ
-
-説明: ネストされた名前空間の下にあるオブジェクトのクエリをサポートするかどうか。デフォルト: `false`。
+- `iceberg.catalog.rest.nested-namespace-enabled`
+  - 必須: いいえ
+  - 説明: 入れ子になった Namespace の下にあるオブジェクトのクエリをサポートするかどうか。デフォルト： `false`。
 
 次の例は、Tabular をメタストアとして使用する Iceberg catalog `tabular` を作成します。
 
@@ -406,35 +379,27 @@ SHOW DATABASES FROM r2;
 
 次の表は、`MetastoreParams` で構成する必要があるパラメーターを説明しています。
 
-##### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - 必須：はい
+  - 説明：Icebergクラスタで使用するメタストアのタイプ。値を `jdbc` に設定します。
 
-必須: はい
+- `iceberg.catalog.uri`
+  - 必須：はい
+  - 説明：データベースのURI。フォーマット：`jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`。
 
-説明: Iceberg クラスターに使用するメタストアのタイプです。値を `jdbc` に設定します。
-
-##### iceberg.catalog.uri
-
-必須: はい
-
-説明: データベースの URI です。形式: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`。
-
-###### iceberg.catalog.warehouse
-
-必須: はい
-
-説明: Iceberg catalog のウェアハウスの場所または識別子。例: `s3://my_bucket/warehouse_location`。
-
-##### iceberg.catalog.jdbc.user
-
-必須: いいえ
+- `iceberg.catalog.warehouse`
+  - 必須：はい
+  - 説明：Iceberg カタログの Warehouse の場所または識別子。例: `s3://my_bucket/warehouse_location`。
 
 説明: データベースのユーザー名。
 
-##### iceberg.catalog.jdbc.password
+- `iceberg.catalog.jdbc.user`
+  - 必須：いいえ
+  - 説明：データベースのユーザー名。
 
-必須: いいえ
-
-説明: データベースのパスワード。
+- `iceberg.catalog.jdbc.password`
+  - 必須：いいえ
+  - 説明：データベースのパスワード。
 
 次の例は、Iceberg catalog `iceberg_jdbc` を作成し、メタストアとして JDBC を使用します。
 
