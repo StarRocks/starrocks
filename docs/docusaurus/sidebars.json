@@ -483,17 +483,7 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
-<<<<<<< HEAD
-=======
-                "administration/http_interface",
-        {
-            "type": "category",
-            "label": "User Privileges and Authentication",
-            "link": {
-                "type": "generated-index"
-            },
-            "items": [
->>>>>>> 1412a475e3 ([Doc] Translate HTTP Interface Doc (#59679))
+                 "administration/http_interface",
                 {
                     "type": "category",
                     "label": "User Privileges and Authentication",
