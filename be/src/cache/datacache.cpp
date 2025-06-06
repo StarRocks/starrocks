@@ -43,6 +43,11 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
     _store_paths = store_paths;
     _block_cache = std::make_shared<BlockCache>();
 
+    size_t datacache_mem_limit = 0;
+    RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
+            config::datacache_mem_size, _global_env->process_mem_limit(), &datacache_mem_limit));
+    datacache_mem_limit = check_storage_page_cache_limit(datacache_mem_limit);
+
 #if defined(WITH_STARCACHE)
     if (!config::datacache_enable) {
         config::block_cache_enable = false;
