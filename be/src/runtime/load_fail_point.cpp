@@ -22,14 +22,43 @@
 
 namespace starrocks::load::failpoint {
 
+// ===================================== Network-related fail points
+// These fail points simulate RPC failures during data loading
+
+// Simulates RPC failure when issuing a tablet_writer_open.
+// Supported in both shared-nothing and shared-data architectures.
 DEFINE_FAIL_POINT(load_tablet_writer_open);
+
+// Simulates RPC failure when issuing a tablet_writer_add_chunks
+// Supported in both shared-nothing and shared-data architectures.
 DEFINE_FAIL_POINT(load_tablet_writer_add_chunks);
+
+// Simulates RPC failure when issuing a tablet_writer_add_segment.
+// Only supported in shared-nothing architecture.
 DEFINE_FAIL_POINT(load_tablet_writer_add_segment);
+
+// Simulates RPC failure when issuing a tablet_writer_cancel.
+// Supported in both shared-nothing and shared-data architectures.
 DEFINE_FAIL_POINT(load_tablet_writer_cancel);
-DEFINE_FAIL_POINT(load_commit_txn);
+
+// ===================================== I/O-related fail points
+// These fail points simulate I/O failures during data loading
+
+// Simulates failure when flushing memtable to storage (disk or S3).
+// Supported in both shared-nothing and shared-data architectures.
 DEFINE_FAIL_POINT(load_memtable_flush);
+
+// Simulates failure when flushing segment to disk on secondary replicas.
+// Only supported in shared-nothing architecture with replicated storage.
 DEFINE_FAIL_POINT(load_segment_flush);
+
+// Simulates failure during primary key index preloading in delta writer.
+// Supported in both shared-nothing and shared-data architectures.
 DEFINE_FAIL_POINT(load_pk_preload);
+
+// Simulates failure during transaction commit at the end of loading.
+// Supported in both shared-nothing and shared-data architectures.
+DEFINE_FAIL_POINT(load_commit_txn);
 
 #ifdef FIU_ENABLE
 
@@ -58,7 +87,7 @@ void tablet_writer_open_fp_action(const std::string& remote_host, RefCountClosur
 void tablet_writer_add_chunks_fp_action(const std::string& remote_host,
                                         ReusableClosure<PTabletWriterAddBatchResult>* closure,
                                         PTabletWriterAddChunksRequest* request) {
-    CHECK(request->requests().size() > 0);
+    DCHECK(request->requests().size() > 0);
     LOG_BRPC_FP(load_tablet_writer_add_chunks, remote_host, request->mutable_requests(0))
             << ", send_id: " << request->mutable_requests(0)->sender_id();
     closure->cntl.SetFailed(

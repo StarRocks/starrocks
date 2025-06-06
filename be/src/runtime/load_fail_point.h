@@ -24,6 +24,14 @@
 
 namespace starrocks::load::failpoint {
 
+// All fail points are defined as global variables in load_fail_point.cpp. Each fail point
+// represents a specific failure scenario that can be triggered during data loading operations.
+// The file contains detailed documentation for each fail point's purpose.
+//
+// Below are the action handlers for each fail point. Each handler is named after its
+// corresponding fail point with an "_fp_action" suffix. These handlers implement the
+// specific failure behavior when a fail point is triggered.
+
 #ifdef FIU_ENABLE
 void tablet_writer_open_fp_action(const std::string& remote_host, RefCountClosure<PTabletWriterOpenResult>* closure,
                                   PTabletWriterOpenRequest* request);
