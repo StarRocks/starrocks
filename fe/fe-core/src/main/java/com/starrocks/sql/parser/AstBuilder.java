@@ -7295,6 +7295,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        // support regexp_replace with 2 param
+        if (functionName.equalsIgnoreCase(FunctionSet.REGEXP_REPLACE) && context.expression().size() == 2) {
+            Expr e1 = (Expr) visit(context.expression(0));
+            Expr e2 = (Expr) visit(context.expression(1));
+            return new FunctionCallExpr(FunctionSet.REGEXP_REPLACE, ImmutableList.of(e1, e2, new StringLiteral("")));
+        }
+
         if (DATE_FUNCTIONS.contains(functionName)) {
             if (context.expression().size() != 2) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);

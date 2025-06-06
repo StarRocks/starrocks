@@ -420,6 +420,14 @@ class ParserTest {
     }
 
     @Test
+    void testRegexpReplace() {
+        String sql = "select regexp_replace('123', '321')";
+        SessionVariable sessionVariable = new SessionVariable();
+        List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+        assertEquals("SELECT regexp_replace('123', '321', '')", AstToSQLBuilder.toSQL(stmts.get(0)));
+    }
+
+    @Test
     void testComplexExpr() {
         String exprString = " not X1 + 1  >  X2 and not X3 + 2 > X4 and not X5 + 3 > X6  and not X7 + 1 = X8 " +
                 "and not X9 + X10 < X11 + X12 ";
