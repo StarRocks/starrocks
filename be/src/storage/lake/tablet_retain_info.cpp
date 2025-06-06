@@ -20,8 +20,8 @@
 
 namespace starrocks::lake {
 
-Status TabletRetainInfo::build_info(const std::vector<int64_t>& retain_versions, int64_t tablet_id,
-                                    TabletManager* tablet_mgr) {
+Status TabletRetainInfo::init(const std::vector<int64_t>& retain_versions, int64_t tablet_id,
+                              TabletManager* tablet_mgr) {
     _tablet_id = tablet_id;
     for (const auto& version : retain_versions) {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
@@ -56,15 +56,15 @@ Status TabletRetainInfo::build_info(const std::vector<int64_t>& retain_versions,
     return Status::OK();
 }
 
-bool TabletRetainInfo::file_need_to_be_retained(const std::string& file_name) const {
+bool TabletRetainInfo::contains_file(const std::string& file_name) const {
     return _files.find(file_name) != _files.end();
 }
 
-bool TabletRetainInfo::version_need_to_be_retained(int64_t version) const {
+bool TabletRetainInfo::contains_version(int64_t version) const {
     return _versions.find(version) != _versions.end();
 }
 
-bool TabletRetainInfo::rowset_need_to_be_retained(uint32_t rowset_id) const {
+bool TabletRetainInfo::contains_rowset(uint32_t rowset_id) const {
     return _rowset_ids.find(rowset_id) != _rowset_ids.end();
 }
 

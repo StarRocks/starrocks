@@ -160,25 +160,25 @@ TEST_F(LakeTabletRetainInfoTest, test_tablet_retain_info_normal) {
     TabletRetainInfo tablet_retain_info = TabletRetainInfo();
     std::vector<int64_t> vec;
     vec.push_back(2);
-    tablet_retain_info.build_info(vec, 666, _tablet_mgr.get());
+    tablet_retain_info.init(vec, 666, _tablet_mgr.get());
 
     EXPECT_TRUE(
-            tablet_retain_info.file_need_to_be_retained("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
+            tablet_retain_info.contains_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
     EXPECT_TRUE(
-            tablet_retain_info.file_need_to_be_retained("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));
-    EXPECT_TRUE(tablet_retain_info.file_need_to_be_retained(
+            tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));
+    EXPECT_TRUE(tablet_retain_info.contains_file(
             "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec"));
     EXPECT_TRUE(
-            tablet_retain_info.file_need_to_be_retained("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"));
+            tablet_retain_info.contains_file("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"));
     EXPECT_FALSE(
-            tablet_retain_info.file_need_to_be_retained("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"));
+            tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"));
 
-    EXPECT_FALSE(tablet_retain_info.version_need_to_be_retained(1));
-    EXPECT_TRUE(tablet_retain_info.version_need_to_be_retained(2));
-    EXPECT_FALSE(tablet_retain_info.version_need_to_be_retained(3));
+    EXPECT_FALSE(tablet_retain_info.contains_version(1));
+    EXPECT_TRUE(tablet_retain_info.contains_version(2));
+    EXPECT_FALSE(tablet_retain_info.contains_version(3));
 
-    EXPECT_TRUE(tablet_retain_info.rowset_need_to_be_retained(100));
-    EXPECT_FALSE(tablet_retain_info.rowset_need_to_be_retained(101));
+    EXPECT_TRUE(tablet_retain_info.contains_rowset(100));
+    EXPECT_FALSE(tablet_retain_info.contains_rowset(101));
 
     EXPECT_TRUE(tablet_retain_info.tablet_id() == 666);
 }

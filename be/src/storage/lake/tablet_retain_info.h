@@ -35,13 +35,13 @@ public:
     TabletRetainInfo() = default;
     ~TabletRetainInfo() = default;
 
-    Status build_info(const std::vector<int64_t>& retain_versions, int64_t tablet_id, TabletManager* tablet_mgr);
+    Status init(const std::vector<int64_t>& retain_versions, int64_t tablet_id, TabletManager* tablet_mgr);
 
-    bool file_need_to_be_retained(const std::string& file_name) const;
+    bool contains_file(const std::string& file_name) const;
 
-    bool version_need_to_be_retained(int64_t version) const;
+    bool contains_version(int64_t version) const;
 
-    bool rowset_need_to_be_retained(uint32_t rowset_id) const;
+    bool contains_rowset(uint32_t rowset_id) const;
 
     int64_t tablet_id() const { return _tablet_id; }
 
