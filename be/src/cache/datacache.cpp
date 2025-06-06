@@ -138,15 +138,10 @@ Status DataCache::_init_datacache() {
         ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
 
         // init starcache & disk monitor
-        _local_cache = std::make_shared<StarCacheWrapper>();
-        _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
-        RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.dir_spaces));
-        RETURN_IF_ERROR(_local_cache->init(cache_options));
-        _disk_space_monitor->start();
+        RETURN_IF_ERROR(_init_starcache(&cache_options));
 
         // init remote cache
-        _remote_cache = std::make_shared<PeerCacheWrapper>();
-        RETURN_IF_ERROR(_remote_cache->init(cache_options));
+        RETURN_IF_ERROR(_init_peer_cache(cache_options));
 
         if (config::block_cache_enable) {
             RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
@@ -158,6 +153,21 @@ Status DataCache::_init_datacache() {
         LOG(INFO) << "starts by skipping the datacache initialization";
     }
     return Status::OK();
+}
+
+Status DataCache::_init_starcache(CacheOptions* cache_options) {
+    _local_cache = std::make_shared<StarCacheWrapper>();
+    _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
+    RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options->dir_spaces));
+    RETURN_IF_ERROR(_local_cache->init(*cache_options));
+    _disk_space_monitor->start();
+
+    return Status::OK();
+}
+
+Status DataCache::_init_peer_cache(const CacheOptions& cache_options) {
+    _remote_cache = std::make_shared<PeerCacheWrapper>();
+    return _remote_cache->init(cache_options);
 }
 
 StatusOr<CacheOptions> DataCache::_init_cache_options() {
