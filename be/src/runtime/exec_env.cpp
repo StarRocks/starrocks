@@ -385,69 +385,6 @@ Status CacheEnv::_init_page_cache() {
     return Status::OK();
 }
 
-#if defined(WITH_STARCACHE)
-StatusOr<CacheOptions> CacheEnv::_init_cache_options() {
-    CacheOptions cache_options;
-    RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
-            config::datacache_mem_size, _global_env->process_mem_limit(), &cache_options.mem_space_size));
-
-    for (auto& root_path : _store_paths) {
-        // Because we have unified the datacache between datalake and starlet, we also need to unify the
-        // cache path and quota.
-        // To reuse the old cache data in `starlet_cache` directory, we try to rename it to the new `datacache`
-        // directory if it exists. To avoid the risk of cross disk renaming of a large amount of cached data,
-        // we do not automatically rename it when the source and destination directories are on different disks.
-        // In this case, users should manually remount the directories and restart them.
-        std::string datacache_path = root_path.path + "/datacache";
-        std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
-#ifdef USE_STAROS
-        if (config::datacache_unified_instance_enable) {
-            RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
-        }
-#endif
-        // Create it if not exist
-        Status st = FileSystem::Default()->create_dir_if_missing(datacache_path);
-        if (!st.ok()) {
-            LOG(ERROR) << "Fail to create datacache directory: " << datacache_path << ", reason: " << st.message();
-            return Status::InternalError("Fail to create datacache directory");
-        }
-
-        ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
-                                                    datacache_path, config::datacache_disk_size, -1));
-#ifdef USE_STAROS
-        // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
-        // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
-        // and then automatically adjusted based on the current avalible disk space.
-        if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
-            ASSIGN_OR_RETURN(
-                    int64_t starlet_cache_size,
-                    DataCacheUtils::parse_conf_datacache_disk_size(
-                            datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1));
-            disk_size = std::max(disk_size, starlet_cache_size);
-        }
-#endif
-        cache_options.disk_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
-    }
-
-    if (cache_options.disk_spaces.empty()) {
-        config::datacache_auto_adjust_enable = false;
-    }
-
-    cache_options.block_size = config::datacache_block_size;
-    cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
-    cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
-    cache_options.enable_checksum = config::datacache_checksum_enable;
-    cache_options.enable_direct_io = config::datacache_direct_io_enable;
-    cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
-    cache_options.skip_read_factor = config::datacache_skip_read_factor;
-    cache_options.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
-    cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
-    cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
-    cache_options.engine = config::datacache_engine;
-    cache_options.eviction_policy = config::datacache_eviction_policy;
-    return cache_options;
-}
-
 Status CacheEnv::_init_starcache(CacheOptions* cache_options) {
     _local_cache = std::make_shared<StarCacheWrapper>();
     _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
