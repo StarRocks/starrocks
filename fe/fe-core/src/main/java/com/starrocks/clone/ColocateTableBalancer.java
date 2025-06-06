@@ -798,7 +798,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
                                 backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
                         int idx = 0;
-                        for (Long tabletId : index.getTabletIdsInOrder()) {
+                        for (Long tabletId : index.getTabletIds()) {
                             LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                             Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
                             // Tablet has already been scheduled, no need to schedule again

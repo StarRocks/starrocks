@@ -121,7 +121,7 @@ public class ConcurrentDDLTest {
         for (long threadId : threadIds) {
             table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_tbl_" + threadId);
             List<Long> tablets = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition()
-                    .getBaseIndex().getTabletIdsInOrder();
+                    .getBaseIndex().getTabletIds();
             List<Long> backendIdList = tablets.stream()
                         .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
                         .map(replicaList -> replicaList.get(0).getBackendId())

@@ -51,6 +51,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
 
@@ -178,7 +179,10 @@ public class DistributionPrunerRuleTest {
                 partition.getDistributionInfo();
                 result = distributionInfo;
 
-                index.getTabletIdsInOrder();
+                index.getVirtualBuckets();
+                result = Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList());
+
+                index.getTabletIds();
                 result = tabletIds;
 
                 distributionInfo.getDistributionColumns();
@@ -186,9 +190,6 @@ public class DistributionPrunerRuleTest {
 
                 distributionInfo.getType();
                 result = DistributionInfo.DistributionInfoType.HASH;
-
-                distributionInfo.getBucketNum();
-                result = tabletIds.size();
             }
         };
 
