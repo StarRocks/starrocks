@@ -154,7 +154,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  `c_new` int(11) ,\n" +
                 "  `cpc` int(11)\n" +
                 ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`d_date`, `c_mr`)\n" +
+                "PRIMARY KEY(`d_date`, `c_mr`)\n" +
                 "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`d_date`, `c_mr`) BUCKETS 16 \n" +
                 "PROPERTIES (\n" +
