@@ -146,6 +146,7 @@ public class AzBlobFileSystemTest {
     @Test
     public void testGlobListWithFilter() throws StarRocksException {
         // Mock
+        properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
         properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
         fs = Mockito.spy(new AzBlobFileSystem(properties));
 
@@ -186,6 +187,7 @@ public class AzBlobFileSystemTest {
 
     @Test
     public void testGetCloudConfiguration() throws StarRocksException {
+        properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
         properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
         fs = new AzBlobFileSystem(properties);
         String path = "wasbs://container_name@account_name.blob.core.windows.net/blob_name";

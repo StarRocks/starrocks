@@ -73,23 +73,27 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     private final String sharedKey;
     private final String container;
     private final String sasToken;
+    private final boolean useManagedIdentity;
     private final String clientId;
     private final String clientSecret;
     private final String tenantId;
 
     AzureBlobCloudCredential(String endpoint, String storageAccount, String sharedKey, String container, String sasToken,
-                             String clientId, String clientSecret, String tenantId) {
+                             boolean useManagedIdentity, String clientId, String clientSecret, String tenantId) {
         Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(storageAccount);
         Preconditions.checkNotNull(sharedKey);
         Preconditions.checkNotNull(container);
         Preconditions.checkNotNull(sasToken);
         Preconditions.checkNotNull(clientId);
+        Preconditions.checkNotNull(clientSecret);
+        Preconditions.checkNotNull(tenantId);
         this.endpoint = endpoint;
         this.storageAccount = storageAccount;
         this.sharedKey = sharedKey;
         this.container = container;
         this.sasToken = sasToken;
+        this.useManagedIdentity = useManagedIdentity;
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.tenantId = tenantId;
@@ -127,14 +131,14 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
             } else if (!sasToken.isEmpty()) {
                 // sas token
                 generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
+            } else if (useManagedIdentity && !clientId.isEmpty()) {
+                // user assigned managed identity
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
             } else if (!clientId.isEmpty() && !clientSecret.isEmpty() && !tenantId.isEmpty()) {
                 // client secret service principal
                 generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
                 generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, clientSecret);
                 generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, tenantId);
-            } else if (!clientId.isEmpty()) {
-                // user assigned managed identity
-                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
             }
         }
     }
@@ -147,7 +151,10 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 ", sharedKey='" + sharedKey + '\'' +
                 ", container='" + container + '\'' +
                 ", sasToken='" + sasToken + '\'' +
+                ", useManagedIdentity='" + useManagedIdentity + '\'' +
                 ", clientId='" + clientId + '\'' +
+                ", clientSecret='" + clientSecret + '\'' +
+                ", tenantId='" + tenantId + '\'' +
                 '}';
     }
 
