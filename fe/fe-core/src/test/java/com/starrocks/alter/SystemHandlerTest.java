@@ -44,6 +44,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -156,6 +157,11 @@ public class SystemHandlerTest {
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
     }
 
+    void skipIfNotTheDefaultWarehouseManagerImplementation() {
+        WarehouseManager mgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Assume.assumeTrue(WarehouseManager.class.getName().equals(mgr.getClass().getName()));
+    }
+
     @Test
     public void testAddBackendIntoCNGroup() throws StarRocksException {
         String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
@@ -174,6 +180,9 @@ public class SystemHandlerTest {
             Assert.assertEquals(warehouse.getId(), node.getWarehouseId());
             Assert.assertEquals(node.getWorkerGroupId(), (long) warehouse.getWorkerGroupIds().get(0));
         }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
         {
             List<String> hostAndPorts = Lists.newArrayList("127.0.0.1:1234");
             AddBackendClause clause = new AddBackendClause(hostAndPorts, warehouseName, "cngroup1", NodePosition.ZERO);
@@ -204,6 +213,9 @@ public class SystemHandlerTest {
             Assert.assertEquals(warehouse.getId(), node.getWarehouseId());
             Assert.assertEquals(node.getWorkerGroupId(), (long) warehouse.getWorkerGroupIds().get(0));
         }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
         {
             List<String> hostAndPorts = Lists.newArrayList("127.0.0.1:1234");
             AddComputeNodeClause clause = new AddComputeNodeClause(hostAndPorts, warehouseName, "cngroup1", NodePosition.ZERO);
@@ -239,6 +251,9 @@ public class SystemHandlerTest {
             // removed successfully
             Assert.assertNull(node);
         }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
         {
             ExceptionChecker.expectThrowsNoException(() -> sysInfo.addBackend(backend));
             List<String> hostAndPorts = Lists.newArrayList(hostPort);
@@ -279,6 +294,9 @@ public class SystemHandlerTest {
             // removed successfully
             Assert.assertNull(node);
         }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
         {
             ExceptionChecker.expectThrowsNoException(() -> sysInfo.addComputeNode(cnNode));
 

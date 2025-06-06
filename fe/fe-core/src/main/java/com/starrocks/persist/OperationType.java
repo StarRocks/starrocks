@@ -642,6 +642,8 @@ public class OperationType {
     public static final short OP_CREATE_WAREHOUSE = 20101;
     public static final short OP_DROP_WAREHOUSE = 20102;
     public static final short OP_ALTER_WAREHOUSE = 20103;
+    // warehouse internal op
+    public static final short OP_WAREHOUSE_INTERNAL_OP = 20111;
 
     // security integration and role mapping
     public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;
@@ -670,6 +672,7 @@ public class OperationType {
                     opType != OP_CREATE_WAREHOUSE &&
                     opType != OP_DROP_WAREHOUSE &&
                     opType != OP_ALTER_WAREHOUSE &&
+                    opType != OP_WAREHOUSE_INTERNAL_OP &&
                     opType != OP_CREATE_SECURITY_INTEGRATION &&
                     opType != OP_DROP_SECURITY_INTEGRATION &&
                     opType != OP_ALTER_SECURITY_INTEGRATION) {
