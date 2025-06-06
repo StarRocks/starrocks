@@ -156,8 +156,11 @@ Iceberg データをクエリする前に、Hive metastore ノードのホスト
 
 次の表は、`MetastoreParams` で設定する必要があるパラメータを説明しています。
 
-##### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - 必須: はい
+  - 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `hive` に設定します。
 
+<<<<<<< HEAD
 必須: はい
 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `hive` に設定します。
 
@@ -165,6 +168,11 @@ Iceberg データをクエリする前に、Hive metastore ノードのホスト
 
 必須: はい
 説明: Hive metastore の URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。<br />Hive metastore に高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
+=======
+- `hive.metastore.uris`
+  - 必須: はい
+  - 説明: Hive metastore の URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。<br />Hive metastore に高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
 </TabItem>
 <TabItem value="GLUE" label="AWS Glue">
@@ -202,18 +210,37 @@ Iceberg データをクエリする前に、Hive metastore ノードのホスト
 
 AWS Glue 用の `MetastoreParams`:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - 必須: はい
+  - 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `glue` に設定します。
 
+<<<<<<< HEAD
 必須: はい
 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `glue` に設定します。
+=======
+- `aws.glue.use_instance_profile`
+  - 必須: はい
+  - 説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。デフォルト値: `false`。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
-###### aws.glue.use_instance_profile
+- `aws.glue.iam_role_arn`
+  - 必須: いいえ
+  - 説明: AWS Glue Data Catalog に対する権限を持つ IAM ロールの ARN。想定ロールベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
 
+<<<<<<< HEAD
 必須: はい
 説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。デフォルト値: `false`。
+=======
+- `aws.glue.region`
+  - 必須: はい
+  - 説明: AWS Glue Data Catalog が存在するリージョン。例: `us-west-1`。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
-###### aws.glue.iam_role_arn
+- `aws.glue.access_key`
+  - 必須: いいえ
+  - 説明: AWS IAM ユーザーのアクセスキー。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
 
+<<<<<<< HEAD
 必須: いいえ
 説明: AWS Glue Data Catalog に対する権限を持つ IAM ロールの ARN。想定ロールベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
 
@@ -231,6 +258,11 @@ AWS Glue 用の `MetastoreParams`:
 
 必須: いいえ
 説明: AWS IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
+=======
+- `aws.glue.secret_key`
+  - 必須: いいえ
+  - 説明: AWS IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
 AWS Glue へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue へのアクセス認証パラメータ](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
 
@@ -255,26 +287,57 @@ S3テーブル用のIceberg RESTカタログの作成方法の詳細について
 
 REST catalog 用の `MetastoreParams`:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - 必須: はい
+  - 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `rest` に設定します。
 
+<<<<<<< HEAD
 必須: はい
 説明: Iceberg クラスターで使用するメタストアのタイプ。値を `rest` に設定します。
+=======
+- `iceberg.catalog.uri`
+  - 必須: はい
+  - 説明: REST サービスエンドポイントの URI。例: `https://api.tabular.io/ws`。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
-###### iceberg.catalog.uri
+- `iceberg.catalog.view-endpoints-supported`
+  - 必須: いいえ
+  - 説明: 以前のバージョンの REST サービスが `CatalogConfig` でエンドポイントを返さない場合に、ビュー関連の操作をサポートするためにビューエンドポイントを使用するかどうか。このパラメータは初期のバージョンの REST サーバとの下位互換性のために使用される。デフォルト: `false`。
 
+<<<<<<< HEAD
 必須: はい
 説明: REST サービスエンドポイントの URI。例: `https://api.tabular.io/ws`。
+=======
+- `iceberg.catalog.security`
+  - 必須: いいえ
+  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
-###### iceberg.catalog.view-endpoints-supported
+- `iceberg.catalog.oauth2.token`
+  - 必須: いいえ
+  - 説明: サーバーとのやり取りに使用されるベアラートークン。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。例: `AbCdEf123456`。
 
-必須: いいえ
+- `iceberg.catalog.oauth2.credential`
+  - 必須: いいえ
+  - 説明: サーバーとの OAuth2 クライアント資格情報フローでトークンと交換するための資格情報。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。例: `AbCdEf123456`。
 
+<<<<<<< HEAD
 説明: 以前のバージョンの REST サービスが `CatalogConfig` でエンドポイントを返さない場合に、ビュー関連の操作をサポートするためにビューエンドポイントを使用するかどうか。このパラメータは初期のバージョンの REST サーバとの下位互換性のために使用される。デフォルト: `false`。
+=======
+- `iceberg.catalog.oauth2.scope`
+  - 必須: いいえ
+  - 説明: REST Catalog と通信する際に使用するスコープ。`credential` を使用する場合にのみ適用されます。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
-###### iceberg.catalog.security
+- `iceberg.catalog.oauth2.server-uri`
+  - 必須: いいえ
+  - 説明: OAuth2 サーバーからアクセストークンを取得するためのエンドポイント。
 
-必須: いいえ
+- `iceberg.catalog.vended-credentials-enabled`
+  - 必須: いいえ
+  - 説明: ファイルシステムアクセスのために REST バックエンドによって提供される資格情報を使用するかどうか。デフォルト: `true`。
 
+<<<<<<< HEAD
 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。
 
 ###### iceberg.catalog.oauth2.token
@@ -317,6 +380,15 @@ REST catalog 用の `MetastoreParams`:
 必須: いいえ
 
 説明: 入れ子になった Namespace の下にあるオブジェクトのクエリをサポートするかどうか。デフォルト： `false`。
+=======
+- `iceberg.catalog.warehouse`
+  - 必須: いいえ
+  - 説明: Iceberg catalog のウェアハウスの場所または識別子。例: `s3://my_bucket/warehouse_location` または `sandbox`。
+
+- `iceberg.catalog.rest.nested-namespace-enabled`
+  - 必須: いいえ
+  - 説明: 入れ子になった Namespace の下にあるオブジェクトのクエリをサポートするかどうか。デフォルト： `false`。
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 
 次の例は、メタストアとして Tabular を使用する Iceberg catalog `tabular` を作成します。
 
@@ -359,6 +431,93 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 3 rows in set (0.34 sec)
 ```
 
+<<<<<<< HEAD
+=======
+次の例は、Cloudflare R2 Data Catalog をメタストアとして使用する Iceberg catalog `r2` を作成します。
+
+```SQL
+CREATE EXTERNAL CATALOG r2
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "<r2_catalog_uri>",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.token" = "<r2_api_token>",
+    "iceberg.catalog.warehouse" = "<r2_warehouse_name>"
+);
+
+SET CATALOG r2;
+
+CREATE DATABASE testdb;
+
+SHOW DATABASES FROM r2;
+
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| testdb             |
++--------------------+
+2 rows in set (0.66 sec)
+```
+
+`<r2_warehouse_name>`,`<r2_api_token>`, および `<r2_catalog_uri>` の値は、 [Cloudflare ダッシュボードの詳細](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites) から取得します。
+
+</TabItem>
+
+<TabItem value="JDBC" label="JDBC">
+
+##### JDBC
+
+データソースのメタストアとして JDBC を選択した場合、`MetastoreParams` を次のように構成します。
+
+```SQL
+"iceberg.catalog.type" = "jdbc",
+"iceberg.catalog.uri" = "<jdbc_uri>",
+"iceberg.catalog.warehouse" = "<warehouse_location>"
+```
+
+次の表は、`MetastoreParams` で構成する必要があるパラメーターを説明しています。
+
+- `iceberg.catalog.type`
+  - 必須：はい
+  - 説明：Icebergクラスタで使用するメタストアのタイプ。値を `jdbc` に設定します。
+
+- `iceberg.catalog.uri`
+  - 必須：はい
+  - 説明：データベースのURI。フォーマット：`jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`。
+
+- `iceberg.catalog.warehouse`
+  - 必須：はい
+  - 説明：Iceberg カタログの Warehouse の場所または識別子。例: `s3://my_bucket/warehouse_location`。
+
+説明: データベースのユーザー名。
+
+- `iceberg.catalog.jdbc.user`
+  - 必須：いいえ
+  - 説明：データベースのユーザー名。
+
+- `iceberg.catalog.jdbc.password`
+  - 必須：いいえ
+  - 説明：データベースのパスワード。
+
+次の例は、Iceberg catalog `iceberg_jdbc` を作成し、メタストアとして JDBC を使用します。
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_jdbc
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password"
+);
+```
+
+>>>>>>> eb3abc1a76 ([Doc] Fix Iceberg Headings - part 2 (#59658))
 </TabItem>
 
 </Tabs>
