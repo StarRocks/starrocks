@@ -98,7 +98,7 @@ public class LakeAggregatePublishTest {
 
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIndex.getTabletIds()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets1.add(tabletCommitInfo);

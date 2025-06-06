@@ -926,16 +926,16 @@ public class PlanFragmentBuilder {
                         selectedNonEmptyPartitionIds.add(partitionId);
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
-                        final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
-                        List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
-                        totalTabletsNum += selectedTable.getTablets().size();
+                        final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexId);
+                        totalTabletsNum += selectedIndex.getTablets().size();
+                        List<Long> allTabletIds = selectedIndex.getTabletIds();
                         for (int i = 0; i < allTabletIds.size(); i++) {
                             tabletId2BucketSeq.put(allTabletIds.get(i), i);
                         }
                         scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                         List<Tablet> tablets =
-                                selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
-                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
+                                selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
+                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
                     }
                 }
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
