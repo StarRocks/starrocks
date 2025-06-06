@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -70,7 +71,9 @@ public class UnionToValuesRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         return input.getInputs().stream()
                 .filter(UnionToValuesRule::isMergeable)
-                .count() > 1;
+                .skip(1)
+                .findFirst()
+                .isPresent();
     }
 
     @Override
@@ -80,25 +83,22 @@ public class UnionToValuesRule extends TransformationRule {
         List<List<ScalarOperator>> newRows = new ArrayList<>();
         List<OptExpression> otherChildren = new ArrayList<>();
         List<List<ColumnRefOperator>> newChildOutputs = Lists.newArrayList();
-        int firstLogicalValuesIndex = -1;
 
-        for (int i = 0; i < input.getInputs().size(); i++) {
+        final int numChildren = input.getInputs().size();
+        for (int i = 0; i < numChildren; i++) {
             OptExpression child = input.getInputs().get(i);
             if (isMergeable(child)) {
-                if (firstLogicalValuesIndex == -1) {
-                    firstLogicalValuesIndex = i;
-                }
-
                 LogicalValuesOperator valuesOp = (LogicalValuesOperator) child.getOp();
                 List<List<ScalarOperator>> rows = valuesOp.getRows();
                 if (isConstantUnion(valuesOp)) {
-                    List<ScalarOperator> scalarOperators = unionOp.getChildOutputColumns().get(i).stream()
-                            .map(valuesOp.getProjection().getColumnRefMap()::get).collect(Collectors.toList());
+                    List<ScalarOperator> scalarOperators = unionOp.getChildOutputColumns().get(i)
+                            .stream()
+                            .map(valuesOp.getProjection().getColumnRefMap()::get)
+                            .collect(Collectors.toList());
                     newRows.add(scalarOperators);
-                } else if (isConstantValues(valuesOp)) {
+                } else {
                     newRows.addAll(rows);
                 }
-
             } else {
                 newChildOutputs.add(unionOp.getChildOutputColumns().get(i));
                 otherChildren.add(child);
@@ -106,26 +106,42 @@ public class UnionToValuesRule extends TransformationRule {
         }
 
         if (otherChildren.isEmpty()) {
-            LogicalValuesOperator newValuesOperator =
-                    new LogicalValuesOperator.Builder().setColumnRefSet(unionOp.getOutputColumnRefOp()).setRows(newRows)
-                            .setLimit(unionOp.getLimit())
-                            .setPredicate(unionOp.getPredicate()).setProjection(unionOp.getProjection()).build();
+            LogicalValuesOperator newValuesOperator = new LogicalValuesOperator.Builder()
+                    .setColumnRefSet(unionOp.getOutputColumnRefOp())
+                    .setRows(newRows)
+                    .setLimit(unionOp.getLimit())
+                    .setPredicate(unionOp.getPredicate())
+                    .setProjection(unionOp.getProjection())
+                    .build();
             return List.of(OptExpression.create(newValuesOperator));
         } else {
             List<OptExpression> inputs = new ArrayList<>(otherChildren);
             if (!newRows.isEmpty()) {
-                LogicalValuesOperator newValuesOperator =
-                        new LogicalValuesOperator.Builder()
-                                .setColumnRefSet(unionOp.getChildOutputColumns().get(firstLogicalValuesIndex))
-                                .setRows(newRows).setPredicate(null).build();
+                // use new ColumnRefOperator for the new child output columns to avoid conflicts
+                // eg:
+                // SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3
+                // UNION ALL
+                // SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3
+                // 1th child's original output only contain one element because of the same name 'test1',
+                // use new ColumnRefOperator to avoid the conflict.
+                final ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
+                final List<ColumnRefOperator> newColRefs = unionOp.getChildOutputColumns().get(0)
+                        .stream()
+                        .map(c -> columnRefFactory.create(c, c.getType(), c.isNullable()))
+                        .collect(Collectors.toUnmodifiableList());
+                final LogicalValuesOperator newValuesOperator = new LogicalValuesOperator.Builder()
+                        .setColumnRefSet(newColRefs)
+                        .setRows(newRows)
+                        .setPredicate(null)
+                        .build();
                 inputs.add(OptExpression.create(newValuesOperator));
                 newChildOutputs.add(newValuesOperator.getColumnRefSet());
             }
 
-            LogicalUnionOperator newUnionOp =
-                    new LogicalUnionOperator.Builder().withOperator(unionOp)
-                            .setChildOutputColumns(newChildOutputs)
-                            .build();
+            LogicalUnionOperator newUnionOp = new LogicalUnionOperator.Builder()
+                    .withOperator(unionOp)
+                    .setChildOutputColumns(newChildOutputs)
+                    .build();
             OptExpression newUnionExpr = OptExpression.create(newUnionOp, inputs);
 
             return List.of(newUnionExpr);
@@ -147,12 +163,12 @@ public class UnionToValuesRule extends TransformationRule {
 
     private static boolean isConstantUnion(LogicalValuesOperator valuesOp) {
         if (valuesOp.getProjection() == null ||
-                !valuesOp.getProjection().getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
+                valuesOp.getProjection().getColumnRefMap().values().stream().anyMatch(expr -> !expr.isConstant())) {
             return false;
         }
 
         List<List<ScalarOperator>> rows = valuesOp.getRows();
-        if (!(rows.size() == 1 && rows.get(0).size() == 1)) {
+        if (rows.size() != 1 || rows.get(0).size() != 1) {
             return false;
         }
 
