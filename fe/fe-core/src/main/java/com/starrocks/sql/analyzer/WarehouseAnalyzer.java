@@ -141,7 +141,7 @@ public class WarehouseAnalyzer {
             if (Strings.isNullOrEmpty(cnName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_CNGROUP_NAME);
             }
-            FeNameFormat.checkWarehouseName(cnName);
+            FeNameFormat.checkCNGroupName(cnName);
             return null;
         }
 

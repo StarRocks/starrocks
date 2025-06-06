@@ -29,6 +29,10 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -276,5 +280,35 @@ public class LocalWarehouse extends Warehouse {
             }
         });
         return result;
+    }
+
+    @Override
+    public void createCNGroup(CreateCnGroupStmt stmt) throws DdlException {
+
+    }
+
+    @Override
+    public void dropCNGroup(DropCnGroupStmt stmt) throws DdlException {
+
+    }
+
+    @Override
+    public void enableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+
+    }
+
+    @Override
+    public void disableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+
+    }
+
+    @Override
+    public void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException {
+
+    }
+
+    @Override
+    public void replayInternalOpLog(String payload) {
+
     }
 }
