@@ -1174,6 +1174,12 @@ public class EditLog {
                     warehouseMgr.replayAlterWarehouse(wh);
                     break;
                 }
+                case OperationType.OP_WAREHOUSE_INTERNAL_OP: {
+                    WarehouseInternalOpLog log = (WarehouseInternalOpLog) journal.data();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayInternalOpLog(log);
+                    break;
+                }
                 case OperationType.OP_CLUSTER_SNAPSHOT_LOG: {
                     ClusterSnapshotLog log = (ClusterSnapshotLog) journal.data();
                     globalStateMgr.getClusterSnapshotMgr().replayLog(log);

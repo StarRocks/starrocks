@@ -383,6 +383,12 @@ public enum ErrorCode {
             "unsupported statement in shared_nothing mode"),
     ERR_INVALID_CNGROUP_NAME(5911, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup name can not be null or empty"),
     ERR_CNGROUP_NOT_IMPLEMENTED(5912, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup feature not implemented"),
+    ERR_UNKNOWN_CNGROUP(5913, new byte[] {'4', '2', '0', '0', '0'}, "CNGroup %s doesn't exist."),
+    ERR_CNGROUP_EXISTS(5914, new byte[] {'4', '2', '0', '0', '0'}, "CNGroup %s already exist."),
+    ERR_NODE_CNGROUP_MISMATCH(5915, new byte[] {'4', '2', '0', '0', '0'},
+            "the node's cngroup doesn't match the provided cngroup name"),
+    ERR_CNGROUP_NOT_EMPTY(5916, new byte[] {'4', '2', '0', '0', '0'},
+            "the cngroup %s is not empty, either drop all nodes in the cngroup or drop the the cngroup with `force` option"),
 
     /**
      * 6000 - 6100: Planner
