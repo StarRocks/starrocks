@@ -58,12 +58,17 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
 #endif
 
     if (config::datacache_engine == "starcache") {
+        ASSIGN_OR_RETURN(auto cache_options, _init_cache_options(datacache_mem_limit));
+        RETURN_IF_ERROR(_init_starcache(&cache_options));
+        RETURN_IF_ERROR(_init_peer_cache(cache_options));
 
+        if (config::block_cache_enable) {
+            RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+        }
     } else {
-
+        _lru_cache = std::make_shared<ShardedLRUCache>(datacache_mem_limit);
     }
 
-    RETURN_IF_ERROR(_init_datacache());
     RETURN_IF_ERROR(_init_starcache_based_object_cache());
     RETURN_IF_ERROR(_init_lru_base_object_cache());
     RETURN_IF_ERROR(_init_page_cache());
@@ -142,30 +147,6 @@ Status DataCache::_init_page_cache() {
     return Status::OK();
 }
 
-Status DataCache::_init_datacache() {
-
-    if (config::datacache_enable) {
-#if defined(WITH_STARCACHE)
-        ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
-
-        // init starcache & disk monitor
-        RETURN_IF_ERROR(_init_starcache(&cache_options));
-
-        // init remote cache
-        RETURN_IF_ERROR(_init_peer_cache(cache_options));
-
-        if (config::block_cache_enable) {
-            RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
-        }
-
-        LOG(INFO) << "datacache init successfully";
-#endif
-    } else {
-        LOG(INFO) << "starts by skipping the datacache initialization";
-    }
-    return Status::OK();
-}
-
 Status DataCache::_init_starcache(CacheOptions* cache_options) {
     _local_cache = std::make_shared<StarCacheWrapper>();
     _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
@@ -181,10 +162,9 @@ Status DataCache::_init_peer_cache(const CacheOptions& cache_options) {
     return _remote_cache->init(cache_options);
 }
 
-StatusOr<CacheOptions> DataCache::_init_cache_options() {
+StatusOr<CacheOptions> DataCache::_init_cache_options(size_t mem_limit) {
     CacheOptions cache_options;
-    RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
-            config::datacache_mem_size, _global_env->process_mem_limit(), &cache_options.mem_space_size));
+    cache_options.mem_space_size = mem_limit;
 
     for (auto& root_path : _store_paths) {
         // Because we have unified the datacache between datalake and starlet, we also need to unify the
@@ -229,12 +209,6 @@ StatusOr<CacheOptions> DataCache::_init_cache_options() {
         config::enable_datacache_disk_auto_adjust = false;
     }
 
-    // Adjust the default engine based on build switches.
-    if (config::datacache_engine == "") {
-#if defined(WITH_STARCACHE)
-        config::datacache_engine = "starcache";
-#endif
-    }
     cache_options.block_size = config::datacache_block_size;
     cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
     cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
