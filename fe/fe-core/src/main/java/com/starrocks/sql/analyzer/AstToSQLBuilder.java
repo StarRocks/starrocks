@@ -349,7 +349,7 @@ public class AstToSQLBuilder {
             sqlBuilder.append("(");
 
             List<String> childSql = Optional.ofNullable(node.getChildExpressions())
-                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(toList());
+                    .orElse(node.getFunctionParams().exprs()).stream().map(this::visit).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
