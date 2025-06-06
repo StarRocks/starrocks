@@ -51,6 +51,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -283,7 +284,8 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
-            ctx.getAuditEventBuilder().setStmt(origStmt);
+            // but redact sensitive credentials first
+            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
         } else {
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
