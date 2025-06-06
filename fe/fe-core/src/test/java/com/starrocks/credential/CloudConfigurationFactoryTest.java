@@ -124,7 +124,10 @@ public class CloudConfigurationFactoryTest {
                     put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "XX2");
                     put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, "XX3");
                     put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, "XX4");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
                     put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "XX5");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, "XX6");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, "XX7");
                 }
             };
             CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
@@ -138,7 +141,8 @@ public class CloudConfigurationFactoryTest {
             cc.toFileStoreInfo();
             Assert.assertEquals(cc.toConfString(),
                     "AzureCloudConfiguration{resources='', jars='', hdpuser='', cred=AzureBlobCloudCredential{endpoint='XX4', " +
-                            "storageAccount='XX3', sharedKey='XX0', container='XX1', sasToken='XX2', clientId='XX5'}}");
+                            "storageAccount='XX3', sharedKey='XX0', container='XX1', sasToken='XX2', " +
+                            "useManagedIdentity='true', clientId='XX5', clientSecret='XX6', tenantId='XX7'}}");
         }
 
         // For azure native sdk
@@ -192,6 +196,7 @@ public class CloudConfigurationFactoryTest {
         {
             Map<String, String> map = new HashMap<String, String>() {
                 {
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
                     put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
                 }
             };
