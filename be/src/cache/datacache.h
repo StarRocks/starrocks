@@ -46,8 +46,6 @@ public:
     LocalCache* local_cache() { return _local_cache.get(); }
     BlockCache* block_cache() const { return _block_cache.get(); }
     void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
-    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
-    ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
     std::shared_ptr<StoragePageCache> page_cache_ptr() const { return _page_cache; }
     bool page_cache_available() const;
