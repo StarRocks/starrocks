@@ -339,10 +339,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "parse_json('{\"a\": {\"b\": 1}}')");
 
         sql = "select json_extract(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b')";
-        assertPlanContains(sql, "get_json_string(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
+        assertPlanContains(sql, "parse_json(get_json_string(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b'))");
 
         sql = "select json_extract(JSON '{\"a\": {\"b\": 1}}', '$.a.b');";
-        assertPlanContains(sql, "get_json_string('{\"a\": {\"b\": 1}}', '$.a.b')");
+        assertPlanContains(sql, "parse_json(get_json_string('{\"a\": {\"b\": 1}}', '$.a.b'))");
 
         sql = "select json_format(JSON '[1, 2, 3]')";
         assertPlanContains(sql, "'[1, 2, 3]'");

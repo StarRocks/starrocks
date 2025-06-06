@@ -321,8 +321,15 @@ public class Trino2SRFunctionCallTransformer {
                 List.of(Expr.class));
 
         // json_extract -> get_json_string
-        registerFunctionTransformer("json_extract", 2, "get_json_string",
-                List.of(Expr.class, Expr.class));
+        registerFunctionTransformer("json_extract", 2,
+                new FunctionCallExpr("parse_json",
+                        List.of(new FunctionCallExpr("get_json_string",
+                                List.of(new PlaceholderExpr(1, Expr.class),
+                                        new PlaceholderExpr(2, Expr.class)
+                                )
+                        ))
+                )
+        );
 
         // json_size -> json_length
         registerFunctionTransformer("json_size", 2, "json_length",
