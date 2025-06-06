@@ -156,15 +156,13 @@ Before querying Iceberg data, you must add the mapping between the host names an
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
-##### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
 
-Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
-
-##### hive.metastore.uris
-
-Required: Yes
-Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
+- `hive.metastore.uris`
+  - Required: Yes
+  - Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
 
 </TabItem>
 <TabItem value="GLUE" label="AWS Glue">
@@ -202,35 +200,29 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 
 `MetastoreParams` for AWS Glue:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
 
-Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
+- `aws.glue.use_instance_profile`
+  - Required: Yes
+  - Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
 
-###### aws.glue.use_instance_profile
+- `aws.glue.iam_role_arn`
+  - Required: No
+  - Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter.
 
-Required: Yes
-Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
+- `aws.glue.region`
+  - Required: Yes
+  - Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`.
 
-###### aws.glue.iam_role_arn
+- `aws.glue.access_key`
+  - Required: No
+  - Description: The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
 
-Required: No
-Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter.
-
-###### aws.glue.region
-
-Required: Yes
-Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`.
-
-###### aws.glue.access_key
-
-Required: No
-Description: The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
-
-###### aws.glue.secret_key
-
-Required: No
-Description: The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
+- `aws.glue.secret_key`
+  - Required: No
+  - Description: The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
@@ -255,68 +247,49 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 
 `MetastoreParams` for REST catalog:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.  - 
 
-Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.
+- `iceberg.catalog.uri`
+  - Required: Yes
+  - Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`.   - 
 
-###### iceberg.catalog.uri
+- `iceberg.catalog.view-endpoints-supported`
+  - Required: No
+  - Description: Whether to use the view endpoints to support view-related operations when the REST service of earlier versions that does not return endpoints in `CatalogConfig`. This parameter is used for backwards compatibility with REST servers of early versions. Default: `false`.
 
-Required: Yes
-Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
+- `iceberg.catalog.security`
+  - Required: No
+  - Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
 
-###### iceberg.catalog.view-endpoints-supported
+- `iceberg.catalog.oauth2.token`
+  - Required: No
+  - Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
 
-Required: No
+- `iceberg.catalog.oauth2.credential`
+  - Required: No
+  - Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
 
-Description: Whether to use the view endpoints to support view-related operations when the REST service of earlier versions that does not return endpoints in `CatalogConfig`. This parameter is used for backwards compatibility with REST servers of early versions. Default: `false`.
+- `iceberg.catalog.oauth2.scope`
+  - Required: No
+  - Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
 
-###### iceberg.catalog.security
+- `iceberg.catalog.oauth2.server-uri`
+  - Required: No
+  - Description: The endpoint to retrieve access token from OAuth2 Server.
 
-Required: No
+- `iceberg.catalog.vended-credentials-enabled`
+  - Required: No
+  - Description: Whether to use credentials provided by REST backend for file system access. Default: `true`.
 
-Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
+- `iceberg.catalog.warehouse`
+  - Required: No
+  - Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.  - 
 
-###### iceberg.catalog.oauth2.token
-
-Required: No
-
-Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
-
-###### iceberg.catalog.oauth2.credential
-
-Required: No
-
-Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
-
-###### iceberg.catalog.oauth2.scope
-
-Required: No
-
-Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
-
-###### iceberg.catalog.oauth2.server-uri
-
-Required: No
-
-Description: The endpoint to retrieve access token from OAuth2 Server.
-
-###### iceberg.catalog.vended-credentials-enabled
-
-Required: No
-
-Description: Whether to use credentials provided by REST backend for file system access. Default: `true`.
-
-###### iceberg.catalog.warehouse
-
-Required: No
-Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
-
-##### iceberg.catalog.rest.nested-namespace-enabled
-
-Required: No
-
-Description: Whether to support querying objects under nested namespace. Default: `false`.
+- `iceberg.catalog.rest.nested-namespace-enabled`
+  - Required: No
+  - Description: Whether to support querying objects under nested namespace. Default: `false`.
 
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
@@ -407,36 +380,26 @@ If you choose JDBC as the metastore of your data source, configure `MetastorePar
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
-##### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `jdbc`.
 
-Required: Yes
-
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `jdbc`.
-
-##### iceberg.catalog.uri
-
-Required: Yes
-
-Description: The URI of your database. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
+- `iceberg.catalog.uri`
+  - Required: Yes
+  - Description: The URI of your database. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
 
 
-###### iceberg.catalog.warehouse
+- `iceberg.catalog.warehouse`
+  - Required: Yes
+  - Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` .
 
-Required: Yes
+- `iceberg.catalog.jdbc.user`
+  - Required: No
+  - Description: The username for the database.
 
-Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` .
-
-##### iceberg.catalog.jdbc.user
-
-Required: No
-
-Description: The username for the database.
-
-##### iceberg.catalog.jdbc.password
-
-Required: No
-
-Description: The password for the database.
+- `iceberg.catalog.jdbc.password`
+  - Required: No
+  - Description: The password for the database.
 
 The following example creates an Iceberg catalog named `iceberg_jdbc` and uses JDBC as metastore:
 
