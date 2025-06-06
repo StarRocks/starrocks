@@ -12,6 +12,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResourceProvider;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropWarehouseLog;
@@ -36,7 +37,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -57,7 +57,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     public WarehouseManagerEPack() {
-        super(new WarehouseComputeResourceProvider());
+        super(new CNGroupResourceProvider());
     }
 
     @Override

@@ -1662,8 +1662,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         streamLoadTask.id = id;
     }
 
-    public static void setWarehouseId(StreamLoadTask streamLoadTask, long warehouseId) {
-        streamLoadTask.warehouseId = warehouseId;
+    public static void setComputeResource(StreamLoadTask streamLoadTask, ComputeResource computeResource) {
+        streamLoadTask.computeResource = computeResource;
+        streamLoadTask.warehouseId = computeResource.getWarehouseId();
     }
 
     public static void setDBId(StreamLoadTask streamLoadTask, long dbId) {

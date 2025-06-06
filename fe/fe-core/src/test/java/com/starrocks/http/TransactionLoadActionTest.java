@@ -22,6 +22,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.load.streamload.StreamLoadMgrEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResourceProvider;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
@@ -41,6 +42,7 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -331,13 +333,15 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
 
             @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
+            public List<Long> getAllComputeNodeIds(ComputeResource cnResource) {
                 return Lists.newArrayList(1234L);
             }
+        };
 
+        new MockUp<CNGroupResourceProvider>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(String warehouseName) {
-                return Lists.newArrayList(1234L);
+            public boolean isResourceAvailable(ComputeResource cnResource) {
+                return true;
             }
         };
 

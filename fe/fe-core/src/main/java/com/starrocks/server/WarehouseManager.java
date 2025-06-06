@@ -22,6 +22,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.ImageWriter;
@@ -66,7 +67,7 @@ public class WarehouseManager implements Writable {
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
 
     // default compute resource
-    public static final ComputeResource DEFAULT_RESOURCE = WarehouseComputeResource.DEFAULT;
+    public static final ComputeResource DEFAULT_RESOURCE = CNGroupResource.DEFAULT;
     // computeResourceProvider is used to acquire cngroup resource from warehouse
     protected final ComputeResourceProvider computeResourceProvider;
 

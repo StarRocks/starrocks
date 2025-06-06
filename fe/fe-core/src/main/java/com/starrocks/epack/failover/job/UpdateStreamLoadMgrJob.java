@@ -6,6 +6,8 @@ import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.load.streamload.StreamLoadMgrEPack;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,8 +39,15 @@ public class UpdateStreamLoadMgrJob extends FailoverGroupJob {
             StreamLoadTask.setId(streamLoadTask, GlobalStateMgr.getServingState().getNextId());
             StreamLoadTask.setDBId(streamLoadTask, localDbId);
             StreamLoadTask.setTableId(streamLoadTask, localTableId);
-            StreamLoadTask.setWarehouseId(streamLoadTask,
-                    GlobalStateMgr.getServingState().getWarehouseMgr().getBackgroundWarehouse().getId());
+            final WarehouseManager warehouseManager = GlobalStateMgr.getServingState().getWarehouseMgr();
+            try {
+                ComputeResource resource = warehouseManager.getBackgroundComputeResource();
+                StreamLoadTask.setComputeResource(streamLoadTask, resource);
+            } catch (Exception e) {
+                LOG.warn("Failed to acquire resource for stream load task: {}", streamLoadTask.getId(), e);
+                continue;
+            }
+
             ((StreamLoadMgrEPack) GlobalStateMgr.getServingState().getStreamLoadMgr()).registerLoadTask(streamLoadTask);
         }
     }
