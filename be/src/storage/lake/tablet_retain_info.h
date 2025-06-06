@@ -35,7 +35,7 @@ public:
     TabletRetainInfo() = default;
     ~TabletRetainInfo() = default;
 
-    Status init(const std::vector<int64_t>& retain_versions, int64_t tablet_id, TabletManager* tablet_mgr);
+    Status init(int64_t tablet_id, const std::vector<int64_t>& retain_versions, TabletManager* tablet_mgr);
 
     bool contains_file(const std::string& file_name) const;
 
@@ -46,10 +46,10 @@ public:
     int64_t tablet_id() const { return _tablet_id; }
 
 private:
+    int64_t _tablet_id;
     std::unordered_set<int64_t> _versions;
     std::unordered_set<std::string> _files;
     std::unordered_set<uint32_t> _rowset_ids;
-    int64_t _tablet_id;
 };
 
 } // namespace starrocks::lake

@@ -160,7 +160,7 @@ TEST_F(LakeTabletRetainInfoTest, test_tablet_retain_info_normal) {
     TabletRetainInfo tablet_retain_info = TabletRetainInfo();
     std::vector<int64_t> vec;
     vec.push_back(2);
-    tablet_retain_info.init(vec, 666, _tablet_mgr.get());
+    tablet_retain_info.init(666, vec, _tablet_mgr.get());
 
     EXPECT_TRUE(
             tablet_retain_info.contains_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
