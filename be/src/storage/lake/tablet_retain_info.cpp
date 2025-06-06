@@ -20,7 +20,8 @@
 
 namespace starrocks::lake {
 
-Status TabletRetainInfo::build_info(const std::vector<int64_t>& retain_versions, int64_t tablet_id, TabletManager* tablet_mgr) {
+Status TabletRetainInfo::build_info(const std::vector<int64_t>& retain_versions, int64_t tablet_id,
+                                    TabletManager* tablet_mgr) {
     for (const auto& version : retain_versions) {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
         if (!res.status().ok()) {
