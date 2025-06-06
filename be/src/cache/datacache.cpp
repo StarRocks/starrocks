@@ -41,6 +41,7 @@ DataCache* DataCache::GetInstance() {
 Status DataCache::init(const std::vector<StorePath>& store_paths) {
     _global_env = GlobalEnv::GetInstance();
     _store_paths = store_paths;
+    _block_cache = std::make_shared<BlockCache>();
 
 #if defined(WITH_STARCACHE)
     if (!config::datacache_enable) {
@@ -50,6 +51,12 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
     config::datacache_enable = false;
     config::block_cache_enable = false;
 #endif
+
+    if (config::datacache_engine == "starcache") {
+
+    } else {
+
+    }
 
     RETURN_IF_ERROR(_init_datacache());
     RETURN_IF_ERROR(_init_starcache_based_object_cache());
@@ -131,7 +138,6 @@ Status DataCache::_init_page_cache() {
 }
 
 Status DataCache::_init_datacache() {
-    _block_cache = std::make_shared<BlockCache>();
 
     if (config::datacache_enable) {
 #if defined(WITH_STARCACHE)
