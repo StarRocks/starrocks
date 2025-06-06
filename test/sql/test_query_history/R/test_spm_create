@@ -1,0 +1,25 @@
+-- name: test_spm_create @sequential
+create table t1 (
+    k1 int,
+    k2 int,
+    k3 string
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 
+select s1, s1 % 1000, repeat('a', 128) FROM TABLE(generate_series(1, 100)) s(s1);
+-- result:
+-- !result
+create table t2 like t1;
+-- result:
+-- !result
+create baseline using select t1.* from t1, t2 where t1.k2 = t2.k2 and t2.k3 = 3;
+-- result:
+-- !result
+show baseline on select t1.* from t1, t2 where t1.k2 = t2.k2 and t2.k3 = 3;
+-- result:
+[REGEX].*t1\.k2 = t_0\.k2.*
+-- !result
