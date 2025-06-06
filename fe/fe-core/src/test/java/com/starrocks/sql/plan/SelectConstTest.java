@@ -300,4 +300,29 @@ public class SelectConstTest extends PlanTestBase {
         assertFeExecuteResult(sql, null);
         FeConstants.enablePruneEmptyOutputScan = false;
     }
+
+    @Test
+    public void testUnionWithUnAlignedValues() throws Exception {
+        String sql = "WITH temp AS (\n" +
+                "  SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3\n" +
+                "  UNION ALL\n" +
+                "  SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3\n" +
+                " )\n" +
+                "SELECT c1, c2, c3\n" +
+                "FROM (\n" +
+                " SELECT c1, c2, c3\n" +
+                " FROM temp\n" +
+                " UNION ALL\n" +
+                " SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3\n" +
+                " UNION ALL\n" +
+                " SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3\n" +
+                ") t;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "     constant exprs: \n" +
+                        "         'test1' | 'test1' | 'test1'\n" +
+                        "         'test1' | 'test2' | 'test3'",
+                "     constant exprs: \n" +
+                        "         'test' | 'test' | 'test'\n" +
+                        "         'test' | 'test' | 'test'");
+    }
 }
