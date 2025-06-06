@@ -99,7 +99,10 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
             if (_sent_audit_stats_frequency < _sent_audit_stats_frequency_upper_limit) {
                 _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
             }
-            if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+
+            auto fragment_id = _fragment_ctx->fragment_instance_id();
+            if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
+                        _delta_bytes_sent.exchange(0), fragment_id, "not final")) {
                 part_stats->to_pb(request.params->mutable_query_statistics());
             }
         }
@@ -323,6 +326,12 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             need_wait = true;
             return Status::OK();
         }
+
+        if (!request.attachment.empty()) {
+            incr_sent_bytes(static_cast<int64_t>(request.attachment.size()));
+            _request_sent++;
+        }
+
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id, &need_wait]() {
                 if (need_wait) {
@@ -351,7 +360,9 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return Status::OK();
                 }
                 // this is the last eos query, set query stats
-                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                auto fragment_id = _fragment_ctx->fragment_instance_id();
+                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
+                            _delta_bytes_sent.exchange(0), fragment_id, std::string{"final"})) {
                     final_stats->to_pb(request.params->mutable_query_statistics());
                 }
             }
@@ -359,11 +370,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
         request.params->set_sequence(++_request_seqs[instance_id.lo]);
-
-        if (!request.attachment.empty()) {
-            _bytes_sent += request.attachment.size();
-            _request_sent++;
-        }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
                 {instance_id, request.params->sequence(), MonotonicNanos()});
