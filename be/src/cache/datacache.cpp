@@ -48,29 +48,40 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
             config::datacache_mem_size, _global_env->process_mem_limit(), &datacache_mem_limit));
     datacache_mem_limit = check_storage_page_cache_limit(datacache_mem_limit);
 
-#if defined(WITH_STARCACHE)
     if (!config::datacache_enable) {
+        config::disable_storage_page_cache = true;
         config::block_cache_enable = false;
     }
+
+#if defined(WITH_STARCACHE)
+    if (config::datacache_engine == "" || config::datacache_engine == "cachelib") {
+        config::datacache_engine = "starcache";
+    }
 #else
-    config::datacache_enable = false;
-    config::block_cache_enable = false;
+    config::datacache_engine = "lrucache";
 #endif
 
     if (config::datacache_engine == "starcache") {
+#if defined(WITH_STARCACHE)
         ASSIGN_OR_RETURN(auto cache_options, _init_cache_options(datacache_mem_limit));
         RETURN_IF_ERROR(_init_starcache(&cache_options));
         RETURN_IF_ERROR(_init_peer_cache(cache_options));
-
         if (config::block_cache_enable) {
             RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
         }
-    } else {
+
+        auto* starcache = reinterpret_cast<StarCacheWrapper*>(_local_cache.get());
+        _object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
+#endif
+    } else if (config::datacache_engine == "lrucache") {
         _lru_cache = std::make_shared<ShardedLRUCache>(datacache_mem_limit);
+        _object_cache = std::make_shared<LRUCacheModule>(_lru_cache);
+    } else {
+        std::string msg = fmt::format("Not supported cache engine: {}", config::datacache_engine);
+        LOG(ERROR) << msg;
+        return Status::InvalidArgument(msg);
     }
 
-    RETURN_IF_ERROR(_init_starcache_based_object_cache());
-    RETURN_IF_ERROR(_init_lru_base_object_cache());
     RETURN_IF_ERROR(_init_page_cache());
 
     _mem_space_monitor = std::make_shared<MemSpaceMonitor>(this);
@@ -94,11 +105,8 @@ void DataCache::destroy() {
     _page_cache.reset();
     LOG(INFO) << "pagecache shutdown successfully";
 
-    _lru_based_object_cache.reset();
-    LOG(INFO) << "lru based object cache shutdown successfully";
-
-    _starcache_based_object_cache.reset();
-    LOG(INFO) << "starcache based object cache shutdown successfully";
+    _object_cache.reset();
+    LOG(INFO) << "Object cache shutdown successfully";
 
     _block_cache.reset();
     LOG(INFO) << "datacache shutdown successfully";
@@ -120,28 +128,8 @@ size_t DataCache::get_mem_capacity() const {
     }
 }
 
-Status DataCache::_init_starcache_based_object_cache() {
-#ifdef WITH_STARCACHE
-    if (_local_cache != nullptr && _local_cache->is_initialized()) {
-        auto* starcache = reinterpret_cast<StarCacheWrapper*>(_local_cache.get());
-        _starcache_based_object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
-    }
-#endif
-    return Status::OK();
-}
-
-Status DataCache::_init_lru_base_object_cache() {
-    ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_limit());
-    storage_cache_limit = check_storage_page_cache_limit(storage_cache_limit);
-
-    _lru_cache = std::make_shared<ShardedLRUCache>(storage_cache_limit);
-    _lru_based_object_cache = std::make_shared<LRUCacheModule>(_lru_cache);
-    LOG(INFO) << "object cache init successfully";
-    return Status::OK();
-}
-
 Status DataCache::_init_page_cache() {
-    _page_cache = std::make_shared<StoragePageCache>(_lru_based_object_cache.get());
+    _page_cache = std::make_shared<StoragePageCache>(_object_cache.get());
     _page_cache->init_metrics();
     LOG(INFO) << "storage page cache init successfully";
     return Status::OK();

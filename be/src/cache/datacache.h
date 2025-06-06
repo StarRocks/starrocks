@@ -61,8 +61,6 @@ private:
     Status _init_starcache(CacheOptions* cache_options);
     Status _init_peer_cache(const CacheOptions& cache_options);
 
-    Status _init_starcache_based_object_cache();
-    Status _init_lru_base_object_cache();
     Status _init_page_cache();
 
     GlobalEnv* _global_env;
@@ -74,8 +72,7 @@ private:
     std::shared_ptr<Cache> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;
-    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
-    std::shared_ptr<ObjectCache> _lru_based_object_cache;
+    std::shared_ptr<ObjectCache> _object_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
 
     std::shared_ptr<DiskSpaceMonitor> _disk_space_monitor;
