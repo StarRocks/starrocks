@@ -135,6 +135,7 @@ Status DataCache::_init_page_cache() {
     return Status::OK();
 }
 
+#if defined(WITH_STARCACHE)
 Status DataCache::_init_starcache(CacheOptions* cache_options) {
     _local_cache = std::make_shared<StarCacheWrapper>();
     _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
@@ -212,6 +213,7 @@ StatusOr<CacheOptions> DataCache::_init_cache_options(size_t mem_limit) {
 
     return cache_options;
 }
+#endif
 
 static bool parse_resource_str(const string& str, string* value) {
     if (!str.empty()) {

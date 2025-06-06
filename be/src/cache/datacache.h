@@ -57,9 +57,11 @@ public:
     size_t get_mem_capacity() const;
 
 private:
+#if defined(WITH_STARCACHE)
     StatusOr<CacheOptions> _init_cache_options(size_t mem_limit);
     Status _init_starcache(CacheOptions* cache_options);
     Status _init_peer_cache(const CacheOptions& cache_options);
+#endif
 
     Status _init_page_cache();
 
