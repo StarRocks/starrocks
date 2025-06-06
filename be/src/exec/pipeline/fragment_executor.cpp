@@ -46,11 +46,14 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks::pipeline {
+
+DEFINE_FAIL_POINT(fragment_prepare_sleep);
 
 using WorkGroupManager = workgroup::WorkGroupManager;
 using WorkGroup = workgroup::WorkGroup;
@@ -798,6 +801,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
     }
+
+    FAIL_POINT_TRIGGER_EXECUTE(fragment_prepare_sleep, { sleep(2); });
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
