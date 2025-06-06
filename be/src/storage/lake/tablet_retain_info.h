@@ -28,8 +28,7 @@ class TabletManager;
 
 /*
  * TabletRetainInfo is used to collect all files name, rowsets id for the specifed versions
- * that need to be retained for a tablet. It is used in vacuum process to determine which
- * files(data or meta) can be deleted.
+ * that used in vacuum process to determine which files(data or meta) can be deleted.
 */
 class TabletRetainInfo {
 public:
