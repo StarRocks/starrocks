@@ -499,6 +499,7 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
+                "administration/http_interface",
         {
             "type": "category",
             "label": "User Privileges and Authentication",
