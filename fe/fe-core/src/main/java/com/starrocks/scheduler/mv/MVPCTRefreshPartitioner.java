@@ -186,15 +186,16 @@ public abstract class MVPCTRefreshPartitioner {
         Set<String> result = Sets.newHashSet();
         Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMaps = mvContext.getRefBaseTableMVIntersectedPartitions();
         if (refBaseTableMVPartitionMaps == null || !refBaseTableMVPartitionMaps.containsKey(refBaseTable)) {
-            logger.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
+            logger.warn("Cannot find need refreshed ref base table from synced partition info: {}, " +
                     "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
             return null;
         }
         Map<String, Set<String>> refBaseTableMVPartitionMap = refBaseTableMVPartitionMaps.get(refBaseTable);
         for (String basePartitionName : baseTablePartitionNames) {
             if (!refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
-                logger.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
-                        "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
+                logger.warn("Cannot find need refreshed ref base table partition {} from synced partition info: {}, " +
+                                "refBaseTableMVPartitionMaps: {}",
+                        basePartitionName, basePartitionName, refBaseTableMVPartitionMaps);
                 // refBaseTableMVPartitionMap may not contain basePartitionName if it's filtered by ttl.
                 continue;
             }

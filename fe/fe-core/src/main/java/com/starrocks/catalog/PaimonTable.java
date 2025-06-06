@@ -80,9 +80,7 @@ public class PaimonTable extends Table {
         this.tableName = tblName;
         this.paimonNativeTable = paimonNativeTable;
         this.partColumnNames = paimonNativeTable.partitionKeys();
-        this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
-                .map(DataField::name)
-                .collect(Collectors.toList());
+        this.paimonFieldNames = paimonNativeTable.rowType().getFieldNames();
     }
 
     @Override

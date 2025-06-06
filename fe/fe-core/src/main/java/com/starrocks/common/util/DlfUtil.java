@@ -49,11 +49,10 @@ public class DlfUtil {
     public static String getRamUser() {
         if (ConnectContext.get() != null) {
             String qualifiedUser = ConnectContext.get().getQualifiedUser();
-            String identityUser = ConnectContext.get().getCurrentUserIdentity().getUser();
             if (!Strings.isNullOrEmpty(qualifiedUser)) {
                 return getRamUser(qualifiedUser);
-            } else if (!Strings.isNullOrEmpty(identityUser)) {
-                return getRamUser(identityUser);
+            } else if (ConnectContext.get().getCurrentUserIdentity() != null) {
+                return getRamUser(ConnectContext.get().getCurrentUserIdentity().getUser());
             } else {
                 return "";
             }

@@ -105,10 +105,6 @@ import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -645,24 +641,13 @@ public class PaimonMetadata implements ConnectorMetadata {
         return hdfsEnvironment.getCloudConfiguration();
     }
 
-    private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
-        LocalDateTime localDateTime = lastUpdateTime.toLocalDateTime();
-        ZoneId zoneId = ZoneId.systemDefault();
-        ZonedDateTime zonedDateTime = localDateTime.atZone(zoneId);
-        return zonedDateTime.toInstant().toEpochMilli();
-    }
-
     public long getTableUpdateTime(String dbName, String tblName) {
         Identifier identifier = new Identifier(dbName, tblName);
         long lastCommitTime = -1;
         try {
             Optional<Snapshot> snapshotOptional = paimonNativeCatalog.getTable(identifier).latestSnapshot();
             if (snapshotOptional.isPresent()) {
-                Timestamp updateTimestamp = Timestamp.fromLocalDateTime(
-                        LocalDateTime.ofInstant(
-                                Instant.ofEpochMilli(snapshotOptional.get().timeMillis()),
-                                ZoneId.systemDefault()));
-                lastCommitTime = convertToSystemDefaultTime(updateTimestamp);
+                lastCommitTime = snapshotOptional.get().timeMillis();
             }
         } catch (Exception e) {
             LOG.error("Failed to get commit_time of paimon table {}.{}.", dbName, tblName, e);
@@ -689,6 +674,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (String partitionName : partitionNames) {
             if (partitionInfo == null || partitionInfo.get(partitionName) == null) {
                 this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                partitionInfo = this.partitionInfos.get(identifier);
             }
             if (partitionInfo.get(partitionName) != null) {
                 result.add(partitionInfo.get(partitionName));

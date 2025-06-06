@@ -60,6 +60,7 @@ import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVPCTMetaRepairer;
 import com.starrocks.scheduler.mv.MVPCTRefreshListPartitioner;
@@ -247,7 +248,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 refreshExternalTable(context, baseTableCandidatePartitions);
             }
 
-            if (!Config.enable_materialized_view_external_table_precise_refresh || retryNum > 1) {
+            if (containPaimonTable() || !Config.enable_materialized_view_external_table_precise_refresh || retryNum > 1) {
                 try (Timer ignored = Tracers.watchScope("MVRefreshSyncPartitions")) {
                     // sync partitions between mv and base tables out of lock
                     // do it outside lock because it is a time-cost operation
@@ -426,19 +427,32 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return maxRefreshMaterializedViewRetryNum;
     }
 
-    private Constants.TaskRunState doRefreshMaterializedView(TaskRunContext context,
-                                                             IMaterializedViewMetricsEntity mvEntity) throws Exception {
-        // 0. Compute the base-table partitions to check for external table
-        // The candidate partition info is used to refresh the external table
-        Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions = Maps.newHashMap();
+    private boolean containPaimonTable() {
+        for (TableSnapshotInfo snapshotInfo : this.snapshotBaseTables.values()) {
+            if (snapshotInfo.getBaseTable().isPaimonTable()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Map<TableSnapshotInfo, Set<String>> collectCandidatePartitionsForExternalTable(TaskRunContext context)
+            throws AnalysisException, LockTimeoutException {
+
         if (Config.enable_materialized_view_external_table_precise_refresh) {
+
+            // Paimon table is not supported in precise refresh.
+            if (containPaimonTable()) {
+                return Maps.newHashMap();
+            }
+
             try (Timer ignored = Tracers.watchScope("MVRefreshComputeCandidatePartitions")) {
                 if (!syncPartitions(context, false)) {
                     throw new DmlException(String.format("materialized view %s refresh task failed: sync partition failed",
                             mv.getName()));
                 }
                 Set<String> mvCandidatePartition = checkMvToRefreshedPartitions(context, true);
-                baseTableCandidatePartitions = getRefTableRefreshPartitions(mvCandidatePartition);
+                return getRefTableRefreshPartitions(mvCandidatePartition);
             } catch (Exception e) {
                 logger.warn("failed to compute candidate partitions in sync partitions", DebugUtil.getRootStackTrace(e));
                 // Since at here we sync partitions before the refreshExternalTable, the situation may happen that
@@ -448,6 +462,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
             }
         }
+        return Maps.newHashMap();
+    }
+
+    private Constants.TaskRunState doRefreshMaterializedView(
+            TaskRunContext context, IMaterializedViewMetricsEntity mvEntity) throws Exception {
+        try (Timer ignored = Tracers.watchScope("MVRefreshInitSnapshotBaseTables")) {
+            initSnapshotBaseTables();
+        }
+
+        // 0. Compute the base-table partitions to check for external table
+        // The candidate partition info is used to refresh the external table
+        Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions =
+                collectCandidatePartitionsForExternalTable(context);
 
         // 1. Refresh the partition information of these base-table partitions, and create mv partitions if needed
         try (Timer ignored = Tracers.watchScope("MVRefreshSyncAndCheckPartitions")) {
@@ -960,8 +987,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private boolean syncPartitions(TaskRunContext taskRunContext,
                                    boolean tentative) throws AnalysisException, LockTimeoutException {
         Stopwatch stopwatch = Stopwatch.createStarted();
-        // collect base table snapshot infos
-        snapshotBaseTables = collectBaseTableSnapshotInfos(mv);
 
         final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(),
                 taskRunContext.getProperties(), tentative);
@@ -1014,6 +1039,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         boolean result = mvRefreshPartitioner.syncAddOrDropPartitions();
         logger.info("finish sync partitions, cost(ms): {}", stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return result;
+    }
+
+    private void initSnapshotBaseTables() throws LockTimeoutException {
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        // collect base table snapshot infos
+        this.snapshotBaseTables = collectBaseTableSnapshotInfos(mv);
+
+        logger.info("Finish init snapshot base tables for mv:{} partitions, cost(ms): {}", mv.getName(),
+                stopwatch.elapsed(TimeUnit.MILLISECONDS));
     }
 
     /**
