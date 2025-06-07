@@ -22,6 +22,7 @@
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
+#include "connector/redis_connector.h"
 
 namespace starrocks::connector {
 
@@ -49,6 +50,7 @@ const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";
 const std::string Connector::BINLOG = "binlog";
 const std::string Connector::ICEBERG = "iceberg";
+const std::string Connector::REDIS = "redis";
 
 class ConnectorManagerInit {
 public:
@@ -62,6 +64,7 @@ public:
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
         cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
         cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
+        cm->put(Connector::REDIS, std::make_unique<RedisConnector>());
     }
 };
 

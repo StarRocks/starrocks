@@ -23,6 +23,7 @@
         <module>kudu-reader</module>
         <module>common-runtime</module>
         <module>hadoop-lib</module>
+        <module>redis-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
