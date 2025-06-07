@@ -162,6 +162,8 @@ public enum ErrorCode {
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate tables must have same replication num: %s, with group %s," +
                     " partition info %s"),
+    ERR_COLOCATE_TABLE_MUST_HAS_SAME_LOCATION_LABEL(5063, new byte[] {'4', '2', '0', '0', '0'},
+            "Colocate tables must have same location label: %s, with group %s"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_BUCKET_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate tables must have same bucket num: %s, with group %s," +
                     " current info %s"),
@@ -286,8 +288,6 @@ public enum ErrorCode {
     /**
      * 5500 - 5599: DDL operation failure
      */
-    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5500, new byte[] {'4', '2', '0', '0', '0'},
-            "table '%s' has location property and cannot be colocated"),
     ERR_BAD_DB_ERROR(5501, new byte[] {'3', 'F', '0', '0', '0'}, "Unknown database '%s'"),
     ERR_BAD_TABLE_ERROR(5502, new byte[] {'4', '2', '6', '0', '2'}, "Unknown table '%s'"),
     ERR_NOT_OLAP_TABLE(5503, new byte[] {'4', '2', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
