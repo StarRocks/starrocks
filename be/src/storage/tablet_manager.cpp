@@ -1000,7 +1000,7 @@ Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
                      << " tablet=" << tablet_info->tablet_id;
         return Status::NotFound("tablet not found");
     }
-    LOG(INFO) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;
+    VLOG(1) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;
 
     tablet->build_tablet_report_info(tablet_info);
     VLOG(10) << "Reported tablet info.";
@@ -1311,7 +1311,7 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
             return;
         }
 
-        if (st = move_to_trash(tablet_id_path); st.ok()) {
+        if (st = move_to_trash(tablet_id_path); st.ok() || st.is_not_found()) {
             LOG(INFO) << "Moved " << tablet_id_path << " to trash";
         } else {
             LOG(WARNING) << "Fail to move " << tablet_id_path << " to trash: " << st;
