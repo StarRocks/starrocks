@@ -47,7 +47,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
         this.starMgrController = starMgrController;
         this.firstRun = true;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
-        this.lastStartTimeMs = 0L;
+        this.lastStartTimeMs = System.currentTimeMillis(); // init last start time
     }
 
     @Override
@@ -57,7 +57,6 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                                             .resetSnapshotJobsStateAfterRestarted(restoredSnapshotInfo);
             firstRun = false;
-            lastStartTimeMs = System.currentTimeMillis();
             return;
         }
 
