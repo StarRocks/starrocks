@@ -106,38 +106,4 @@ bool HiveTextArrayReader::read_quoted_string(const std::unique_ptr<Converter>& e
     return elem_converter->read_string(column, s, options);
 }
 
-char HiveTextArrayReader::get_collection_delimiter(char collection_delimiter, char mapkey_delimiter,
-                                                   size_t nested_array_level) {
-    DCHECK(nested_array_level >= 1 && nested_array_level <= 153);
-
-    // tmp maybe negative, dont use size_t.
-    // 1 (\001) means default 1D array collection delimiter.
-    int32_t tmp = 1;
-
-    if (nested_array_level == 1) {
-        // If level is 1, use collection_delimiter directly.
-        return collection_delimiter;
-    } else if (nested_array_level == 2) {
-        // If level is 2, use mapkey_delimiter directly.
-        return mapkey_delimiter;
-    } else if (nested_array_level <= 7) {
-        // [3, 7] -> [4, 8]
-        tmp = static_cast<int32_t>(nested_array_level) + (4 - 3);
-    } else if (nested_array_level == 8) {
-        // [8] -> [11]
-        tmp = 11;
-    } else if (nested_array_level <= 21) {
-        // [9, 21] -> [14, 26]
-        tmp = static_cast<int32_t>(nested_array_level) + (14 - 9);
-    } else if (nested_array_level <= 25) {
-        // [22, 25] -> [28, 31]
-        tmp = static_cast<int32_t>(nested_array_level) + (28 - 22);
-    } else if (nested_array_level <= 153) {
-        // [26, 153] -> [-128, -1]
-        tmp = static_cast<int32_t>(nested_array_level) + (-128 - 26);
-    }
-
-    return static_cast<char>(tmp);
-}
-
 } // namespace starrocks::csv
