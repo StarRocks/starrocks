@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -55,7 +56,7 @@ public class Dictionary implements Writable {
     @SerializedName(value = "dbName")
     private String dbName;
     @SerializedName(value = "queryableObject")
-    private String queryableObject;
+    private TableName queryableObject;
 
     @SerializedName(value = "dictionaryKeys")
     private List<String> dictionaryKeys = Lists.newArrayList();
@@ -85,7 +86,7 @@ public class Dictionary implements Writable {
     private long lastSuccessVersion = 0;
     // =============== Runtime parameter ===========================
 
-    public Dictionary(long dictionaryId, String dictionaryName, String queryableObject,
+    public Dictionary(long dictionaryId, String dictionaryName, TableName queryableObject,
                       String catalogName, String dbName, List<String> dictionaryKeys,
                       List<String> dictionaryValues, Map<String, String> properties) {
         this.dictionaryId = dictionaryId;
@@ -128,7 +129,7 @@ public class Dictionary implements Writable {
         return dbName;
     }
 
-    public String getQueryableObject() {
+    public TableName getQueryableObject() {
         return queryableObject;
     }
 
@@ -380,7 +381,7 @@ public class Dictionary implements Writable {
         info.add(dictionaryName);
         info.add(catalogName);
         info.add(dbName);
-        info.add(queryableObject);
+        info.add(queryableObject.toString());
 
         String keys = "";
         String values = "";
