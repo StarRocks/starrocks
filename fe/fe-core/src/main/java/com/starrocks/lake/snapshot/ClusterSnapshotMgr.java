@@ -52,11 +52,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public static final String AUTOMATED_NAME_PREFIX = "automated_cluster_snapshot_";
 
     @SerializedName(value = "storageVolumeName")
-    private volatile String storageVolumeName;
+    protected volatile String storageVolumeName;
     @SerializedName(value = "automatedSnapshotJobs")
-    private NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
+    protected NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
 
-    private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
+    protected ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
 
     public ClusterSnapshotMgr() {
     }
