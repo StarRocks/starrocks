@@ -1667,3 +1667,8 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - 説明: すべての Routine Load ジョブによるデータロード中に発生したエラーロウの総数。
+
+### starrocks_fe_sql_block_hit_count
+
+- 単位: Count
+- 説明: ブラックリストに登録された SQL がインターセプトされた回数。

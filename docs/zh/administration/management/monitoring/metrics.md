@@ -1667,3 +1667,8 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：所有 Routine Load 作业导入错误数据的总行数。
+
+### starrocks_fe_sql_block_hit_count
+
+- 单位：个
+- 描述: 黑名单 SQL 被拦截的次数。
