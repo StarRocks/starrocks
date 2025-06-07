@@ -1668,3 +1668,8 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The total number of error rows encountered during data loading by all Routine Load jobs.
+
+### starrocks_fe_sql_block_hit_count
+
+- Unit: Count
+- Description: The number of times blacklisted sql have been intercepted.
