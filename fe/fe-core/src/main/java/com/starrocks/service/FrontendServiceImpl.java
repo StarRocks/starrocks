@@ -1161,7 +1161,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends()) {
             if (fe.getHost().equals(clientIp) && fe.isAlive() && fe.getHost().equals(user) &&
                     fe.getNodeName().equals(passwd) && StatsConstants.STATISTICS_DB_NAME.equals(db) &&
-                    StatsConstants.QUERY_HISTORY_TABLE_NAME.equals(tbl)) {
+                    (StatsConstants.QUERY_HISTORY_TABLE_NAME.equals(tbl)
+                     || StatsConstants.PARTITIONS_SCAN_TABLE_NAME.equals(tbl))) {
                 return true;
             }
         }
