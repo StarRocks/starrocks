@@ -23,6 +23,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
@@ -165,6 +166,8 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     // brpc send buffer is also considered as part of the memory used by load
     _mem_tracker->consume_without_root(_closure->request_size);
 
+    FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_segment,
+                               TABLET_WRITER_ADD_SEGMENT_FP_ACTION(_host, _closure, request));
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
     request.release_id();
