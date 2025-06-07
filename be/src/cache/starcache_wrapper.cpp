@@ -133,6 +133,16 @@ Status StarCacheWrapper::update_mem_quota(size_t quota_bytes, bool flush_to_disk
     return st;
 }
 
+Status StarCacheWrapper::adjust_capacity(int64_t delta, size_t min_capacity) {
+    auto starcache_metrics = _cache->metrics();
+    size_t capacity = starcache_metrics.mem_quota_bytes;
+    int64_t new_capacity = capacity + delta;
+    if (new_capacity < (int64_t)min_capacity) {
+        return Status::InvalidArgument("target capacity is less than the minimum capacity");
+    }
+    return to_status(_cache->update_mem_quota(new_capacity, false));
+}
+
 Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
     std::vector<starcache::DirSpace> disk_spaces;
     disk_spaces.reserve(spaces.size());

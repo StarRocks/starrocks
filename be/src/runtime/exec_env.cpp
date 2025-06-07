@@ -272,6 +272,16 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
+Status CacheEnv::adjust_capacity(int64_t delta, size_t min_capacity) {
+    if (config::datacache_engine == "starcache") {
+        return _local_cache->adjust_capacity(delta, min_capacity);
+    } else if (config::datacache_engine == "lrucache") {
+        return _lru_cache->adjust_capacity(delta, min_capacity);
+    } else {
+        return Status::NotSupported(fmt::format("not support cache engine: {}", config::datacache_engine));
+    }
+}
+
 std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent) {
     auto mem_tracker = std::make_shared<MemTracker>(type, bytes_limit, MemTracker::type_to_label(type), parent);
     _mem_tracker_map[type] = mem_tracker;
@@ -305,6 +315,100 @@ bool parse_resource_str(const string& str, string* value) {
         return false;
     }
 }
+
+Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
+    _global_env = GlobalEnv::GetInstance();
+    _store_paths = store_paths;
+    _block_cache = std::make_shared<BlockCache>();
+
+    if (!config::datacache_enable) {
+        config::disable_storage_page_cache = true;
+        config::block_cache_enable = false;
+        return Status::OK();
+    }
+
+#if defined(WITH_STARCACHE)
+    if (config::datacache_engine == "") {
+        config::datacache_engine = "starcache";
+    }
+#else
+    config::datacache_engine = "lrucache";
+#endif
+
+    if (config::datacache_engine == "starcache") {
+#if defined(WITH_STARCACHE)
+        ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
+        RETURN_IF_ERROR(_init_starcache(&cache_options));
+        RETURN_IF_ERROR(_init_peer_cache(cache_options));
+        RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+        RETURN_IF_ERROR(_init_object_cache(_local_cache.get()));
+#endif
+    } else if (config::datacache_engine == "lrucache") {
+        size_t datacache_mem_limit = 0;
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
+                config::datacache_mem_size, _global_env->process_mem_limit(), &datacache_mem_limit));
+        datacache_mem_limit = check_storage_page_cache_limit(datacache_mem_limit);
+        _lru_cache = std::make_shared<ShardedLRUCache>(datacache_mem_limit);
+        _object_cache = std::make_shared<LRUCacheModule>(_lru_cache);
+    } else {
+        std::string msg = fmt::format("Not supported cache engine: {}", config::datacache_engine);
+        LOG(ERROR) << msg;
+        return Status::InvalidArgument(msg);
+    }
+
+    RETURN_IF_ERROR(_init_page_cache());
+
+    return Status::OK();
+}
+
+void CacheEnv::destroy() {
+    if (_disk_space_monitor != nullptr) {
+        _disk_space_monitor->stop();
+        _disk_space_monitor.reset();
+        LOG(INFO) << "disk space monitor stop successfully";
+    }
+
+    _page_cache.reset();
+    LOG(INFO) << "pagecache shutdown successfully";
+
+    _object_cache.reset();
+    LOG(INFO) << "object cache shutdown successfully";
+
+    _block_cache.reset();
+    LOG(INFO) << "datacache shutdown successfully";
+}
+
+Status CacheEnv::_init_page_cache() {
+    _page_cache = std::make_shared<StoragePageCache>(_object_cache.get());
+    _page_cache->init_metrics();
+    LOG(INFO) << "storage page cache init successfully";
+    return Status::OK();
+}
+
+Status CacheEnv::_init_starcache(CacheOptions* cache_options) {
+    _local_cache = std::make_shared<StarCacheWrapper>();
+    _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
+    RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options->disk_spaces));
+    RETURN_IF_ERROR(_local_cache->init(*cache_options));
+    _disk_space_monitor->start();
+
+    return Status::OK();
+}
+
+Status CacheEnv::_init_peer_cache(const CacheOptions& cache_options) {
+    _remote_cache = std::make_shared<PeerCacheWrapper>();
+    return _remote_cache->init(cache_options);
+}
+
+Status CacheEnv::_init_object_cache(LocalCache* local_cache) {
+    if (local_cache != nullptr && local_cache->is_initialized()) {
+        auto* starcache = reinterpret_cast<StarCacheWrapper*>(local_cache);
+        _object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
+    }
+    return Status::OK();
+}
+
+#endif
 
 ExecEnv* ExecEnv::GetInstance() {
     static ExecEnv s_exec_env;
