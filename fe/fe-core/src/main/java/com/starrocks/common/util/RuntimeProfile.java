@@ -165,6 +165,9 @@ public class RuntimeProfile {
 
         // Remove from its parent sub sets
         Pair<Counter, String> pair = counterMap.get(name);
+        if (pair == null) {
+            return;
+        }
         String parentName = pair.second;
         if (childCounterMap.containsKey(parentName)) {
             Set<String> childNames = childCounterMap.get(parentName);
