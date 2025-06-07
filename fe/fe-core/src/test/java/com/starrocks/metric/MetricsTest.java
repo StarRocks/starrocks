@@ -155,8 +155,22 @@ public class MetricsTest {
                 "sr_duration{quantile=\"0.98\", k1=\"v1\", k2=\"v2\"}",
                 "sr_duration{quantile=\"0.99\", k1=\"v1\", k2=\"v2\"}",
                 "sr_duration{quantile=\"0.999\", k1=\"v1\", k2=\"v2\"}",
-                "sr_duration_sum",
-                "sr_duration_count"
+                "sr_duration_sum{k1=\"v1\", k2=\"v2\"}",
+                "sr_duration_count{k1=\"v1\", k2=\"v2\"}"
+        );
+        for (String metricName : metricNames) {
+            Assert.assertTrue(output.contains(metricName));
+        }
+
+        histogramMetric.addLabel(new MetricLabel("k2", "v3"));
+        metricNames = Arrays.asList(
+                "sr_duration{quantile=\"0.75\", k1=\"v1\", k2=\"v3\"}",
+                "sr_duration{quantile=\"0.95\", k1=\"v1\", k2=\"v3\"}",
+                "sr_duration{quantile=\"0.98\", k1=\"v1\", k2=\"v3\"}",
+                "sr_duration{quantile=\"0.99\", k1=\"v1\", k2=\"v3\"}",
+                "sr_duration{quantile=\"0.999\", k1=\"v1\", k2=\"v3\"}",
+                "sr_duration_sum{k1=\"v1\", k2=\"v3\"}",
+                "sr_duration_count{k1=\"v1\", k2=\"v3\"}"
         );
         for (String metricName : metricNames) {
             Assert.assertTrue(output.contains(metricName));

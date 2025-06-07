@@ -26,6 +26,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -263,7 +264,7 @@ public class HiveMetastoreTest {
     public static class MockedHiveMetaClient extends HiveMetaClient {
 
         public MockedHiveMetaClient() {
-            super(new HiveConf());
+            super(new HiveConf(), HiveMetadataMetricsRegistry.getInstance().getHMSEntity("MockedHiveMetaClient"));
         }
 
         public CurrentNotificationEventId getCurrentNotificationEventId() {
