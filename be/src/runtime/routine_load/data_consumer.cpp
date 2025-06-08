@@ -540,9 +540,9 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
     }
 
     if (initial_position == InitialPosition::LATEST || initial_position == InitialPosition::EARLIEST) {
-        pulsar::InitialPosition p_initial_position = initial_position == InitialPosition::LATEST
-                                                             ? pulsar::InitialPosition::InitialPositionLatest
-                                                             : pulsar::InitialPosition::InitialPositionEarliest;
+        pulsar::MessageId p_initial_position = initial_position == InitialPosition::LATEST
+                                                       ? pulsar::MessageId::latest()
+                                                       : pulsar::MessageId::earliest();
         result = _p_consumer.seek(p_initial_position);
         if (result != pulsar::ResultOk) {
             LOG(WARNING) << "PAUSE: failed to reset the subscription: " << ctx->brief(true) << ", err: " << result;
