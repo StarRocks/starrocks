@@ -21,6 +21,7 @@
 
 #include <exception>
 #include <memory>
+#include <sstream>
 
 namespace starrocks {
 static void encode_base64_internal(const std::string& in, std::string* out, const unsigned char* basis, bool padding) {
@@ -160,6 +161,39 @@ std::string url_encode(const std::string& decoded) {
     std::string result(encoded_value);
     curl_free(encoded_value);
     return result;
+}
+
+// Adapted from
+// http://www.boost.org/doc/libs/1_40_0/doc/html/boost_asio/
+//   example/http/server3/request_handler.cpp
+// See http://www.boost.org/LICENSE_1_0.txt for license for this method.
+bool url_decode(const std::string& in, std::string* out) {
+    out->clear();
+    out->reserve(in.size());
+
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (in[i] == '%') {
+            if (i + 3 <= in.size()) {
+                int value = 0;
+                std::istringstream is(in.substr(i + 1, 2));
+
+                if (is >> std::hex >> value) {
+                    (*out) += static_cast<char>(value);
+                    i += 2;
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        } else if (in[i] == '+') {
+            (*out) += ' ';
+        } else {
+            (*out) += in[i];
+        }
+    }
+
+    return true;
 }
 
 } // namespace starrocks

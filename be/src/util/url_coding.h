@@ -32,4 +32,8 @@ bool base64_decode(const std::string& in, std::string* out);
 // refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
 std::string url_encode(const std::string& decoded);
 
+// Utility method to decode a string that was URL-encoded. Returns
+// true unless the string could not be correctly decoded.
+bool url_decode(const std::string& in, std::string* out);
+
 } // namespace starrocks
