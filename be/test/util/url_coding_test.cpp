@@ -1,5 +1,7 @@
 #include "util/url_coding.h"
+
 #include <gtest/gtest.h>
+
 #include <string>
 
 namespace starrocks {
@@ -19,7 +21,6 @@ TEST(UrlCodingTest, UrlDecodeBasic) {
     const char c1[32] = "testStreamLoad桌";
     int res = memcmp(c1, out.c_str(), 17);
     EXPECT_EQ(res, 0);
-
 }
 
 TEST(UrlCodingTest, UrlDecodeInvalid) {
