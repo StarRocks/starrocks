@@ -17,8 +17,11 @@ package com.starrocks.common.util;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,6 +31,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class UUIDUtilTest {
+    /**
+     * Extract timestamp from a UUIDv7.
+     * UUIDv7 has the timestamp in the first 48 bits
+     */
+    private long extractTimestampFromUuid(UUID uuid) {
+        long msb = uuid.getMostSignificantBits();
+        return (msb >>> 16) & 0xFFFFFFFFFFFL; // 48 bits
+    }
+
+    /**
+     * Extract random component from UUIDv7 for comparison
+     */
+    private long extractRandomFromUuid(UUID uuid) {
+        return uuid.getLeastSignificantBits();
+    }
+
     @Test
     public void testUniqueness() {
         final int numUuids = 10000;
@@ -41,6 +60,60 @@ public class UUIDUtilTest {
             Assert.assertTrue("Generated duplicate UUID: " + uuidStr,
                     uuidStrings.add(uuidStr));
         }
+    }
+
+    @Test
+    public void testMonotonicIncrease() throws InterruptedException {
+        final int numUuids = 100;
+
+        UUID prevUuid = UUIDUtil.genUUID();
+        long prevTimestamp = extractTimestampFromUuid(prevUuid);
+
+        // Sleep to ensure timestamp changes
+        Thread.sleep(5);
+
+        for (int i = 0; i < numUuids; i++) {
+            UUID uuid = UUIDUtil.genUUID();
+            long timestamp = extractTimestampFromUuid(uuid);
+
+            // Timestamp should be >= previous one
+            Assert.assertTrue("UUID timestamp not monotonically increasing",
+                    timestamp >= prevTimestamp);
+
+            prevTimestamp = timestamp;
+        }
+    }
+
+    @Test
+    public void testTimestampCorrelation() {
+
+        long before = Instant.now().toEpochMilli();
+        UUID uuid = UUIDUtil.genUUID();
+        long after = Instant.now().toEpochMilli();
+
+        long uuidTimestamp = extractTimestampFromUuid(uuid);
+
+        // UUID timestamp should be between 'before' and 'after'
+        Assert.assertTrue("UUID timestamp should be >= system time before generation",
+                uuidTimestamp >= before);
+        Assert.assertTrue("UUID timestamp should be <= system time after generation",
+                uuidTimestamp <= after);
+    }
+
+    @Test
+    public void testRandomComponent() {
+        final int numUuids = 1000;
+        List<Long> randomParts = new ArrayList<>();
+
+        for (int i = 0; i < numUuids; i++) {
+            UUID uuid = UUIDUtil.genUUID();
+            randomParts.add(extractRandomFromUuid(uuid));
+        }
+
+        Set<Long> uniqueRandoms = new HashSet<>(randomParts);
+
+        Assert.assertEquals("Random component is not unique enough between UUIDs",
+                randomParts.size(), uniqueRandoms.size());
     }
 
     @Test
@@ -80,11 +153,9 @@ public class UUIDUtilTest {
     public void testVersion() {
         UUID uuid = UUIDUtil.genUUID();
 
-        // Extract version (should be 1)
         int version = uuid.version();
-        Assert.assertEquals("UUID should be version 1", 1, version);
+        Assert.assertEquals("UUID should be version 7", 7, version);
 
-        // Also verify variant
         int variant = uuid.variant();
         Assert.assertEquals("UUID should have RFC 4122 variant", 2, variant);
     }
