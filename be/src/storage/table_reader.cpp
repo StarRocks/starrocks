@@ -266,6 +266,7 @@ Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService
     if (_params->timeout_ms > 0) {
         closure->cntl.set_timeout_ms(_params->timeout_ms);
     }
+    closure->ref();
     stub->local_tablet_reader_multi_get(&closure->cntl, &request, &closure->result, closure);
     closure->join();
     if (closure->cntl.Failed()) {
