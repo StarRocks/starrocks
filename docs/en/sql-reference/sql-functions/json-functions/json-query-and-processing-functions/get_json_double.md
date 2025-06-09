@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # get_json_double
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 This function analyzes and gets the floating point value from a specified path in json string. json_path must start with `$` and use `.` as the path separator.
 
 :::tip
