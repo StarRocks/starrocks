@@ -21,7 +21,6 @@
 
 #include <string>
 
-
 namespace starrocks {
 
 TEST(UrlCodingTest, UrlDecodeBasic) {
