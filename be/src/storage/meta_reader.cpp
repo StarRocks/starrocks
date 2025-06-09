@@ -189,7 +189,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     if (_segment->encryption_info()) {
         ropts.encryption_info = *_segment->encryption_info();
     }
-    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(ropts, _segment->file_name()));
+    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file_with_bundling(ropts, _segment->file_info()));
 
     auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);

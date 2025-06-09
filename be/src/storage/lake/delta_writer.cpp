@@ -613,7 +613,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     }
 
     // handle partial update
-    bool skip_pk_preload = config::skip_pk_preload;
+    // If there is bundle data file, we will skip preload pk state, because the bundle data file hasn't been
+    // flushed to storage yet.
+    bool skip_pk_preload = config::skip_pk_preload || op_write->rowset().bundle_file_offsets_size() > 0;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {
