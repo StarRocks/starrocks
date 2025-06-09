@@ -24,8 +24,12 @@ import org.apache.iceberg.FileScanTask;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergMORParams.ScanTaskType.DATA_FILE_WITHOUT_EQ_DELETE;
 import static com.starrocks.connector.iceberg.IcebergMORParams.ScanTaskType.DATA_FILE_WITH_EQ_DELETE;
@@ -99,21 +103,32 @@ public class IcebergRemoteSourceTrigger {
 
         IcebergRemoteFileInfo remoteFileInfo = delegate.getOutput().cast();
         FileScanTask scanTask = remoteFileInfo.getFileScanTask();
-        Optional<DeleteFile> eqDeleteFile = scanTask.deletes().stream()
+        List<DeleteFile> eqDeleteFiles = scanTask.deletes().stream()
                 .filter(f -> f.content() == FileContent.EQUALITY_DELETES)
-                .findFirst();
+                .collect(Collectors.toList());
 
         // dispatch the iceberg file scan task to the corresponding queue.
-        if (eqDeleteFile.isEmpty()) {
+        if (eqDeleteFiles.isEmpty()) {
             dataFileWithoutEqDeleteQueue.map(queue -> queue.add(remoteFileInfo));
         } else {
             dataFileWithEqDeleteQueue.map(queue -> queue.add(remoteFileInfo));
             if (!needToCheckEqualityIds) {
                 eqDeleteQueue.map(queue -> queue.add(remoteFileInfo));
             } else {
-                Deque<RemoteFileInfo> queue = queues.get(IcebergMORParams.of(EQ_DELETE, eqDeleteFile.get().equalityFieldIds()));
-                if (queue != null) {
-                    queue.add(remoteFileInfo);
+                // now the different equality ids have its own file info queue.
+                // but a data file may correspanding to many eq delete files. 
+                // and these eq delete files may not have the same equality ids, 
+                // we should fill in all the correspongding queue.
+                // otherwise delete table scan with certain equality ids can get no results and miss the join result.
+                Set<IcebergMORParams> haveAdded = new HashSet<>();
+                for (DeleteFile deleteFile : eqDeleteFiles) {
+                    IcebergMORParams key = IcebergMORParams.of(EQ_DELETE, deleteFile.equalityFieldIds());
+                    if (haveAdded.add(key)) { // not contain the key
+                        Deque<RemoteFileInfo> queue = queues.get(key);
+                        if (queue != null) {
+                            queue.add(remoteFileInfo);
+                        }
+                    }
                 }
             }
         }
