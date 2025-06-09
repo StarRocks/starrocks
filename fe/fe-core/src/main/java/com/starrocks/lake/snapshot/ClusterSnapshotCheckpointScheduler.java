@@ -37,7 +37,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
     protected boolean firstRun;
 
-    protected long lastStartTimeMs;
+    protected long lastAutomatedJobStartTimeMs;
     protected volatile ClusterSnapshotJob runningJob;
 
     public ClusterSnapshotCheckpointScheduler(CheckpointController feController,
@@ -47,7 +47,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
         this.starMgrController = starMgrController;
         this.firstRun = true;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
-        this.lastStartTimeMs = System.currentTimeMillis(); // init last start time
+        this.lastAutomatedJobStartTimeMs = System.currentTimeMillis(); // init last start time
     }
 
     @Override
@@ -65,28 +65,26 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
          * for the future purpose.
          */
         if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn() ||
-                System.currentTimeMillis() - lastStartTimeMs < Config.automated_cluster_snapshot_interval_seconds * 1000L) {
+                System.currentTimeMillis() - lastAutomatedJobStartTimeMs <
+                        Config.automated_cluster_snapshot_interval_seconds * 1000L) {
             return;
         }
 
-        lastStartTimeMs = System.currentTimeMillis();
-        runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
-        if (runningJob == null) {
-            // should not happen by design
-            LOG.error("failed to create automated cluster snapshot");
-            return;
-        }
         CheckpointController.exclusiveLock();
         try {
-            runCheckpointScheduler();
+            runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+
+            // set last start time when job has been created and begin to submit
+            lastAutomatedJobStartTimeMs = System.currentTimeMillis();
+            runCheckpointScheduler(runningJob);
         } finally {
+            runningJob = null;
             CheckpointController.exclusiveUnlock();
         }
     }
 
-    protected void runCheckpointScheduler() {
+    protected void runCheckpointScheduler(ClusterSnapshotJob job) {
         String errMsg = "";
-        ClusterSnapshotJob job = runningJob;
 
         do {
             // step 1: capture consistent journal id for checkpoint

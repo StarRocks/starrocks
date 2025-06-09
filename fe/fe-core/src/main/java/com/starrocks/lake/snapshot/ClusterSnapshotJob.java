@@ -50,13 +50,13 @@ public class ClusterSnapshotJob implements Writable {
     private String detailInfo;
 
     public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
-        this.snapshot = newClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs);
+        this.snapshot = createClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs);
         this.state = ClusterSnapshotJobState.INITIALIZING;
         this.errMsg = "";
         this.detailInfo = "";
     }
 
-    protected ClusterSnapshot newClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
+    protected ClusterSnapshot createClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         return new ClusterSnapshot(id, snapshotName, ClusterSnapshot.ClusterSnapshotType.AUTOMATED,
                     storageVolumeName, createdTimeMs, -1, 0, 0);
     }
@@ -76,10 +76,6 @@ public class ClusterSnapshotJob implements Writable {
 
     public void setErrMsg(String errMsg) {
         this.errMsg = errMsg;
-    }
-
-    public void setCreatedTimeMs(long createdTimeMs) {
-        snapshot.setCreatedTimeMs(createdTimeMs);
     }
 
     public String getSnapshotName() {

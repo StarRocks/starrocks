@@ -62,10 +62,6 @@ public class ClusterSnapshot {
         this.starMgrJournalId = starMgrJournalId;
     }
 
-    public void setCreatedTimeMs(long createdTimeMs) {
-        this.createdTimeMs = createdTimeMs;
-    }
-
     public void setFinishedTimeMs(long finishedTimeMs) {
         this.finishedTimeMs = finishedTimeMs;
     }
