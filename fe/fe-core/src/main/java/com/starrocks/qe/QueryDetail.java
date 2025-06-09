@@ -86,6 +86,8 @@ public class QueryDetail implements Serializable {
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     private String digest;
     private String catalog;
+    private long  operatorTimeNs = -1;
+    private long executionWallTimeNs = -1;
 
     private long queryFeMemory = 0;
 
@@ -155,6 +157,8 @@ public class QueryDetail implements Serializable {
         queryDetail.resourceGroupName = this.resourceGroupName;
         queryDetail.catalog = this.catalog;
         queryDetail.queryFeMemory = this.queryFeMemory;
+        queryDetail.operatorTimeNs = this.operatorTimeNs;
+        queryDetail.executionWallTimeNs = this.executionWallTimeNs;
         return queryDetail;
     }
 
@@ -376,5 +380,21 @@ public class QueryDetail implements Serializable {
 
     public long getQueryFeMemory() {
         return queryFeMemory;
+    }
+
+    public long getOperatorTimeNs() {
+        return operatorTimeNs;
+    }
+
+    public void setOperatorTimeNs(long operatorTimeNs) {
+        this.operatorTimeNs = operatorTimeNs;
+    }
+
+    public long getExecutionWallTimeNs() {
+        return executionWallTimeNs;
+    }
+
+    public void setExecutionWallTimeNs(long executionWallTimeNs) {
+        this.executionWallTimeNs = executionWallTimeNs;
     }
 }
