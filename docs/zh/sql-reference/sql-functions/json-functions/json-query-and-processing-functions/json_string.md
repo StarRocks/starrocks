@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # json_string
 
-<<<<<<< HEAD
-## 功能
-=======
 将 JSON 对象转换为 JSON 字符串
 
 :::tip
 所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 使用[生成列](../../../sql-statements/generated_columns.md)加速查询
 :::
