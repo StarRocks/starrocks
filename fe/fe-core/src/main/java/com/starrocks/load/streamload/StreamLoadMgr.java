@@ -174,7 +174,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
-            task.beginTxnFromBackend(requestId, resp);
+            task.beginTxnFromBackend(requestId, clientIp, resp);
             addLoadTask(task);
         } finally {
             writeUnlock();

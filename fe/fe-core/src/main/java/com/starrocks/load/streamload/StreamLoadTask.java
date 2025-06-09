@@ -74,7 +74,6 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
-import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
@@ -289,15 +288,17 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return endTimeMs();
     }
 
-    public void beginTxnFromBackend(TUniqueId requestId, TransactionResult resp) {
-        beginTxn(0, 1, requestId, true, resp);
+    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, TransactionResult resp) {
+        beginTxn(0, 1, requestId, new TxnCoordinator(TransactionState.TxnSourceType.BE, clientIp), resp);
     }
 
     public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {
-        beginTxn(channelId, channelNum, null, false, resp);
+        beginTxn(channelId, channelNum, null,
+                new TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()), resp);
     }
 
-    public void beginTxn(int channelId, int channelNum, TUniqueId requestId, boolean isBackendTxn, TransactionResult resp) {
+    public void beginTxn(int channelId, int channelNum, TUniqueId requestId, TxnCoordinator txnCoordinator,
+                         TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         Exception exception = null;
         writeLock();
@@ -311,7 +312,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
             switch (this.state) {
                 case BEGIN: {
-                    unprotectedBeginTxn(false, isBackendTxn, requestId);
+                    unprotectedBeginTxn(requestId, txnCoordinator);
                     this.state = State.BEFORE_LOAD;
                     this.channels.set(channelId, State.BEFORE_LOAD);
                     this.beforeLoadTimeMs = System.currentTimeMillis();
@@ -955,13 +956,21 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-    public void unprotectedBeginTxn(boolean replay, boolean isBackendTxn, TUniqueId requestId) throws StarRocksException {
+    public void unprotectedBeginTxn(TUniqueId requestId, TxnCoordinator txnCoordinator) throws StarRocksException {
+        TransactionState.LoadJobSourceType sourceType;
+        switch (txnCoordinator.sourceType) {
+            case FE:
+                sourceType = TransactionState.LoadJobSourceType.FRONTEND_STREAMING;
+                break;
+            case BE:
+                sourceType = TransactionState.LoadJobSourceType.BACKEND_STREAMING;
+                break;
+            default:
+                throw new StarRocksException("Unknown source type: " + txnCoordinator.sourceType);
+        }
         this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
-                dbId, Lists.newArrayList(tableId), label, requestId,
-                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                isBackendTxn ? TransactionState.LoadJobSourceType.BACKEND_STREAMING
-                    : TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
-                timeoutMs / 1000, computeResource);
+                dbId, Lists.newArrayList(tableId), label, requestId, txnCoordinator,
+                sourceType, id, timeoutMs / 1000, computeResource);
     }
 
     public void unprotectedPrepareTxn() throws StarRocksException, LockTimeoutException {
