@@ -79,4 +79,17 @@ public class AstToSQLBuilderTest {
         Assert.assertEquals("SELECT test_exclude.* EXCLUDE ( \"name\" ) \nFROM `test_exclude`",
                 AstToSQLBuilder.toSQL(stmt));
     }
+
+    @Test
+    public void testFunctionTable() {
+        String sql = "SELECT * from tarray, unnest(v3) as t(x)";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assert.assertEquals("SELECT *\nFROM `tarray` , unnest(`v3`) t(`x`) ",
+                AstToSQLBuilder.toSQL(stmt));
+
+        sql = "SELECT * from t0, generate_series(v1, v2, 1) as t(x)";
+        stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assert.assertEquals("SELECT *\nFROM `t0` , generate_series(`v1`,`v2`,1) t(`x`) ",
+                AstToSQLBuilder.toSQL(stmt));
+    }
 }
