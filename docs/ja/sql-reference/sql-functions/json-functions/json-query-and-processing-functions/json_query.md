@@ -4,21 +4,15 @@ displayed_sidebar: docs
 
 # json_query
 
-## 説明
-
-<<<<<<< HEAD
 JSON オブジェクト内で `json_path` 式によって位置を特定できる要素の値をクエリし、JSON 値を返します。
 
-## 構文
-=======
 :::tip
 すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
 
 クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
 :::
 
-## Syntax
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
+## 構文
 
 ```Haskell
 json_query(json_object_expr, json_path)
@@ -54,11 +48,7 @@ mysql> SELECT json_query(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
        -> NULL
 ```
 
-<<<<<<< HEAD
 例 3: 指定された JSON オブジェクト内で `'$.a[2]'` 式によって位置を特定できる要素の値をクエリします。この例では、配列 a という名前の JSON オブジェクトにインデックス 2 の要素が含まれており、その要素の値は 3 です。したがって、JSON_QUERY 関数は JSON 値 `3` を返します。
-=======
-Example 3: 指定された JSON オブジェクト内で `'$.a[2]'` 式で特定できる要素の値をクエリします。この例では、配列 a という名前の JSON オブジェクトがインデックス 2 に要素を含んでおり、その要素の値は 3 です。したがって、JSON_QUERY 関数は JSON 値 `3` を返します。
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 ```plaintext
 mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
@@ -66,11 +56,7 @@ mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
        -> 3
 ```
 
-<<<<<<< HEAD
 例 4: 指定された JSON オブジェクト内で `'$.a[3]'` 式によって位置を特定できる要素をクエリします。この例では、配列 a という名前の JSON オブジェクトにインデックス 3 の要素が含まれていないため、json_query 関数は SQL 値 `NULL` を返します。
-=======
-Example 4: 指定された JSON オブジェクト内で `'$.a[3]'` 式で特定できる要素をクエリします。この例では、配列 a という名前の JSON オブジェクトがインデックス 3 に要素を含んでいません。したがって、json_query 関数は SQL 値 `NULL` を返します。
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 ```plaintext
 mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
