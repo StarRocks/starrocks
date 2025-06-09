@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # json_each
 
-<<<<<<< HEAD
-## 功能
-=======
 将 JSON 对象的最外层元素展开为一组包含在两列中的键值对，并返回一个由每个元素组成一行的表。
 
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和 [概览页面](../overview-of-json-functions-and-operators.md)
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过 [生成列](../../../sql-statements/generated_columns.md) 加速查询
 :::
