@@ -149,8 +149,8 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                 "  `v1` array<bigint(20)> NULL COMMENT \"\",\n" +
                 "  `v2` array<bigint(20)> NULL COMMENT \"\",\n" +
                 "  `v3` array<bigint(20)> NULL COMMENT \"\",\n" +
-                "  `v4` struct<a int(11), b struct<a int(11)>> NULL COMMENT \"\",\n" +
-                "  `v5` struct<a int(11), b struct<a array<bigint(20)>>> NULL COMMENT \"\",\n" +
+                "  `v4` struct<`a` int(11), `b` struct<`a` int(11)>> NULL COMMENT \"\",\n" +
+                "  `v5` struct<`a` int(11), `b` struct<`a` array<bigint(20)>>> NULL COMMENT \"\",\n" +
                 "  `v6` map<int(11),int(11)> NULL COMMENT \"\",\n" +
                 "  `v7` map<int(11),int(11)> NULL COMMENT \"\",\n" +
                 "  `v8` json NULL COMMENT \"\",\n" +
@@ -311,7 +311,7 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                     "result: INT; args nullable: true; result nullable: true]\n" +
                     "  |  cardinality: 1");
             assertContains(plan, "     Pruned type: 2 <-> [ARRAY<BIGINT>]\n" +
-                    "     Pruned type: 6 <-> [struct<a int(11), b struct<a array<bigint(20)>>>]\n" +
+                    "     Pruned type: 6 <-> [struct<`a` int(11), `b` struct<`a` array<bigint(20)>>>]\n" +
                     "     Pruned type: 7 <-> [MAP<INT,INT>]\n" +
                     "     ColumnAccessPath: [/v1/OFFSET, /v5/b/a/OFFSET, /v6/OFFSET]");
         }

@@ -1228,7 +1228,7 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testCastRowDataType() throws Exception {
         String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
-        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<X bigint(20), Y double>)");
+        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<`X` bigint(20), `Y` double>)");
     }
 
     @Test
