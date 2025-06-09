@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # get_json_bool
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Parses and gets the boolean value from a specified JSON path in a JSON string.
 
 :::tip
