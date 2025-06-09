@@ -12,11 +12,7 @@ JSON コンストラクタ関数は、JSON オブジェクトや JSON 配列な�
 
 | Function                                                     | Description                                                  | Example                                                   | Return value                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
-<<<<<<< HEAD
 | [json_object](./json-constructor-functions/json_object.md) | 1 つ以上のキーと値のペアを、辞書順でキーによってソートされたキーと値のペアからなる JSON オブジェクトに変換します。 | `SELECT JSON_OBJECT('Daniel Smith', 26, 'Lily Smith', 25);` | `{"Daniel Smith": 26, "Lily Smith": 25}` |
-=======
-| [json_object](./json-constructor-functions/json_object.md) | 1 つ以上のキーと値のペアを、辞書順にキーでソートされたキーと値のペアからなる JSON オブジェクトに変換します。 | `SELECT JSON_OBJECT('Daniel Smith', 26, 'Lily Smith', 25);` | `{"Daniel Smith": 26, "Lily Smith": 25}` |
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 | [json_array](./json-constructor-functions/json_array.md) | SQL 配列の各要素を JSON 値に変換し、それらの JSON 値からなる JSON 配列を返します。 | `SELECT JSON_ARRAY(1, 2, 3);`                                | `[1,2,3]`                                |
 | [parse_json](./json-constructor-functions/parse_json.md) | 文字列を JSON 値に変換します。                           | `SELECT PARSE_JSON('{"a": 1}');`                             | `{"a": 1}`                               |
 
@@ -32,15 +28,9 @@ JSON クエリ関数と処理関数は、JSON データをクエリおよび処�
 | [get_json_int](./json-query-and-processing-functions/get_json_int.md)   | JSON 文字列内の指定されたパスから整数値を解析して取得します。  | `SELECT get_json_int('{"k1":1, "k2":"2"}', "$.k1");` | `1` |
 | [get_json_string](./json-query-and-processing-functions/get_json_string.md)   | JSON 文字列内の指定されたパスから文字列を解析して取得します。  | `SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");` | `v1` |
 | [json_query](./json-query-and-processing-functions/json_query.md) | JSON オブジェクト内のパス式で特定できる要素の値をクエリします。 | `SELECT JSON_QUERY('{"a": 1}', '$.a');`                         | `1`                                                   |
-<<<<<<< HEAD
 | [json_each](./json-query-and-processing-functions/json_each.md) | JSON オブジェクトのトップレベル要素をキーと値のペアに展開します。 | `SELECT * FROM tj_test, LATERAL JSON_EACH(j);` | `!`[json_each](../../../_assets/json_each.png) |
 | [json_exists](./json-query-and-processing-functions/json_exists.md) | JSON オブジェクトにパス式で特定できる要素が含まれているかどうかを確認します。要素が存在する場合、この関数は 1 を返します。要素が存在しない場合、この関数は 0 を返します。 | `SELECT JSON_EXISTS('{"a": 1}', '$.a'); `                      | `1`                                     |
 | [json_keys](./json-query-and-processing-functions/json_keys.md) | JSON オブジェクトからトップレベルのキーを JSON 配列として返します。また、パスが指定されている場合は、そのパスからトップレベルのキーを返します。   | `SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}');` |  `["a", "b", "c"]`|
-=======
-| [json_each](./json-query-and-processing-functions/json_each.md) | JSON オブジェクトのトップレベルの要素をキーと値のペアに展開します。 | `SELECT * FROM tj_test, LATERAL JSON_EACH(j);` | `!`[json_each](../../../_assets/json_each.png) |
-| [json_exists](./json-query-and-processing-functions/json_exists.md) | JSON オブジェクトがパス式で特定できる要素を含んでいるかどうかを確認します。要素が存在する場合、この関数は 1 を返します。要素が存在しない場合、この関数は 0 を返します。 | `SELECT JSON_EXISTS('{"a": 1}', '$.a'); `                      | `1`                                     |
-| [json_keys](./json-query-and-processing-functions/json_keys.md) | JSON オブジェクトのトップレベルのキーを JSON 配列として返します。また、パスが指定されている場合は、そのパスからトップレベルのキーを返します。   | `SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}');` |  `["a", "b", "c"]`|
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 | [json_length](./json-query-and-processing-functions/json_length.md) | JSON ドキュメントの長さを返します。  | `SELECT json_length('{"Name": "Alice"}');` |  `1`  |
 | [json_string](./json-query-and-processing-functions/json_string.md)   | JSON オブジェクトを JSON 文字列に変換します。      | `SELECT json_string(parse_json('{"Name": "Alice"}'));` | `{"Name": "Alice"}`  |
 
@@ -65,18 +55,10 @@ JSON パス式を使用して、JSON オブジェクト内の要素をクエリ�
 }
 ```
 
-<<<<<<< HEAD
-| JSON path symbol | Description                                                  | JSON path example     | Return value                                                 |
-=======
 | JSON パス記号 | 説明                                                  | JSON パス例     | 戻り値                                                 |
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 | ---------------- | ------------------------------------------------------------ | --------------------- | ------------------------------------------------------------ |
 | `$`                | ルート JSON オブジェクトを示します。                                  | `'$'`                   | `{ "people": [ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ] }`|
 |`.`               | 子 JSON オブジェクトを示します。                                 |`' $.people'`          |`[ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ]`|
 |`[]`              | 1 つ以上の配列インデックスを示します。`[n]` は配列内の n 番目の要素を示します。インデックスは 0 から始まります。 <br />StarRocks 2.5 は多次元配列のクエリをサポートしています。たとえば、`["Lucy", "Daniel"], ["James", "Smith"]`。"Lucy" 要素をクエリするには、`$.people[0][0]` を使用できます。| `'$.people [0]'`        | `{ "name": "Daniel", "surname": "Smith" }`                     |
 | `[*]`             | 配列内のすべての要素を示します。                            | `'$.people[*].name'`    | `["Daniel", "Lily"]`                                           |
-<<<<<<< HEAD
 | `[start: end]`     | 配列から要素のサブセットを示します。サブセットは `[start, end]` 区間で指定され、終了インデックスで示される要素は含まれません。 | `'$.people[0: 1].name'` | `["Daniel"]`                                                   |
-=======
-| `[start: end]`     | 配列から要素のサブセットを示します。サブセットは `[start, end]` 間隔で指定され、終了インデックスで示される要素は含まれません。 | `'$.people[0: 1].name'` | `["Daniel"]`                                                   |
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
