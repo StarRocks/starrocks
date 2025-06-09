@@ -112,6 +112,7 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return createDecimalV3Type(type, precision, scale);
             default:
                 return createType(type);
@@ -145,6 +146,7 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return createDecimalV3Type(PrimitiveType.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
             default:
                 return createType(PrimitiveType.fromThrift(tPrimitiveType));
@@ -164,17 +166,10 @@ public class ScalarType extends Type implements Cloneable {
     public static void checkEnableDecimalV3() throws AnalysisException {
         if (!isDecimalV3Enabled()) {
             throw new AnalysisException("Config field enable_decimal_v3 is false now, " +
-                    "turn it on before decimal32/64/128 are used, " +
+                    "turn it on before decimal32/64/128/256 are used, " +
                     "execute cmd 'admin set frontend config (\"enable_decimal_v3\" = \"true\")' " +
                     "on every FE server");
         }
-    }
-
-    private static AnalysisException decimalParseError(String errorMsg) {
-        final String hint =
-                "Legal format is 'DECIMAL(precision, scale)', " +
-                        "constraints 0<precision<=38 and 0<=scale<=precision must be hold. ";
-        return new AnalysisException(hint + "error='" + errorMsg + "'");
     }
 
     /**
@@ -195,7 +190,15 @@ public class ScalarType extends Type implements Cloneable {
             // use decimal64 even if precision <= 9, because decimal32 is vulnerable to overflow
             // and casted to decimal64 before expression evaluations are performed on it in BE, so
             // decimal32 has a performance penalty.
-            PrimitiveType pt = precision <= 18 ? PrimitiveType.DECIMAL64 : PrimitiveType.DECIMAL128;
+            PrimitiveType pt;
+            if (precision <= 18) {
+                pt = PrimitiveType.DECIMAL64;
+            } else if (precision <= 38) {
+                pt = PrimitiveType.DECIMAL128;
+            } else {
+                pt = PrimitiveType.DECIMAL256;
+            }
+
             return createDecimalV3Type(pt, precision, scale);
         } else {
             return createDecimalV2Type(precision, scale);
@@ -218,7 +221,7 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
         ConnectContext ctx = ConnectContext.get();
         if (ctx == null ||
                 ctx.getSessionVariable() == null ||
@@ -237,7 +240,7 @@ public class ScalarType extends Type implements Cloneable {
                 return ScalarType.DOUBLE;
             } else {
                 precision = maxPrecision;
-                type = PrimitiveType.DECIMAL128;
+                type = PrimitiveType.DECIMAL256;
             }
         }
         ScalarType scalarType = new ScalarType(type);
@@ -255,8 +258,8 @@ public class ScalarType extends Type implements Cloneable {
         } else if (scale <= PrimitiveType.getDefaultScaleOfDecimal(PrimitiveType.DECIMAL128)) {
             scalarType = new ScalarType(PrimitiveType.DECIMAL128);
         } else {
-            scalarType = new ScalarType(PrimitiveType.DECIMAL128);
-            scale = PrimitiveType.getDefaultScaleOfDecimal(PrimitiveType.DECIMAL128);
+            scalarType = new ScalarType(PrimitiveType.DECIMAL256);
+            scale = PrimitiveType.getDefaultScaleOfDecimal(PrimitiveType.DECIMAL256);
         }
         scalarType.precision = scale;
         scalarType.scale = scale;
@@ -300,7 +303,7 @@ public class ScalarType extends Type implements Cloneable {
             return createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
         } else {
             Preconditions.checkState(false,
-                    "Illegal decimal precision(1 to 38): precision=" + precision);
+                    "Illegal decimal precision(1 to 76): precision=" + precision);
             return ScalarType.INVALID;
         }
     }
@@ -588,6 +591,7 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
                 break;
             case BOOLEAN:
@@ -645,7 +649,8 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMALV2:
             case DECIMAL32:
             case DECIMAL64:
-            case DECIMAL128: {
+            case DECIMAL128:
+            case DECIMAL256: {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
                 scalarType.setType(type.toThrift());
@@ -858,6 +863,7 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
             case DECIMALV2:
                 return "decimal";
             default:
@@ -887,6 +893,7 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 stringBuilder.append(type.toString().toLowerCase()).append("(").append(precision).append(", ")
                         .append(scale).append(")");
                 break;
