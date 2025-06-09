@@ -167,9 +167,9 @@ std::string url_encode(const std::string& decoded) {
 // http://www.boost.org/doc/libs/1_40_0/doc/html/boost_asio/
 //   example/http/server3/request_handler.cpp
 // See http://www.boost.org/LICENSE_1_0.txt for license for this method.
-bool url_decode(const std::string& in, std::string* out) {
-    out->clear();
-    out->reserve(in.size());
+StatusOr<std::string> url_decode(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
 
     for (size_t i = 0; i < in.size(); ++i) {
         if (in[i] == '%') {
@@ -178,22 +178,22 @@ bool url_decode(const std::string& in, std::string* out) {
                 std::istringstream is(in.substr(i + 1, 2));
 
                 if (is >> std::hex >> value) {
-                    (*out) += static_cast<char>(value);
+                    (out) += static_cast<char>(value);
                     i += 2;
                 } else {
-                    return false;
+                    return Status::InvalidArgument("invalid encoding in URL");
                 }
             } else {
-                return false;
+                return Status::InvalidArgument("invalid encoding in URL");
             }
         } else if (in[i] == '+') {
-            (*out) += ' ';
+            (out) += ' ';
         } else {
-            (*out) += in[i];
+            (out) += in[i];
         }
     }
 
-    return true;
+    return out;
 }
 
 } // namespace starrocks

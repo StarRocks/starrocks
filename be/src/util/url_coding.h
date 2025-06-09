@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "common/statusor.h"
+
 namespace starrocks {
 void base64_encode(const std::string& in, std::string* out);
 
@@ -34,6 +36,9 @@ std::string url_encode(const std::string& decoded);
 
 // Utility method to decode a string that was URL-encoded. Returns
 // true unless the string could not be correctly decoded.
-bool url_decode(const std::string& in, std::string* out);
+//Example:
+//    std::string decoded;
+//    StatusOr<std::string> ret = url_decode("Load%E6%A1%8C", &decoded); //decoded == "Load桌"
+StatusOr<std::string> url_decode(const std::string& in);
 
 } // namespace starrocks

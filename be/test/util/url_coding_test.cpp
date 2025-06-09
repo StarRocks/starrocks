@@ -1,45 +1,69 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 #include "util/url_coding.h"
 
 #include <gtest/gtest.h>
 
 #include <string>
 
+
 namespace starrocks {
 
 TEST(UrlCodingTest, UrlDecodeBasic) {
-    std::string out;
     // Simple decode
-    EXPECT_TRUE(url_decode("abc", &out));
-    EXPECT_EQ(out, "abc");
+    auto res = url_decode("abc");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "abc");
     // Encoded space
-    EXPECT_TRUE(url_decode("a+b+c", &out));
-    EXPECT_EQ(out, "a b c");
+    res = url_decode("a+b+c");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "a b c");
     // Encoded percent
-    EXPECT_TRUE(url_decode("a%20b%21c", &out));
-    EXPECT_EQ(out, "a b!c");
-    EXPECT_TRUE(url_decode("testStreamLoad%E6%A1%8C", &out));
+    res = url_decode("a%20b%21c");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "a b!c");
+    res = url_decode("testStreamLoad%E6%A1%8C");
+    EXPECT_TRUE(res.ok());
     const char c1[32] = "testStreamLoad桌";
-    int res = memcmp(c1, out.c_str(), 17);
-    EXPECT_EQ(res, 0);
+    int ret = memcmp(c1, res.value().c_str(), 17);
+    EXPECT_EQ(ret, 0);
 }
 
 TEST(UrlCodingTest, UrlDecodeInvalid) {
-    std::string out;
     // Incomplete percent encoding
-    EXPECT_FALSE(url_decode("abc%", &out));
-    EXPECT_FALSE(url_decode("abc%2", &out));
+    auto res = url_decode("abc%");
+    EXPECT_FALSE(res.ok());
+    res = url_decode("abc%2");
+    EXPECT_FALSE(res.ok());
 }
 
 TEST(UrlCodingTest, UrlDecodeEdgeCases) {
-    std::string out;
     // Empty string
-    EXPECT_TRUE(url_decode("", &out));
-    EXPECT_EQ(out, "");
+    auto res = url_decode("");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "");
     // Only pluses
-    EXPECT_TRUE(url_decode("+++", &out));
-    EXPECT_EQ(out, "   ");
+    res = url_decode("+++");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "   ");
     // Mix of valid and invalid
-    EXPECT_FALSE(url_decode("%GG", &out));
+    res = url_decode("%GG");
+    EXPECT_FALSE(res.ok());
 }
 
 } // namespace starrocks
