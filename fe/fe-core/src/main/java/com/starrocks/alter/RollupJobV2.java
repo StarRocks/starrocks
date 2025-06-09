@@ -409,6 +409,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long partitionId = physicalPartition.getId();
                 MaterializedIndex rollupIndex = this.physicalPartitionIdToRollupIndex.get(partitionId);
+                // After version 3.4, partition is a logical partition rather than a physical partition. 
+                // However, in version 3.3 and earlier, a partition serves as both a logical partition and the first physical partition. 
+                // Therefore, when rolling back from version 3.4, the physical partition ID recorded in the edit log may not be found. 
+                // If it cannot be found, use the default physical partition ID as a substitute.
+                if (rollupIndex == null) {
+                    long defaultPhysicalPartitionId = partition.getDefaultPhysicalPartitionId();
+                    rollupIndex = this.physicalPartitionIdToRollupIndex.get(defaultPhysicalPartitionId);
+                }
                 Preconditions.checkNotNull(rollupIndex);
                 Preconditions.checkState(rollupIndex.getState() == IndexState.SHADOW, rollupIndex.getState());
                 physicalPartition.createRollupIndex(rollupIndex);
