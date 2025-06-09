@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # json_string
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Converting JSON object to JSON string
 
 :::tip
