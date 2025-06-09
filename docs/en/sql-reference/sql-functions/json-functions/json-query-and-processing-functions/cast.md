@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # cast
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Converts a value between the JSON type and SQL type.
 
 :::tip
