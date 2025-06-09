@@ -127,7 +127,7 @@ Status ESScanReader::open() {
         RETURN_IF_ERROR(_network_client.init(_init_scroll_url));
         LOG(INFO) << "First scroll request URL: " << _init_scroll_url;
     }
-    if (!_user_name.empty() && !_passwd.empty()) {
+    if (!_user_name.empty() || !_passwd.empty()) {
         _network_client.set_basic_auth(_user_name, _passwd);
     }
     _network_client.set_content_type("application/json");
@@ -162,7 +162,7 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser)
             return Status::OK();
         }
         RETURN_IF_ERROR(_network_client.init(_next_scroll_url));
-        if (!_user_name.empty() && !_passwd.empty()) {
+        if (!_user_name.empty() || !_passwd.empty()) {
             _network_client.set_basic_auth(_user_name, _passwd);
         }
         _network_client.set_content_type("application/json");
@@ -224,7 +224,7 @@ Status ESScanReader::close() {
                                               scroll_id = _scroll_id, scratch_target]() {
         HttpClient client;
         RETURN_IF(!client.init(scratch_target).ok(), (void)0);
-        if (!user_name.empty() && !passwd.empty()) {
+        if (!user_name.empty() || !passwd.empty()) {
             client.set_basic_auth(user_name, passwd);
         }
         client.set_method(DELETE);
