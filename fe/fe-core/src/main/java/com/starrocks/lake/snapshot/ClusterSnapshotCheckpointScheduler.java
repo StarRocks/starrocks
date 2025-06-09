@@ -34,8 +34,6 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
     // cluster snapshot information used for start
     protected final RestoredSnapshotInfo restoredSnapshotInfo;
 
-    protected boolean firstRun;
-
     protected long lastAutomatedJobStartTimeMs;
     protected volatile ClusterSnapshotJob runningJob;
 
