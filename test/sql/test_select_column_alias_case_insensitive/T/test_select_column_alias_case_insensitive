@@ -1,0 +1,45 @@
+-- name: test_select_column_alias_case_insensitive
+CREATE DATABASE IF NOT EXISTS test_alias_case;
+USE test_alias_case;
+
+-- Create test table
+CREATE TABLE IF NOT EXISTS test_case_sensitive (
+    foo INT,
+    bar INT,
+    baz INT
+) DISTRIBUTED BY HASH(foo) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Insert test data
+INSERT INTO test_case_sensitive VALUES (1, 2, 3);
+
+-- Test case 1: Basic select with case-different aliases (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive;
+
+-- Test case 2: Select with ORDER BY using case-insensitive column name (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive ORDER BY baz;
+
+-- Test case 3: Select with ORDER BY using aliased column (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive ORDER BY foo;
+
+-- Test case 4: Select with ORDER BY using upper case alias (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive ORDER BY FOO;
+
+-- Test case 5: Select with WHERE clause and ORDER BY (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive WHERE baz > 0 ORDER BY baz;
+
+-- Test case 6: Select with multiple case variations (should fail with ambiguous error)
+SELECT foo as Foo, bar as FOO, baz as fOO FROM test_case_sensitive ORDER BY Foo;
+
+-- Test case 7: Select with unique aliases (should work)
+SELECT foo AS col1, bar AS col2, SUM(baz) as sum_baz FROM test_case_sensitive GROUP BY foo, bar ORDER BY col1;
+
+-- Test case 8: Select with DISTINCT and unique aliases (should work)
+SELECT DISTINCT foo AS col1, bar AS col2 FROM test_case_sensitive ORDER BY col1;
+
+-- Test case 9: Select without ambiguous aliases (should work)
+SELECT foo, bar, baz FROM test_case_sensitive ORDER BY foo;
+
+-- Cleanup
+DROP TABLE test_case_sensitive;
+DROP DATABASE test_alias_case;

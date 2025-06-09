@@ -1,0 +1,84 @@
+-- name: test_select_column_alias_case_insensitive
+CREATE DATABASE IF NOT EXISTS test_alias_case;
+-- result:
+-- !result
+USE test_alias_case;
+-- result:
+-- !result
+
+-- Create test table
+CREATE TABLE IF NOT EXISTS test_case_sensitive (
+    foo INT,
+    bar INT,
+    baz INT
+) DISTRIBUTED BY HASH(foo) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+-- Insert test data
+INSERT INTO test_case_sensitive VALUES (1, 2, 3);
+-- result:
+-- !result
+
+-- Test case 1: Basic select with case-different aliases (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'foo' is ambiguous.")
+-- !result
+
+-- Test case 2: Select with ORDER BY using case-insensitive column name (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive ORDER BY baz;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'foo' is ambiguous.")
+-- !result
+
+-- Test case 3: Select with ORDER BY using aliased column (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive ORDER BY foo;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'foo' is ambiguous.")
+-- !result
+
+-- Test case 4: Select with ORDER BY using upper case alias (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive ORDER BY FOO;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'foo' is ambiguous.")
+-- !result
+
+-- Test case 5: Select with WHERE clause and ORDER BY (should fail with ambiguous error)
+SELECT foo AS foo, bar AS FOO FROM test_case_sensitive WHERE baz > 0 ORDER BY baz;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'foo' is ambiguous.")
+-- !result
+
+-- Test case 6: Select with multiple case variations (should fail with ambiguous error)
+SELECT foo as Foo, bar as FOO, baz as fOO FROM test_case_sensitive ORDER BY Foo;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'Foo' is ambiguous.")
+-- !result
+
+-- Test case 7: Select with unique aliases (should work)
+SELECT foo AS col1, bar AS col2, SUM(baz) as sum_baz FROM test_case_sensitive GROUP BY foo, bar ORDER BY col1;
+-- result:
+1	2	3
+-- !result
+
+-- Test case 8: Select with DISTINCT and unique aliases (should work)
+SELECT DISTINCT foo AS col1, bar AS col2 FROM test_case_sensitive ORDER BY col1;
+-- result:
+1	2
+-- !result
+
+-- Test case 9: Select without ambiguous aliases (should work)
+SELECT foo, bar, baz FROM test_case_sensitive ORDER BY foo;
+-- result:
+1	2	3
+-- !result
+
+-- Cleanup
+DROP TABLE test_case_sensitive;
+-- result:
+-- !result
+DROP DATABASE test_alias_case;
+-- result:
+-- !result

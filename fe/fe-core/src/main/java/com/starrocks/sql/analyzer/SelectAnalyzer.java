@@ -335,10 +335,28 @@ public class SelectAnalyzer {
             }
         }
 
+        // Check for ambiguous column aliases (case-insensitive)
+        List<Field> builtFields = outputFields.build();
+        Map<String, List<Field>> namesToFields = new HashMap<>();
+        for (Field field : builtFields) {
+            if (field.getName() != null) {
+                String lowerName = field.getName().toLowerCase();
+                namesToFields.computeIfAbsent(lowerName, k -> new ArrayList<>()).add(field);
+            }
+        }
+
+        for (Map.Entry<String, List<Field>> entry : namesToFields.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                // Get any of the original names for the error message
+                String originalName = entry.getValue().get(0).getName();
+                throw new SemanticException("Column '%s' is ambiguous", originalName);
+            }
+        }
+
         List<Expr> outputExpressions = outputExpressionBuilder.build();
         analyzeState.setOutputExpression(outputExpressions);
         analyzeState.setOutputExprInOrderByScope(outputExprInOrderByScope);
-        analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
+        analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(builtFields)));
         return outputExpressions;
     }
 
