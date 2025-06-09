@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # json_length
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
  Returns the length of a JSON document. If a path is specified, this function returns the length of the value identified by the path.
 
 :::tip
