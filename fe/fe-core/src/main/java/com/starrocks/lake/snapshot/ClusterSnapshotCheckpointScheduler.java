@@ -70,7 +70,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getNextCluterSnapshotJob();
 
             // set last start time when job has been created and begin to submit
-            lastAutomatedJobStartTimeMs = System.currentTimeMillis();
+            lastAutomatedJobStartTimeMs = runningJob.getCreatedTimeMs();
             runCheckpointScheduler(runningJob);
         } finally {
             runningJob = null;
