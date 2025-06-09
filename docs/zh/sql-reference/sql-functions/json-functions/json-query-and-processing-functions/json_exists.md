@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # json_exists
 
-<<<<<<< HEAD
-## 功能
-=======
 检查一个 JSON 对象是否包含可以通过 `json_path` 表达式定位的元素。如果元素存在，JSON_EXISTS 函数返回 `1`。否则，JSON_EXISTS 函数返回 `0`。
 
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上。
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过[生成列](../../../sql-statements/generated_columns.md)加速查询。
 :::
