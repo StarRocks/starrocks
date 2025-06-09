@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # get_json_int
 
-<<<<<<< HEAD
-## 功能
-=======
 此函数用于分析并从 JSON 字符串中指定路径获取整数值。
 
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上。
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过[生成列](../../../sql-statements/generated_columns.md)加速查询。
 :::
