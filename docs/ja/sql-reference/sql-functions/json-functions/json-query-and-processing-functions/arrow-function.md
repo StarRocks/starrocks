@@ -24,7 +24,7 @@ json_object_expr -> json_path
 
 - `json_path`: JSON オブジェクト内の要素へのパスを表す式。このパラメータの値は文字列です。StarRocks がサポートする JSON パス構文の詳細については、[Overview of JSON functions and operators](../overview-of-json-functions-and-operators.md) を参照してください。
 
-## Return value
+## 戻り値
 
 JSON 値を返します。
 
