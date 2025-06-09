@@ -44,6 +44,10 @@ public class ClusterSnapshotUtils {
         }
 
         StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotStorageVolume();
+        clearClusterSnapshotFromRemote(snapshotName, sv);
+    }
+
+    public static void clearClusterSnapshotFromRemote(String snapshotName, StorageVolume sv) throws StarRocksException {
         BrokerDesc brokerDesc = new BrokerDesc(sv.getProperties());
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
 

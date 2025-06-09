@@ -405,4 +405,33 @@ public class ClusterSnapshotTest {
         Assert.assertTrue(job2.isFinished());
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
     }
+
+    @Test
+    public void testRunAfterCatalogReady() {
+        CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
+        ClusterSnapshotCheckpointScheduler scheduler = new ClusterSnapshotCheckpointScheduler(feController,
+                starMgrController);
+        long beginTime = scheduler.lastAutomatedJobStartTimeMs;
+
+        setAutomatedSnapshotOn(false);
+        scheduler.runAfterCatalogReady();
+        scheduler.runAfterCatalogReady();
+
+
+        new MockUp<ClusterSnapshotCheckpointScheduler>() {
+            @Mock
+            protected void runCheckpointScheduler(ClusterSnapshotJob job) {
+                Assert.assertTrue(job != null);
+            }
+        };
+
+        long oldValue = Config.automated_cluster_snapshot_interval_seconds;
+        Config.automated_cluster_snapshot_interval_seconds = 0L;
+        scheduler.runAfterCatalogReady();
+        long endTime = scheduler.lastAutomatedJobStartTimeMs;
+        Config.automated_cluster_snapshot_interval_seconds = oldValue;
+
+        Assert.assertTrue(beginTime != endTime);
+    }
 }
