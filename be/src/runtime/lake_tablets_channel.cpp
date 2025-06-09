@@ -206,6 +206,8 @@ private:
 
     void _update_tablet_profile(DeltaWriter* writer, RuntimeProfile* profile);
 
+    bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
+
     LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
@@ -236,7 +238,7 @@ private:
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
     // Partition id -> BundleWritableFileContext
-    std::unordered_map<int64_t, std::unique_ptr<BundleWritableFileContext>> _bundle_writable_file_contexts;
+    std::unordered_map<int64_t, std::unique_ptr<BundleWritableFileContext>> _bwfile_ctxs_by_partition;
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
@@ -663,6 +665,11 @@ void LakeTabletsChannel::_flush_stale_memtables() {
     }
 }
 
+bool LakeTabletsChannel::_is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params) {
+    return params.has_lake_tablet_params() && params.lake_tablet_params().has_enable_data_file_bundling() &&
+           params.lake_tablet_params().enable_data_file_bundling();
+}
+
 Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental) {
     int64_t schema_id = 0;
     std::vector<SlotDescriptor*>* slots = nullptr;
@@ -697,20 +704,15 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         }
     }
 
-    bool enable_data_file_bundling = false;
-    if (params.has_lake_tablet_params() && params.lake_tablet_params().has_enable_data_file_bundling() &&
-        params.lake_tablet_params().enable_data_file_bundling()) {
-        enable_data_file_bundling = true;
-    }
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
-        if (enable_data_file_bundling) {
-            if (_bundle_writable_file_contexts.count(tablet.partition_id()) == 0) {
-                _bundle_writable_file_contexts[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
+        if (_is_data_file_bundle_enabled(params)) {
+            if (_bwfile_ctxs_by_partition.count(tablet.partition_id()) == 0) {
+                _bwfile_ctxs_by_partition[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
             }
-            bundle_writable_file_context = _bundle_writable_file_contexts[tablet.partition_id()].get();
+            bundle_writable_file_context = _bwfile_ctxs_by_partition[tablet.partition_id()].get();
         }
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
             // already created for the tablet, usually in incremental open case
