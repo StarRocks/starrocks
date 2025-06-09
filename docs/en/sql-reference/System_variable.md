@@ -229,6 +229,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Int
 * **Introduced in**: v3.3.0
 
+### custom_session_name (session)
+
+* **Description**: Used to specify custom name of current session, analog of `applicationName` or `program_name` in DMBS like MySQL or PostgreSQL. Can be set using `SET SESSION custom_session_name = 'my session name';`. Value can be found in audit logs in `customSessionName` field.
+* **Default**: ""
+* **Data type**: String
+* **Introduced in**: v4.0.0
+
 ### enable_sync_materialized_view_rewrite
 
 * **Description**: Whether to enable query rewrite based on synchronous materialized views.
