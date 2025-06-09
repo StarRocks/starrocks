@@ -990,7 +990,8 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope context) {
             if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
+                String catalog = ConnectContext.get().getCurrentCatalog();
+                subquery.setAlias(new TableName(catalog, "alias_db", "alias_" + System.nanoTime()));
             }
 
             Scope queryOutputScope = process(subquery.getQueryStatement(), context);
