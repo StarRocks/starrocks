@@ -127,6 +127,15 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    public boolean canScheduleNextJob (long lastAutomatedJobStartTimeMs) {
+        return isAutomatedSnapshotOn() && (System.currentTimeMillis() - lastAutomatedJobStartTimeMs >=
+                                           Config.automated_cluster_snapshot_interval_seconds * 1000L);
+    }
+
+    public ClusterSnapshotJob getNextCluterSnapshotJob() {
+        return createAutomatedSnapshotJob();
+    }
+
     public ClusterSnapshotJob createAutomatedSnapshotJob() {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();

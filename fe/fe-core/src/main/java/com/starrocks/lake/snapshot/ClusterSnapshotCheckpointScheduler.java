@@ -47,16 +47,16 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
         this.starMgrController = starMgrController;
         this.firstRun = true;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
-        this.lastAutomatedJobStartTimeMs = System.currentTimeMillis(); // init last start time
+        this.lastAutomatedJobStartTimeMs = 0;
     }
 
     @Override
     protected void runAfterCatalogReady() {
         // skip first run when the scheduler start
-        if (firstRun) {
+        if (lastAutomatedJobStartTimeMs == 0) {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                                             .resetSnapshotJobsStateAfterRestarted(restoredSnapshotInfo);
-            firstRun = false;
+            lastAutomatedJobStartTimeMs = System.currentTimeMillis(); // init last start time
             return;
         }
 
@@ -64,15 +64,13 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
          * Control the interval of automated cluster snapshot manually instead of by Daemon framework
          * for the future purpose.
          */
-        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn() ||
-                System.currentTimeMillis() - lastAutomatedJobStartTimeMs <
-                        Config.automated_cluster_snapshot_interval_seconds * 1000L) {
+        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)) {
             return;
         }
 
         CheckpointController.exclusiveLock();
         try {
-            runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+            runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getNextCluterSnapshotJob();
 
             // set last start time when job has been created and begin to submit
             lastAutomatedJobStartTimeMs = System.currentTimeMillis();
