@@ -129,7 +129,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         std::string segment_name = std::string(basename(segment_path));
         auto file_info = FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()};
         if (_seg_writer->bundle_file_offset() >= 0) {
-            // This is a shared data file.
+            // This is a bundle data file.
             file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
         }
         _files.emplace_back(file_info);
