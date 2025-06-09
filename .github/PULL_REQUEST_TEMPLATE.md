@@ -35,7 +35,6 @@ If yes, please specify the type of change:
 - [ ] This is a backport pr
 
 ## Bugfix cherry-pick branch check:
-
 - [ ] I have checked the version labels which the pr will be auto-backported to the target branch
   - [ ] 3.5
   - [ ] 3.4
