@@ -2,9 +2,11 @@
 displayed_sidebar: docs
 ---
 
-# char
+# char 
 
-CHAR() は、指定された整数値に対応する ASCII テーブルの文字値を返します。
+## 説明
+
+CHAR() は、指定された整数値を ASCII テーブルに基づいて文字値に変換します。
 
 ## 構文
 

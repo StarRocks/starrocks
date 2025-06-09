@@ -4,34 +4,36 @@ displayed_sidebar: docs
 
 # days_diff
 
-2 つの日付式 (`expr1` − `expr2`) の日数差を返します。日単位で正確です。
+## 説明
+
+2 つの日付式（`expr1` − `expr2`）の間の日数の差を返します。日単位で正確です。
 
 days_diff と [datediff](./datediff.md) の違い:
 
-|Function|Behavior|Example|
+|Function|動作|例|
 |---|---|---|
-|days_diff| 計算は秒単位で正確で、最も近い整数に切り捨てられます。|'2020-12-25 23:00:00' と '2020-12-24 23:00:01' の days_diff は 0 です。|
-|datediff| 計算は日単位で正確です。|'2020-12-25 23:00:00' と '2020-12-24 23:00:01' の datediff は 1 です。|
+|days_diff| 計算は秒単位で行われ、最も近い整数に切り捨てられます。|'2020-12-25 23:00:00' と '2020-12-24 23:00:01' の間の days_diff は 0 です。|
+|datediff| 計算は日単位で行われます。|'2020-12-25 23:00:00' と '2020-12-24 23:00:01' の間の datediff は 1 です。|
 
-## Syntax
+## 構文
 
 ```Haskell
 BIGINT days_diff(DATETIME expr1,DATETIME expr2);
 ```
 
-## Parameters
+## パラメータ
 
-- `expr1`: 終了時刻。DATETIME または DATE 型である必要があります。
+- `expr1`: 終了時刻。DATETIME または DATE 型でなければなりません。
 
-- `expr2`: 開始時刻。DATETIME または DATE 型である必要があります。
+- `expr2`: 開始時刻。DATETIME または DATE 型でなければなりません。
 
-## Return value
+## 戻り値
 
 BIGINT 値を返します。
 
-日付が存在しない場合、例えば 2022-02-29 の場合、NULL が返されます。days_diff() は時間、分、秒の部分を計算に含めます。差が 1 日未満の場合、0 が返されます。
+日付が存在しない場合、例えば 2022-02-29 の場合は NULL が返されます。days_diff() は時間、分、秒の部分を計算に含めます。差が 1 日未満の場合、0 が返されます。
 
-## Examples
+## 例
 
 ```Plain
 select days_diff('2010-11-30 23:00:00', '2010-11-29 23:00:00')

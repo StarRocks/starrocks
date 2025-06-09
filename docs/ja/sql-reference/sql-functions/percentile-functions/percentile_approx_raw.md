@@ -4,29 +4,31 @@ displayed_sidebar: docs
 
 # percentile_approx_raw
 
+## 説明
+
 `x` から指定されたパーセンタイルに対応する値を返します。
 
 `x` が列の場合、この関数はまず `x` の値を昇順にソートし、パーセンタイル `y` に対応する値を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 PERCENTILE_APPROX_RAW(x, y);
 ```
 
-## Parameters
+## パラメータ
 
-- `x`: 列または値の集合であることができます。PERCENTILE に評価される必要があります。
+- `x`: 列または値のセットであることができます。PERCENTILE に評価される必要があります。
 
 - `y`: パーセンタイル。サポートされているデータ型は DOUBLE です。値の範囲: [0.0,1.0]。
 
-## Return value
+## 戻り値
 
 PERCENTILE 値を返します。
 
-## Examples
+## 例
 
-`percent` 列が percentile_approx_raw() の入力である `aggregate_tbl` テーブルを作成します。
+`aggregate_tbl` テーブルを作成し、`percent` 列が percentile_approx_raw() の入力となります。
 
   ```sql
   CREATE TABLE `aggregate_tbl` (

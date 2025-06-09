@@ -7,18 +7,18 @@ sidebar_position: 30
 
 ## ユーザー接続数
 
-`Property` はユーザー単位で設定されます。Client と FE 間の最大接続数を設定するには、以下のコマンドを使用します。
+`Property` はユーザーの粒度で設定されます。Client と FE 間の最大接続数を設定するには、以下のコマンドを使用します。
 
 ```sql
 ALTER USER '<username>' SET PROPERTIES ("key"="value", ...)
 ```
 
-ユーザーのプロパティには、ユーザーに割り当てられたリソースが含まれます。ここで設定されるプロパティは `user_identity` ではなくユーザーに対するものです。つまり、`CREATE USER` ステートメントで `jack'@'%` と `jack'@'192.%` の2つのユーザーが作成された場合、`ALTER USER SET PROPERTIES` ステートメントはユーザー `jack` に対して機能し、`jack'@'%` や `jack'@'192.%` には機能しません。
+ユーザーのプロパティには、ユーザーに割り当てられたリソースが含まれます。ここで設定されるプロパティは `user_identity` ではなく、ユーザーに対するものです。つまり、`CREATE USER` ステートメントで `jack'@'%` と `jack'@'192.%` の2つのユーザーが作成された場合、`ALTER USER SET PROPERTIES` ステートメントはユーザー `jack` に対して機能し、`jack'@'%` や `jack'@'192.%` には機能しません。
 
 例 1:
 
 ```sql
--- ユーザー `jack` の最大接続数を1000に変更
+-- ユーザー `jack` の最大接続数を 1000 に変更
 ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 
 -- root ユーザーの接続制限を確認
@@ -31,7 +31,7 @@ SHOW PROPERTY FOR 'root';
 
 - parallel_fragment_exec_instance_num
 
-  クエリの並行性で、デフォルト値は1です。各 BE 上のフラグメントインスタンスの数を示します。クエリパフォーマンスを向上させるために、BE の CPU コア数の半分に設定できます。
+  クエリの並行性で、デフォルト値は 1 です。各 BE 上のフラグメントインスタンスの数を示します。クエリパフォーマンスを向上させるために、BE の CPU コア数の半分に設定できます。
 
 - query_mem_limit
 
@@ -39,7 +39,7 @@ SHOW PROPERTY FOR 'root';
 
 - load_mem_limit
 
-  インポートのメモリ制限で、メモリ不足を報告するインポートジョブの際に調整できます。
+  インポートのメモリ制限で、インポートジョブがメモリ不足を報告する際に調整できます。
 
 例 2:
 
@@ -101,5 +101,4 @@ mysql> select connection_id();
 
 mysql> kill 114;
 Query OK, 0 rows affected (0.02 sec)
-
 ```

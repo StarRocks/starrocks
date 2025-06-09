@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # trim
 
+## 説明
+
 `str` 引数の先頭と末尾から連続するスペースまたは指定された文字を削除します。指定された文字の削除は StarRocks 2.5.0 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 VARCHAR trim(VARCHAR str[, VARCHAR characters])
 ```
 
-## Parameters
+## パラメータ
 
 `str`: 必須、トリムする文字列で、VARCHAR 値に評価される必要があります。
 
-`characters`: オプション、削除する文字で、VARCHAR 値である必要があります。このパラメータが指定されていない場合、デフォルトで文字列からスペースが削除されます。このパラメータが空文字列に設定されている場合、エラーが返されます。
+`characters`: オプション、削除する文字で、VARCHAR 値である必要があります。このパラメータが指定されていない場合、デフォルトで文字列からスペースが削除されます。このパラメータが空の文字列に設定されている場合、エラーが返されます。
 
-## Return value
+## 戻り値
 
 VARCHAR 値を返します。
 
-## Examples
+## 例
 
-例 1: 文字列の先頭と末尾から 5 つのスペースを削除します。
+例 1: 文字列の先頭と末尾から5つのスペースを削除します。
 
 ```Plain Text
 MySQL > SELECT trim("   ab c  ");
@@ -54,7 +56,7 @@ MySQL > SELECT trim("xxabcdxx", "x");
 +-----------------------+
 ```
 
-## References
+## 参照
 
 - [ltrim](ltrim.md)
 - [rtrim](rtrim.md)

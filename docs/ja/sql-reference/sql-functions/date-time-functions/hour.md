@@ -4,17 +4,19 @@ displayed_sidebar: docs
 
 # hour
 
-指定された日付の時間を返します。返される値は 0 から 23 の範囲です。
+## 説明
+
+指定された日付の時間を返します。戻り値は0から23の範囲です。
 
 `date` パラメータは DATE または DATETIME 型でなければなりません。
 
-## Syntax
+## 構文
 
 ```Haskell
 INT HOUR(DATETIME|DATE date)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select hour('2018-12-31 23:59:59');
@@ -25,6 +27,6 @@ MySQL > select hour('2018-12-31 23:59:59');
 +-----------------------------+
 ```
 
-## keyword
+## キーワード
 
 HOUR

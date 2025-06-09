@@ -31,4 +31,4 @@ mysql> SELECT DATE('2003-12-31 01:02:03');
 -> '2003-12-31'
 ```
 
-詳細については、[date](../../sql-functions/date-time-functions/date.md) 関数を参照してください。
+詳細については、[ date](../../sql-functions/date-time-functions/date.md) 関数を参照してください。

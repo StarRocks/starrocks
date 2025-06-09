@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # last_query_id
 
-現在のセッションで最も最近実行されたクエリの ID を取得します。
+## 説明
 
-## Syntax
+現在のセッションで最も最近実行されたクエリのIDを取得します。
+
+## 構文
 
 ```Haskell
 VARCHAR last_query_id();
 ```
 
-## Parameters
+## パラメータ
 
 なし
 
-## Return value
+## 戻り値
 
 VARCHAR 型の値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select last_query_id();
@@ -32,6 +34,6 @@ mysql> select last_query_id();
 1 row in set (0.00 sec)
 ```
 
-## Keywords
+## キーワード
 
 LAST_QUERY_ID

@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # bitmap_union_int
 
-TINYINT、SMALLINT、INT 型の列における異なる値の数をカウントし、COUNT (DISTINCT expr) と同じ合計を返します。
+## 説明
+
+TINYINT、SMALLINT、INT 型の列における異なる値の数をカウントし、COUNT (DISTINCT expr) の合計を返します。
 
 ## 構文
 

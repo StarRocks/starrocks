@@ -4,20 +4,22 @@ displayed_sidebar: docs
 
 # next_day
 
-指定された曜日 (DOW) のうち、入力された日付 (DATE または DATETIME) の後に最初に来る日付を返します。例えば、`next_day('2023-04-06', 'Monday')` は '2023-04-06' の後に来る次の月曜日の日付を返します。
+## 説明
+
+指定された曜日 (DOW) の最初の日付を、入力日付 (DATE または DATETIME) の後に返します。例えば、`next_day('2023-04-06', 'Monday')` は '2023-04-06' の後に来る次の月曜日の日付を返します。
 
 この関数は v3.1 からサポートされています。[previous_day](./previous_day.md) の反対です。
 
-## Syntax
+## 構文
 
 ```SQL
 DATE next_day(DATETIME|DATE date_expr, VARCHAR dow)
 ```
 
-## Parameters
+## パラメータ
 
 - `date_expr`: 入力日付。これは有効な DATE または DATETIME 式でなければなりません。
-- `dow`: 曜日。大文字小文字を区別するいくつかの省略形が有効です。
+- `dow`: 曜日。大文字小文字を区別するいくつかの省略形を含む有効な値です。
   
   | DOW_FULL  | DOW_2 | DOW_3 |
   | --------- | ----- |:-----:|
@@ -29,15 +31,15 @@ DATE next_day(DATETIME|DATE date_expr, VARCHAR dow)
   | Friday    | Fr    | Fri   |
   | Saturday  | Sa    | Sat   |
 
-## Return value
+## 戻り値
 
 DATE 値を返します。
 
 無効な `dow` はエラーを引き起こします。`dow` は大文字小文字を区別します。
 
-無効な日付または NULL 引数が渡されると、NULL を返します。
+無効な日付または NULL 引数が渡された場合は NULL を返します。
 
-## Examples
+## 例
 
 ```Plain
 -- 2023-04-06 の後に来る次の月曜日の日付を返します。2023-04-06 は木曜日で、次の月曜日の日付は 2023-04-10 です。
@@ -64,6 +66,6 @@ MySQL > select next_day('2023-04-06 20:13:14', 'Fr');
 +---------------------------------------+
 ```
 
-## keyword
+## キーワード
 
 NEXT_DAY, NEXT

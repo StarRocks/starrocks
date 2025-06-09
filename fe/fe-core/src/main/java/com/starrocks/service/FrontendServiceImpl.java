@@ -75,6 +75,7 @@ import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
 import com.starrocks.common.CaseSensibility;
@@ -1209,7 +1210,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws UserException {
+    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws Exception {
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
@@ -1260,7 +1261,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 request.getUser(), request.getUser_ip(), timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
-            throw new UserException(resp.msg);
+            throw resp.getException();
         }
 
         StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
@@ -1664,8 +1665,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
             streamLoadTask.setCoordinator(coord);
-
-            QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            } catch (AlreadyExistsException e) {
+                LOG.info("receive duplicate stream load put request: {}", request.getLoadId());
+            }
 
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state
@@ -2226,6 +2230,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 olapTable.lockCreatePartition(partitionName);
             }
 
+            // if the txn is already create partition failed, we should not create partition again
+            // because create partition failed will cause the txn to be aborted
+            if (txnState.getIsCreatePartitionFailed()) {
+                throw new UserException("automatic create partition failed. error: txn " + request.getTxn_id() +
+                        " already create partition failed");
+            }
+
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 String errMsg = "Alter job conflicts with partition creation, for more details please check "
@@ -2266,6 +2277,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
+            txnState.setIsCreatePartitionFailed(true);
             return result;
         } finally {
             for (String partitionName : creatingPartitionNames) {

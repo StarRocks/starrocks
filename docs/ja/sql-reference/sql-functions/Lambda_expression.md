@@ -5,11 +5,11 @@ sidebar_position: 0.9
 
 # Lambda expression
 
-ラムダ式は、匿名関数であり、高階 SQL 関数のパラメータとして渡すことができます。ラムダ式を使用すると、より簡潔でエレガント、かつ拡張性のあるコードを開発できます。
+ラムダ式は、匿名関数であり、高階 SQL 関数のパラメータとして渡すことができます。ラムダ式を使用することで、より簡潔でエレガント、かつ拡張性のあるコードを開発できます。
 
-ラムダ式は `->` 演算子を使用して記述され、「goes to」と読みます。`->` の左側は入力パラメータ（ある場合）で、右側は式です。
+ラムダ式は `->` 演算子を使用して記述され、「goes to」と読みます。`->` の左側が入力パラメータ（ある場合）で、右側が式です。
 
-バージョン 2.5 以降、StarRocks は次の高階 SQL 関数でラムダ式の使用をサポートしています: [array_map()](./array-functions/array_map.md), [array_filter()](./array-functions/array_filter.md), [array_sum()](./array-functions/array_sum.md), および [array_sortby()](./array-functions/array_sortby.md)。
+バージョン 2.5 以降、StarRocks は次の高階 SQL 関数でラムダ式を使用することをサポートしています: [array_map()](./array-functions/array_map.md), [array_filter()](./array-functions/array_filter.md), [array_sum()](./array-functions/array_sum.md), および [array_sortby()](./array-functions/array_sortby.md).
 
 ## Syntax
 
@@ -19,9 +19,9 @@ parameter -> expression
 
 ## Parameters
 
-- `parameter`: ラムダ式の入力パラメータで、0 個、1 個、または複数のパラメータを受け入れることができます。2 つ以上の入力パラメータは括弧で囲みます。
+- `parameter`: ラムダ式の入力パラメータで、ゼロ、1つ、または複数のパラメータを受け取ることができます。2つ以上の入力パラメータは括弧で囲まれます。
 
-- `expression`: `parameter` を参照する単純な式です。この式は入力パラメータに対して有効でなければなりません。
+- `expression`: `parameter` を参照する単純な式です。式は入力パラメータに対して有効でなければなりません。
 
 ## Return value
 
@@ -35,7 +35,7 @@ parameter -> expression
 - 集計関数はサポートされていません。例えば、`x -> min(y)`。
 - ウィンドウ関数はサポートされていません。
 - テーブル関数はサポートされていません。
-- 相関列はラムダ関数内に現れることはできません。
+- 相関列はラムダ関数内で使用できません。
 
 ## Examples
 

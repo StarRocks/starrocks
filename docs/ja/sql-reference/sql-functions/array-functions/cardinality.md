@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # cardinality
 
+## 説明
+
 配列内の要素数を返します。結果の型は INT です。入力パラメータが NULL の場合、結果も NULL になります。NULL 要素も長さにカウントされます。
 
 これは [array_length()](array_length.md) の別名です。

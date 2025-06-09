@@ -22,6 +22,8 @@ Here is the translation dictionary for domain specific words. Always translate t
 
 - Do not translate target markdown links. Never translate the part of the link inside (). For instance here [https://wandb.ai/site](https://wandb.ai/site) do not translate anything, but on this, you should translate the [] part:
 [track metrics](./guides/track.md), [create logs](./guides/artifacts.md).
+- Markdown links must always have a space before the opening square bracket `[`. If there is a missing space add it.
+- Markdown links must always have a space after the closing parens `)`. If there is a missing space add it.
 - Beware with <Tabs> and <TabItem> formatting. Respect spacing and newlines around this important constructs. Specially after lists, be sure to keep the same spacing. It is a double newline after the list.
 - For inline formatting (italic, bold, strikethrough, inline code) in Japanese, consider adding spaces before and after when applying to part of a word/phrase. For example "_A_ and _B_" should be translated as "_A_ と _B_", not "_A_と_B_". Without spaces, the translated markdown does not work.
 - Add a space when switching between alphabets and Japanese characters including Kanji, Hiragana, and Katagana.

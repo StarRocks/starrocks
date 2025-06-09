@@ -10,9 +10,9 @@ import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadP
 
 `PAUSED` 状態にある Routine Load ジョブを変更します。PAUSE ROUTINE LOAD を実行して Routine Load ジョブを一時停止できます。
 
-Routine Load ジョブを正常に変更した後、以下の操作が可能です:
+Routine Load ジョブの変更が成功した後、以下のことができます:
 
-- [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) を使用して、Routine Load ジョブに行われた変更を確認します。
+- [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) を使用して、Routine Load ジョブに加えられた変更を確認します。
 - [RESUME ROUTINE LOAD](RESUME_ROUTINE_LOAD.md) を使用して、Routine Load ジョブを再開します。
 
 <RoutineLoadPrivNote />
@@ -88,7 +88,7 @@ FROM data_source
   - **`data_source_properties`**
 
     データソースのプロパティ。現在、以下のプロパティのみ変更可能です:
-    - `kafka_partitions` および `kafka_offsets`: StarRocks は既に消費された Kafka パーティションのオフセットの変更のみをサポートし、新しい Kafka パーティションの追加はサポートしていません。
+    - `kafka_partitions` および `kafka_offsets`: StarRocks は、すでに消費された Kafka パーティションのオフセットの変更のみをサポートし、新しい Kafka パーティションの追加はサポートしていません。
     - `property.*`: Kafka のデータソース用のカスタムパラメータ、例: `property.kafka_default_offsets`。
 
 ## 例
@@ -119,7 +119,7 @@ FROM data_source
    );
    ```
 
-3. 次の例では、フィルタリング条件と StarRocks パーティションを同時に変更してデータをロードします。
+3. 次の例では、フィルタリング条件と、データがロードされる StarRocks パーティションを同時に変更します。
 
    ```SQL
    ALTER ROUTINE LOAD FOR example_tbl_ordertest

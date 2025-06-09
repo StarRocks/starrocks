@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # date
 
-日付または日時式の日付部分を抽出します。
+## 説明
 
-## Syntax
+日付または日時式から日付部分を抽出します。
+
+## 構文
 
 ```Haskell
 DATE date(DATETIME|DATE expr)
 ```
 
-## Parameters
+## パラメータ
 
-`expr`: 日付または日時式。
+`expr`: 日付または日時の式。
 
-## Return value
+## 戻り値
 
-DATE 型の値を返します。入力が NULL または無効な場合は NULL が返されます。
+DATE 型の値を返します。入力が NULL または無効な場合、NULL が返されます。
 
-## Examples
+## 例
 
-Example 1: 日時値の日付部分を抽出します。
+例 1: 日時値から日付部分を抽出します。
 
 ```plaintext
 SELECT DATE("2017-12-31 11:20:59");
@@ -34,7 +36,7 @@ SELECT DATE("2017-12-31 11:20:59");
 1 row in set (0.05 sec)
 ```
 
-Example 2: 日付値の日付部分を抽出します。
+例 2: 日付値から日付部分を抽出します。
 
 ```plaintext
 SELECT DATE('2017-12-31');
@@ -46,7 +48,7 @@ SELECT DATE('2017-12-31');
 1 row in set (0.08 sec)
 ```
 
-Example 3: 現在のタイムスタンプの日付部分を抽出します。
+例 3: 現在のタイムスタンプから日付部分を抽出します。
 
 ```plaintext
 SELECT DATE(current_timestamp());

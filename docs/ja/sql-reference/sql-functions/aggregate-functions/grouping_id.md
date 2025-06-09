@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # grouping_id
 
-grouping_id は、同じグループ化基準の統計結果を区別するために使用されます。
+## Description
 
-## 構文
+grouping_id は、同じグループ化基準のグループ化統計結果を区別するために使用されます。
+
+## Syntax
 
 ```Haskell
 GROUPING_ID(expr)
 ```
 
-## 例
+## Examples
 
 ```Plain
 MySQL > SELECT COL1,GROUPING_ID(COL2) AS 'GroupingID' FROM tbl GROUP BY ROLLUP (COL1, COL2);

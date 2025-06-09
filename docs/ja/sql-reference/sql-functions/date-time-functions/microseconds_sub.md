@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # microseconds_sub
 
-時間間隔を日付値から減算します。時間間隔はマイクロ秒単位です。
+## 説明
+
+日付値から時間間隔を減算します。時間間隔はマイクロ秒単位です。
 
 ## 構文
 
@@ -14,9 +16,9 @@ DATETIME microseconds_sub(DATETIME expr1,INT expr2);
 
 ## パラメータ
 
-`expr1`: 時間の式。DATETIME 型である必要があります。
+`expr1`: 時間の式です。DATETIME 型でなければなりません。
 
-`expr2`: 減算したい時間間隔をマイクロ秒単位で指定します。INT 型である必要があります。
+`expr2`: 減算したい時間間隔をマイクロ秒単位で指定します。INT 型でなければなりません。
 
 ## 戻り値
 

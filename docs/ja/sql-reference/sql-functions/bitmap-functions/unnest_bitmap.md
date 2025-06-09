@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # unnest_bitmap
 
+## Description
+
 unnest_bitmap は、ビットマップを受け取り、そのビットマップ内の要素をテーブルの複数行に変換するテーブル関数です。
 
 StarRocks の [Lateral Join](../../../using_starrocks/Lateral_join.md) は、unnest_bitmap 関数と組み合わせて、一般的な列から行へのロジックを実装することができます。
@@ -12,26 +14,26 @@ StarRocks の [Lateral Join](../../../using_starrocks/Lateral_join.md) は、unn
 
 この関数は v3.1 からサポートされています。
 
-## 構文
+## Syntax
 
 ```Haskell
 unnest_bitmap(bitmap)
 ```
 
-## パラメータ
+## Parameters
 
 `bitmap`: 変換したいビットマップ。
 
-## 戻り値
+## Return value
 
 ビットマップから変換された複数の行を返します。戻り値の型は BIGINT です。
 
-## 例
+## Examples
 
 `c2` はテーブル `t1` のビットマップ列です。
 
 ```SQL
--- bitmap_to_string 関数を使用して、c2 列の値を文字列に変換します。
+-- c2 列の値を文字列に変換するために bitmap_to_string 関数を使用します。
 mysql> select c1, bitmap_to_string(c2) from t1;
 +------+----------------------+
 | c1   | bitmap_to_string(c2) |
@@ -39,7 +41,7 @@ mysql> select c1, bitmap_to_string(c2) from t1;
 |    1 | 1,2,3,4,5,6,7,8,9,10 |
 +------+----------------------+
 
--- unnest_bitmap 関数を使用して、ビットマップ列を複数の行に展開します。
+-- ビットマップ列を複数行に展開するために unnest_bitmap 関数を使用します。
 mysql> select c1, unnest_bitmap from t1, unnest_bitmap(c2);
 +------+---------------+
 | c1   | unnest_bitmap |

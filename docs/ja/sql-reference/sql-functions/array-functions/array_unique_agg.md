@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # array_unique_agg
 
-ARRAY 列の異なる値 (`NULL` を含む) を集約し、1 つの行にまとめます。
+## 説明
 
-この関数は v3.2 からサポートされています。
+ARRAY列の異なる値（`NULL`を含む）を集約し、配列にまとめます（複数行から1行に）。
+
+この関数はバージョン3.2からサポートされています。
 
 ## 構文
 
@@ -16,21 +18,21 @@ ARRAY_UNIQUE_AGG(col)
 
 ## パラメータ
 
-- `col`: 集約したい値を持つ列。サポートされているデータ型は ARRAY です。
+- `col`: 集約したい値が含まれる列。サポートされるデータ型はARRAYです。
 
 ## 戻り値
 
-ARRAY 型の値を返します。
+ARRAY型の値を返します。
 
 ## 使用上の注意
 
 - 配列内の要素の順序はランダムです。
 - 返される配列内の要素のデータ型は、入力列の要素のデータ型と同じです。
-- 一致する値がない場合は `NULL` を返します。
+- 一致する値がない場合は`NULL`を返します。
 
 ## 例
 
-次のデータテーブルを例にとります。
+次のデータテーブルを例として考えます。
 
 ```plaintext
 mysql > select * from array_unique_agg_example;
@@ -44,7 +46,7 @@ mysql > select * from array_unique_agg_example;
 +------+--------------+
 ```
 
-例 1: 列 `a` の値をグループ化し、列 `b` の異なる値を配列に集約します。
+例1: 列`a`の値をグループ化し、列`b`の異なる値を配列に集約します。
 
 ```plaintext
 mysql > select a, array_unique_agg(b) from array_unique_agg_example group by a;
@@ -56,7 +58,7 @@ mysql > select a, array_unique_agg(b) from array_unique_agg_example group by a;
 +------+---------------------+
 ```
 
-例 2: WHERE 句を使用して列 `b` の値を集約します。フィルター条件に一致するデータがない場合、`NULL` 値が返されます。
+例2: WHERE句を使用して列`b`の値を集約します。フィルター条件に一致するデータがない場合、`NULL`値が返されます。
 
 ```plaintext
 mysql > select array_unique_agg(b) from array_unique_agg_example where a < 0;

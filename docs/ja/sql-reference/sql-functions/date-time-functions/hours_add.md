@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # hours_add
 
-日付または日時に時間を加算します。
+## 説明
 
-## Syntax
+日付または日時に時間を追加します。
+
+## 構文
 
 ```Haskell
 DATETIME hours_add(DATETIME|DATE date, INT hours);
 ```
 
-## Parameters
+## パラメータ
 
 `date`: 基準となる日付または日時。
 
-`hours`: 加算する時間。
+`hours`: 追加する時間。
 
-## Return value
+## 戻り値
 
 DATETIME 値を返します。
 
 入力パラメータのいずれかが NULL の場合、NULL が返されます。
 
-## Examples
+## 例
 
 ```Plain Text
 select hours_add('2022-01-01 01:01:01', 2);

@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # get_query_profile
 
-`query_id` を使用してクエリのプロファイルを取得します。この関数は、`query_id` が存在しないか間違っている場合は空を返します。
+## Description
 
-この関数を使用するには、プロファイリング機能を有効にする必要があります。つまり、セッション変数 `enable_profile` を `true` に設定します (`set enable_profile = true;`)。この機能が有効でない場合、空のプロファイルが返されます。
+`query_id` を使用してクエリのプロファイルを取得します。この関数は、`query_id` が存在しないか、間違っている場合は空を返します。
+
+この関数を使用するには、プロファイリング機能を有効にする必要があります。つまり、セッション変数 `enable_profile` を `true` に設定します (`set enable_profile = true;`) 。この機能が有効でない場合、空のプロファイルが返されます。
 
 この関数は v3.0 からサポートされています。
 
-## 構文
+## Syntax
 
 ```Haskell
 get_query_profile(x)
 ```
 
-## パラメータ
+## Parameters
 
-`x`: query_id 文字列。サポートされているデータ型は VARCHAR です。
+`x`: query_id の文字列。サポートされているデータ型は VARCHAR です。
 
-## 戻り値
+## Return value
 
-クエリプロファイルには以下のフィールドが含まれます。クエリプロファイルの詳細については、[Query Profile](../../../administration/query_profile_overview.md) を参照してください。
+クエリプロファイルには次のフィールドが含まれます。クエリプロファイルの詳細については、 [Query Profile](../../../administration/query_profile_overview.md) を参照してください。
 
 ```SQL
 Query:
@@ -45,13 +47,13 @@ Query:
        ...
 ```
 
-## 例
+## Examples
 
 ```sql
 -- プロファイリング機能を有効にします。
 set enable_profile = true;
 
--- シンプルなクエリを実行します。
+-- 単純なクエリを実行します。
 select 1;
 
 -- クエリの query_id を取得します。
@@ -74,7 +76,7 @@ select regexp_extract(get_query_profile('bd3335ce-8dde-11ee-92e4-3269eb8da7d1'),
 +-----------------------------------------------------------------------------------------------------------------------+
 ```
 
-## 関連関数
+## Related functions
 
-- [last_query_id](./last_query_id.md)
-- [regexp_extract](../like-predicate-functions/regexp_extract.md)
+- [ last_query_id](./last_query_id.md)
+- [ regexp_extract](../like-predicate-functions/regexp_extract.md)

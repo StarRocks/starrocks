@@ -4,29 +4,31 @@ displayed_sidebar: docs
 
 # log2
 
-数値の底 2 の対数を計算します。
+## 説明
 
-## Syntax
+数値の底2の対数を計算します。
+
+## 構文
 
 ```SQL
 log2(arg)
 ```
 
-## Parameters
+## パラメータ
 
 - `arg`: 対数を計算したい値。DOUBLE データ型のみサポートされています。
 
-> **NOTE**
+> **注意**
 >
 > StarRocks は、`arg` が負または 0 に指定された場合、NULL を返します。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Example
+## 例
 
-例 1: 8 の底 2 の対数を計算します。
+例 1: 8 の底2の対数を計算します。
 
 ```Plain
 mysql> select log2(8);

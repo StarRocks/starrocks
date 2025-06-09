@@ -6,9 +6,9 @@ displayed_sidebar: docs
 
 ## 説明
 
-指定されたデータアンロードジョブをキャンセルします。状態が `CANCELLED` または `FINISHED` のアンロードジョブはキャンセルできません。アンロードジョブのキャンセルは非同期プロセスです。[SHOW EXPORT](SHOW_EXPORT.md) ステートメントを使用して、アンロードジョブが正常にキャンセルされたかどうかを確認できます。アンロードジョブが正常にキャンセルされた場合、`State` の値は `CANCELLED` になります。
+指定されたデータアンロードジョブをキャンセルします。状態が `CANCELLED` または `FINISHED` のアンロードジョブはキャンセルできません。アンロードジョブのキャンセルは非同期プロセスです。[SHOW EXPORT](SHOW_EXPORT.md) ステートメントを使用して、アンロードジョブが正常にキャンセルされたかどうかを確認できます。`State` の値が `CANCELLED` の場合、アンロードジョブは正常にキャンセルされています。
 
-CANCEL EXPORT ステートメントを使用するには、指定されたアンロードジョブが属するデータベースに対して、次のいずれかの権限を持っている必要があります: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, `DROP_PRIV`, および `USAGE_PRIV`。権限の詳細については、[GRANT](../../account-management/GRANT.md) を参照してください。
+CANCEL EXPORT ステートメントを実行するには、指定されたアンロードジョブが属するデータベースに対して、次のいずれかの権限を持っている必要があります: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, `DROP_PRIV`, および `USAGE_PRIV`。権限の詳細については、[GRANT](../../account-management/GRANT.md) を参照してください。
 
 ## 構文
 

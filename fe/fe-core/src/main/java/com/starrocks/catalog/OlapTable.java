@@ -1306,22 +1306,24 @@ public class OlapTable extends Table {
      * Infer the distribution info based on partitions and cluster status
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
-        if (info.getBucketNum() == 0) {
-            if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
-                // infer bucket num
+        if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
+            // infer bucket num
+            if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         5, Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
-            } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
-                // prior to use user set mutable bucket num
-                long numBucket = getMutableBucketNum();
-                if (numBucket <= 0) {
-                    numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
-                }
-                info.setBucketNum((int) numBucket);
-            } else {
-                throw new DdlException("Unknown distribution info type: " + info.getType());
             }
+        } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
+            // prior to use user set mutable bucket num
+            long numBucket = getMutableBucketNum();
+            if (numBucket > 0) {
+                info.setBucketNum((int) numBucket);
+            } else if (info.getBucketNum() == 0) {
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                info.setBucketNum((int) numBucket);
+            }
+        } else {
+            throw new DdlException("Unknown distribution info type: " + info.getType());
         }
     }
 

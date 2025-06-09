@@ -26,7 +26,7 @@ WHERE JobName = <job_name>
 
 :::note
 
-通常の横向きのテーブル形式ではなく、縦向きに結果を表示するために、ステートメントに `\G` オプションを追加することができます（例: `SHOW ROUTINE LOAD TASK WHERE JobName = <job_name>\G`）。
+ステートメントに `\G` オプションを追加することで、通常の横向きのテーブル形式ではなく、縦向きに返された結果を表示できます（例: `SHOW ROUTINE LOAD TASK WHERE JobName = <job_name>\G`）。
 
 :::
 
@@ -43,19 +43,19 @@ WHERE JobName = <job_name>
 | -------------------- | ------------------------------------------------------------ |
 | TaskId               | StarRocks によって自動生成されるロードタスクのグローバルに一意な ID。 |
 | TxnId                | ロードタスクが属するトランザクションの ID。        |
-| TxnStatus            | ロードタスクが属するトランザクションのステータス。`UNKNOWN` は、ロードタスクがまだディスパッチまたは実行されていないため、トランザクションが開始されていないことを示します。 |
+| TxnStatus            | ロードタスクが属するトランザクションのステータス。`UNKNOWN` は、ロードタスクがまだディスパッチまたは実行されていないため、トランザクションが開始されていない可能性があることを示します。 |
 | JobId                | ロードジョブの ID。                                          |
 | CreateTime           | ロードタスクが作成された日時。            |
 | LastScheduledTime    | ロードタスクが最後にスケジュールされた日時。     |
 | ExecuteStartTime     | ロードタスクが実行された日時。           |
-| Timeout              | FE パラメータ [`routine_load_task_timeout_second`](../../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) と [job_properties](./CREATE_ROUTINE_LOAD.md) の `task_timeout_second` パラメータによって制御されるロードタスクのタイムアウト期間。 |
+| Timeout              | FE パラメータ [`routine_load_task_timeout_second`](../../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) と Routine Load ジョブの `task_timeout_second` パラメータで制御されるロードタスクのタイムアウト期間。 |
 | BeId                 | ロードタスクを実行する BE の ID。                    |
-| DataSourceProperties | トピックのパーティション内のメッセージを消費するロードタスクの進捗状況（オフセットで測定）。 |
-| Message              | タスクエラー情報を含むロードタスクに対して返される情報。 |
+| DataSourceProperties | トピックのパーティションでメッセージを消費するロードタスクの進捗状況（オフセットで測定）。 |
+| Message              | タスクエラー情報を含むロードタスクに返される情報。 |
 
 ## 例
 
-Routine Load ジョブ `example_tbl_ordertest` のすべてのロードタスクを表示します。
+Routine Load ジョブ `example_tbl_ordertest` 内のすべてのロードタスクを表示します。
 
 ```SQL
 MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "example_tbl_ordertest";  

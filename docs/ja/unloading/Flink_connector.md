@@ -4,13 +4,13 @@ displayed_sidebar: docs
 
 # Flink コネクタを使用して StarRocks からデータを読み取る
 
-StarRocks は、Apache Flink® 用に自社開発したコネクタである StarRocks Connector for Apache Flink®（以下、Flink コネクタ）を提供しており、Flink を使用して StarRocks クラスターからデータを一括で読み取ることができます。
+StarRocks は、Apache Flink® 用に独自開発したコネクタである StarRocks Connector for Apache Flink®（以下、Flink コネクタ）を提供しており、Flink を使用して StarRocks クラスターからデータを一括で読み取ることができます。
 
 Flink コネクタは、Flink SQL と Flink DataStream の2つの読み取り方法をサポートしています。Flink SQL の使用を推奨します。
 
 > **NOTE**
 >
-> Flink コネクタは、Flink によって読み取られたデータを別の StarRocks クラスターやストレージシステムに書き込むこともサポートしています。詳細は [Apache Flink® からデータを継続的にロードする](../loading/Flink-connector-starrocks.md) を参照してください。
+> Flink コネクタは、Flink が読み取ったデータを別の StarRocks クラスターやストレージシステムに書き込むこともサポートしています。詳細は [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md) を参照してください。
 
 ## 背景情報
 
@@ -18,30 +18,30 @@ Flink が提供する JDBC コネクタとは異なり、StarRocks の Flink コ
 
 - StarRocks の Flink コネクタ
 
-  StarRocks の Flink コネクタを使用すると、Flink はまず責任を持つ FE からクエリプランを取得し、取得したクエリプランをパラメータとして関与するすべての BE に配布し、最終的に BE から返されたデータを取得します。
+  StarRocks の Flink コネクタを使用すると、Flink はまず担当の FE からクエリプランを取得し、その後、取得したクエリプランをパラメータとして関与するすべての BE に配布し、最終的に BE から返されたデータを取得します。
 
   ![- StarRocks の Flink コネクタ](../_assets/5.3.2-1.png)
 
 - Flink の JDBC コネクタ
 
-  Flink の JDBC コネクタを使用すると、Flink は個々の FE からのみデータを読み取ることができ、一度に1つずつです。データの読み取りは遅いです。
+  Flink の JDBC コネクタを使用すると、Flink は個々の FE からしかデータを読み取ることができません。データの読み取りは遅くなります。
 
   ![Flink の JDBC コネクタ](../_assets/5.3.2-2.png)
 
 ## バージョン要件
 
 | コネクタ | Flink                    | StarRocks     | Java | Scala     |
-|---------|--------------------------|---------------| ---- |-----------|
-| 1.2.10  | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.9   | 1.15,1.16,1.17,1.18      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.8   | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.7   | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
+|-----------|--------------------------|---------------| ---- |-----------|
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## 前提条件
 
 Flink がデプロイされていること。Flink がデプロイされていない場合は、以下の手順に従ってデプロイしてください。
 
-1. Java 8 または Java 11 をオペレーティングシステムにインストールして、Flink が正常に動作するようにします。Java インストールのバージョンを確認するには、次のコマンドを使用できます。
+1. Java 8 または Java 11 をオペレーティングシステムにインストールし、Flink が正常に動作するようにします。Java のインストールバージョンを確認するには、次のコマンドを使用します。
 
    ```SQL
    java -version
@@ -76,7 +76,7 @@ Flink がデプロイされていること。Flink がデプロイされてい�
    # Flink クラスターを起動します。
    ./bin/start-cluster.sh
          
-   # 次の情報が表示された場合、Flink クラスターが正常に起動しています:
+   # 次の情報が表示された場合、Flink クラスターが正常に起動しています。
    Starting cluster.
    Starting standalonesession daemon on host.
    Starting taskexecutor daemon on host.
@@ -94,13 +94,13 @@ Flink コネクタをデプロイするには、次の手順に従います。
 
    > **NOTICE**
    >
-   > Flink コネクタパッケージのバージョンが 1.2.x 以降であり、使用している Flink バージョンと同じ最初の2桁を持つものをダウンロードすることをお勧めします。例えば、Flink v1.14.x を使用している場合、`flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar` をダウンロードできます。
+   > Flink コネクタパッケージのバージョンが 1.2.x 以降であり、使用している Flink バージョンと同じ最初の2桁のバージョンを持つ Flink コネクタパッケージをダウンロードすることをお勧めします。例えば、Flink v1.14.x を使用している場合、`flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar` をダウンロードできます。
 
 2. ダウンロードまたはコンパイルした Flink コネクタパッケージを Flink の `lib` ディレクトリに配置します。
 
 3. Flink クラスターを再起動します。
 
-### ネットワーク設定
+### ネットワーク構成
 
 Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/management/BE_configuration.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認します。
 
@@ -113,8 +113,8 @@ Flink が配置されているマシンが、StarRocks クラスターの FE ノ
 | パラメータ                   | 必須     | データ型   | 説明                                                  |
 | --------------------------- | -------- | --------- | ------------------------------------------------------------ |
 | connector                   | Yes      | STRING    | データを読み取るために使用するコネクタのタイプ。値を `starrocks` に設定します。                                |
-| scan-url                    | Yes      | STRING    | Web サーバーから FE に接続するために使用されるアドレス。形式: `<fe_host>:<fe_http_port>`。デフォルトポートは `8030`。複数のアドレスを指定することができ、カンマ（,）で区切る必要があります。例: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
-| jdbc-url                    | Yes      | STRING    | FE の MySQL クライアントに接続するために使用されるアドレス。形式: `jdbc:mysql://<fe_host>:<fe_query_port>`。デフォルトのポート番号は `9030`。 |
+| scan-url                    | Yes      | STRING    | Web サーバーから FE に接続するために使用されるアドレス。形式: `<fe_host>:<fe_http_port>`。デフォルトポートは `8030` です。複数のアドレスを指定することができ、カンマ (,) で区切る必要があります。例: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
+| jdbc-url                    | Yes      | STRING    | FE の MySQL クライアントに接続するために使用されるアドレス。形式: `jdbc:mysql://<fe_host>:<fe_query_port>`。デフォルトのポート番号は `9030` です。 |
 | username                    | Yes      | STRING    | StarRocks クラスターアカウントのユーザー名。読み取りたい StarRocks テーブルに対する読み取り権限を持っている必要があります。[ユーザー権限](../administration/user_privs/User_privilege.md) を参照してください。 |
 | password                    | Yes      | STRING    | StarRocks クラスターアカウントのパスワード。              |
 | database-name               | Yes      | STRING    | 読み取りたい StarRocks テーブルが属する StarRocks データベースの名前。 |
@@ -125,20 +125,20 @@ Flink が配置されているマシンが、StarRocks クラスターの FE ノ
 | scan.params.mem-limit-byte  | No       | STRING    | 各 BE でのクエリごとに許可される最大メモリ量。単位: バイト。デフォルト値: `1073741824`、1 GB に相当します。 |
 | scan.max-retries            | No       | STRING    | 読み取りタスクが失敗した場合に再試行できる最大回数。デフォルト値: `1`。再試行回数がこの制限を超えると、読み取りタスクはエラーを返します。 |
 
-### Flink DataStream 用のパラメータ
+### Flink DataStream 用パラメータ
 
 以下のパラメータは、Flink DataStream の読み取り方法にのみ適用されます。
 
 | パラメータ    | 必須     | データ型   | 説明                                                  |
 | ------------ | -------- | --------- | ------------------------------------------------------------ |
-| scan.columns | No       | STRING    | 読み取りたい列。複数の列を指定することができ、カンマ（,）で区切る必要があります。 |
+| scan.columns | No       | STRING    | 読み取りたい列。複数の列を指定することができ、カンマ (,) で区切る必要があります。 |
 | scan.filter  | No       | STRING    | データをフィルタリングするためのフィルター条件。 |
 
 Flink で `c1`、`c2`、`c3` の3つの列からなるテーブルを作成したと仮定します。この Flink テーブルの `c1` 列の値が `100` に等しい行を読み取るには、2つのフィルター条件 `"scan.columns, "c1"` と `"scan.filter, "c1 = 100"` を指定できます。
 
 ## StarRocks と Flink 間のデータ型マッピング
 
-以下のデータ型マッピングは、Flink が StarRocks からデータを読み取る場合にのみ有効です。Flink が StarRocks にデータを書き込む際に使用されるデータ型マッピングについては、[Apache Flink® からデータを継続的にロードする](../loading/Flink-connector-starrocks.md) を参照してください。
+以下のデータ型マッピングは、Flink が StarRocks からデータを読み取る場合にのみ有効です。Flink が StarRocks にデータを書き込む際に使用されるデータ型マッピングについては、[Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md) を参照してください。
 
 | StarRocks  | Flink     |
 | ---------- | --------- |
@@ -256,7 +256,7 @@ Flink で `c1`、`c2`、`c3` の3つの列からなるテーブルを作成し�
 
 ### Flink SQL を使用してデータを読み取る
 
-1. Flink クラスターで、ソース StarRocks テーブル（この例では `score_board`）のスキーマに基づいて `flink_test` という名前のテーブルを作成します。テーブル作成コマンドでは、Flink コネクタ、ソース StarRocks データベース、およびソース StarRocks テーブルに関する情報を含む読み取りタスクのプロパティを設定する必要があります。
+1. Flink クラスター内で、ソース StarRocks テーブル（この例では `score_board`）のスキーマに基づいて `flink_test` という名前のテーブルを作成します。テーブル作成コマンドでは、Flink コネクタ、ソース StarRocks データベース、およびソース StarRocks テーブルに関する読み取りタスクのプロパティを設定する必要があります。
 
    ```SQL
    CREATE TABLE flink_test
@@ -283,11 +283,11 @@ Flink で `c1`、`c2`、`c3` の3つの列からなるテーブルを作成し�
    SELECT id, name FROM flink_test WHERE score > 20;
    ```
 
-Flink SQL を使用してデータを読み取る際には、次の点に注意してください。
+Flink SQL を使用してデータを読み取る際には、以下の点に注意してください。
 
-- StarRocks からデータを読み取るために使用できるのは、`SELECT ... FROM <table_name> WHERE ...` のような SQL 文のみです。集計関数のうち、`count` のみがサポートされています。
-- プリディケートプッシュダウンがサポートされています。例えば、クエリにフィルター条件 `char_1 <> 'A' and int_1 = -126` が含まれている場合、フィルター条件は Flink コネクタにプッシュダウンされ、クエリが実行される前に StarRocks によって実行可能な文に変換されます。追加の設定は不要です。
-- LIMIT 文はサポートされていません。
+- StarRocks からデータを読み取るために使用できるのは、`SELECT ... FROM <table_name> WHERE ...` のような SQL ステートメントのみです。集計関数の中では、`count` のみがサポートされています。
+- プリディケートプッシュダウンがサポートされています。例えば、クエリにフィルター条件 `char_1 <> 'A' and int_1 = -126` が含まれている場合、フィルター条件は Flink コネクタにプッシュダウンされ、クエリが実行される前に StarRocks によって実行可能なステートメントに変換されます。追加の設定を行う必要はありません。
+- LIMIT ステートメントはサポートされていません。
 - StarRocks はチェックポイントメカニズムをサポートしていません。そのため、読み取りタスクが失敗した場合、データの一貫性は保証されません。
 
 ### Flink DataStream を使用してデータを読み取る
@@ -346,4 +346,4 @@ Flink SQL を使用してデータを読み取る際には、次の点に注意�
 
 ## 次のステップ
 
-Flink が StarRocks からデータを正常に読み取った後、[Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) を使用して読み取りタスクを監視できます。例えば、WebUI の **Metrics** ページで `totalScannedRows` メトリックを表示して、正常に読み取られた行数を取得できます。また、Flink SQL を使用して、読み取ったデータに対してジョインなどの計算を行うこともできます。
+Flink が StarRocks からデータを正常に読み取った後、[Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) を使用して読み取りタスクを監視できます。例えば、WebUI の **Metrics** ページで `totalScannedRows` メトリックを表示して、正常に読み取られた行数を取得できます。また、読み取ったデータに対して Flink SQL を使用してジョインなどの計算を行うこともできます。

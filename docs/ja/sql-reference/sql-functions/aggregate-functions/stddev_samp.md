@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # stddev_samp
 
+## 説明
+
 式の標本標準偏差を返します。バージョン 2.5.10 以降、この関数はウィンドウ関数としても使用できます。
 
 ## 構文
@@ -14,11 +16,11 @@ STDDEV_SAMP(expr)
 
 ## パラメータ
 
-`expr`: 式。テーブルの列である場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、または DECIMAL に評価される必要があります。
+`expr`: 式です。テーブルの列である場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、または DECIMAL に評価される必要があります。
 
 ## 戻り値
 
-DOUBLE 値を返します。式は以下の通りで、`n` はテーブルの行数を表します。
+DOUBLE 値を返します。以下の式において、`n` はテーブルの行数を表します。
 
 ![image](../../../_assets/stddevsamp_formula.png)
 
@@ -41,4 +43,4 @@ group by datetime;
 
 ## キーワード
 
-STDDEV_SAMP,STDDEV,SAMP
+STDDEV_SAMP, STDDEV, SAMP

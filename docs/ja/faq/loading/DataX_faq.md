@@ -10,4 +10,4 @@ displayed_sidebar: docs
 
 ## DataX Writer を使用してデータを同期する際にキーワードをどのように処理しますか？
 
-キーワードをバッククォート（``）で囲んでください。最新バージョンの DataX をダウンロードしたい場合は、[DataX Writer.](../../integrations/loading_tools/DataX-starrocks-writer.md) を参照してください。
+キーワードをバッククォート（``）で囲んでください。DataX の最新バージョンをダウンロードしたい場合は、[DataX Writer.](../../integrations/loading_tools/DataX-starrocks-writer.md) を参照してください。

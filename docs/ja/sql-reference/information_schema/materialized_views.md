@@ -10,14 +10,14 @@ displayed_sidebar: docs
 
 | **Field**                            | **Description**                                              |
 | ------------------------------------ | ------------------------------------------------------------ |
-| MATERIALIZED_VIEW_ID                 | マテリアライズドビューの ID。                                |
+| MATERIALIZED_VIEW_ID                 | マテリアライズドビューのID。                                 |
 | TABLE_SCHEMA                         | マテリアライズドビューが存在するデータベース。               |
 | TABLE_NAME                           | マテリアライズドビューの名前。                               |
-| REFRESH_TYPE                         | マテリアライズドビューのリフレッシュタイプ。 有効な値: `ROLLUP` (同期マテリアライズドビュー), `ASYNC` (非同期リフレッシュマテリアライズドビュー), および `MANUAL` (手動リフレッシュマテリアライズドビュー)。値が `ROLLUP` の場合、アクティベーションステータスとリフレッシュに関連するすべてのフィールドは空です。 |
-| IS_ACTIVE                            | マテリアライズドビューがアクティブかどうかを示します。 非アクティブなマテリアライズドビューはリフレッシュまたはクエリできません。 |
+| REFRESH_TYPE                         | マテリアライズドビューのリフレッシュタイプ。有効な値は `ROLLUP`（同期マテリアライズドビュー）、`ASYNC`（非同期リフレッシュマテリアライズドビュー）、および `MANUAL`（手動リフレッシュマテリアライズドビュー）です。値が `ROLLUP` の場合、アクティベーションステータスとリフレッシュに関連するすべてのフィールドは空です。 |
+| IS_ACTIVE                            | マテリアライズドビューがアクティブかどうかを示します。非アクティブなマテリアライズドビューはリフレッシュやクエリができません。 |
 | INACTIVE_REASON                      | マテリアライズドビューが非アクティブである理由。             |
 | PARTITION_TYPE                       | マテリアライズドビューのパーティショニング戦略のタイプ。     |
-| TASK_ID                              | マテリアライズドビューをリフレッシュするタスクの ID。        |
+| TASK_ID                              | マテリアライズドビューをリフレッシュするタスクのID。         |
 | TASK_NAME                            | マテリアライズドビューをリフレッシュするタスクの名前。       |
 | LAST_REFRESH_START_TIME              | 最新のリフレッシュタスクの開始時間。                         |
 | LAST_REFRESH_FINISHED_TIME           | 最新のリフレッシュタスクの終了時間。                         |
@@ -27,8 +27,8 @@ displayed_sidebar: docs
 | LAST_REFRESH_START_PARTITION         | 最新のリフレッシュタスクの開始パーティション。               |
 | LAST_REFRESH_END_PARTITION           | 最新のリフレッシュタスクの終了パーティション。               |
 | LAST_REFRESH_BASE_REFRESH_PARTITIONS | 最新のリフレッシュタスクに関与したベーステーブルのパーティション。 |
-| LAST_REFRESH_MV_REFRESH_PARTITIONS   | 最新のリフレッシュタスクでリフレッシュされたマテリアライズドビューパーティション。 |
+| LAST_REFRESH_MV_REFRESH_PARTITIONS   | 最新のリフレッシュタスクでリフレッシュされたマテリアライズドビューのパーティション。 |
 | LAST_REFRESH_ERROR_CODE              | 最新のリフレッシュタスクのエラーコード。                     |
 | LAST_REFRESH_ERROR_MESSAGE           | 最新のリフレッシュタスクのエラーメッセージ。                 |
-| TABLE_ROWS                           | マテリアライズドビュー内のデータ行数（おおよそのバックグラウンド統計に基づく）。 |
-| MATERIALIZED_VIEW_DEFINITION         | マテリアライズドビューの SQL 定義。                          |
+| TABLE_ROWS                           | マテリアライズドビューのデータ行数（おおよそのバックグラウンド統計に基づく）。 |
+| MATERIALIZED_VIEW_DEFINITION         | マテリアライズドビューのSQL定義。                            |

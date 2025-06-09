@@ -2,7 +2,7 @@
 
 ## 説明
 
-パイプ内のすべてのデータファイルまたは特定のデータファイルのロードを再試行します。このコマンドは v3.2 以降でサポートされています。
+パイプ内のすべてのデータファイルまたは特定のデータファイルを再度ロードします。このコマンドは v3.2 以降でサポートされています。
 
 ## 構文
 
@@ -18,23 +18,23 @@ ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }
 
 ### file_name
 
-再試行してロードしたいデータファイルのストレージパス。ファイルの完全なストレージパスを指定する必要があります。指定したファイルが `pipe_name` で指定したパイプに属していない場合、エラーが返されます。
+再度ロードしたいデータファイルのストレージパス。ファイルの完全なストレージパスを指定する必要があることに注意してください。指定したファイルが `pipe_name` で指定したパイプに属していない場合、エラーが返されます。
 
 ## 例
 
-次の例は、`user_behavior_replica` という名前のパイプ内のすべてのデータファイルのロードを再試行します。
+次の例は、`user_behavior_replica` という名前のパイプ内のすべてのデータファイルを再度ロードします。
 
 ```SQL
 ALTER PIPE user_behavior_replica RETRY ALL;
 ```
 
-次の例は、`user_behavior_replica` という名前のパイプ内のデータファイル `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` のロードを再試行します。
+次の例は、`user_behavior_replica` という名前のパイプ内のデータファイル `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` を再度ロードします。
 
 ```SQL
 ALTER PIPE user_behavior_replica RETRY FILE 's3://starrocks-examples/user_behavior_ten_million_rows.parquet';
 ```
 
-## 参照
+## 参考文献
 
 - [CREATE PIPE](CREATE_PIPE.md)
 - [ALTER PIPE](ALTER_PIPE.md)

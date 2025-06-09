@@ -7,6 +7,6 @@ sidebar_position: 1
 
 import DocCardList from '@theme/DocCardList';
 
-StarRocks は次のデータ型をサポートしています: [Numeric](#numeric)、[String](#string)、[Date](#date)、[Semi-structured](#semi-structured)、および [Others](#others)。これらの型のカラムをテーブル作成時に定義できます。
+StarRocks は次のデータ型をサポートしています: [Numeric](#numeric)、[String](#string)、[Date](#date)、[Semi-structured](#semi-structured)、および [Others](#others)。これらの型の列をテーブル作成時に定義できます。
 
 <DocCardList />

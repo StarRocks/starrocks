@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # array_difference
 
-配列の各要素からその次の要素を引くことで、配列内の隣接する要素間の差を計算し、その差を含む配列を返します。
+## 説明
 
-## Syntax
+配列の各要素をその次の要素から引くことで、隣接する要素間の差を計算し、その差を含む配列を返します。
+
+## 構文
 
 ```SQL
 array_difference(input)
 ```
 
-## Parameters
+## パラメータ
 
 `input`: 隣接する要素間の差を計算したい配列。
 
-## Return value
+## 戻り値
 
 `input` パラメータで指定した配列と同じデータ型と長さの配列を返します。
 
-## Examples
+## 例
 
-Example 1:
+例 1:
 
 ```Plain
 mysql> SELECT array_difference([342, 32423, 213, 23432]);
@@ -33,7 +35,7 @@ mysql> SELECT array_difference([342, 32423, 213, 23432]);
 +-----------------------------------------+
 ```
 
-Example 2:
+例 2:
 
 ```Plain
 mysql> SELECT array_difference([342, 32423, 213, null, 23432]);
@@ -44,7 +46,7 @@ mysql> SELECT array_difference([342, 32423, 213, null, 23432]);
 +----------------------------------------------+
 ```
 
-Example 3:
+例 3:
 
 ```Plain
 mysql> SELECT array_difference([1.2, 2.3, 3.2, 4324242.55]);
@@ -55,7 +57,7 @@ mysql> SELECT array_difference([1.2, 2.3, 3.2, 4324242.55]);
 +--------------------------------------------+
 ```
 
-Example 4:
+例 4:
 
 ```Plain
 mysql> SELECT array_difference([false, true, false]);

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # to_iso8601
 
+## Description
+
 指定された日付を ISO 8601 形式の文字列に変換します。
 
 ## Syntax
@@ -14,11 +16,11 @@ VARCHAR TO_ISO8601(DATETIME | DATE date)
 
 ## Parameters
 
-`date`: 変換したい日付を指定します。有効な日付または日付式である必要があります。
+`date`: 変換したい日付です。有効な日付または日付式である必要があります。
 
 ## Examples
 
-例 1: 日付 `2020-01-01` を ISO 8601 形式の文字列に変換します。
+Example 1: 日付 `2020-01-01` を ISO 8601 形式の文字列に変換します。
 
 ```SQL
 MySQL > select to_iso8601(date'2020-01-01');
@@ -29,7 +31,7 @@ MySQL > select to_iso8601(date'2020-01-01');
 +--------------------------+
 ```
 
-例 2: 日付 `2020-01-01 00:00:00.01` を ISO 8601 形式の文字列に変換します。
+Example 2: 日付 `2020-01-01 00:00:00.01` を ISO 8601 形式の文字列に変換します。
 
 ```SQL
 MySQL > select to_iso8601(datetime'2020-01-01 00:00:00.01');

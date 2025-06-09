@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # months_diff
 
-2 つの日付式の月差を返します (`expr1` − `expr2`)。月単位で正確です。
+## Description
+
+2 つの日付式（`expr1` − `expr2`）の月の差を返します。月単位で正確です。
 
 ## Syntax
 
@@ -14,9 +16,9 @@ BIGINT months_diff(DATETIME expr1,DATETIME expr2);
 
 ## Parameters
 
-- `expr1`: 終了時間。DATETIME または DATE 型である必要があります。
+- `expr1`: 終了時刻。DATETIME または DATE 型である必要があります。
 
-- `expr2`: 開始時間。DATETIME または DATE 型である必要があります。
+- `expr2`: 開始時刻。DATETIME または DATE 型である必要があります。
 
 ## Return value
 

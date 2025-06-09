@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-StarRocks 内で実行中のスレッドによって現在実行されている接続またはクエリを終了します。
+StarRocks 内でスレッドが実行中の接続またはクエリを終了します。
 
 :::tip
 
@@ -20,11 +20,11 @@ StarRocks 内で実行中のスレッドによって現在実行されている�
 KILL [ CONNECTION | QUERY ] <processlist_id>
 ```
 
-## パラメーター
+## パラメータ
 
-| **パラメーター**            | **説明**                                              |
+| **パラメータ**            | **説明**                                              |
 | ------------------------ | ------------------------------------------------------------ |
-| 修飾子:<ul><li>CONNECTION</li><li>QUERY</li></ul> | <ul><li>`CONNECTION` 修飾子を使用すると、KILL ステートメントは指定された `processlist_id` に関連付けられた接続を終了し、その接続が実行しているステートメントを終了します。</li><li>`QUERY` 修飾子を使用すると、KILL ステートメントは接続が現在実行しているステートメントを終了しますが、接続自体はそのまま残ります。</li><li>修飾子が指定されていない場合、デフォルトは `CONNECTION` です。</li></ul> |
+| 修飾子:<ul><li>CONNECTION</li><li>QUERY</li></ul> | <ul><li>`CONNECTION` 修飾子を使用すると、KILL ステートメントは指定された `processlist_id` に関連付けられた接続を終了し、接続が実行しているステートメントを終了します。</li><li>`QUERY` 修飾子を使用すると、KILL ステートメントは接続が現在実行しているステートメントを終了しますが、接続自体はそのまま残ります。</li><li>修飾子がない場合、デフォルトは `CONNECTION` です。</li></ul> |
 | processlist_id           | 終了したいスレッドの ID です。実行中のスレッドの ID は [SHOW PROCESSLIST](SHOW_PROCESSLIST.md) を使用して取得できます。 |
 
 ## 例

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # milliseconds_diff
 
+## Description
+
 開始日と終了日の時間差をミリ秒で返します。
 
 この関数は v3.2.4 からサポートされています。

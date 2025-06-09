@@ -29,11 +29,11 @@ SHOW DICTIONARY [ <dictionary_object_name> ]
   - `REFRESHING`: 辞書オブジェクトが現在リフレッシュ中の状態。
   - `COMMITTING`: 各 BE ノードの辞書オブジェクトにデータがキャッシュされ、メタデータの更新などの最終タスクが実行されている状態。
   - `FINISHED`: リフレッシュが成功し、終了した状態。
-  - `CANCELLED`: リフレッシュプロセス中にエラーが発生し、リフレッシュがキャンセルされた状態。`ErrorMessage` のエラー情報に基づいて問題を修正し、再度辞書オブジェクトをリフレッシュする必要があります。
+  - `CANCELLED`: リフレッシュプロセス中にエラーが発生し、リフレッシュがキャンセルされた状態。`ErrorMessage` のエラー情報に基づいて問題を修正し、辞書オブジェクトを再度リフレッシュする必要があります。
 - `lastSuccessRefreshTime`: 辞書オブジェクトの最後の成功したリフレッシュの開始時間。
 - `lastSuccessFinishedTime`: 辞書オブジェクトの最後の成功したリフレッシュの終了時間。
-- `nextSchedulableTime`: 辞書オブジェクトデータが自動的にリフレッシュされる次の時間。
-- `ErrorMessage`: 辞書オブジェクトのリフレッシュが失敗した際のエラーメッセージ。
+- `nextSchedulableTime`: 辞書オブジェクトデータが次に自動的にリフレッシュされる時間。
+- `ErrorMessage`: 辞書オブジェクトのリフレッシュが失敗したときのエラーメッセージ。
 - `approximated dictionaryMemoryUsage (Bytes)`: 各 BE ノードにキャッシュされた辞書オブジェクトの推定メモリ使用量。
 
 ## 例

@@ -2,11 +2,11 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks の開発環境をセットアップする
+# StarRocks 開発のための IDE セットアップ
 
-StarRocks のコントリビューターになりたいけれど、開発環境に悩んでいる方のために、ここにチュートリアルを書きます。
+StarRocks のコントリビューターになりたいけれど、開発環境に悩んでいる方もいるでしょう。ここでは、そのためのチュートリアルを書きます。
 
-完璧な開発ツールチェーンとは何でしょうか？
+完璧な開発ツールチェーンとは？
 
 * FE と BE をワンクリックでコンパイルできること。
 * Clion と IDEA でコードジャンプをサポートすること。
@@ -16,15 +16,15 @@ StarRocks のコントリビューターになりたいけれど、開発環境�
 
 ## 準備
 
-私は MacBook (M1) をローカルでのコーディングに使用し、リモートサーバーで StarRocks のコンパイルとテストを行います。（リモートサーバーは Ubuntu 22 を使用し、**少なくとも 16GB RAM が必要です**）。
+私は MacBook (M1) を使ってローカルでコーディングし、リモートサーバーで StarRocks をコンパイルとテストしています。（リモートサーバーは Ubuntu 22 を使用し、**少なくとも 16GB RAM が必要**です）。
 
-全体のアイデアは、MacBook でコードを書き、それを IDE を通じてサーバーに自動的に同期し、サーバーを使って StarRocks をコンパイルおよび開発することです。
+全体のアイデアは、MacBook でコードを書き、IDE を通じて自動的にサーバーにコードを同期し、サーバーを使って StarRocks をコンパイルおよび開発することです。
 
-### MacBook のセットアップ
+### MacBook セットアップ
 
 #### Thrift 0.13
 
-公式の brew リポジトリには Thrift の 0.13 バージョンがありません。私たちのコミッターの一人が自分のリポジトリにバージョンを作成してインストールできるようにしました。
+公式の brew リポジトリには Thrift の 0.13 バージョンがありません。私たちのコミッターの一人が自分のリポジトリにバージョンを作成しました。
 
 ```bash
 brew install alberttwong/thrift/thrift@0.13
@@ -68,7 +68,7 @@ export JAVA_HOME=xxxxx
 export PYTHON=/usr/bin/python3
 ```
 
-### Ubuntu22 サーバーのセットアップ
+### Ubuntu22 サーバーセットアップ
 
 #### StarRocks コードのクローン
 
@@ -90,7 +90,7 @@ sudo apt install gcc g++ maven openjdk-11-jdk python3 python-is-python3 unzip cm
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ```
 
-#### StarRocks のコンパイルを行う
+#### StarRocks のコンパイル
 
 ```bash
 cd starrocks/
@@ -101,7 +101,7 @@ cd starrocks/
 
 **最初のコンパイルには gcc を使用する必要があります。現在、サードパーティは clang では成功しません。**
 
-## IDE のセットアップ
+## IDE セットアップ
 
 ### FE
 
@@ -115,9 +115,9 @@ FE の開発は簡単です。MacOS で直接コンパイルできます。`fe` 
 
 #### リモートデバッグ
 
-Ubuntu サーバーで `./start_fe.sh --debug` を実行し、IDEA のリモートデバッグを使用して接続します。デフォルトのポートは 5005 ですが、`start_fe.sh` スクリプトで変更できます。
+Ubuntu サーバーで `./start_fe.sh --debug` を実行し、IDEA リモートデバッグを使用して接続します。デフォルトのポートは 5005 で、`start_fe.sh` スクリプトで変更できます。
 
-デバッグ用の Java パラメータ: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` は IDEA からコピーしたものです。
+デバッグ用 Java パラメータ: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` は IDEA からコピーしたものです。
 
 ![IDE](../../_assets/ide-1.png)
 
@@ -125,7 +125,7 @@ Ubuntu サーバーで `./start_fe.sh --debug` を実行し、IDEA のリモー�
 
 最初に `fe` フォルダで `mvn install -DskipTests` を実行して、gensrc ディレクトリ内の thrift と protobuf が正しくコンパイルされていることを確認することをお勧めします。
 
-その後、`gensrc` フォルダに入り、それぞれ `make clean` と `make` コマンドを実行する必要があります。そうしないと Clion が thrift の出力ファイルを検出できません。
+その後、`gensrc` フォルダに入り、`make clean` と `make` コマンドをそれぞれ実行する必要があります。そうしないと、Clion が thrift の出力ファイルを検出できません。
 
 Clion を使用して `be` フォルダを開きます。
 
@@ -137,7 +137,7 @@ Clion を使用して `be` フォルダを開きます。
 
 ![IDE](../../_assets/ide-3.png)
 
-`Settings` / `Cmake` で、ツールチェーンを先ほど追加したリモートツールチェーンに変更します。次の環境変数を追加します。
+`Settings` / `Cmake` で、先ほど追加したリモートツールチェーンに Toolchain を変更します。次の環境変数を追加します。
 
 ```bash
 JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
@@ -145,7 +145,7 @@ STARROCKS_GCC_HOME=/usr/
 STARROCKS_THIRDPARTY=/root/starrocks/thirdparty
 ```
 
-注意: `Include system environment variables` をチェックしないように注意してください。
+注意: `Include system environment variables` をチェックしないようにしてください。
 
 ![IDE](../../_assets/ide-4.png)
 
@@ -155,9 +155,9 @@ STARROCKS_THIRDPARTY=/root/starrocks/thirdparty
 
 #### デバッグ
 
-BE のデバッグは少し難しく、リモートサーバーで gdb を使用する必要があります。もちろん、gdb サーバー + Clion リモート gdb を使用することもできますが、お勧めしません。動作が非常に遅いです。
+BE のデバッグは少し難しいです。リモートサーバーで gdb を使用する必要があります。もちろん、gdb サーバー + Clion リモート gdb を使用することもできますが、お勧めしません。非常に遅いです。
 
-`start_backend.sh` スクリプトを以下のように変更する必要があります。
+`start_backend.sh` スクリプトを次のように変更する必要があります。
 
 ```bash
 if [ ${RUN_BE} -eq 1 ]; then
@@ -170,7 +170,7 @@ if [ ${RUN_BE} -eq 1 ]; then
 fi
 ```
 
-から以下のように変更します。
+から:
 
 ```bash
 if [ ${RUN_BE} -eq 1 ]; then
@@ -183,18 +183,20 @@ if [ ${RUN_BE} -eq 1 ]; then
 fi
 ```
 
+に変更します。
+
 その後、フラグなしで `./bin/start_be.sh` を実行するだけです。
 
-> lakehouse のデバッグ時にエラーレポートが発生した場合は、`~/.gdbinit` に `handle SIGSEGV nostop noprint pass` を追加してください。
+> lakehouse のデバッグ時にエラーレポートが表示された場合は、`~/.gdbinit` に `handle SIGSEGV nostop noprint pass` を追加してください。
 
 #### LLVM
 
 もちろん、LLVM ツールを使用して BE を開発することもできます。
 
-Ubuntu の LLVM インストールについては、https://apt.llvm.org/ を参照してください。
+Ubuntu LLVM のインストールについては、https://apt.llvm.org/ を参照してください。
 
-その後、次のコマンドを使用して BE をコンパイルします: `CC=clang-15 CXX=clang++-15 ./build.sh`。ただし、前提条件として、サードパーティが gcc でコンパイルされている必要があります。
+その後、次のコマンドを使用して BE をコンパイルします: `CC=clang-15 CXX=clang++-15 ./build.sh`。ただし、前提条件としてサードパーティが gcc でコンパイルされている必要があります。
 
 ## 最後に
 
-自由に StarRocks にコードを貢献してください。 🫵
+気軽に StarRocks にコードを貢献してください。 🫵

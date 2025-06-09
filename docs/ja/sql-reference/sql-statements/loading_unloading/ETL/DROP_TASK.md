@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 > **注意**
 >
-> DROP TASK でタスクを削除すると、対応する TaskRun も同時にキャンセルされます。
+> DROP TASK でタスクを削除すると、同時に対応する TaskRun もキャンセルされます。
 
 ## 構文
 
@@ -23,11 +23,11 @@ DROP TASK `<task_name>` [FORCE]
 | **パラメータ** | **必須** | **説明**               |
 | ------------- | -------- | ---------------------- |
 | task_name     | はい     | 削除するタスクの名前。タスク名をバッククォート (`) で囲んで、解析エラーを防いでください。 |
-| FORCE         | いいえ   | タスクの強制削除を行います。 |
+| FORCE         | いいえ   | タスクを強制的に削除します。 |
 
 ## 使用上の注意
 
-Information Schema のメタデータビュー `tasks` と `task_runs` をクエリすることで、非同期タスクの情報を確認できます。
+Information Schema のメタデータビュー `tasks` および `task_runs` をクエリすることで、非同期タスクの情報を確認できます。
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;

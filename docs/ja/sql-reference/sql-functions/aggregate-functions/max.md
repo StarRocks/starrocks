@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # max
 
-expr 式の最大値を返します。
+## 説明
 
-## Syntax
+`expr` 式の最大値を返します。
+
+## 構文
 
 ```Haskell
 MAX(expr)

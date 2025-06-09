@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # any_value
 
+## 説明
+
 各集約グループから任意の行を取得します。この関数を使用して、`GROUP BY` 句を含むクエリを最適化できます。
 
 ## 構文
@@ -14,7 +16,7 @@ ANY_VALUE(expr)
 
 ## パラメータ
 
-`expr`: 集約される式です。v3.2 以降、`expr` は ARRAY、MAP、および STRUCT に評価できます。
+`expr`: 集約される式。v3.2 以降、`expr` は ARRAY、MAP、および STRUCT に評価できます。
 
 ## 戻り値
 

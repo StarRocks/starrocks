@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # timestamp
 
-日付または日時式の DATETIME 値を返します。
+## 説明
 
-## Syntax
+日付または日時式のDATETIME値を返します。
+
+## 構文
 
 ```Haskell
 DATETIME timestamp(DATETIME|DATE expr);
 ```
 
-## Parameters
+## パラメータ
 
-`expr`: 変換したい時間式。DATETIME または DATE 型である必要があります。
+`expr`: 変換したい時間式です。DATETIMEまたはDATE型である必要があります。
 
-## Return value
+## 戻り値
 
-DATETIME 値を返します。入力された時間が空または存在しない場合（例: `2021-02-29`）、NULL が返されます。
+DATETIME値を返します。入力時間が空または存在しない場合（例: `2021-02-29`）、NULLが返されます。
 
-## Examples
+## 例
 
 ```Plain Text
 select timestamp("2019-05-27");

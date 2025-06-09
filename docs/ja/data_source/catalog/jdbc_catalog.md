@@ -7,11 +7,11 @@ toc_max_heading_level: 4
 
 StarRocks は v3.0 以降で JDBC catalog をサポートしています。
 
-JDBC catalog は、データを取り込むことなく、JDBC を通じてアクセスされるデータソースからデータをクエリすることを可能にする一種の external catalog です。
+JDBC catalog は、JDBC を介してアクセスされるデータソースからデータを取り込まずにクエリを実行できる外部 catalog の一種です。
 
-また、JDBC catalog を使用して、JDBC データソースからデータを直接変換してロードすることもできます。[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用します。
+また、JDBC catalog を使用して、JDBC データソースから直接データを変換してロードすることもできます。[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用します。
 
-JDBC catalog は v3.0 以降で MySQL と PostgreSQL をサポートし、v3.2.9 および v3.3.1 以降で Oracle と SQLServer をサポートしています。
+JDBC catalog は、v3.0 以降で MySQL と PostgreSQL をサポートし、v3.2.9 と v3.3.1 以降で Oracle と SQLServer をサポートしています。
 
 ## 前提条件
 
@@ -32,31 +32,31 @@ PROPERTIES ("key"="value", ...)
 
 #### `catalog_name`
 
-JDBC catalog の名前。命名規則は以下の通りです：
+JDBC catalog の名前です。命名規則は以下の通りです：
 
-- 名前には文字、数字 (0-9)、アンダースコア (_) を含めることができます。文字で始める必要があります。
-- 名前は大文字と小文字を区別し、長さは 1023 文字を超えることはできません。
+- 名前には文字、数字 (0-9)、アンダースコア (_) を含めることができます。文字で始まる必要があります。
+- 名前は大文字と小文字を区別し、長さは 1023 文字を超えてはなりません。
 
 #### `comment`
 
-JDBC catalog の説明。このパラメーターはオプションです。
+JDBC catalog の説明です。このパラメーターはオプションです。
 
 #### `PROPERTIES`
 
-JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーターを含める必要があります：
+JDBC Catalog のプロパティです。`PROPERTIES` には以下のパラメーターを含める必要があります：
 
 | **Parameter**     | **Description**                                                     |
 | ----------------- | ------------------------------------------------------------ |
-| type              | リソースのタイプ。値を `jdbc` に設定します。           |
-| user              | ターゲットデータベースに接続するために使用されるユーザー名。 |
-| password          | ターゲットデータベースに接続するために使用されるパスワード。 |
-| jdbc_uri          | JDBC ドライバーがターゲットデータベースに接続するために使用する URI。MySQL の場合、URI は `"jdbc:mysql://ip:port"` 形式です。PostgreSQL の場合、URI は `"jdbc:postgresql://ip:port/db_name"` 形式です。詳細は [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html) を参照してください。 |
-| driver_url        | JDBC ドライバー JAR パッケージのダウンロード URL。HTTP URL またはファイル URL がサポートされます。例えば、`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` や `file:///home/disk1/postgresql-42.3.3.jar` です。<br />**注意**<br />JDBC ドライバーを FE と BE または CN ノードの同じパスに配置し、`driver_url` をそのパスに設定することもできます。この場合、`file:///<path>/to/the/driver` 形式でなければなりません。 |
-| driver_class      | JDBC ドライバーのクラス名。一般的なデータベースエンジンの JDBC ドライバークラス名は以下の通りです：<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x およびそれ以前) および `com.mysql.cj.jdbc.Driver` (MySQL v6.x およびそれ以降)</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
+| type              | リソースのタイプです。値を `jdbc` に設定します。           |
+| user              | ターゲットデータベースに接続するために使用されるユーザー名です。 |
+| password          | ターゲットデータベースに接続するために使用されるパスワードです。 |
+| jdbc_uri          | JDBC ドライバーがターゲットデータベースに接続するために使用する URI です。MySQL の場合、URI は `"jdbc:mysql://ip:port"` 形式です。PostgreSQL の場合、URI は `"jdbc:postgresql://ip:port/db_name"` 形式です。詳細情報: [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)。 |
+| driver_url        | JDBC ドライバー JAR パッケージのダウンロード URL です。HTTP URL またはファイル URL がサポートされます。例: `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` および `file:///home/disk1/postgresql-42.3.3.jar`。<br />**注意**<br />JDBC ドライバーを FE および BE または CN ノードの任意の同じパスに配置し、`driver_url` をそのパスに設定することもできます。この場合、パスは `file:///<path>/to/the/driver` 形式でなければなりません。 |
+| driver_class      | JDBC ドライバーのクラス名です。一般的なデータベースエンジンの JDBC ドライバークラス名は以下の通りです：<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x およびそれ以前) および `com.mysql.cj.jdbc.Driver` (MySQL v6.x およびそれ以降)</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
 
 > **注意**
 >
-> FEs は JDBC catalog 作成時に JDBC ドライバー JAR パッケージをダウンロードし、BEs または CNs は最初のクエリ時に JDBC ドライバー JAR パッケージをダウンロードします。ダウンロードにかかる時間はネットワークの状況によって異なります。
+> FEs は JDBC catalog 作成時に JDBC ドライバー JAR パッケージをダウンロードし、BEs または CNs は最初のクエリ時に JDBC ドライバー JAR パッケージをダウンロードします。ダウンロードにかかる時間はネットワーク状況によって異なります。
 
 ### 例
 
@@ -117,7 +117,7 @@ PROPERTIES
 SHOW CATALOGS;
 ```
 
-また、external catalog の作成ステートメントをクエリするには、[SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) を使用します。以下の例では、`jdbc0` という名前の JDBC catalog の作成ステートメントをクエリします。
+外部 catalog の作成ステートメントをクエリするには、[SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) を使用します。以下の例では、`jdbc0` という名前の JDBC catalog の作成ステートメントをクエリします。
 
 ```SQL
 SHOW CREATE CATALOG jdbc0;
@@ -133,9 +133,9 @@ JDBC catalog を削除するには、[DROP CATALOG](../../sql-reference/sql-stat
 DROP Catalog jdbc0;
 ```
 
-## JDBC catalog のテーブルをクエリする
+## JDBC catalog 内のテーブルをクエリ
 
-1. JDBC 互換クラスター内のデータベースを表示するには、[SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) を使用します。
+1. JDBC 対応クラスター内のデータベースを表示するには、[SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) を使用します。
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
@@ -167,6 +167,6 @@ DROP Catalog jdbc0;
 
 ## FAQ
 
-「Malformed database URL, failed to parse the main URL sections」というエラーが発生した場合はどうすればよいですか？
+「Malformed database URL, failed to parse the main URL sections」というエラーが表示された場合はどうすればよいですか？
 
 このようなエラーが発生した場合、`jdbc_uri` に渡した URI が無効です。渡した URI を確認し、有効であることを確認してください。詳細については、このトピックの「[PROPERTIES](#properties)」セクションのパラメーター説明を参照してください。

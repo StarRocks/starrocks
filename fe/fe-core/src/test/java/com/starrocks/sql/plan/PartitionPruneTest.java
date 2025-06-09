@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -74,6 +75,22 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202401 VALUES IN (('2', '2024-01-01'))");
         starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202402 VALUES IN (('2', '2024-02-01'))");
         starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202403 VALUES IN (('2', '2024-03-01'))");
+
+        // date_trunc('month', hours_add(date_trunc('day', hours_sub(c1, 8)), 8))
+        starRocksAssert.withTable("CREATE TABLE t_gen_col2 (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 DATETIME NULL AS date_trunc('month', hours_add(date_trunc('day', hours_sub(c1, 8)), 8)) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col2 ADD PARTITION p1_202401 VALUES IN (('1', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col2 ADD PARTITION p1_202402 VALUES IN (('1', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col2 ADD PARTITION p1_202403 VALUES IN (('1', '2024-03-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col2 ADD PARTITION p2_202401 VALUES IN (('2', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col2 ADD PARTITION p2_202402 VALUES IN (('2', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col2 ADD PARTITION p2_202403 VALUES IN (('2', '2024-03-01'))");
 
         starRocksAssert.withTable("CREATE TABLE t_bool_partition (" +
                 " c1 datetime NOT NULL, " +
@@ -224,6 +241,7 @@ public class PartitionPruneTest extends PlanTestBase {
     private static Pair<ScalarOperator, LogicalScanOperator> buildConjunctAndScan(String sql) throws Exception {
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         ExecPlan execPlan = pair.second;
+        System.out.println(execPlan.getExplainString(TExplainLevel.NORMAL));
         LogicalScanOperator scanOperator =
                 (LogicalScanOperator) execPlan.getLogicalPlan().getRoot().inputAt(0).inputAt(0).inputAt(0).getOp();
         ScalarOperator predicate = execPlan.getPhysicalPlan().getOp().getPredicate();
@@ -238,9 +256,15 @@ public class PartitionPruneTest extends PlanTestBase {
         Assert.assertEquals(expected, newPredicate.toString());
     }
 
+    private void testAssertContains(String sql, String expected) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        ExecPlan execPlan = pair.second;
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, expected);
+    }
+
     @Test
     public void testGeneratedColumnPrune_RemovePredicate() throws Exception {
-        testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' ", "true");
         testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' and c2 > 100", "true");
         testRemovePredicate("select * from t_gen_col where c1 >= '2024-01-01'  and c1 <= '2024-01-03' " +
                 "and c2 > 100", "true");
@@ -256,6 +280,23 @@ public class PartitionPruneTest extends PlanTestBase {
                 "cast(1: c1 as double) = random(1)");
         testRemovePredicate("select * from t_gen_col where c2 + 100 > c1 + 1",
                 "cast(add(2: c2, 100) as double) > add(cast(1: c1 as double), 1)");
+    }
+
+    @Test
+    public void testGeneratedColumnPrune_RemovePredicate2() throws Exception {
+        testAssertContains("select * from t_gen_col2 where c1 >= '2024-02-02' ", "partitions=4/6");
+        testAssertContains("select * from t_gen_col2 where c1 = '2024-02-02' ", "partitions=2/6");
+        testAssertContains("select * from t_gen_col2 where c1 = '2024-02-02' and c2 > 100", "partitions=0/6");
+        testAssertContains("select * from t_gen_col2 where c1 >= '2024-02-02'  and c1 <= '2024-02-03' " +
+                "and c2 > 100", "partitions=0/6");
+        testAssertContains("select * from t_gen_col2 where c2 in (1, 2,3)", "partitions=6/6");
+        testAssertContains("select * from t_gen_col2 where c2 = cast('123' as int)", "partitions=0/6");
+
+        // can not be removed
+        testAssertContains("select * from t_gen_col2 where c1 = random() and c2 > 100",
+                "partitions=0/6");
+        testAssertContains("select * from t_gen_col2 where c2 + 100 > c1 + 1",
+                "partitions=6/6");
     }
 
     @Test

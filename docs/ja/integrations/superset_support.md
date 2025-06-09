@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 [Apache Superset](https://superset.apache.org) は、モダンなデータ探索と可視化プラットフォームです。データのクエリには [SQLAlchemy](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks) を使用します。
 
-[MySQL Dialect](https://superset.apache.org/docs/databases/mysql) を使用することもできますが、`largeint` をサポートしていません。そのため、[StarRocks Dialect](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks/) を開発しました。
+[MySQL Dialect](https://superset.apache.org/docs/databases/mysql) も使用できますが、`largeint` をサポートしていません。そのため、[StarRocks Dialect](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks/) を開発しました。
 
 ## 環境
 
@@ -24,7 +24,7 @@ No module named 'MySQLdb'
 
 `dialect` は `SQLAlchemy` に貢献していないため、ソースコードからインストールする必要があります。
 
-`superset` を Docker でインストールする場合、`sqlalchemy-starrocks` は `root` でインストールしてください。
+`superset` を Docker でインストールする場合、`sqlalchemy-starrocks` を `root` でインストールしてください。
 
 [ソースコード](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks) からインストール
 
@@ -40,7 +40,7 @@ pip uninstall sqlalchemy-starrocks
 
 ## 使用法
 
-SQLAlchemy を使用して StarRocks に接続するには、次の URL パターンを使用できます:
+SQLAlchemy を使用して StarRocks に接続するには、次の URL パターンを使用します:
 
 ```shell
 starrocks://<username>:<password>@<host>:<port>/<database>[?charset=utf8]
@@ -50,7 +50,7 @@ starrocks://<username>:<password>@<host>:<port>/<database>[?charset=utf8]
 
 ### Sqlalchemy の例
 
-StarRocks データベースに接続するには、Python 3.x を使用することをお勧めします。例:
+Python 3.x を使用して StarRocks データベースに接続することをお勧めします。例:
 
 ```python
 from sqlalchemy import create_engine

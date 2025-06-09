@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # bitmap_to_array
 
+## 説明
+
 BITMAP を BIGINT 配列に変換します。
 
-## Syntax
+## 構文
 
 ```Haskell
  ARRAY<BIGINT> BITMAP_TO_ARRAY (bitmap)
 ```
 
-## Parameters
+## パラメータ
 
 `bitmap`: 変換したいビットマップ。
 
-## Return value
+## 戻り値
 
 BIGINT 配列を返します。
 
-## Examples
+## 例
 
 ```Plain
 select bitmap_to_array(bitmap_from_string("1, 7"));

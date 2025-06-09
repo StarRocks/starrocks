@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # xx_hash3_128
 
+## 説明
+
 入力文字列の128ビットのxxhash3ハッシュ値を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 LARGEINT XX_HASH3_128(VARCHAR input, ...)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select xx_hash3_128(null);

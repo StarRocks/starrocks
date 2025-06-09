@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # ln, dlog1, log
 
+## 説明
+
 数値の自然対数（底 `e`）を計算します。
 
 ## 構文

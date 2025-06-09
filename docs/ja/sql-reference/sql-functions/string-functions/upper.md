@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # upper
 
+## Description
+
 文字列を大文字に変換します。
 
-## 構文
+## Syntax
 
 ```haskell
 upper(str)
 ```
 
-## パラメータ
+## Parameters
 
 - `str`: 変換する文字列。`str` が文字列型でない場合、最初に暗黙的なキャストを試みます。
 
-## 戻り値
+## Return values
 
 大文字の文字列を返します。
 
-## 例
+## Examples
 
 ```plaintext
 MySQL [test]> select C_String, upper(C_String) from ex_iceberg_tbl;

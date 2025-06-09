@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # array_to_bitmap
 
+## 説明
+
 配列を BITMAP 値に変換します。この関数は v2.3 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 BITMAP array_to_bitmap(array)
 ```
 
-## Parameters
+## パラメータ
 
 `array`: 配列内の要素は BIGINT、INT、TINYINT、または SMALLINT 型である必要があります。
 
-## Return value
+## 戻り値
 
 BITMAP 型の値を返します。
 
-## Usage notes
+## 使用上の注意
 
 - 入力配列の要素のデータ型が STRING や DECIMAL のように無効な場合、エラーが返されます。
 
@@ -28,7 +30,7 @@ BITMAP 型の値を返します。
 
 - `NULL` が入力された場合、`NULL` が返されます。
 
-## Examples
+## 例
 
 例 1: 配列を BITMAP 値に変換します。この関数は BITMAP 値を表示できないため、`bitmap_to_array` にネストする必要があります。
 
@@ -41,7 +43,7 @@ MySQL > select bitmap_to_array(array_to_bitmap([1,2,3]));
 +-------------------------------------------+
 ```
 
-例 2: 空の配列を入力すると、空の配列が返されます。
+例 2: 空の配列を入力し、空の配列が返されます。
 
 ```Plain
 MySQL > select bitmap_to_array(array_to_bitmap([]));
@@ -52,7 +54,7 @@ MySQL > select bitmap_to_array(array_to_bitmap([]));
 +--------------------------------------+
 ```
 
-例 3: `NULL` を入力すると、`NULL` が返されます。
+例 3: `NULL` を入力し、`NULL` が返されます。
 
 ```Plain
 MySQL > select array_to_bitmap(NULL);

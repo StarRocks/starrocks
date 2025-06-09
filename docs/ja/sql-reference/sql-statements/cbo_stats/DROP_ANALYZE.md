@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 カスタムコレクションタスクを削除します。
 
-デフォルトでは、StarRocks はテーブルの完全な統計情報を自動的に収集します。データの更新を5分ごとにチェックし、データの変更が検出されると、データ収集が自動的にトリガーされます。自動の完全収集を使用したくない場合は、FE の設定項目 `enable_collect_full_statistic` を `false` に設定し、カスタムのコレクションタスクを作成できます。
+デフォルトでは、StarRocks はテーブルの完全な統計を自動的に収集します。5 分ごとにデータの更新を確認します。データの変更が検出されると、データ収集が自動的にトリガーされます。自動の完全収集を使用したくない場合は、FE の設定項目 `enable_collect_full_statistic` を `false` に設定し、コレクションタスクをカスタマイズできます。
 
 このステートメントは v2.4 からサポートされています。
 
@@ -34,4 +34,4 @@ DROP ANALYZE 266030;
 
 [KILL ANALYZE](KILL_ANALYZE.md): 実行中のカスタムコレクションタスクをキャンセルします。
 
-CBO の統計情報収集の詳細については、[Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md) を参照してください。
+CBO の統計収集に関する詳細は、 [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md) を参照してください。

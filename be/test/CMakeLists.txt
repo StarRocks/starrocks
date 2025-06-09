@@ -91,6 +91,7 @@ set(EXEC_FILES
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
+        ./exec/tablet_sink_index_channel_test.cpp
         ./exec/table_function_node_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
@@ -309,6 +310,7 @@ set(EXEC_FILES
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/tablet_schema_test.cpp
+        ./storage/tablet_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/tablet_updates_schema_change_test.cpp
         ./storage/update_manager_test.cpp
@@ -456,6 +458,7 @@ set(EXEC_FILES
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
+        ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
@@ -480,6 +483,7 @@ set(EXEC_FILES
         ./block_cache/datacache_utils_test.cpp
         ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
+        ./util/thrift_client_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

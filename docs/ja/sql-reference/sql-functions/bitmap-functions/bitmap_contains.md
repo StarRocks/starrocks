@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # bitmap_contains
 
-入力値が bitmap 列に含まれているかどうかを計算し、Boolean 値を返します。
+## Description
+
+入力値がビットマップ列に含まれているかどうかを計算し、ブール値を返します。
 
 ## Syntax
 

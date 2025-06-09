@@ -9,19 +9,18 @@ displayed_sidebar: docs
 ## Syntax
 
 ```SQL
-CANCEL BACKUP { FROM <db_name> | FOR EXTERNAL CATALOG }
+CANCEL BACKUP FROM <db_name>
 ```
 
 ## Parameters
 
 | **Parameter** | **Description**                                       |
 | ------------- | ----------------------------------------------------- |
-| db_name       | BACKUP タスクが属するデータベースの名前です。 |
-| FOR EXTERNAL CATALOG | external catalog メタデータの進行中の BACKUP タスクをキャンセルします。 |
+| db_name       | BACKUP タスクが属するデータベースの名前。             |
 
 ## Examples
 
-例 1: データベース `example_db` の下で BACKUP タスクをキャンセルします。
+例 1: データベース `example_db` の BACKUP タスクをキャンセルします。
 
 ```SQL
 CANCEL BACKUP FROM example_db;

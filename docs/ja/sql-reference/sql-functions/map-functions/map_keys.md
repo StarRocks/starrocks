@@ -4,31 +4,33 @@ displayed_sidebar: docs
 
 # map_keys
 
+## 説明
+
 指定されたマップ内のすべてのキーを配列として返します。
 
 この関数は v2.5 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 map_keys(any_map)
 ```
 
-## Parameters
+## パラメータ
 
 `any_map`: キーを取得したい MAP 値。
 
-## Return value
+## 戻り値
 
-返り値は `array<keyType>` の形式です。配列内の要素の型はマップ内のキーの型と一致します。
+戻り値は `array<keyType>` の形式です。配列内の要素の型はマップ内のキーの型と一致します。
 
-入力が NULL の場合、NULL が返されます。MAP 値内のキーまたは値が NULL の場合、NULL は通常の値として処理され、結果に含まれます。
+入力が NULL の場合、NULL が返されます。MAP 値のキーまたは値が NULL の場合、NULL は通常の値として処理され、結果に含まれます。
 
-## Examples
+## 例
 
 ### StarRocks 内部テーブルから MAP データをクエリする
 
-v3.1 以降、StarRocks はテーブル作成時に MAP カラムの定義をサポートしています。この例では、以下のデータを含むテーブル `test_map` を使用します。
+v3.1 以降、StarRocks はテーブル作成時に MAP カラムを定義することをサポートしています。この例では、以下のデータを含むテーブル `test_map` を使用します。
 
 ```Plain
 CREATE TABLE test_map(
@@ -82,7 +84,7 @@ SELECT * FROM hive_map ORDER BY col_int;
 +---------+---------------+
 ```
 
-クラスター内に [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) が作成された後、この catalog と map_keys() 関数を使用して、`col_map` カラムの各行からすべてのキーを取得できます。
+クラスタ内に [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) が作成された後、この catalog と map_keys() 関数を使用して、`col_map` カラムの各行からすべてのキーを取得できます。
 
 ```Plaintext
 select map_keys(col_map) from hive_map order by col_int;

@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks が提供する[主キーテーブル](../table_design/table_types/primary_key_table.md)を使用すると、[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、または[Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)ジョブを実行して StarRocks テーブルにデータ変更を加えることができます。これらのデータ変更には、挿入、更新、削除が含まれます。ただし、主キーテーブルは、[Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)や[INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)を使用したデータ変更をサポートしていません。
+StarRocks が提供する [Primary Key tables](../table_design/table_types/primary_key_table.md) を使用すると、[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、または [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) ジョブを実行して StarRocks テーブルにデータ変更を加えることができます。これらのデータ変更には、挿入、更新、削除が含まれます。ただし、Primary Key tables は [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) または [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用したデータ変更をサポートしていません。
 
 StarRocks は部分更新と条件付き更新もサポートしています。
 
@@ -16,17 +16,17 @@ StarRocks は部分更新と条件付き更新もサポートしています。
 
 > **注意**
 >
-> CSV データの場合、UTF-8 文字列（カンマ（,）、タブ、パイプ（|）など）をテキスト区切り文字として使用できますが、その長さは 50 バイトを超えないようにしてください。
+> CSV データの場合、UTF-8 文字列（カンマ (,)、タブ、パイプ (|) など）をテキスト区切り文字として使用できますが、その長さは 50 バイトを超えないようにしてください。
 
 ## 実装
 
-StarRocks が提供する主キーテーブルは、UPSERT および DELETE 操作をサポートしており、INSERT 操作と UPDATE 操作を区別しません。
+StarRocks が提供する Primary Key tables は UPSERT および DELETE 操作をサポートしており、INSERT 操作と UPDATE 操作を区別しません。
 
-ロードジョブを作成する際に、StarRocks はジョブ作成ステートメントまたはコマンドに `__op` という名前のフィールドを追加することをサポートしています。`__op` フィールドは、実行したい操作の種類を指定するために使用されます。
+ロードジョブを作成する際、StarRocks は `__op` というフィールドをジョブ作成ステートメントまたはコマンドに追加することをサポートしています。`__op` フィールドは、実行したい操作の種類を指定するために使用されます。
 
 > **注意**
 >
-> テーブルを作成する際に、そのテーブルに `__op` という名前の列を追加する必要はありません。
+> テーブルを作成する際、そのテーブルに `__op` という列を追加する必要はありません。
 
 `__op` フィールドの定義方法は、選択したロード方法によって異なります。
 
@@ -36,13 +36,13 @@ StarRocks が提供する主キーテーブルは、UPSERT および DELETE 操�
 
 - Routine Load を選択した場合、`COLUMNS` 列を使用して `__op` フィールドを定義します。
 
-データ変更に基づいて `__op` フィールドを追加するかどうかを決定できます。`__op` フィールドを追加しない場合、操作の種類はデフォルトで UPSERT になります。主なデータ変更シナリオは次のとおりです。
+データ変更に基づいて `__op` フィールドを追加するかどうかを決定できます。`__op` フィールドを追加しない場合、操作タイプはデフォルトで UPSERT になります。主なデータ変更シナリオは次のとおりです。
 
 - ロードしたいデータファイルが UPSERT 操作のみを含む場合、`__op` フィールドを追加する必要はありません。
 
-- ロードしたいデータファイルが DELETE 操作のみを含む場合、`__op` フィールドを追加し、操作の種類を DELETE として指定する必要があります。
+- ロードしたいデータファイルが DELETE 操作のみを含む場合、`__op` フィールドを追加し、操作タイプを DELETE として指定する必要があります。
 
-- ロードしたいデータファイルが UPSERT および DELETE 操作の両方を含む場合、`__op` フィールドを追加し、データファイルに `0` または `1` の値を持つ列が含まれていることを確認する必要があります。`0` の値は UPSERT 操作を示し、`1` の値は DELETE 操作を示します。
+- ロードしたいデータファイルが UPSERT と DELETE 操作の両方を含む場合、`__op` フィールドを追加し、データファイルに `0` または `1` の値を持つ列が含まれていることを確認する必要があります。`0` の値は UPSERT 操作を示し、`1` の値は DELETE 操作を示します。
 
 ## 使用上の注意
 
@@ -52,7 +52,7 @@ StarRocks が提供する主キーテーブルは、UPSERT および DELETE 操�
 
 ## 基本操作
 
-このセクションでは、ロードを通じて StarRocks テーブルにデータ変更を加える方法の例を示します。詳細な構文とパラメータの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、および[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)を参照してください。
+このセクションでは、ロードを通じて StarRocks テーブルにデータ変更を加える方法の例を示します。詳細な構文とパラメータの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、および [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
 
 ### UPSERT
 
@@ -62,8 +62,9 @@ StarRocks が提供する主キーテーブルは、UPSERT および DELETE 操�
 >
 > `__op` フィールドを追加する場合:
 >
-> - 操作の種類を UPSERT として指定できます。
-> - `__op` フィールドを空のままにしておくことができます。操作の種類はデフォルトで UPSERT になります。
+> - 操作タイプを UPSERT として指定できます。
+>
+> - `__op` フィールドを空のままにしておくことができます。操作タイプはデフォルトで UPSERT になります。
 
 #### データ例
 
@@ -80,7 +81,7 @@ StarRocks が提供する主キーテーブルは、UPSERT および DELETE 操�
 
 2. StarRocks テーブルを準備します。
 
-   a. StarRocks データベース `test_db` に `table1` という名前の主キーテーブルを作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
+   a. StarRocks データベース `test_db` に `table1` という名前の Primary Key table を作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
 
       ```SQL
       CREATE TABLE `table1`
@@ -96,7 +97,7 @@ StarRocks が提供する主キーテーブルは、UPSERT および DELETE 操�
 
       > **注意**
       >
-      > バージョン v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細情報については、[バケット数の設定](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)を参照してください。
+      > v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。手動でバケット数を設定する必要はありません。詳細については、[set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
    b. `table1` にレコードを挿入します。
 
@@ -226,7 +227,7 @@ SELECT * FROM table1;
 
 ### DELETE
 
-ロードしたいデータファイルが DELETE 操作のみを含む場合、`__op` フィールドを追加し、操作の種類を DELETE として指定する必要があります。
+ロードしたいデータファイルが DELETE 操作のみを含む場合、`__op` フィールドを追加し、操作タイプを DELETE として指定する必要があります。
 
 #### データ例
 
@@ -242,7 +243,7 @@ SELECT * FROM table1;
 
 2. StarRocks テーブルを準備します。
 
-   a. StarRocks テーブル `test_db` に `table2` という名前の主キーテーブルを作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
+   a. StarRocks テーブル `test_db` に `table2` という名前の Primary Key table を作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
 
       ```SQL
       CREATE TABLE `table2`
@@ -258,7 +259,7 @@ SELECT * FROM table1;
 
       > **注意**
       >
-      > バージョン v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細情報については、[バケット数の設定](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)を参照してください。
+      > v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。手動でバケット数を設定する必要はありません。詳細については、[set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
    b. `table2` に 2 つのレコードを挿入します。
 
@@ -336,13 +337,13 @@ SELECT * FROM table2;
 
 ### UPSERT と DELETE
 
-ロードしたいデータファイルが UPSERT および DELETE 操作の両方を含む場合、`__op` フィールドを追加し、データファイルに `0` または `1` の値を持つ列が含まれていることを確認する必要があります。`0` の値は UPSERT 操作を示し、`1` の値は DELETE 操作を示します。
+ロードしたいデータファイルが UPSERT と DELETE 操作の両方を含む場合、`__op` フィールドを追加し、データファイルに `0` または `1` の値を持つ列が含まれていることを確認する必要があります。`0` の値は UPSERT 操作を示し、`1` の値は DELETE 操作を示します。
 
 #### データ例
 
 1. データファイルを準備します。
 
-   a. ローカルファイルシステムに `example3.csv` という名前の CSV ファイルを作成します。このファイルは、ユーザー ID、ユーザー名、ユーザースコア、操作の種類を順に表す 4 つの列で構成されています。
+   a. ローカルファイルシステムに `example3.csv` という名前の CSV ファイルを作成します。このファイルは、ユーザー ID、ユーザー名、ユーザースコア、操作タイプを順に表す 4 つの列で構成されています。
 
       ```Plain
       101,Tom,100,1
@@ -354,7 +355,7 @@ SELECT * FROM table2;
 
 2. StarRocks テーブルを準備します。
 
-   a. StarRocks データベース `test_db` に `table3` という名前の主キーテーブルを作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
+   a. StarRocks データベース `test_db` に `table3` という名前の Primary Key table を作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
 
       ```SQL
       CREATE TABLE `table3`
@@ -368,11 +369,11 @@ SELECT * FROM table2;
       DISTRIBUTED BY HASH(`id`);
       ```
 
-> **注意**
+      > **注意**
       >
-      > バージョン v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細情報については、[バケット数の設定](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)を参照してください。
+      > v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。手動でバケット数を設定する必要はありません。詳細については、[set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
-   b. `table3` に 2 つのレコードを挿入します。
+b. `table3` に 2 つのレコードを挿入します。
 
       ```SQL
       INSERT INTO table3 VALUES
@@ -398,7 +399,7 @@ SELECT * FROM table2;
 
   > **注意**
   >
-  > 上記の例では、`example3.csv` の操作タイプを表す第 4 列が一時的に `temp` として命名され、`columns` パラメータを使用して `__op` フィールドが `temp` 列にマッピングされています。このようにして、StarRocks は `example3.csv` の第 4 列の値が `0` または `1` であるかに応じて、UPSERT または DELETE 操作を実行するかどうかを決定できます。
+  > 上記の例では、`example3.csv` の操作タイプを表す第 4 列が一時的に `temp` として命名され、`columns` パラメータを使用して `__op` フィールドが `temp` 列にマッピングされています。このようにして、StarRocks は `example3.csv` の第 4 列の値が `0` または `1` であるかどうかに基づいて UPSERT または DELETE 操作を実行するかどうかを決定できます。
 
 - Broker Load ジョブを実行します。
 
@@ -454,11 +455,11 @@ SELECT * FROM table3;
 
 ## 部分更新
 
-主キーテーブルは部分更新もサポートしており、異なるデータ更新シナリオに対応するために、行モードと列モードの 2 つの部分更新モードを提供します。これらの 2 つの部分更新モードは、クエリパフォーマンスを保証しながら、可能な限り部分更新のオーバーヘッドを最小限に抑え、リアルタイム更新を実現します。行モードは、多くの列と小さなバッチを含むリアルタイム更新シナリオにより適しています。列モードは、少数の列と多数の行を含むバッチ処理更新シナリオに適しています。
+Primary Key tables は部分更新もサポートしており、異なるデータ更新シナリオに対応するために行モードと列モードの 2 つの部分更新モードを提供しています。これらの 2 つの部分更新モードは、クエリパフォーマンスを保証しながら、可能な限り部分更新のオーバーヘッドを最小限に抑え、リアルタイム更新を実現します。行モードは、多くの列と小さなバッチを含むリアルタイム更新シナリオに適しています。列モードは、少数の列と多数の行を含むバッチ処理更新シナリオに適しています。
 
 > **注意**
 >
-> 部分更新を実行する際に、更新対象の行が存在しない場合、StarRocks は新しい行を挿入し、データ更新が挿入されていないフィールドにはデフォルト値を埋め込みます。
+> 部分更新を実行する際、更新対象の行が存在しない場合、StarRocks は新しい行を挿入し、データ更新が挿入されていないフィールドにはデフォルト値を埋め込みます。
 
 このセクションでは、CSV を例にして部分更新を実行する方法を説明します。
 
@@ -478,7 +479,7 @@ SELECT * FROM table3;
 
 2. StarRocks テーブルを準備します。
 
-   a. StarRocks データベース `test_db` に `table4` という名前の主キーテーブルを作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
+   a. StarRocks データベース `test_db` に `table4` という名前の Primary Key table を作成します。このテーブルは、`id`、`name`、`score` の 3 つの列で構成されており、`id` が主キーです。
 
       ```SQL
       CREATE TABLE `table4`
@@ -494,7 +495,7 @@ SELECT * FROM table3;
 
       > **注意**
       >
-      > バージョン v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細情報については、[バケット数の設定](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)を参照してください。
+      > v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。手動でバケット数を設定する必要はありません。詳細については、[set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
    b. `table4` にレコードを挿入します。
 
@@ -505,7 +506,7 @@ SELECT * FROM table3;
 
 ### データのロード
 
-`example4.csv` の 2 つの列のデータを `table4` の `id` 列と `name` 列に更新するロードを実行します。
+`example4.csv` の 2 つの列のデータを `table4` の `id` と `name` 列に更新するロードを実行します。
 
 - Stream Load ジョブを実行します。
 
@@ -521,7 +522,7 @@ SELECT * FROM table3;
 
   > **注意**
   >
-  > Stream Load を選択する場合、部分更新機能を有効にするために `partial_update` パラメータを `true` に設定する必要があります。デフォルトは行モードでの部分更新です。列モードで部分更新を実行する必要がある場合は、`partial_update_mode` を `column` に設定する必要があります。さらに、更新したい列を指定するために `columns` パラメータを使用する必要があります。
+  > Stream Load を選択する場合、`partial_update` パラメータを `true` に設定して部分更新機能を有効にする必要があります。デフォルトは行モードでの部分更新です。列モードで部分更新を実行する必要がある場合は、`partial_update_mode` を `column` に設定する必要があります。さらに、更新したい列を指定するために `columns` パラメータを使用する必要があります。
 
 - Broker Load ジョブを実行します。
 
@@ -542,7 +543,7 @@ SELECT * FROM table3;
 
   > **注意**
   >
-  > Broker Load を選択する場合、部分更新機能を有効にするために `partial_update` パラメータを `true` に設定する必要があります。デフォルトは行モードでの部分更新です。列モードで部分更新を実行する必要がある場合は、`partial_update_mode` を `column` に設定する必要があります。さらに、更新したい列を指定するために `column_list` パラメータを使用する必要があります。
+  > Broker Load を選択する場合、`partial_update` パラメータを `true` に設定して部分更新機能を有効にする必要があります。デフォルトは行モードでの部分更新です。列モードで部分更新を実行する必要がある場合は、`partial_update_mode` を `column` に設定する必要があります。さらに、更新したい列を指定するために `column_list` パラメータを使用する必要があります。
 
 - Routine Load ジョブを実行します。
 
@@ -564,7 +565,7 @@ SELECT * FROM table3;
 
   > **注意**
   >
-  > - Routine Load を選択する場合、部分更新機能を有効にするために `partial_update` パラメータを `true` に設定する必要があります。さらに、更新したい列を指定するために `COLUMNS` パラメータを使用する必要があります。
+  > - Routine Load を選択する場合、`partial_update` パラメータを `true` に設定して部分更新機能を有効にする必要があります。さらに、更新したい列を指定するために `COLUMNS` パラメータを使用する必要があります。
   > - Routine Load は行モードでの部分更新のみをサポートし、列モードでの部分更新はサポートしていません。
 
 ### データのクエリ
@@ -587,15 +588,15 @@ SELECT * FROM table4;
 
 ## 条件付き更新
 
-StarRocks v2.5 以降、主キーテーブルは条件付き更新をサポートしています。非主キー列を条件として指定し、更新が有効になるかどうかを決定できます。このようにして、ソースレコードから宛先レコードへの更新は、指定された列でソースデータレコードが宛先データレコードよりも大きいか等しい値を持つ場合にのみ有効になります。
+StarRocks v2.5 以降、Primary Key tables は条件付き更新をサポートしています。更新が有効になるかどうかを決定するために、非主キー列を条件として指定できます。このようにして、ソースレコードからデスティネーションレコードへの更新は、指定された列でソースデータレコードがデスティネーションデータレコードよりも大きいか等しい値を持つ場合にのみ有効になります。
 
-条件付き更新機能は、データの順序が乱れている問題を解決するために設計されています。ソースデータが無秩序である場合、この機能を使用して、新しいデータが古いデータによって上書きされないようにすることができます。
+条件付き更新機能はデータの無秩序を解決するために設計されています。ソースデータが無秩序である場合、この機能を使用して新しいデータが古いデータによって上書きされないようにすることができます。
 
 > **注意**
 >
 > - 同じバッチのデータに対して異なる列を更新条件として指定することはできません。
 > - DELETE 操作は条件付き更新をサポートしていません。
-> - バージョン v3.1.3 より前のバージョンでは、部分更新と条件付き更新を同時に使用することはできません。v3.1.3 以降、StarRocks は部分更新と条件付き更新の同時使用をサポートしています。
+> - v3.1.3 より前のバージョンでは、部分更新と条件付き更新を同時に使用することはできません。v3.1.3 以降、StarRocks は部分更新と条件付き更新を同時に使用することをサポートしています。
 
 ### データ例
 
@@ -612,7 +613,7 @@ StarRocks v2.5 以降、主キーテーブルは条件付き更新をサポー�
 
 2. StarRocks テーブルを準備します。
 
-   a. StarRocks データベース `test_db` に `table5` という名前の主キーテーブルを作成します。このテーブルは、`id`、`version`、`score` の 3 つの列で構成されており、`id` が主キーです。
+   a. StarRocks データベース `test_db` に `table5` という名前の Primary Key table を作成します。このテーブルは、`id`、`version`、`score` の 3 つの列で構成されており、`id` が主キーです。
 
       ```SQL
       CREATE TABLE `table5`
@@ -627,7 +628,7 @@ StarRocks v2.5 以降、主キーテーブルは条件付き更新をサポー�
 
       > **注意**
       >
-      > バージョン v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細情報については、[バケット数の設定](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)を参照してください。
+      > v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。手動でバケット数を設定する必要はありません。詳細については、[set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
    b. `table5` にレコードを挿入します。
 
@@ -639,7 +640,7 @@ StarRocks v2.5 以降、主キーテーブルは条件付き更新をサポー�
 
 ### データのロード
 
-`example5.csv` の `id` が `101` と `102` のレコードをそれぞれ `table5` に更新し、更新が有効になるのは、2 つのレコードの `version` 値がそれぞれの現在の `version` 値以上である場合のみと指定します。
+`example5.csv` の `id` が `101` と `102` のレコードをそれぞれ `table5` に更新し、各レコードの `version` 値が現在の `version` 値以上である場合にのみ更新が有効になるように指定するロードを実行します。
 
 - Stream Load ジョブを実行します。
 

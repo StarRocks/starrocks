@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # isnotnull
 
+## 説明
+
 値が `NULL` でないかを確認し、`NULL` でない場合は `1` を返し、`NULL` の場合は `0` を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 ISNOTNULL(v)
 ```
 
-## Parameters
+## パラメータ
 
 - `v`: チェックする値。すべての日付型がサポートされています。
 
-## Return value
+## 戻り値
 
 `NULL` でない場合は 1 を返し、`NULL` の場合は 0 を返します。
 
-## Examples
+## 例
 
 ```plain text
 MYSQL > SELECT c1, isnotnull(c1) FROM t1;

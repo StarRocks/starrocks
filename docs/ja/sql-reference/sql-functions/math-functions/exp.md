@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # exp, dexp
 
-e を `x` 乗した値を返します。この関数は自然対数関数と呼ばれます。
+## 説明
 
-## Syntax
+e を `x` の累乗にした値を返します。この関数は自然対数関数と呼ばれます。
+
+## 構文
 
 ```SQL
 EXP(x);
 ```
 
-## Parameters
+## パラメータ
 
-`x`: 指数の数値。DOUBLE がサポートされています。
+`x`: 累乗の数値。DOUBLE がサポートされています。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Examples
+## 例
 
-e を 3.14 乗した値を返します。
+3.14 の累乗にした e を返します:
 
 ```Plaintext
 mysql> select exp(3.14);

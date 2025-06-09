@@ -4,24 +4,24 @@ displayed_sidebar: docs
 
 # sha2
 
-文字列の SHA-224 ハッシュ値、SHA-256 ハッシュ値、SHA-384 ハッシュ値、または SHA-512 ハッシュ値を計算します。
+文字列のSHA-224ハッシュ値、SHA-256ハッシュ値、SHA-384ハッシュ値、またはSHA-512ハッシュ値を計算します。
 
-## 構文
+## Syntax
 
 ```Haskell
 VARCHAR sha2(VARCHAR expr, INT hash_length)
 ```
 
-## パラメータ
+## Parameters
 
-- `Expr`: 計算したい値を持つ文字列。
-- `hash_length`: ハッシュ値の長さ。このパラメータの値は 224、256、384、512、または 0 にすることができます。値 0 は 256 と同等です。このパラメータを他の値に設定すると、この関数は `NULL` を返します。
+- `Expr`: 計算したい文字列の値。
+- `hash_length`: ハッシュ値の長さ。このパラメータの値は224、256、384、512、または0にすることができます。値0は256と同等です。このパラメータを他の値に設定すると、この関数は`NULL`を返します。
 
-## 戻り値
+## Return value
 
-VARCHAR 型のハッシュ値を返します。2 つの入力パラメータのいずれかが `Null` の場合、`Null` が返されます。
+VARCHAR型のハッシュ値を返します。2つの入力パラメータのいずれかが`Null`の場合、`Null`が返されます。
 
-## 例
+## Examples
 
 ```Plain Text
 mysql> select sha2('abc',224);
@@ -71,6 +71,6 @@ mysql> select sha2('abc', 1),sha2('abc', null), sha2(null, 384);
 1 row in set (0.01 sec)
 ```
 
-## キーワード
+## Keywords
 
 SHA2, ENCRYPTION

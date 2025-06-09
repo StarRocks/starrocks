@@ -89,6 +89,9 @@ public:
 
     void append_default(size_t count) override;
 
+    // json column support dict-encode
+    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
+
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 

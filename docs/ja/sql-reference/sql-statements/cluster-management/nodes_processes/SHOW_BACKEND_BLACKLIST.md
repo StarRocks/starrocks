@@ -12,7 +12,7 @@ BE Blacklist にある BE ノードを表示します。
 
 :::note
 
-この操作を実行できるのは、SYSTEM レベルの BLACKLIST 権限を持つユーザーのみです。
+この操作を行うには、SYSTEM レベルの BLACKLIST 権限を持つユーザーである必要があります。
 
 :::
 
@@ -24,12 +24,12 @@ SHOW BACKEND BLACKLIST
 
 ## 戻り値
 
-| **戻り値**                   | **説明**                                                    |
-| ---------------------------- | ----------------------------------------------------------- |
-| AddBlackListType             | BE ノードがブラックリストに追加された方法。`MANUAL` はユーザーによって手動でブラックリストに追加されたことを示します。`AUTO` は StarRocks によって自動的にブラックリストに追加されたことを示します。 |
+| **Return**                   | **Description**                                              |
+| ---------------------------- | ------------------------------------------------------------ |
+| AddBlackListType             | BE ノードがブラックリストに追加された方法を示します。`MANUAL` はユーザーによって手動でブラックリストに追加されたことを示します。`AUTO` は StarRocks によって自動的にブラックリストに追加されたことを示します。 |
 | LostConnectionTime           | `MANUAL` タイプの場合、BE ノードが手動でブラックリストに追加された時刻を示します。<br />`AUTO` タイプの場合、最後に正常に接続された時刻を示します。 |
-| LostConnectionNumberInPeriod | `CheckTimePeriod(s)` 内で検出された切断の回数。 |
-| CheckTimePeriod(s)           | StarRocks がブラックリストに登録された BE ノードの接続状況を確認する間隔。この値は、FE 設定項目 `black_host_history_sec` に指定した値に評価されます。単位: 秒。 |
+| LostConnectionNumberInPeriod | `CheckTimePeriod(s)` 内で検出された切断の回数を示します。 |
+| CheckTimePeriod(s)           | StarRocks がブラックリストに登録された BE ノードの接続状態を確認する間隔を示します。この値は、FE の設定項目 `black_host_history_sec` に指定した値に評価されます。単位: 秒。 |
 
 ## 例
 

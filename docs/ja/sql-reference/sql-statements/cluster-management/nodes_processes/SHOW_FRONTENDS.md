@@ -6,11 +6,11 @@ displayed_sidebar: docs
 
 ## 説明
 
-このステートメントは FE ノードを表示するために使用されます。
+このステートメントは、FE ノードを表示するために使用されます。
 
 :::tip
 
-この操作を実行できるのは、SYSTEM レベルの OPERATE 権限を持つユーザーまたは `cluster_admin` ロールを持つユーザーのみです。
+SYSTEM レベルの OPERATE 権限を持つユーザーまたは `cluster_admin` ロールを持つユーザーのみがこの操作を実行できます。
 
 :::
 

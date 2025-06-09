@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # regexp_replace
 
+## Description
+
 この関数は、正規表現パターンに一致する `str` 内の文字列を `repl` で置き換えます。
 
 ## Syntax
@@ -12,7 +14,7 @@ displayed_sidebar: docs
 VARCHAR regexp_replace(VARCHAR str, VARCHAR pattern, VARCHAR repl)
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > SELECT regexp_replace('a b c', " ", "-");
@@ -30,6 +32,6 @@ MySQL > SELECT regexp_replace('a b c','(b)','<\\1>');
 +----------------------------------------+
 ```
 
-## キーワード
+## keyword
 
-REGEXP_REPLACE,REGEXP,REPLACE
+REGEXP_REPLACE, REGEXP, REPLACE

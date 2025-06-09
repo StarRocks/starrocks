@@ -16,13 +16,13 @@ DROP RESOURCE 'resource_name'
 
 ## 例
 
-1. Spark リソース spark0 を削除します。
+1. spark0 という名前の Spark リソースを削除します。
 
     ```SQL
     DROP RESOURCE 'spark0';
     ```
 
-2. Hive リソース hive0 を削除します。
+2. hive0 という名前の Hive リソースを削除します。
 
     ```SQL
     DROP RESOURCE 'hive0';

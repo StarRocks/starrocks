@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # weeks_add
 
-日付に週数を追加した値を返します。
+## 説明
+
+指定した日付に週数を加えた値を返します。
 
 ## 構文
 
@@ -22,7 +24,7 @@ DATETIME weeks_add(DATETIME expr1, INT expr2);
 
 `DATETIME` を返します。
 
-日付が存在しない場合は `NULL` が返されます。
+日付が存在しない場合は `NULL` を返します。
 
 ## 例
 

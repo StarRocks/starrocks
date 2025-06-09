@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # bitmap_union
 
-グループ化後の値のセットに対して、bitmap union を計算します。一般的な使用シナリオには、PV や UV の計算が含まれます。
+## 説明
 
-## Syntax
+グループ化後の値のセットに対して bitmap union を計算します。一般的な使用シナリオには、PV や UV の計算が含まれます。
+
+## 構文
 
 ```Haskell
 BITMAP BITMAP_UNION(BITMAP value)
 ```
 
-## Examples
+## 例
 
 ```sql
 select page_id, bitmap_union(user_id)
@@ -20,7 +22,7 @@ from table
 group by page_id;
 ```
 
-この関数を bitmap_count() と組み合わせて使用することで、ウェブページの UV を取得できます。
+この関数を bitmap_count() と一緒に使用して、ウェブページの UV を取得します。
 
 ```sql
 select page_id, bitmap_count(bitmap_union(user_id))
@@ -36,6 +38,6 @@ from table
 group by page_id;
 ```
 
-## keyword
+## キーワード
 
 BITMAP_UNION, BITMAP

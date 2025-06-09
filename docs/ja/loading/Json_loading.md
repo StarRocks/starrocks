@@ -30,7 +30,7 @@ curl -v --location-trusted -u <username>:<password> \
     http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
 ~~~
 
-`format: json` パラメータは、インポートするデータの形式を実行することを可能にします。`jsonpaths` は、対応するデータインポートパスを実行するために使用されます。
+`format: json` パラメータは、インポートされたデータのフォーマットを実行することを可能にします。`jsonpaths` は、対応するデータインポートパスを実行するために使用されます。
 
 関連パラメータ:
 
@@ -134,13 +134,13 @@ curl -v --location-trusted -u <username>:<password> \
 stream load と同様に、Kafka データソースのメッセージ内容は完全な JSON データとして扱われます。
 
 1. メッセージが配列形式で複数行のデータを含む場合、すべての行がインポートされ、Kafka のオフセットは 1 だけ増加します。
-2. 配列形式の JSON が複数行のデータを表すが、JSON 形式のエラーにより JSON の解析に失敗した場合、エラー行は 1 だけ増加します（解析に失敗したため、StarRocks は実際に何行のデータを含むかを判断できず、エラーデータを 1 行として記録することしかできません）。
+2. 配列形式の JSON が複数行のデータを表すが、JSON フォーマットエラーのために JSON の解析に失敗した場合、エラー行は 1 だけ増加します（解析に失敗した場合、StarRocks は実際に何行のデータが含まれているかを判断できず、エラーデータを 1 行として記録することしかできません）。
 
-### Canal を使用して MySQL から StarRocks へ増分同期 binlogs をインポート
+### Canal を使用して MySQL から StarRocks へインクリメンタル同期で binlog をインポート
 
-[Canal](https://github.com/alibaba/canal) は Alibaba のオープンソース MySQL binlog 同期ツールで、これを通じて MySQL データを Kafka に同期できます。データは Kafka で JSON 形式で生成されます。ここでは、routine load を使用して Kafka 内のデータを MySQL と増分データ同期する方法を示します。
+[Canal](https://github.com/alibaba/canal) は Alibaba のオープンソース MySQL binlog 同期ツールで、これを通じて MySQL データを Kafka に同期できます。データは Kafka で JSON フォーマットで生成されます。ここでは、routine load を使用して Kafka 内のデータを同期し、MySQL とのインクリメンタルデータ同期を行う方法を示します。
 
-* MySQL には、次のテーブル作成文を持つデータテーブルがあります。
+* MySQL には以下のテーブル作成文を持つデータテーブルがあります。
 
 ~~~sql
 CREATE TABLE `query_record` (
@@ -162,7 +162,7 @@ CREATE TABLE `query_record` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 ~~~
 
-* 前提条件: MySQL に binlog が有効であり、形式が ROW であることを確認してください。
+* 前提条件: MySQL に binlog が有効であり、フォーマットが ROW であることを確認します。
 
 ~~~bash
 [mysqld]
@@ -212,7 +212,7 @@ canal.instance.defaultDatabaseName =
 canal.instance.connectionCharset = UTF-8
 #テーブルの正規表現
 canal.instance.filter.regex = .\*\\\\..\*
-# 同期するテーブルの名前と kafka ターゲットのパーティション名を選択します。
+# 同期するテーブル名と kafka ターゲットのパーティション名を選択します。
 canal.mq.dynamicTopic=databasename.query_record
 canal.mq.partitionHash= databasename.query_record:query_id
 ~~~
@@ -231,14 +231,14 @@ canal.mq.retries = 0
 # この値は flagMessage モードで増やすことができますが、MQ メッセージの最大サイズを超えないようにしてください。
 canal.mq.batchSize = 16384
 canal.mq.maxRequestSize = 1048576
-# flatMessage モードでは、この値を大きく変更してください。50-200 が推奨されます。
+# flatMessage モードでは、この値を大きくしてください。50-200 が推奨されます。
 canal.mq.lingerMs = 1
 canal.mq.bufferMemory = 33554432
-# Canal のバッチサイズはデフォルトで 50K です。Kafka の最大メッセージサイズ制限（900K 未満）により、1M を超えないようにしてください。
+# Canal のバッチサイズはデフォルトで 50K です。Kafka の最大メッセージサイズ制限（900K 以下）を超えないようにしてください。
 canal.mq.canalBatchSize = 50
 # `Canal get` のタイムアウト（ミリ秒）。空の場合は無制限のタイムアウトを示します。
 canal.mq.canalGetTimeout = 100
-# オブジェクトが flat json 形式かどうか
+# オブジェクトが flat json フォーマットかどうか
 canal.mq.flatMessage = false
 canal.mq.compressionType = none
 canal.mq.acks = all
@@ -250,7 +250,7 @@ canal.mq.transaction = false
 
 `bin/startup.sh`
 
-対応する同期ログは `logs/example/example.log` に表示され、Kafka では以下の形式で表示されます:
+対応する同期ログは `logs/example/example.log` に表示され、Kafka では以下のフォーマットで表示されます:
 
 ~~~json
 {
@@ -340,7 +340,7 @@ canal.mq.transaction = false
 }
 ~~~
 
-`json_root` と `strip_outer_array = true` を追加して `data` からデータをインポートします。
+`data` からデータをインポートするために `json_root` と `strip_outer_array = true` を追加します。
 
 ~~~sql
 create routine load manual.query_job on query_record   

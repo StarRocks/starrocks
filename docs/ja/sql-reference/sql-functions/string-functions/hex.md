@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # hex
 
-`x` が数値の場合、この関数はその値の16進数表現を返します。
+## 説明
 
-`x` が文字列の場合、この関数は文字列の各文字を2つの16進数に変換した文字列の16進数表現を返します。
+`x` が数値の場合、この関数はその値の16進数表現を文字列として返します。
 
-## Syntax
+`x` が文字列の場合、この関数は文字列内の各文字を2つの16進数に変換した16進数表現の文字列を返します。
+
+## 構文
 
 ```Haskell
 HEX(x);
 ```
 
-## Parameters
+## パラメータ
 
-`x`: 変換する文字列または数値。サポートされているデータ型は BIGINT、VARCHAR、および VARBINARY (v3.0以降) です。
+`x`: 変換する文字列または数値。サポートされているデータ型は BIGINT、VARCHAR、および VARBINARY（v3.0以降）です。
 
-## Return value
+## 戻り値
 
 VARCHAR 型の値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select hex(3);
@@ -59,6 +61,6 @@ mysql> select hex(x'abab');
 1 row in set (0.01 sec)
 ```
 
-## Keywords
+## キーワード
 
 HEX

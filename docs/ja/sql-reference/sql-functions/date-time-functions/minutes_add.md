@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # minutes_add
 
-指定された分を日付に加え、分単位で正確に計算します。
+## 説明
 
-## Syntax
+指定された分を日付に追加します。分単位で正確です。
+
+## 構文
 
 ```Haskell
 DATETIME minutes_add(DATETIME|DATE date, INT minutes);
 ```
 
-## Parameters
+## パラメータ
 
-- `date`: 開始時間。DATETIME または DATE 型である必要があります。
+- `date`: 開始時間です。DATETIME または DATE 型である必要があります。
 
-- `minutes`: 加算する分数。INT 型で、0 より大きい、等しい、または小さい値を取ることができます。
+- `minutes`: 追加する分です。INT 型である必要があり、0 より大きい、等しい、または小さい可能性があります。
 
-## Return value
+## 戻り値
 
 DATETIME 値を返します。
 
 `date` または `minutes` のいずれかが NULL の場合、NULL を返します。
 
-## Examples
+## 例
 
 ```Plain
 select minutes_add('2022-01-01 01:01:01', 2);

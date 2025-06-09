@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # abs
 
+## Description
+
 数値 `x` の絶対値を返します。入力値が NULL の場合、NULL が返されます。
 
 ## Syntax
@@ -16,7 +18,7 @@ ABS(x);
 
 `x`: 数値または式。
 
-サポートされているデータ型: DOUBLE, FLOAT, LARGEINT, BIGINT, INT, SMALLINT, TINYINT, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128.
+サポートされているデータ型: DOUBLE, FLOAT, LARGEINT, BIGINT, INT, SMALLINT, TINYINT, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128。
 
 ## Return value
 

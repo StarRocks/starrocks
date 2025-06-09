@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # map_values
 
-指定されたマップ内のすべての値を含む配列を返します。
+## Description
+
+指定されたマップ内のすべての値を配列として返します。
 
 この関数は v2.5 からサポートされています。
 
-## 構文
+## Syntax
 
 ```Haskell
 map_values(any_map)
 ```
 
-## パラメータ
+## Parameters
 
 `any_map`: 値を取得したい MAP 値。
 
-## 戻り値
+## Return value
 
-戻り値は `array<valueType>` の形式です。配列内の要素の型は、マップ内の値の型と一致します。
+返り値は `array<valueType>` の形式です。配列内の要素の型は、マップ内の値の型と一致します。
 
 入力が NULL の場合、NULL が返されます。MAP 値のキーまたは値が NULL の場合、NULL は通常の値として処理され、結果に含まれます。
 
-## 例
+## Examples
 
 ### StarRocks 内部テーブルから MAP データをクエリする
 
@@ -82,7 +84,7 @@ SELECT * FROM hive_map ORDER BY col_int;
 +---------+---------------+
 ```
 
-クラスター内に [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) が作成された後、この catalog と map_values() 関数を使用して、`col_map` カラムの各行からすべての値を取得できます。
+クラスターに [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) が作成された後、この catalog と map_values() 関数を使用して、`col_map` カラムの各行からすべての値を取得できます。
 
 ```SQL
 select map_values(col_map) from hive_map order by col_int;

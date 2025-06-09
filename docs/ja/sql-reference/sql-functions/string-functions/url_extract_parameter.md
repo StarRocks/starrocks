@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # url_extract_parameter
 
-指定された `name` パラメーターの値を URL のクエリ文字列から抽出します。パラメーターの抽出は [RFC 1866#section-8.2.1](https://datatracker.ietf.org/doc/html/rfc1866.html#section-8.2.1) に指定された方法で処理されます。指定されたパラメーター名が存在しない場合は、NULL が返されます。
+## 説明
+
+URL のクエリ文字列から、指定された `name` パラメータの値を抽出します。パラメータの抽出は [RFC 1866#section-8.2.1](https://datatracker.ietf.org/doc/html/rfc1866.html#section-8.2.1) に記載された方法で処理されます。指定されたパラメータ名が存在しない場合は、NULL が返されます。
 
 この関数は v3.2 からサポートされています。
 
@@ -14,10 +16,10 @@ displayed_sidebar: docs
 VARCHAR url_extract_parameter(VARCHAR str, VARCHAR name)
 ```
 
-## パラメーター
+## パラメータ
 
-- `str`: パラメーターを抽出する URL 文字列。
-- `name`: クエリ文字列内のパラメーターの名前。
+- `str`: パラメータを抽出するための URL 文字列。
+- `name`: クエリ文字列内のパラメータの名前。
 
 ## 戻り値
 

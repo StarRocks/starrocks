@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # array_concat
 
+## Description
+
 複数の配列を連結して、すべての要素を含む1つの配列にします。
 
-連結する配列内の要素は、同じ型でも異なる型でもかまいません。ただし、要素は同じ型であることを推奨します。
+連結する配列の要素は同じ型でも異なる型でもかまいませんが、同じ型であることを推奨します。
 
 Null は通常の値として処理されます。
 
@@ -18,11 +20,11 @@ array_concat(input0, input1, ...)
 
 ## Parameters
 
-`input`: 連結したい1つ以上の配列を指定します。配列は `(input0, input1, ...)` 形式で指定します。この関数は、次のタイプの配列要素をサポートします: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, および JSON。**JSON はバージョン 2.5 からサポートされています。**
+`input`: 連結したい1つ以上の配列を指定します。配列は `(input0, input1, ...)` の形式で指定します。この関数は次のタイプの配列要素をサポートします: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, および JSON。**JSON は 2.5 からサポートされています。**
 
 ## Return value
 
-`input` パラメータで指定された配列内のすべての要素を含む配列を返します。返される配列の要素は、入力配列の要素と同じデータ型です。さらに、返される配列の要素は、入力配列とその要素の順序に従います。
+`input` パラメータで指定された配列に含まれるすべての要素を含む配列を返します。返される配列の要素は、入力配列の要素と同じデータ型です。さらに、返される配列の要素は、入力配列とその要素の順序に従います。
 
 ## Examples
 

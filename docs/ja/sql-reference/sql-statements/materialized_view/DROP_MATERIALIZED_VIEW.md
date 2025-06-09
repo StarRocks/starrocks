@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 マテリアライズドビューを削除します。
 
-このコマンドでは、作成中の同期マテリアライズドビューを削除することはできません。作成中の同期マテリアライズドビューを削除するには、[同期マテリアライズドビュー - 未完成のマテリアライズドビューを削除する](../../../using_starrocks/Materialized_view-single_table.md#drop-an-unfinished-synchronous-materialized-view)を参照してください。
+このコマンドでは、作成中の同期マテリアライズドビューを削除することはできません。作成中の同期マテリアライズドビューを削除するには、[Synchronous materialized View - Drop an unfinished materialized view](../../../using_starrocks/Materialized_view-single_table.md#drop-an-unfinished-synchronous-materialized-view) を参照してください。
 
 :::tip
 

@@ -104,6 +104,7 @@ public class MockedBase {
         properties.put("odps.access.key", "sk");
         properties.put("odps.endpoint", "http://127.0.0.1");
         properties.put("odps.project", "project");
+        properties.put("odps.tunnel.quota", "pay-as-you-go");
         odpsProperties = new OdpsProperties(properties);
 
         when(odps.getEndpoint()).thenReturn("http://127.0.0.1");

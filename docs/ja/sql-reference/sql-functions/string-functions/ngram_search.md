@@ -4,11 +4,13 @@ displayed_sidebar: docs
 
 # ngram_search
 
-2 つの文字列の ngram 類似度を計算します。
+## 説明
+
+2つの文字列の ngram 類似度を計算します。
 
 :::info
 - 現在、文字エンコーディングは ASCII エンコーディングのみをサポートしており、UTF-8 エンコーディングはサポートしていません。
-- 関数 `ngram_search` は大文字と小文字を区別します。別の関数 `ngram_search_case_insensitive` は大文字と小文字を区別しません。それ以外は、これら 2 つの関数は同じです。
+- 関数 `ngram_search` は大文字と小文字を区別します。別の関数 `ngram_search_case_insensitive` は大文字と小文字を区別しません。それ以外は、これら2つの関数は同じです。
 :::
 
 ## 構文
@@ -19,22 +21,22 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 
 ## パラメータ
 
-- `haystack`: 必須、比較する最初の文字列。VARCHAR 値でなければなりません。列名または定数値にすることができます。`haystack` が列名であり、その列に N-Gram ブルームフィルターインデックスが作成されている場合、インデックスは `ngram_search` 関数の計算速度を向上させることができます。
-- `needle`: 必須、比較する 2 番目の文字列。VARCHAR 値でなければなりません。定数値のみ可能です。
+- `haystack`: 必須、比較する最初の文字列。VARCHAR 値でなければなりません。カラム名または定数値にすることができます。`haystack` がカラム名の場合、そのカラムに N-Gram ブルームフィルターインデックスが作成されていると、`ngram_search` 関数の計算速度を向上させることができます。
+- `needle`: 必須、比較する2番目の文字列。VARCHAR 値でなければなりません。定数値のみ使用できます。
 
   :::tip
 
-  - `needle` の値の長さは 2^15 を超えることはできません。そうでない場合、エラーが発生します。
+  - `needle` の値の長さは 2^15 を超えてはなりません。そうでない場合、エラーが発生します。
   - `haystack` の値の長さが 2^15 を超える場合、この関数は 0 を返します。
   - `haystack` または `needle` の値の長さが `gram_num` より小さい場合、この関数は 0 を返します。
-
+  
   :::
 
 - `gram_num`: 必須、グラムの数を指定するために使用されます。推奨値は `4` です。
 
 ## 戻り値
 
-これら 2 つの文字列がどれだけ類似しているかを示す値を返します。返される値の範囲は 0 から 1 です。この値が大きいほど、2 つの文字列はより類似しています。
+これら2つの文字列がどれだけ類似しているかを示す値を返します。返される値の範囲は 0 から 1 の間です。この値が大きいほど、2つの文字列はより類似しています。
 
 ## 例
 
@@ -47,7 +49,7 @@ mysql> select ngram_search('English', 'England',4);
 |                                  0.25 |
 +---------------------------------------+
 
--- haystack の値は列名であり、needle の値は定数値です。
+-- haystack の値はカラム名で、needle の値は定数値です。
 mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",4) as string_similarity from string_table order by string_similarity desc limit 5;
 +--------------------------------------+-------------------+
 | rowkey                               | string_similarity |

@@ -8,16 +8,16 @@ displayed_sidebar: docs
 
 > **注意**
 >
-> v3.0 より前のバージョンでは、SHOW CREATE TABLE ステートメントを実行するには、そのテーブルに対する `SELECT_PRIV` 権限が必要です。v3.0 以降では、SHOW CREATE TABLE ステートメントを実行するには、そのテーブルに対する `SELECT` 権限が必要です。
+> v3.0 より前のバージョンでは、SHOW CREATE TABLE ステートメントを使用するには、テーブルに対する `SELECT_PRIV` 権限が必要です。v3.0 以降では、SHOW CREATE TABLE ステートメントを使用するには、テーブルに対する `SELECT` 権限が必要です。
 
 v3.0 以降、SHOW CREATE TABLE ステートメントを使用して、external catalog によって管理され、Apache Hive™、Apache Iceberg、Apache Hudi、または Delta Lake に保存されているテーブルの CREATE TABLE ステートメントを表示できます。
 
-v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細については、[バケット数の設定](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)を参照してください。
+v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細については、[set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
 - テーブル作成時にバケット数を指定した場合、SHOW CREATE TABLE の出力にはバケット数が表示されます。
 - テーブル作成時にバケット数を指定しなかった場合、SHOW CREATE TABLE の出力にはバケット数が表示されません。[SHOW PARTITIONS](SHOW_PARTITIONS.md) を実行して、各パーティションのバケット数を確認できます。
 
-v2.5.7 より前のバージョンでは、テーブル作成時にバケット数を設定する必要がありました。そのため、SHOW CREATE TABLE はデフォルトでバケット数を表示します。
+v2.5.7 より前のバージョンでは、テーブル作成時にバケット数を設定する必要があります。そのため、SHOW CREATE TABLE はデフォルトでバケット数を表示します。
 
 ## 構文
 
@@ -29,7 +29,7 @@ SHOW CREATE TABLE [db_name.]table_name
 
 | **パラメータ** | **必須** | **説明**                                              |
 | ------------- | -------- | ----------------------------------------------------- |
-| db_name       | いいえ   | データベース名。このパラメータを指定しない場合、現在のデータベース内の指定されたテーブルの CREATE TABLE ステートメントがデフォルトで返されます。 |
+| db_name       | いいえ   | データベース名。このパラメータが指定されていない場合、現在のデータベース内の指定されたテーブルの CREATE TABLE ステートメントがデフォルトで返されます。 |
 | table_name    | はい     | テーブル名。                                           |
 
 ## 出力
@@ -40,11 +40,11 @@ SHOW CREATE TABLE [db_name.]table_name
 +-----------+----------------+
 ```
 
-このステートメントによって返されるパラメータを以下に示します。
+このステートメントによって返されるパラメータを以下の表で説明します。
 
-| **パラメータ** | **説明**                              |
-| ------------- | ------------------------------------- |
-| Table         | テーブル名。                           |
+| **パラメータ** | **説明**                          |
+| ------------- | --------------------------------- |
+| Table         | テーブル名。                       |
 | Create Table  | テーブルの CREATE TABLE ステートメント。 |
 
 ## 例
@@ -85,7 +85,7 @@ DISTRIBUTED BY HASH(`k1`)
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
-"enable_persistent_index" = "true",
+"enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -127,7 +127,7 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
-"enable_persistent_index" = "true",
+"enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );

@@ -367,7 +367,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     l2.unlock(); // _rowsets_lock
 
     std::vector<TabletSegmentId> tsids_vec;
-    tsids_vec.resize(tsids.size());
+    tsids_vec.reserve(tsids.size());
     for (const auto& tsid : tsids) {
         tsids_vec.emplace_back(tsid);
     }
@@ -5856,6 +5856,24 @@ void TabletUpdates::rewrite_rs_meta(bool is_fatal) {
     LOG_IF(WARNING, !is_fatal && !st.ok())
             << "fail to rewrite rowset meta: " << st << ". tablet_id=" << _tablet.tablet_id()
             << ", pending rowset num=" << pending_rs << ", published rowset num=" << published_rs;
+}
+
+bool TabletUpdates::rowset_check_file_existence() const {
+    vector<RowsetSharedPtr> all_rowsets;
+    {
+        // 1. fetch rowsets
+        std::lock_guard<std::mutex> lg(_rowsets_lock);
+        for (auto& [rowset_id, rowset] : _rowsets) {
+            all_rowsets.push_back(rowset);
+        }
+    }
+    // 2. check rowset file
+    for (auto& rowset : all_rowsets) {
+        if (!rowset->check_file_existence()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace starrocks

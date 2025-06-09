@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Operator を使用して StarRocks をデプロイする
+# Deploy StarRocks with Operator
 
 このトピックでは、StarRocks Operator を使用して Kubernetes クラスター上で StarRocks クラスターのデプロイと管理を自動化する方法を紹介します。
 
@@ -10,15 +10,15 @@ displayed_sidebar: docs
 StarRocks k8s operator はレベル 2 オペレーターとして設計されています。レベル 2 オペレーターの機能について詳しくは、https://sdk.operatorframework.io/docs/overview/operator-capabilities/ を参照してください。
 :::
 
-## 動作の仕組み
+## How it works
 
 ![img](../_assets/starrocks_operator.png)
 
-## 始める前に
+## Before you begin
 
-### Kubernetes クラスターを作成する
+### Create Kubernetes cluster
 
-Amazon Elastic Kubernetes Service (EKS) や Google Kubernetes Engine (GKE) クラスターなどのクラウド管理 Kubernetes サービス、または自己管理の Kubernetes クラスターを使用できます。
+クラウド管理の Kubernetes サービス、例えば [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks/?nc1=h_ls) や [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine) クラスター、または自己管理の Kubernetes クラスターを使用できます。
 
 - Amazon EKS クラスターを作成する
 
@@ -26,19 +26,19 @@ Amazon Elastic Kubernetes Service (EKS) や Google Kubernetes Engine (GKE) ク�
      1. AWS コマンドラインツール AWS CLI をインストールして設定します。
      2. EKS クラスターコマンドラインツール eksctl をインストールします。
      3. Kubernetes クラスターコマンドラインツール kubectl をインストールします。
-  2. 次のいずれかの方法を使用して EKS クラスターを作成します:
+  2. 次のいずれかの方法で EKS クラスターを作成します:
      1. [eksctl を使用して EKS クラスターを迅速に作成する](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html)。
-     2. [AWS コンソールと AWS CLI を使用して手動で EKS クラスターを作成する](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-console.html)。
+     2. [AWS コンソールと AWS CLI を使用して EKS クラスターを手動で作成する](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-console.html)。
 
 - GKE クラスターを作成する
 
-  GKE クラスターを作成する前に、すべての[前提条件](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin)を完了してください。その後、[Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) に記載された手順に従って GKE クラスターを作成します。
+  GKE クラスターを作成する前に、すべての[前提条件](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin)を完了してください。その後、[Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) の指示に従って GKE クラスターを作成します。
 
 - 自己管理の Kubernetes クラスターを作成する
 
-  [kubeadm を使用したクラスターのブートストラップ](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) に記載された手順に従って、自己管理の Kubernetes クラスターを作成します。[Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) と [Docker Desktop](https://docs.docker.com/desktop/) を使用して、最小限の手順でシングルノードのプライベート Kubernetes クラスターを作成できます。
+  [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) の指示に従って自己管理の Kubernetes クラスターを作成します。[Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) と [Docker Desktop](https://docs.docker.com/desktop/) を使用して、最小限の手順でシングルノードのプライベート Kubernetes クラスターを作成できます。
 
-### StarRocks Operator をデプロイする
+### Deploy StarRocks Operator
 
 1. カスタムリソース StarRocksCluster を追加します。
 
@@ -46,14 +46,14 @@ Amazon Elastic Kubernetes Service (EKS) や Google Kubernetes Engine (GKE) ク�
    kubectl apply -f https://raw.githubusercontent.com/StarRocks/starrocks-kubernetes-operator/main/deploy/starrocks.com_starrocksclusters.yaml
    ```
 
-2. StarRocks Operator をデプロイします。デフォルトの設定ファイルまたはカスタム設定ファイルを使用して StarRocks Operator をデプロイすることができます。
+2. StarRocks Operator をデプロイします。デフォルトの設定ファイルまたはカスタム設定ファイルを使用して StarRocks Operator をデプロイできます。
    1. デフォルトの設定ファイルを使用して StarRocks Operator をデプロイします。
 
       ```bash
       kubectl apply -f https://raw.githubusercontent.com/StarRocks/starrocks-kubernetes-operator/main/deploy/operator.yaml
       ```
 
-      StarRocks Operator は `starrocks` 名前空間にデプロイされ、すべての名前空間の下のすべての StarRocks クラスターを管理します。
+      StarRocks Operator は `starrocks` ネームスペースにデプロイされ、すべてのネームスペース下のすべての StarRocks クラスターを管理します。
    2. カスタム設定ファイルを使用して StarRocks Operator をデプロイします。
       - StarRocks Operator をデプロイするために使用される設定ファイル **operator.yaml** をダウンロードします。
 
@@ -68,7 +68,7 @@ Amazon Elastic Kubernetes Service (EKS) や Google Kubernetes Engine (GKE) ク�
         kubectl apply -f operator.yaml
         ```
 
-3. StarRocks Operator の稼働状況を確認します。ポッドが `Running` 状態であり、ポッド内のすべてのコンテナが `READY` であれば、StarRocks Operator は期待通りに稼働しています。
+3. StarRocks Operator の実行状態を確認します。ポッドが `Running` 状態で、ポッド内のすべてのコンテナが `READY` であれば、StarRocks Operator は期待通りに動作しています。
 
     ```bash
     $ kubectl -n starrocks get pods
@@ -78,11 +78,11 @@ Amazon Elastic Kubernetes Service (EKS) や Google Kubernetes Engine (GKE) ク�
 
 > **NOTE**
 >
-> StarRocks Operator が配置されている名前空間をカスタマイズする場合は、`starrocks` をカスタマイズした名前空間の名前に置き換える必要があります。
+> StarRocks Operator が配置されているネームスペースをカスタマイズする場合は、`starrocks` をカスタマイズしたネームスペースの名前に置き換える必要があります。
 
-## StarRocks クラスターをデプロイする
+## Deploy StarRocks Cluster
 
-StarRocks が提供する [サンプル設定ファイル](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/examples/starrocks) を直接使用して、StarRocks クラスター（カスタムリソース StarRocks Cluster を使用してインスタンス化されたオブジェクト）をデプロイできます。たとえば、**starrocks-fe-and-be.yaml** を使用して、3 つの FE ノードと 3 つの BE ノードを含む StarRocks クラスターをデプロイできます。
+StarRocks が提供する [サンプル設定ファイル](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/examples/starrocks) を直接使用して、StarRocks クラスター（カスタムリソース StarRocks Cluster を使用してインスタンス化されたオブジェクト）をデプロイできます。例えば、**starrocks-fe-and-be.yaml** を使用して、3 つの FE ノードと 3 つの BE ノードを含む StarRocks クラスターをデプロイできます。
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/StarRocks/starrocks-kubernetes-operator/main/examples/starrocks/starrocks-fe-and-be.yaml
@@ -93,16 +93,16 @@ kubectl apply -f https://raw.githubusercontent.com/StarRocks/starrocks-kubernete
 | **Field** | **Description**                                              |
 | --------- | ------------------------------------------------------------ |
 | Kind      | オブジェクトのリソースタイプ。値は `StarRocksCluster` でなければなりません。 |
-| Metadata  | メタデータで、以下のサブフィールドがネストされています:<ul><li>`name`: オブジェクトの名前。同じリソースタイプのオブジェクトを一意に識別します。</li><li>`namespace`: オブジェクトが属する名前空間。</li></ul> |
-| Spec      | オブジェクトの期待される状態。有効な値は `starRocksFeSpec`、`starRocksBeSpec`、`starRocksCnSpec` です。 |
+| Metadata  | メタデータ。以下のサブフィールドがネストされています:<ul><li>`name`: オブジェクトの名前。各オブジェクト名は同じリソースタイプのオブジェクトを一意に識別します。</li><li>`namespace`: オブジェクトが属するネームスペース。</li></ul> |
+| Spec      | オブジェクトの期待される状態。有効な値は `starRocksFeSpec`、`starRocksBeSpec`、および `starRocksCnSpec` です。 |
 
 修正された設定ファイルを使用して StarRocks クラスターをデプロイすることもできます。サポートされているフィールドと詳細な説明については、[api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) を参照してください。
 
-StarRocks クラスターのデプロイには時間がかかります。この期間中、`kubectl -n starrocks get pods` コマンドを使用して StarRocks クラスターの起動状態を確認できます。すべてのポッドが `Running` 状態であり、ポッド内のすべてのコンテナが `READY` であれば、StarRocks クラスターは期待通りに稼働しています。
+StarRocks クラスターのデプロイには時間がかかります。この期間中、`kubectl -n starrocks get pods` コマンドを使用して StarRocks クラスターの起動状態を確認できます。すべてのポッドが `Running` 状態で、ポッド内のすべてのコンテナが `READY` であれば、StarRocks クラスターは期待通りに動作しています。
 
 > **NOTE**
 >
-> StarRocks クラスターが配置されている名前空間をカスタマイズする場合は、`starrocks` をカスタマイズした名前空間の名前に置き換える必要があります。
+> StarRocks クラスターが配置されているネームスペースをカスタマイズする場合は、`starrocks` をカスタマイズしたネームスペースの名前に置き換える必要があります。
 
 ```bash
 $ kubectl -n starrocks get pods
@@ -118,22 +118,22 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 
 > **Note**
 >
-> 長時間経過しても一部のポッドが起動しない場合は、`kubectl logs -n starrocks <pod_name>` を使用してログ情報を確認するか、`kubectl -n starrocks describe pod <pod_name>` を使用してイベント情報を確認し、問題を特定してください。
+> 長時間経過しても一部のポッドが起動しない場合は、`kubectl logs -n starrocks <pod_name>` を使用してログ情報を表示するか、`kubectl -n starrocks describe pod <pod_name>` を使用してイベント情報を表示して問題を特定できます。
 
-## StarRocks クラスターを管理する
+## Manage StarRocks Cluster
 
-### StarRocks クラスターにアクセスする
+### Access StarRocks Cluster
 
-StarRocks クラスターのコンポーネントは、FE サービスなどの関連するサービスを通じてアクセスできます。サービスとそのアクセスアドレスの詳細については、[api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) および [Services](https://kubernetes.io/docs/concepts/services-networking/service/) を参照してください。
+StarRocks クラスターのコンポーネントは、FE サービスなどの関連するサービスを通じてアクセスできます。サービスとそのアクセスアドレスの詳細な説明については、[api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) および [Services](https://kubernetes.io/docs/concepts/services-networking/service/) を参照してください。
 
 > **NOTE**
 >
 > - デフォルトでは FE サービスのみがデプロイされます。BE サービスと CN サービスをデプロイする必要がある場合は、StarRocks クラスター設定ファイルで `starRocksBeSpec` と `starRocksCnSpec` を設定する必要があります。
-> - サービスの名前はデフォルトで `<cluster name>-<component name>-service` です。たとえば、`starrockscluster-sample-fe-service` です。各コンポーネントの spec でサービス名を指定することもできます。
+> - サービスの名前はデフォルトで `<cluster name>-<component name>-service` です。例えば、`starrockscluster-sample-fe-service` です。各コンポーネントの spec でサービス名を指定することもできます。
 
-#### Kubernetes クラスター内から StarRocks クラスターにアクセスする
+#### Access StarRocks Cluster from within Kubernetes Cluster
 
-Kubernetes クラスター内からは、FE サービスの ClusterIP を通じて StarRocks クラスターにアクセスできます。
+Kubernetes クラスター内からは、StarRocks クラスターは FE サービスの ClusterIP を通じてアクセスできます。
 
 1. FE サービスの内部仮想 IP アドレス `CLUSTER-IP` とポート `PORT(S)` を取得します。
 
@@ -151,7 +151,7 @@ Kubernetes クラスター内からは、FE サービスの ClusterIP を通じ�
    mysql -h 10.100.162.xxx -P 9030 -uroot
    ```
 
-#### Kubernetes クラスター外から StarRocks クラスターにアクセスする
+#### Access StarRocks Cluster from outside Kubernetes Cluster
 
 Kubernetes クラスター外からは、FE サービスの LoadBalancer または NodePort を通じて StarRocks クラスターにアクセスできます。このトピックでは LoadBalancer を例として使用します:
 
@@ -165,7 +165,7 @@ Kubernetes クラスター外からは、FE サービスの LoadBalancer また�
         cpu: 4
         memory: 16Gi
       service:            
-        type: LoadBalancer # LoadBalancer として指定
+        type: LoadBalancer # specified as LoadBalancer
     ```
 
 2. FE サービスが外部に公開する IP アドレス `EXTERNAL-IP` とポート `PORT(S)` を取得します。
@@ -184,9 +184,9 @@ Kubernetes クラスター外からは、FE サービスの LoadBalancer また�
     mysql -h a7509284bf3784983a596c6eec7fc212-618xxxxxx.us-west-2.elb.amazonaws.com -P9030 -uroot
     ```
 
-### StarRocks クラスターをアップグレードする
+### Upgrade StarRocks Cluster
 
-#### BE ノードをアップグレードする
+#### Upgrade BE nodes
 
 次のコマンドを実行して、新しい BE イメージファイル（例: `starrocks/be-ubuntu:latest`）を指定します。
 
@@ -194,7 +194,7 @@ Kubernetes クラスター外からは、FE サービスの LoadBalancer また�
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:latest"}}}'
 ```
 
-#### FE ノードをアップグレードする
+#### Upgrade FE nodes
 
 次のコマンドを実行して、新しい FE イメージファイル（例: `starrocks/fe-ubuntu:latest`）を指定します。
 
@@ -202,11 +202,11 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:latest"}}}'
 ```
 
-アップグレードプロセスには時間がかかります。`kubectl -n starrocks get pods` コマンドを実行して、アップグレードの進行状況を確認できます。
+アップグレードプロセスには時間がかかります。`kubectl -n starrocks get pods` コマンドを実行してアップグレードの進行状況を確認できます。
 
-### StarRocks クラスターをスケールする
+### Scale StarRocks cluster
 
-#### BE クラスターをスケールアウトする
+#### Scale out BE cluster
 
 次のコマンドを実行して、BE クラスターを 9 ノードにスケールアウトします。
 
@@ -214,9 +214,9 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
 ```
 
-### BE クラスターをスケールインする
+### Scale in BE cluster
 
-BE ノードをスケールインする際には、一度に 1 つずつスケールインし、BEs 上のタブレットが再分配されるのを待ってから次に進む必要があります。単一レプリカのテーブルがある場合、BE ノードをオフラインにすると、タブレットが再分配されない場合にデータ損失が発生する可能性があります。
+BE ノードをスケールインする際には、一度に 1 つずつスケールインし、BEs 上のタブレットが再分配されるのを待つ必要があります。単一レプリカのテーブルがある場合、BE ノードをオフラインにすると、タブレットが再分配されない場合にデータが失われる可能性があります。
 
 次のコマンドを実行して、10 BE ノードのクラスターを 9 にスケールインします。
 
@@ -228,7 +228,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 タブレットの再分配には時間がかかります。`SHOW PROC '/statistic';` を実行して進行状況を確認できます。
 
-#### FE クラスターをスケールアウトする
+#### Scale out FE cluster
 
 次のコマンドを実行して、FE クラスターを 4 ノードにスケールアウトします。
 
@@ -238,15 +238,15 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 スケーリングプロセスには時間がかかります。`kubectl -n starrocks get pods` コマンドを使用してスケーリングの進行状況を確認できます。
 
-### CN クラスターの自動スケーリング
+### Automatic scaling for CN cluster
 
-コマンド `kubectl -n starrocks edit src starrockscluster-sample` を実行して、CN クラスターの自動スケーリングポリシーを設定します。CN のリソースメトリクスとして、平均 CPU 使用率、平均メモリ使用量、弾性スケーリングのしきい値、上限弾性スケーリング制限、下限弾性スケーリング制限を指定できます。上限弾性スケーリング制限と下限弾性スケーリング制限は、弾性スケーリングに許可される CN の最大数と最小数を指定します。
+コマンド `kubectl -n starrocks edit src starrockscluster-sample` を実行して、CN クラスターの自動スケーリングポリシーを設定します。CN のリソースメトリクスとして、平均 CPU 使用率、平均メモリ使用量、弾性スケーリングのしきい値、上限弾性スケーリング制限、および下限弾性スケーリング制限を指定できます。上限弾性スケーリング制限と下限弾性スケーリング制限は、弾性スケーリングに許可される CN の最大数と最小数を指定します。
 
 > **NOTE**
 >
-> CN クラスターの自動スケーリングポリシーが設定されている場合は、StarRocks クラスター設定ファイルの `starRocksCnSpec` から `replicas` フィールドを削除してください。
+> CN クラスターの自動スケーリングポリシーが設定されている場合、StarRocks クラスター設定ファイルの `starRocksCnSpec` から `replicas` フィールドを削除してください。
 
-Kubernetes はまた、`behavior` を使用してビジネスシナリオに応じたスケーリング動作をカスタマイズし、迅速または遅いスケーリングを実現したり、スケーリングを無効にしたりすることをサポートしています。自動スケーリングポリシーの詳細については、[Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) を参照してください。
+Kubernetes はまた、ビジネスシナリオに応じてスケーリング動作をカスタマイズするために `behavior` を使用することをサポートしており、迅速または遅いスケーリングを実現したり、スケーリングを無効にしたりするのに役立ちます。自動スケーリングポリシーの詳細については、[Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) を参照してください。
 
 以下は、StarRocks が提供する自動スケーリングポリシーを設定するための[テンプレート](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml)です。
 
@@ -260,31 +260,31 @@ Kubernetes はまた、`behavior` を使用してビジネスシナリオに応�
       cpu: 16
       memory: 64Gi
     autoScalingPolicy: # CN クラスターの自動スケーリングポリシー。
-      maxReplicas: 10 # CN の最大数を 10 に設定。
-      minReplicas: 1 # CN の最小数を 1 に設定。
-      # 以下のフィールドに基づいて HPA リソースを作成します。
-      # 詳細は https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ を参照してください。
+      maxReplicas: 10 # CN の最大数を 10 に設定します。
+      minReplicas: 1 # CN の最小数を 1 に設定します。
+      # operator は以下のフィールドに基づいて HPA リソースを作成します。
+      # 詳細については、https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ を参照してください。
       hpaPolicy:
         metrics: # リソースメトリクス
           - type: Resource
             resource:
-              name: memory  # CN の平均メモリ使用量をリソースメトリクスとして指定。
+              name: memory  # CN の平均メモリ使用量をリソースメトリクスとして指定します。
               target:
-                # 弾性スケーリングのしきい値は 60%。
-                # CN の平均メモリ使用率が 60% を超えると、スケールアウトのために CN の数が増加。
-                # CN の平均メモリ使用率が 60% 未満になると、スケールインのために CN の数が減少。
+                # 弾性スケーリングのしきい値は 60% です。
+                # CN の平均メモリ使用率が 60% を超えると、スケールアウトのために CN の数が増加します。
+                # CN の平均メモリ使用率が 60% 未満になると、スケールインのために CN の数が減少します。
                 averageUtilization: 60
                 type: Utilization
           - type: Resource
             resource:
-              name: cpu # CN の平均 CPU 使用率をリソースメトリクスとして指定。
+              name: cpu # CN の平均 CPU 使用率をリソースメトリクスとして指定します。
               target:
-                # 弾性スケーリングのしきい値は 60%。
-                # CN の平均 CPU 使用率が 60% を超えると、スケールアウトのために CN の数が増加。
-                # CN の平均 CPU 使用率が 60% 未満になると、スケールインのために CN の数が減少。
+                # 弾性スケーリングのしきい値は 60% です。
+                # CN の平均 CPU 使用率が 60% を超えると、スケールアウトのために CN の数が増加します。
+                # CN の平均 CPU 使用率が 60% 未満になると、スケールインのために CN の数が減少します。
                 averageUtilization: 60
                 type: Utilization
-        behavior: # ビジネスシナリオに応じたスケーリング動作をカスタマイズし、迅速または遅いスケーリングを実現したり、スケーリングを無効にしたりします。
+        behavior: # ビジネスシナリオに応じてスケーリング動作をカスタマイズし、迅速または遅いスケーリングを実現したり、スケーリングを無効にしたりします。
           scaleUp:
             policies:
               - type: Pods
@@ -296,20 +296,20 @@ Kubernetes はまた、`behavior` を使用してビジネスシナリオに応�
 
 以下の表は、いくつかの重要なフィールドを説明しています。
 
-- 上限および下限の弾性スケーリング制限。
+- 上限と下限の弾性スケーリング制限。
 
 ```YAML
-maxReplicas: 10 # CN の最大数を 10 に設定。
-minReplicas: 1 # CN の最小数を 1 に設定。
+maxReplicas: 10 # CN の最大数を 10 に設定します。
+minReplicas: 1 # CN の最小数を 1 に設定します。
 ```
 
 - 弾性スケーリングのしきい値。
 
 ```YAML
-# たとえば、CN の平均 CPU 使用率をリソースメトリクスとして指定。
-# 弾性スケーリングのしきい値は 60%。
-# CN の平均 CPU 使用率が 60% を超えると、スケールアウトのために CN の数が増加。
-# CN の平均 CPU 使用率が 60% 未満になると、スケールインのために CN の数が減少。
+# 例えば、CN の平均 CPU 使用率をリソースメトリクスとして指定します。
+# 弾性スケーリングのしきい値は 60% です。
+# CN の平均 CPU 使用率が 60% を超えると、スケールアウトのために CN の数が増加します。
+# CN の平均 CPU 使用率が 60% 未満になると、スケールインのために CN の数が減少します。
 - type: Resource
   resource:
     name: cpu
@@ -321,6 +321,6 @@ minReplicas: 1 # CN の最小数を 1 に設定。
 
 **問題の説明:** カスタムリソース StarRocksCluster を `kubectl apply -f xxx` を使用してインストールすると、`The CustomResourceDefinition 'starrocksclusters.starrocks.com' is invalid: metadata.annotations: Too long: must have at most 262144 bytes` というエラーが返されます。
 
-**原因の分析:** `kubectl apply -f xxx` を使用してリソースを作成または更新するたびに、メタデータアノテーション `kubectl.kubernetes.io/last-applied-configuration` が追加されます。このメタデータアノテーションは JSON 形式で、*last-applied-configuration* を記録します。`kubectl apply -f xxx` はほとんどのケースで適していますが、カスタムリソースの設定ファイルが大きすぎる場合など、まれな状況ではメタデータアノテーションのサイズが制限を超えることがあります。
+**原因の分析:** `kubectl apply -f xxx` を使用してリソースを作成または更新するたびに、メタデータ注釈 `kubectl.kubernetes.io/last-applied-configuration` が追加されます。このメタデータ注釈は JSON 形式で、*last-applied-configuration* を記録します。`kubectl apply -f xxx` はほとんどのケースに適していますが、カスタムリソースの設定ファイルが大きすぎる場合など、まれな状況ではメタデータ注釈のサイズが制限を超える可能性があります。
 
-**解決策:** カスタムリソース StarRocksCluster を初めてインストールする場合は、`kubectl create -f xxx` を使用することをお勧めします。環境にすでにカスタムリソース StarRocksCluster がインストールされており、その設定を更新する必要がある場合は、`kubectl replace -f xxx` を使用することをお勧めします。
+**解決策:** カスタムリソース StarRocksCluster を初めてインストールする場合は、`kubectl create -f xxx` を使用することをお勧めします。環境にすでにカスタムリソース StarRocksCluster がインストールされていて、その設定を更新する必要がある場合は、`kubectl replace -f xxx` を使用することをお勧めします。

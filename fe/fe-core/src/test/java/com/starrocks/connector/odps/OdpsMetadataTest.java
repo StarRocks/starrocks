@@ -62,6 +62,7 @@ public class OdpsMetadataTest extends MockedBase {
         properties.put(OdpsProperties.ACCESS_KEY, "sk");
         properties.put(OdpsProperties.ENDPOINT, "http://127.0.0.1");
         properties.put(OdpsProperties.PROJECT, "project");
+        properties.put(OdpsProperties.TUNNEL_QUOTA, "pay-as-you-go");
         properties.put(OdpsProperties.ENABLE_PARTITION_CACHE, "false");
         properties.put(OdpsProperties.ENABLE_TABLE_CACHE, "false");
         properties.put(OdpsProperties.ENABLE_TABLE_NAME_CACHE, "true");

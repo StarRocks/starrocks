@@ -102,6 +102,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
@@ -250,6 +251,11 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+
+    private AtomicLong currentThreadAllocatedMemory = new AtomicLong(0);
+
+    // thread id is the thread who created this ConnectContext's id
+    private AtomicLong currentThreadId = null;
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -1325,5 +1331,24 @@ public class ConnectContext {
             }
             return row;
         }
+    }
+
+    public long getCurrentThreadAllocatedMemory() {
+        return currentThreadAllocatedMemory.get();
+    }
+
+    public void setCurrentThreadAllocatedMemory(long currentThreadAllocatedMemory) {
+        this.currentThreadAllocatedMemory.set(currentThreadAllocatedMemory);
+    }
+
+    public long getCurrentThreadId() {
+        if (currentThreadId == null) {
+            return 0;
+        }
+        return currentThreadId.get();
+    }
+
+    public void setCurrentThreadId(long currentThreadId) {
+        this.currentThreadId = new AtomicLong(currentThreadId);
     }
 }

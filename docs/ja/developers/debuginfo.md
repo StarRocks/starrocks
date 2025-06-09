@@ -2,17 +2,17 @@
 displayed_sidebar: docs
 ---
 
-# デバッグのための debuginfo ファイルの使用
+# debuginfo ファイルを使用したデバッグ
 
 ## 変更内容
 
-v2.5 以降、BE の debuginfo ファイルはインストールパッケージのサイズとスペース使用量を削減するために StarRocks インストールパッケージから削除されています。2 つのパッケージは [StarRocks website](https://www.starrocks.io/download/community) で確認できます。
+v2.5 以降、BE の debuginfo ファイルはインストールパッケージのサイズとスペース使用量を削減するために StarRocks インストールパッケージから削除されました。 [StarRocks website](https://www.starrocks.io/download/community) で 2 つのパッケージを確認できます。
 
 ![debuginfo](../_assets/debug_info.png)
 
 この図では、`Get Debug Symbol files` をクリックして debuginfo パッケージをダウンロードできます。`StarRocks-2.5.10.tar.gz` はインストールパッケージで、**Download** をクリックしてこのパッケージをダウンロードできます。
 
-この変更は、StarRocks のダウンロードや使用には影響しません。クラスターのデプロイやアップグレードにはインストールパッケージのみをダウンロードできます。debuginfo パッケージは、開発者が GDB を使用してプログラムをデバッグするためのものです。
+この変更は、StarRocks のダウンロードや使用には影響しません。クラスターのデプロイとアップグレードにはインストールパッケージのみをダウンロードできます。debuginfo パッケージは、開発者が GDB を使用してプログラムをデバッグするためのものです。
 
 ## 注意事項
 
@@ -30,7 +30,7 @@ v2.5 以降、BE の debuginfo ファイルはインストールパッケージ�
 
     > **NOTE**
     >
-    > `<sr_ver>` を、ダウンロードしたい StarRocks インストールパッケージのバージョン番号に置き換えてください。
+    > `<sr_ver>` をダウンロードしたい StarRocks インストールパッケージのバージョン番号に置き換えてください。
 
 2. GDB デバッグを行う際に debuginfo ファイルをロードします。
 
@@ -40,7 +40,7 @@ v2.5 以降、BE の debuginfo ファイルはインストールパッケージ�
     objcopy --add-gnu-debuglink=starrocks_be.debug starrocks_be
     ```
 
-    この操作により、デバッグ情報ファイルが実行ファイルに関連付けられます。
+    この操作により、デバッグ情報ファイルが実行可能ファイルに関連付けられます。
 
     - **方法 2**
 
@@ -48,4 +48,4 @@ v2.5 以降、BE の debuginfo ファイルはインストールパッケージ�
     gdb -s starrocks_be.debug -e starrocks_be -c `core_file`
     ```
 
-debuginfo ファイルは perf や pstack とも良好に動作します。追加の操作なしで perf や pstack を直接使用できます。
+debuginfo ファイルは perf や pstack とも相性が良く、追加の操作なしで perf や pstack を直接使用できます。

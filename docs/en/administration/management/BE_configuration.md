@@ -3583,6 +3583,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
 - Introduced in: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The cache capacity of starlet filesystem instances.
+- Introduced in: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The cache expiration time of starlet filesystem instances.
+- Introduced in: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3938,11 +3956,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_mem_size
 
-- Default: 10%
+- Default: 0
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). It is recommended to set the value of this parameter to at least 10 GB.
+- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`).
 - Introduced in: -
 
 ##### datacache_disk_size
@@ -5239,4 +5257,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: Bytes
 - Is mutable: No
 - Description: The maximum length of input values for bitmap functions.
+- Introduced in: -
+
+##### report_exec_rpc_request_retry_num
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
 - Introduced in: -

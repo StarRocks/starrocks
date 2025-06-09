@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "butil/time.h"
+#include "column/column.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -1630,4 +1631,38 @@ TEST_F(JsonFunctionsTest, map_to_json) {
     }
 }
 
+TEST_F(JsonFunctionsTest, query_json_obj) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    ColumnBuilder<TYPE_VARCHAR> builder(1);
+    builder.append("has_active_email");
+
+    std::vector<std::string> param_flat_path{"other"};
+    std::vector<LogicalType> param_flat_type{LogicalType::TYPE_JSON};
+
+    auto flat_json1 = JsonColumn::create();
+    ASSIGN_OR_ABORT(auto jj1, JsonValue::parse(R"({"a1": 1, "b1": 2})"));
+    down_cast<JsonColumn*>(flat_json1.get())->append(jj1);
+
+    auto remain = JsonColumn::create();
+    ASSIGN_OR_ABORT(auto jj2, JsonValue::parse(R"({"has_active_email": false, "c1": 3})"));
+    down_cast<JsonColumn*>(remain.get())->append(jj2);
+
+    Columns flat_js{flat_json1, remain};
+
+    auto json_col = JsonColumn::create();
+    json_col->set_flat_columns(param_flat_path, param_flat_type, flat_js);
+
+    Columns columns{std::move(json_col), builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+
+    ASSIGN_OR_ABORT(ColumnPtr result, JsonFunctions::get_native_json_bool(ctx.get(), columns));
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSERT_EQ(result->debug_string(), "[0]");
+}
 } // namespace starrocks

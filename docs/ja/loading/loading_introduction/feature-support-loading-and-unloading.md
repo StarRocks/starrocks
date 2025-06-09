@@ -5,7 +5,7 @@ sidebar_label: Feature Support
 
 # 機能サポート: データロードとアンロード
 
-このドキュメントは、StarRocks がサポートするさまざまなデータロードおよびアンロード方法の機能を概説します。
+このドキュメントは、StarRocks がサポートするさまざまなデータロードとアンロードの方法の機能を概説します。
 
 ## ファイル形式
 
@@ -100,9 +100,9 @@ sidebar_label: Feature Support
 
 [1], [2]\: Schema Registry が必要です。
 
-[3]\: JSON はさまざまな CDC 形式をサポートします。StarRocks がサポートする JSON CDC 形式の詳細については、[JSON CDC format](#json-cdc-formats) を参照してください。
+[3]\: JSON はさまざまな CDC 形式をサポートします。StarRocks がサポートする JSON CDC 形式の詳細については、 [JSON CDC format](#json-cdc-formats) を参照してください。
 
-[4]\: 現在、PIPE を使用したロードでは INSERT from FILES のみがサポートされています。
+[4]\: 現在、PIPE を使用したロードは INSERT from FILES のみサポートされています。
 
 [5]\: 各 BE または CN ノードの同じディレクトリに NAS デバイスを NFS としてマウントし、`file://` プロトコルを介して NFS 内のファイルにアクセスする必要があります。
 
@@ -388,9 +388,9 @@ sidebar_label: Feature Support
 
 :::note
 
-[1]\: 現在、CSV ファイルを Stream Load でロードする場合のみ、`format=gzip` を使用して圧縮形式を指定できます。これは gzip 圧縮された CSV ファイルを示します。`deflate` および `bzip2` 形式もサポートされています。
+[1]\: 現在、CSV ファイルを Stream Load でロードする場合のみ、`format=gzip` を使用して圧縮形式を指定できます。これは gzip 圧縮された CSV ファイルを示します。`deflate` と `bzip2` 形式もサポートされています。
 
-[2]\: Broker Load は、`format` パラメータを使用して CSV ファイルの圧縮形式を指定することをサポートしていません。Broker Load はファイルの拡張子を使用して圧縮形式を識別します。gzip 圧縮ファイルの拡張子は `.gz` であり、zstd 圧縮ファイルの拡張子は `.zst` です。さらに、`trim_space` や `enclose` などの他の `format` 関連のパラメータもサポートされていません。
+[2]\: Broker Load は、`format` パラメータを使用して CSV ファイルの圧縮形式を指定することをサポートしていません。Broker Load はファイルの拡張子を使用して圧縮形式を識別します。gzip 圧縮ファイルの拡張子は `.gz` で、zstd 圧縮ファイルの拡張子は `.zst` です。その他の `format` 関連のパラメータ、例えば `trim_space` や `enclose` もサポートされていません。
 
 [3]\: `compression = gzip` を使用して圧縮形式を指定することがサポートされています。
 
@@ -510,9 +510,9 @@ sidebar_label: Feature Support
 
 [1]\: HDFS の場合、StarRocks はシンプル認証と Kerberos 認証の両方をサポートしています。
 
-[2]\: セキュリティプロトコルが `sasl_plaintext` または `sasl_ssl` に設定されている場合、SASL および GSSAPI (Kerberos) 認証の両方がサポートされています。
+[2]\: セキュリティプロトコルが `sasl_plaintext` または `sasl_ssl` に設定されている場合、SASL および GSSAPI (Kerberos) 認証がサポートされます。
 
-[3]\: セキュリティプロトコルが `sasl_plaintext` または `sasl_ssl` に設定されている場合、SASL および PLAIN 認証の両方がサポートされています。
+[3]\: セキュリティプロトコルが `sasl_plaintext` または `sasl_ssl` に設定されている場合、SASL および PLAIN 認証がサポートされます。
 
 :::
 
@@ -539,7 +539,7 @@ sidebar_label: Feature Support
         <th>Spark Load</th>
     </tr>
     <tr>
-        <td>部分更新</td>
+        <td>partial_update</td>
         <td>Yes (v3.0+)</td>
         <td colspan="2">Yes [1] (v3.3+)</td>
         <td>Yes (v3.0+)</td>
@@ -590,7 +590,7 @@ sidebar_label: Feature Support
 
 :::note
 
-[1]\: v3.3 以降、StarRocks は INSERT INTO で列リストを指定することにより、Row モードでの部分更新をサポートしています。
+[1]\: v3.3 以降、StarRocks は INSERT INTO における行モードでの部分更新を、列リストを指定することでサポートします。
 
 [2]\: パラメータまたはセッション変数でタイムゾーンを設定すると、strftime()、alignment_timestamp()、from_unixtime() などの関数が返す結果に影響します。
 

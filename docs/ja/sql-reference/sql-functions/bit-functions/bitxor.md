@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # bitxor
 
-2 つの数値式のビットごとの XOR を返します。
+## 説明
 
-## Syntax
+2 つの数値式のビット単位の XOR を返します。
+
+## 構文
 
 ```Haskell
 BITXOR(x,y);
 ```
 
-## Parameters
+## パラメータ
 
-- `x`: この式は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT のいずれかのデータ型に評価される必要があります。
+- `x`: この式は、次のいずれかのデータ型に評価されなければなりません: TINYINT, SMALLINT, INT, BIGINT, LARGEINT。
 
-- `y`: この式は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT のいずれかのデータ型に評価される必要があります。
+- `y`: この式は、次のいずれかのデータ型に評価されなければなりません: TINYINT, SMALLINT, INT, BIGINT, LARGEINT。
 
 > `x` と `y` はデータ型が一致している必要があります。
 
-## Return value
+## 戻り値
 
 戻り値は `x` と同じ型です。いずれかの値が NULL の場合、結果は NULL です。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select bitxor(3,0);

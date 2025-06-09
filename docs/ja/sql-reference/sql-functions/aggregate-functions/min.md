@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # min
 
+## 説明
+
 expr 式の最小値を返します。
 
 ## 構文

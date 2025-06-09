@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # bitmap_union_count
 
-一連のビットマップ値の和集合を返し、その和集合の基数を返します。この関数は v2.3 からサポートされています。
+## Description
 
-## 構文
+ビットマップ値の集合の合併を返し、その合併の基数を返します。この関数は v2.3 からサポートされています。
+
+## Syntax
 
 ```Haskell
 BIGINT bitmap_union_count(BITMAP value)
 ```
 
-### パラメータ
+### Parameters
 
 `value`: ビットマップ値の集合。サポートされているデータ型は BITMAP です。
 
-## 戻り値
+## Return value
 
 BIGINT 型の値を返します。
 
-## 例
+## Examples
 
 ウェブページのユニークビュー (UV) を計算します。`user_id` が INT 型の場合、後者の2つのクエリは同等です。
 

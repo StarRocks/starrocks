@@ -4,15 +4,15 @@ displayed_sidebar: docs
 
 # Flink Connector
 
-## flink-connector-jdbc_2.11sink が StarRocks で 8 時間遅れている
+## flink-connector-jdbc_2.11sink が StarRocks で 8 時間遅れる
 
 **問題の説明:**
 
-localtimestap 関数によって生成された時間は Flink では正常です。しかし、StarRocks に送信されたときに 8 時間遅れました。Flink サーバーと StarRocks サーバーは同じタイムゾーン、つまり Asia/Shanghai UTC/GMT+08:00 にあります。Flink のバージョンは 1.12 です。ドライバー: flink-connector-jdbc_2.11。この問題を解決する方法を教えてください。
+localtimestap 関数によって生成された時間は Flink では正常です。しかし、StarRocks に送信されると 8 時間遅れます。Flink サーバーと StarRocks サーバーは同じタイムゾーン、すなわち Asia/Shanghai UTC/GMT+08:00 にあります。Flink のバージョンは 1.12 です。ドライバー: flink-connector-jdbc_2.11。この問題を解決する方法を教えていただけますか？
 
 **解決策:**
 
-Flink のシンクテーブルで時間パラメータ 'server-time-zone' = 'Asia/Shanghai' を設定してみてください。また、jdbc URL に &serverTimezone=Asia/Shanghai を追加することもできます。以下に例を示します:
+Flink のシンクテーブルで 'server-time-zone' = 'Asia/Shanghai' の時間パラメータを設定してみてください。また、jdbc URL に &serverTimezone=Asia/Shanghai を追加することもできます。以下に例を示します:
 
 ```sql
 CREATE TABLE sk (
@@ -31,7 +31,7 @@ WITH (
 );
 ```
 
-## Flink インポートでは、StarRocks クラスターにデプロイされた kafka クラスターのみをインポートできる
+## Flink インポートでは、StarRocks クラスターにデプロイされた kafka クラスターのみがインポート可能
 
 **問題の説明:**
 
@@ -53,7 +53,7 @@ StarRocks Tools を使用してステートメントをエクスポートでき�
 
 これは通常の現象です。オペレーティングシステムからデータベースに割り当てられた大きなメモリブロックは、メモリを再利用し、メモリ割り当てをより便利にするために、割り当て時に予約され、解放時に遅延されます。ユーザーは、長期間にわたってメモリ使用量を監視することで、メモリが解放されるかどうかを確認するためにテスト環境を検証することをお勧めします。
 
-## ダウンロード後に Flink コネクタが機能しない
+## ダウンロード後に Flink コネクタが動作しない
 
 **問題の説明:**
 
@@ -63,16 +63,16 @@ StarRocks Tools を使用してステートメントをエクスポートでき�
 
 `/etc/maven/settings.xml` のミラー部分がすべて Aliyun ミラーアドレスを通じて取得されるように設定されていることを確認してください。
 
-もしそうであれば、次のように変更してください:
+もしそうであれば、以下のように変更してください:
 
-<mirror>
+ <mirror>
     <id>aliyunmaven </id>
     <mirrorf>central</mirrorf>
     <name>aliyun public repo</name>
     <url>https: //maven.aliyun.com/repository/public</url>
 </mirror>
 
-## Flink-connector-StarRocks のパラメータ sink.buffer-flush.interval-ms の意味
+## Flink-connector-StarRocks におけるパラメータ sink.buffer-flush.interval-ms の意味
 
 **問題の説明:**
 
@@ -85,8 +85,8 @@ StarRocks Tools を使用してステートメントをエクスポートでき�
 +----------------------+--------------------------------------------------------------+
 ```
 
-このパラメータが 15 秒に設定され、チェックポイント間隔が 5 分に等しい場合、この値はまだ有効ですか？
+このパラメータが 15 秒に設定され、チェックポイント間隔が 5 分と等しい場合、この値はまだ有効ですか？
 
 **解決策:**
 
-3 つのしきい値のうち、どれかが最初に達成されると、そのしきい値が最初に有効になります。これは、チェックポイント間隔の値には影響されません。チェックポイント間隔の値は、exactly once にのみ機能します。interval-ms は at_least_once によって使用されます。
+3 つのしきい値のうち、どれかが最初に達成されると、それが最初に有効になります。これは、チェックポイント間隔の値には影響されず、チェックポイント間隔は exactly once にのみ機能します。Interval-ms は at_least_once によって使用されます。

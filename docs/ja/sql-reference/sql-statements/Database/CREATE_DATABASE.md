@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-この操作には、対象の catalog に対する CREATE DATABASE 権限が必要です。この権限を付与するには、[GRANT](../account-management/GRANT.md) の指示に従ってください。
+この操作には、対象の catalog に対する CREATE DATABASE 権限が必要です。この権限を付与するには、 [GRANT](../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
@@ -23,7 +23,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 ## パラメータ
 
-`db_name`: 作成するデータベースの名前。命名規則については、[System limits](../../System_limit.md) を参照してください。
+`db_name`: 作成するデータベースの名前。命名規則については、 [System limits](../../System_limit.md) を参照してください。
 
 **PROPERTIES (オプション)**
 
@@ -44,7 +44,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
    PROPERTIES ("storage_volume"="s3_storage_volume");
    ```
 
-## 参照
+## 参考
 
 - [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)
 - [USE](USE.md)

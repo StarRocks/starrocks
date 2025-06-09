@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # time_to_sec
 
-時間の値を秒数に変換します。変換に使用される式は次の通りです：
+## 説明
+
+時間の値を秒数に変換します。変換に使用される式は以下の通りです：
 
 Hour x 3600 + Minute x 60 + Second
 
-## Syntax
+## 構文
 
 ```Haskell
 BIGINT time_to_sec(TIME time)
 ```
 
-## Parameters
+## パラメータ
 
 `time`: TIME 型である必要があります。
 
-## Return value
+## 戻り値
 
-BIGINT 型の値を返します。入力が無効な場合は、NULL が返されます。
+BIGINT 型の値を返します。入力が無効な場合、NULL が返されます。
 
-## Examples
+## 例
 
 ```plain text
 select time_to_sec('12:13:14');

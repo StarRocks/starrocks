@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # seconds_sub
 
+## Description
+
 日付値から時間間隔を引きます。時間間隔は秒単位です。
 
 ## Syntax
@@ -14,9 +16,9 @@ DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 
 ## Parameters
 
-`date`: 時間の表現です。DATETIME 型でなければなりません。
+`date`: 時間の表現。DATETIME 型である必要があります。
 
-`seconds`: 引きたい時間間隔を秒単位で指定します。INT 型でなければなりません。
+`seconds`: 引きたい時間間隔を秒単位で指定します。INT 型である必要があります。
 
 ## Return value
 

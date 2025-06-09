@@ -278,4 +278,84 @@ public class MvRewriteTestBase {
             Assert.fail("add partition failed:" + e);
         }
     }
+
+    /**
+     * TestListener is a base class that can be used to test cases in multi-variable environments.
+     */
+    public abstract class TestListener {
+        protected boolean val;
+
+        public abstract void onBeforeCase(ConnectContext connectContext);
+
+        public abstract void onAfterCase(ConnectContext connectContext);
+    }
+
+    public class EnableMVRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(val);
+        }
+    }
+
+    public class DisableMVRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(val);
+        }
+    }
+
+    public class EnableMVMultiStageRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewMultiStagesRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(val);
+        }
+    }
+
+    public class DisableMVMultiStageRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewMultiStagesRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(val);
+        }
+    }
+
+    public interface ExceptionRunnable {
+        public abstract void run() throws Exception;
+    }
+
+    protected void doTest(List<TestListener> listeners, ExceptionRunnable testCase) {
+        for (TestListener listener : listeners) {
+            listener.onBeforeCase(connectContext);
+            try {
+                testCase.run();
+            } catch (Exception e) {
+                Assert.fail(e.getMessage());
+            } finally {
+                listener.onAfterCase(connectContext);
+            }
+        }
+    }
 }

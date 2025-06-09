@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # ST_X
 
-ポイントが有効な Point 型の場合、対応する X 座標の値を返します。
+## 説明
+
+point が有効な Point 型の場合、対応する X 座標の値を返します。
 
 ## 構文
 

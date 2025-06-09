@@ -936,7 +936,8 @@ void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
             }
 
             if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
-                _apply_tablet_changed_cv.wait_until(ul, _schedule_apply_tasks.top().first);
+                auto wait_time = _schedule_apply_tasks.top().first;
+                _apply_tablet_changed_cv.wait_until(ul, wait_time);
             }
         }
     }

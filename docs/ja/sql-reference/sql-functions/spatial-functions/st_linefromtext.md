@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # ST_LineFromText,ST_LineStringFromText
 
-WKT (Well Known Text) を Line 形式のメモリ表現に変換します。
+## 説明
 
-## Syntax
+WKT (Well Known Text) をメモリ表現の Line 形式に変換します。
+
+## 構文
 
 ```Haskell
 GEOMETRY ST_LineFromText(VARCHAR wkt)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_LineFromText("LINESTRING (1 1, 2 2)"));
@@ -23,6 +25,6 @@ MySQL > SELECT ST_AsText(ST_LineFromText("LINESTRING (1 1, 2 2)"));
 +---------------------------------------------------------+
 ```
 
-## keyword
+## キーワード
 
 ST_LINEFROMTEXT,ST_LINESTRINGFROMTEXT,ST,LINEFROMTEXT,LINESTRINGFROMTEXT

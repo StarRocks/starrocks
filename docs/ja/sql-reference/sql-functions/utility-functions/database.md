@@ -4,29 +4,31 @@ displayed_sidebar: docs
 
 # database
 
-現在のデータベースの名前を返します。データベースが選択されていない場合は、空の値が返されます。
+## 説明
 
-## Syntax
+現在のデータベースの名前を返します。データベースが選択されていない場合、空の値が返されます。
+
+## 構文
 
 ```Haskell
 database()
 ```
 
-## Parameters
+## パラメータ
 
 この関数はパラメータを必要としません。
 
-## Return value
+## 戻り値
 
 現在のデータベースの名前を文字列として返します。
 
-## Examples
+## 例
 
 ```sql
--- Select a destination database.
+-- 目的のデータベースを選択します。
 use db_test
 
--- Query the name of the current database.
+-- 現在のデータベースの名前を問い合わせます。
 select database();
 +------------+
 | DATABASE() |
@@ -35,6 +37,6 @@ select database();
 +------------+
 ```
 
-## See also
+## 関連項目
 
-[USE](../../sql-statements/Database/USE.md): 目的のデータベースに切り替えます。
+[ USE](../../sql-statements/Database/USE.md): 目的のデータベースに切り替えます。

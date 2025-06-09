@@ -7,16 +7,16 @@ keywords: ['Stream Load']
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-バージョン 2.4 以降、StarRocks は Stream Load トランザクションインターフェースを提供し、Apache Flink® や Apache Kafka® などの外部システムからデータをロードするために実行されるトランザクションに対して、2 フェーズコミット (2PC) を実装します。Stream Load トランザクションインターフェースは、高度に並行したストリームロードのパフォーマンスを向上させます。
+バージョン 2.4 以降、StarRocks は Stream Load トランザクションインターフェースを提供し、Apache Flink® や Apache Kafka® などの外部システムからデータをロードするトランザクションに対して 2 フェーズコミット (2PC) を実装します。Stream Load トランザクションインターフェースは、高度に並行したストリームロードのパフォーマンスを向上させます。
 
 このトピックでは、Stream Load トランザクションインターフェースと、このインターフェースを使用して StarRocks にデータをロードする方法について説明します。
 
 ## 説明
 
-Stream Load トランザクションインターフェースは、HTTP プロトコル互換のツールや言語を使用して API 操作を呼び出すことをサポートします。このトピックでは、curl を例にとってこのインターフェースの使用方法を説明します。このインターフェースは、トランザクション管理、データ書き込み、トランザクションの事前コミット、トランザクションの重複排除、トランザクションのタイムアウト管理など、さまざまな機能を提供します。
+Stream Load トランザクションインターフェースは、HTTP プロトコル互換のツールや言語を使用して API 操作を呼び出すことをサポートしています。このトピックでは、curl を例にしてこのインターフェースの使用方法を説明します。このインターフェースは、トランザクション管理、データ書き込み、トランザクションの事前コミット、トランザクションの重複排除、トランザクションのタイムアウト管理など、さまざまな機能を提供します。
 
 :::note
-Stream Load は CSV および JSON ファイル形式をサポートします。個々のサイズが 10 GB を超えない少数のファイルからデータをロードしたい場合、この方法が推奨されます。Stream Load は Parquet ファイル形式をサポートしていません。Parquet ファイルからデータをロードする必要がある場合は、[INSERT+files()](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) を使用してください。
+Stream Load は CSV および JSON ファイル形式をサポートしています。個々のサイズが 10 GB を超えない少数のファイルからデータをロードしたい場合、この方法が推奨されます。Stream Load は Parquet ファイル形式をサポートしていません。Parquet ファイルからデータをロードする必要がある場合は、[INSERT+files()](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) を使用してください。
 :::
 
 ### トランザクション管理
@@ -25,13 +25,13 @@ Stream Load トランザクションインターフェースは、トランザ�
 
 - `/api/transaction/begin`: 新しいトランザクションを開始します。
 
-- `/api/transaction/commit`: 現在のトランザクションをコミットしてデータの変更を永続化します。
+- `/api/transaction/commit`: 現在のトランザクションをコミットしてデータ変更を永続化します。
 
-- `/api/transaction/rollback`: 現在のトランザクションをロールバックしてデータの変更を中止します。
+- `/api/transaction/rollback`: 現在のトランザクションをロールバックしてデータ変更を中止します。
 
 ### トランザクションの事前コミット
 
-Stream Load トランザクションインターフェースは、現在のトランザクションを事前コミットし、データの変更を一時的に永続化するための `/api/transaction/prepare` 操作を提供します。トランザクションを事前コミットした後、トランザクションをコミットまたはロールバックすることができます。トランザクションが事前コミットされた後に StarRocks クラスターがダウンした場合でも、StarRocks クラスターが正常に復旧した後にトランザクションをコミットすることができます。
+Stream Load トランザクションインターフェースは、現在のトランザクションを事前コミットしてデータ変更を一時的に永続化するための `/api/transaction/prepare` 操作を提供します。トランザクションを事前コミットした後、トランザクションをコミットまたはロールバックすることができます。トランザクションが事前コミットされた後に StarRocks クラスターがダウンした場合でも、StarRocks クラスターが正常に復旧した後にトランザクションをコミットすることができます。
 
 > **NOTE**
 >
@@ -49,25 +49,25 @@ Stream Load トランザクションインターフェースは、StarRocks の�
 
 各 FE の設定ファイルで `stream_load_default_timeout_second` パラメータを使用して、その FE のデフォルトのトランザクションタイムアウト期間を指定できます。
 
-トランザクションを作成する際、HTTP リクエストヘッダーの `timeout` フィールドを使用して、トランザクションのタイムアウト期間を指定できます。
+トランザクションを作成する際、HTTP リクエストヘッダーの `timeout` フィールドを使用してトランザクションのタイムアウト期間を指定できます。
 
 トランザクションを作成する際、HTTP リクエストヘッダーの `idle_transaction_timeout` フィールドを使用して、トランザクションがアイドル状態でいられるタイムアウト期間を指定することもできます。タイムアウト期間内にデータが書き込まれない場合、トランザクションは自動的にロールバックされます。
 
 ## 利点
 
-Stream Load トランザクションインターフェースは、次の利点をもたらします。
+Stream Load トランザクションインターフェースは、以下の利点をもたらします。
 
 - **厳密な一度だけのセマンティクス**
 
-  トランザクションは、事前コミットとコミットの 2 つのフェーズに分割され、システム間でデータをロードしやすくします。たとえば、このインターフェースは Flink からのデータロードに対して厳密な一度だけのセマンティクスを保証できます。
+  トランザクションは事前コミットとコミットの 2 つのフェーズに分割されており、システム間でのデータロードが容易になります。たとえば、このインターフェースは Flink からのデータロードに対して厳密な一度だけのセマンティクスを保証できます。
 
 - **ロードパフォーマンスの向上**
 
-  プログラムを使用してロードジョブを実行する場合、Stream Load トランザクションインターフェースを使用すると、複数のミニバッチのデータをオンデマンドでマージし、1 つのトランザクション内で `/api/transaction/commit` 操作を呼び出して一度に送信できます。その結果、ロードするデータバージョンが少なくなり、ロードパフォーマンスが向上します。
+  プログラムを使用してロードジョブを実行する場合、Stream Load トランザクションインターフェースを使用すると、複数のミニバッチのデータをオンデマンドでマージし、1 つのトランザクション内で一度にすべて送信することができます。このようにして、ロードするデータバージョンが少なくなり、ロードパフォーマンスが向上します。
 
 ## 制限
 
-Stream Load トランザクションインターフェースには、次の制限があります。
+Stream Load トランザクションインターフェースには、以下の制限があります。
 
 - **単一データベース単一テーブル** トランザクションのみがサポートされています。**複数データベース複数テーブル** トランザクションのサポートは開発中です。
 
@@ -81,8 +81,8 @@ Stream Load トランザクションインターフェースには、次の制�
 
 - 呼び出した `/api/transaction/begin`、`/api/transaction/load`、または `/api/transaction/prepare` 操作がエラーを返した場合、トランザクションは失敗し、自動的にロールバックされます。
 - 新しいトランザクションを開始するために `/api/transaction/begin` 操作を呼び出す際、ラベルを指定する必要があります。なお、後続の `/api/transaction/load`、`/api/transaction/prepare`、および `/api/transaction/commit` 操作は、`/api/transaction/begin` 操作と同じラベルを使用する必要があります。
-- 以前のトランザクションのラベルを使用して `/api/transaction/begin` 操作を呼び出して新しいトランザクションを開始すると、以前のトランザクションは失敗し、ロールバックされます。
-- StarRocks が CSV 形式のデータに対してサポートするデフォルトのカラムセパレータと行区切り文字は `\t` と `\n` です。データファイルがデフォルトのカラムセパレータまたは行区切り文字を使用していない場合、`/api/transaction/load` 操作を呼び出す際に、データファイルで実際に使用されているカラムセパレータまたは行区切り文字を `"column_separator: <column_separator>"` または `"row_delimiter: <row_delimiter>"` を使用して指定する必要があります。
+- 前のトランザクションのラベルを使用して `/api/transaction/begin` 操作を呼び出して新しいトランザクションを開始すると、前のトランザクションは失敗し、ロールバックされます。
+- StarRocks が CSV 形式のデータに対してサポートするデフォルトの列区切り文字と行区切り文字は `\t` と `\n` です。データファイルがデフォルトの列区切り文字または行区切り文字を使用していない場合、`/api/transaction/load` 操作を呼び出す際に `"column_separator: <column_separator>"` または `"row_delimiter: <row_delimiter>"` を使用して、データファイルで実際に使用されている列区切り文字または行区切り文字を指定する必要があります。
 
 ## 始める前に
 
@@ -90,7 +90,7 @@ Stream Load トランザクションインターフェースには、次の制�
 
 <InsertPrivNote />
 
-#### ネットワーク設定の確認
+#### ネットワーク構成の確認
 
 ロードしたいデータが存在するマシンが、StarRocks クラスターの FE および BE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port) (デフォルト: `8030`) および [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (デフォルト: `8040`) を介してアクセスできることを確認してください。
 
@@ -100,7 +100,7 @@ Stream Load トランザクションインターフェースには、次の制�
 
 このトピックでは、CSV 形式のデータを例として使用します。
 
-1. ローカルファイルシステムの `/home/disk1/` パスに、`example1.csv` という名前の CSV ファイルを作成します。このファイルは、ユーザー ID、ユーザー名、ユーザースコアを順に表す 3 つの列で構成されています。
+1. ローカルファイルシステムの `/home/disk1/` パスに `example1.csv` という名前の CSV ファイルを作成します。このファイルは、ユーザー ID、ユーザー名、ユーザースコアを順に表す 3 つの列で構成されています。
 
    ```Plain
    1,Lily,23
@@ -171,7 +171,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
   }
   ```
 
-- 重複ラベル以外のエラーが発生した場合、次の結果が返されます。
+- 重複したラベル以外のエラーが発生した場合、次の結果が返されます。
 
   ```Bash
   {
@@ -209,7 +209,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **NOTE**
 >
-> この例では、データファイル `example1.csv` で使用されているカラムセパレータは、StarRocks のデフォルトのカラムセパレータ (`\t`) ではなく、カンマ (`,`) です。そのため、`/api/transaction/load` 操作を呼び出す際に、`"column_separator: <column_separator>"` を使用してカンマ (`,`) をカラムセパレータとして指定する必要があります。
+> この例では、データファイル `example1.csv` で使用されている列区切り文字はカンマ (`,`) であり、StarRocks のデフォルトの列区切り文字 (`\t`) ではありません。そのため、`/api/transaction/load` 操作を呼び出す際に `"column_separator: <column_separator>"` を使用してカンマ (`,`) を列区切り文字として指定する必要があります。
 
 #### 戻り結果
 
@@ -233,7 +233,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
   }
   ```
 
-- トランザクションが不明と見なされる場合、次の結果が返されます。
+- トランザクションが不明と見なされた場合、次の結果が返されます。
 
   ```Bash
   {
@@ -244,7 +244,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
   }
   ```
 
-- トランザクションが無効な状態と見なされる場合、次の結果が返されます。
+- トランザクションが無効な状態と見なされた場合、次の結果が返されます。
 
   ```Bash
   {
@@ -309,7 +309,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
   }
   ```
 
-- トランザクションが存在しないと見なされる場合、次の結果が返されます。
+- トランザクションが存在しないと見なされた場合、次の結果が返されます。
 
   ```Bash
   {
@@ -385,7 +385,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
   }
   ```
 
-- トランザクションが既にコミットされている場合、次の結果が返されます。
+- トランザクションがすでにコミットされている場合、次の結果が返されます。
 
   ```Bash
   {
@@ -396,7 +396,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
   }
   ```
 
-- トランザクションが存在しないと見なされる場合、次の結果が返されます。
+- トランザクションが存在しないと見なされた場合、次の結果が返されます。
 
   ```Bash
   {
@@ -474,7 +474,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
   }
   ```
 
-- トランザクションが存在しないと見なされる場合、次の結果が返されます。
+- トランザクションが存在しないと見なされた場合、次の結果が返されます。
 
   ```Bash
   {
@@ -498,6 +498,6 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ## 参考文献
 
-Stream Load の適用シナリオやサポートされているデータファイル形式、および Stream Load の動作については、[Loading from a local file system via Stream Load](../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load) を参照してください。
+Stream Load の適用可能なシナリオやサポートされるデータファイル形式、Stream Load の動作についての情報は、[Loading from a local file system via Stream Load](../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load) を参照してください。
 
-Stream Load ジョブの作成に関する構文やパラメータについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+Stream Load ジョブを作成するための構文とパラメータについての情報は、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::
 
-`table_constraints` は、どのテーブルに制約があるかを示します。
+`table_constraints` は、どのテーブルに制約があるかを説明します。
 
 `table_constraints` には以下のフィールドが提供されています。
 

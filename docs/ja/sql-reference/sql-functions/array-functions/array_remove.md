@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # array_remove
 
+## 説明
+
 配列から要素を削除します。
 
 ## 構文

@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # DROP STORAGE VOLUME
 
-## 説明
+## Description
 
 ストレージボリュームを削除します。削除されたストレージボリュームは、もう参照できません。この機能は v3.1 からサポートされています。
 
@@ -14,19 +14,19 @@ displayed_sidebar: docs
 > - デフォルトのストレージボリュームおよび組み込みのストレージボリューム `builtin_storage_volume` は削除できません。[DESC STORAGE VOLUME](DESC_STORAGE_VOLUME.md) を使用して、ストレージボリュームがデフォルトのストレージボリュームかどうかを確認できます。
 > - 既存のデータベースやクラウドネイティブテーブルによって参照されているストレージボリュームは削除できません。
 
-## 構文
+## Syntax
 
 ```SQL
 DROP STORAGE VOLUME [ IF EXISTS ] <storage_volume_name>
 ```
 
-## パラメータ
+## Parameters
 
-| **パラメータ**      | **説明**                                   |
+| **Parameter**       | **Description**                         |
 | ------------------- | --------------------------------------- |
-| storage_volume_name | 削除するストレージボリュームの名前です。 |
+| storage_volume_name | 削除するストレージボリュームの名前。     |
 
-## 例
+## Examples
 
 例 1: ストレージボリューム `my_s3_volume` を削除します。
 
@@ -35,7 +35,7 @@ MySQL > DROP STORAGE VOLUME my_s3_volume;
 Query OK, 0 rows affected (0.01 sec)
 ```
 
-## 関連する SQL ステートメント
+## Relevant SQL statements
 
 - [CREATE STORAGE VOLUME](CREATE_STORAGE_VOLUME.md)
 - [ALTER STORAGE VOLUME](ALTER_STORAGE_VOLUME.md)

@@ -1,5 +1,5 @@
 ---
-description: Datadog でモニタリングする
+description: Datadog で監視する
 displayed_sidebar: docs
 ---
 
@@ -16,7 +16,7 @@ displayed_sidebar: docs
 
 > **NOTE**
 >
-> Datadog Agent を初めてインストールする際、Python も依存関係としてインストールされます。以下の手順では、この Python を使用することをお勧めします。
+> Datadog Agent を初めてインストールする際に、Python も依存関係としてインストールされます。以下の手順では、この Python を使用することをお勧めします。
 
 ## StarRocks ソースコードの準備
 
@@ -106,7 +106,7 @@ sudo systemctl start datadog-agent
 
 ## 統合キットのアンインストール
 
-統合キットが不要になった場合、アンインストールすることができます。
+統合キットが不要になった場合は、アンインストールできます。
 
 - FE 統合キットをアンインストールするには、次のコマンドを実行します。
 

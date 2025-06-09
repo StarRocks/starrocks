@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # bitand
 
-2 つの数値式のビット単位の AND を返します。
+## 説明
 
-## Syntax
+2つの数値式のビット単位のANDを返します。
+
+## 構文
 
 ```Haskell
 BITAND(x,y);
 ```
 
-## Parameters
+## パラメータ
 
-- `x`: この式は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT のいずれかのデータ型に評価される必要があります。
+- `x`: この式は、次のデータ型のいずれかに評価される必要があります: TINYINT, SMALLINT, INT, BIGINT, LARGEINT。
 
-- `y`: この式は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT のいずれかのデータ型に評価される必要があります。
+- `y`: この式は、次のデータ型のいずれかに評価される必要があります: TINYINT, SMALLINT, INT, BIGINT, LARGEINT。
 
 > `x` と `y` はデータ型が一致している必要があります。
 
-## Return value
+## 戻り値
 
-戻り値は `x` と同じ型です。いずれかの値が NULL の場合、結果は NULL になります。
+戻り値は `x` と同じ型です。いずれかの値がNULLの場合、結果はNULLです。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select bitand(3,0);

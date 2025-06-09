@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # null_or_empty
 
-この関数は、文字列が空または NULL の場合に true を返します。それ以外の場合は false を返します。
+## 説明
 
-## Syntax
+この関数は、文字列が空またはNULLの場合にtrueを返します。それ以外の場合はfalseを返します。
+
+## 構文
 
 ```Haskell
 BOOLEAN NULL_OR_EMPTY (VARCHAR str)

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # array_cum_sum
 
+## Description
+
 配列内の要素の累積和を返します。
 
 ## Syntax
@@ -15,7 +17,7 @@ array_cum_sum(array(double))
 
 ## Parameters
 
-`array`: 配列内の要素は BIGINT (8 バイトの符号付き整数) または DOUBLE (8 バイトの浮動小数点数) 型でなければなりません。
+`array`: 配列内の要素は、BIGINT（8バイトの符号付き整数）または DOUBLE（8バイトの浮動小数点数）型でなければなりません。
 
 ## Return values
 

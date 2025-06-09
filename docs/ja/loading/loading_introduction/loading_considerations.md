@@ -3,21 +3,21 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
-# 考慮事項
+# Considerations
 
 このトピックでは、データロードを実行する前に考慮すべきシステムの制限と設定について説明します。
 
 ## メモリ制限
 
-StarRocks は、各ロードジョブのメモリ使用量を制限するためのパラメータを提供しており、特に高い同時実行シナリオでのメモリ消費を削減します。ただし、メモリ使用量の制限を過度に低く設定しないでください。メモリ使用量の制限が過度に低い場合、ロードジョブのメモリ使用量が指定された制限に達するため、データが頻繁にメモリからディスクにフラッシュされる可能性があります。ビジネスシナリオに基づいて適切なメモリ使用量の制限を指定することをお勧めします。
+StarRocks は、各ロードジョブのメモリ使用量を制限するためのパラメータを提供しており、特に高い同時実行性のシナリオでメモリ消費を削減します。ただし、メモリ使用量の制限を過度に低く設定しないでください。メモリ使用量の制限が過度に低い場合、ロードジョブのメモリ使用量が指定された制限に達するため、データが頻繁にメモリからディスクにフラッシュされる可能性があります。ビジネスシナリオに基づいて適切なメモリ使用量の制限を指定することをお勧めします。
 
-メモリ使用量を制限するためのパラメータは、各ロード方法によって異なります。詳細については、[Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)、および [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を参照してください。ロードジョブは通常、複数の BEs または CNs で実行されるため、パラメータはすべての BEs または CNs におけるロードジョブの合計メモリ使用量ではなく、各 BE または CN における各ロードジョブのメモリ使用量を制限します。
+メモリ使用量を制限するために使用されるパラメータは、各ロード方法によって異なります。詳細については、 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 、 [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 、 [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 、 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 、および [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を参照してください。ロードジョブは通常、複数の BEs または CNs で実行されます。そのため、パラメータは、関与する各 BE または CN 上の各ロードジョブのメモリ使用量を制限し、すべての関与する BEs または CNs 上のロードジョブの総メモリ使用量を制限するわけではありません。
 
-StarRocks はまた、各個別の BE または CN で実行されるすべてのロードジョブの合計メモリ使用量を制限するためのパラメータも提供しています。詳細については、以下の「[システム設定](#system-configurations)」セクションを参照してください。
+StarRocks はまた、各個別の BE または CN 上で実行されるすべてのロードジョブの総メモリ使用量を制限するためのパラメータを提供しています。詳細については、以下の「 [System configurations](#system-configurations) 」セクションを参照してください。
 
 ## システム設定
 
-このセクションでは、StarRocks が提供するすべてのロード方法に適用されるパラメータ設定について説明します。
+このセクションでは、StarRocks が提供するすべてのロード方法に適用されるいくつかのパラメータ設定について説明します。
 
 ### FE 設定
 
@@ -29,15 +29,15 @@ StarRocks はまた、各個別の BE または CN で実行されるすべて�
 
 - `desired_max_waiting_jobs`
   
-  このパラメータは、キューで待機できるロードジョブの最大数を指定します。デフォルト値は **1024** です（v2.4 以前は 100、v2.5 以降は 1024）。FE 上の **PENDING** 状態のロードジョブの数が指定した最大数に達すると、FE は新しいロード要求を拒否します。このパラメータは非同期ロードジョブにのみ有効です。
+  このパラメータは、キューで待機中のロードジョブの最大数を指定します。デフォルト値は **1024** です（v2.4 以前は 100、v2.5 以降は 1024）。FE 上の **PENDING** 状態のロードジョブの数が指定した最大数に達すると、FE は新しいロードリクエストを拒否します。このパラメータは、非同期ロードジョブにのみ有効です。
 
 - `max_running_txn_num_per_db`
   
-  このパラメータは、StarRocks クラスターの各データベースで許可される進行中のロードトランザクションの最大数を指定します。ロードジョブは 1 つ以上のトランザクションを含むことができます。デフォルト値は **100** です。データベースで実行中のロードトランザクションの数が指定した最大数に達すると、送信した後続のロードジョブはスケジュールされません。この状況では、同期ロードジョブを送信すると、ジョブは拒否されます。非同期ロードジョブを送信すると、ジョブはキューで待機します。
+  このパラメータは、StarRocks クラスターの各データベースで許可される進行中のロードトランザクションの最大数を指定します。ロードジョブには 1 つ以上のトランザクションが含まれる場合があります。デフォルト値は **100** です。データベースで実行中のロードトランザクションの数が指定した最大数に達すると、送信した後続のロードジョブはスケジュールされません。この状況で、同期ロードジョブを送信すると、ジョブは拒否されます。非同期ロードジョブを送信すると、ジョブはキューで待機中になります。
 
   :::note
   
-  StarRocks はすべてのロードジョブをまとめてカウントし、同期ロードジョブと非同期ロードジョブを区別しません。
+  StarRocks はすべてのロードジョブを一緒にカウントし、同期ロードジョブと非同期ロードジョブを区別しません。
 
   :::
 
@@ -58,21 +58,21 @@ StarRocks はまた、各個別の BE または CN で実行されるすべて�
 
 - `streaming_load_rpc_max_alive_time_sec`
   
-  各 Writer プロセスの待機タイムアウト期間。デフォルト値は 1200 秒です。データロードプロセス中、StarRocks は各 tablet にデータを受信して書き込むために Writer プロセスを開始します。指定した待機タイムアウト期間内に Writer プロセスがデータを受信しない場合、StarRocks は Writer プロセスを停止します。StarRocks クラスターが低速でデータを処理する場合、Writer プロセスが長時間次のデータバッチを受信しない可能性があり、その結果 "TabletWriter add batch with unknown id" エラーが報告されます。この場合、このパラメータの値を増やすことができます。
+  各 Writer プロセスの待機タイムアウト期間。デフォルト値は 1200 秒です。データロードプロセス中、StarRocks は各タブレットにデータを受信して書き込むために Writer プロセスを開始します。指定した待機タイムアウト期間内に Writer プロセスがデータを受信しない場合、StarRocks は Writer プロセスを停止します。StarRocks クラスターが低速でデータを処理する場合、Writer プロセスは長期間にわたって次のデータバッチを受信せず、「TabletWriter add batch with unknown id」エラーを報告することがあります。この場合、このパラメータの値を増やすことができます。
 
 - `load_process_max_memory_limit_bytes` と `load_process_max_memory_limit_percent`
   
-  これらのパラメータは、各個別の BE または CN でのすべてのロードジョブに消費される最大メモリ量を指定します。StarRocks は、2 つのパラメータの値のうち、より小さいメモリ消費量を許可される最終的なメモリ消費量として識別します。
+  これらのパラメータは、各個別の BE または CN 上でのすべてのロードジョブに消費される最大メモリ量を指定します。StarRocks は、2 つのパラメータの値のうち、より小さいメモリ消費量を最終的に許可されるメモリ消費量として識別します。
 
   - `load_process_max_memory_limit_bytes`: 最大メモリサイズを指定します。デフォルトの最大メモリサイズは 100 GB です。
-  - `load_process_max_memory_limit_percent`: 最大メモリ使用量を指定します。デフォルト値は 30% です。このパラメータは `mem_limit` パラメータとは異なります。`mem_limit` パラメータは StarRocks クラスターの合計最大メモリ使用量を指定し、デフォルト値は 90% x 90% です。
+  - `load_process_max_memory_limit_percent`: 最大メモリ使用量を指定します。デフォルト値は 30% です。このパラメータは `mem_limit` パラメータとは異なります。`mem_limit` パラメータは、StarRocks クラスターの総最大メモリ使用量を指定し、デフォルト値は 90% x 90% です。
 
     BE または CN が存在するマシンのメモリ容量を M とすると、ロードジョブに消費される最大メモリ量は次のように計算されます: `M x 90% x 90% x 30%`。
 
 ### システム変数設定
 
-次の[システム変数](../../sql-reference/System_variable.md)を設定できます。
+次の [system variable](../../sql-reference/System_variable.md) を設定できます。
 
 - `query_timeout`
 
-  クエリのタイムアウト期間。単位: 秒。値の範囲: `1` から `259200`。デフォルト値: `300`。この変数は、現在の接続のすべてのクエリステートメントおよび INSERT ステートメントに影響します。
+  クエリのタイムアウト期間。単位: 秒。値の範囲: `1` から `259200`。デフォルト値: `300`。この変数は、現在の接続内のすべてのクエリステートメント、および INSERT ステートメントに影響します。

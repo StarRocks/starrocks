@@ -5,61 +5,61 @@ sidebar_position: 0.9
 
 # Hive Bitmap UDF
 
-Hive Bitmap UDF は、Hive で直接使用できる UDF を提供します。これらは、Bitmap データを生成し、Bitmap に関連する計算を行うために使用できます。
+Hive Bitmap UDF は、Hive で直接使用できる UDF を提供します。これらは Bitmap データを生成し、Bitmap に関連する計算を行うために使用できます。
 
-Hive Bitmap UDF で定義された Bitmap フォーマットは、StarRocks のフォーマットと一致しており、Bitmap データを StarRocks にロードしたり、StarRocks から Hive にアンロードしたりする際に直接使用できます。
+Hive Bitmap UDF で定義された Bitmap フォーマットは StarRocks のフォーマットと一致しており、Bitmap データを StarRocks にロードしたり、StarRocks から Hive にアンロードしたりする際に直接使用できます。
 
 適用シナリオ:
 
-- 生データの量が多く、これらのデータを直接 StarRocks にロードして計算することは、StarRocks クラスターに大きな負担をかけます。望ましい解決策は、Hive で Bitmap データを生成し、それを StarRocks にロードすることです。
+- 生データの量が多く、これらのデータを直接 StarRocks にロードして計算すると、StarRocks クラスターに大きな負荷がかかります。望ましい解決策は、Hive で Bitmap データを生成し、それを StarRocks にロードすることです。
 - StarRocks で生成された Bitmap データを他のシステムで使用するために Hive にエクスポートします。
 
-サポートされるソースおよびターゲットデータタイプ:
+サポートされているソースおよびターゲットデータタイプ:
 
-- v3.1 以降では、これらのタイプのデータのロードとアンロードをサポートします: String, Base64, Binary。
-- v2.5 および v3.0 では、String と Base64 データのロードとアンロードのみをサポートします。
+- v3.1 以降では、String、Base64、Binary のデータのロードとアンロードをサポートしています。
+- v2.5 および v3.0 では、String と Base64 データのロードとアンロードのみをサポートしています。
 
 ## 生成可能な Hive Bitmap UDF
 
 - com.starrocks.hive.udf.UDAFBitmapAgg
 
-  列内の複数行の非 null 値を 1 行の Bitmap 値に結合します。これは、StarRocks の組み込み集計関数 [bitmap_agg](bitmap-functions/bitmap_agg.md) と同等です。
+  列内の複数の非 NULL 値を 1 行の Bitmap 値に結合します。これは StarRocks の組み込み集計関数 [bitmap_agg](bitmap-functions/bitmap_agg.md) に相当します。
 
 - com.starrocks.hive.udf.UDAFBitmapUnion
 
-  一連のビットマップの和集合を計算します。これは、StarRocks の組み込み集計関数 [bitmap_union](bitmap-functions/bitmap_union.md) と同等です。
+  一連のビットマップの和集合を計算します。これは StarRocks の組み込み集計関数 [bitmap_union](bitmap-functions/bitmap_union.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBase64ToBitmap
 
-  base64 エンコードされた文字列をビットマップに変換します。これは、StarRocks の組み込み関数 [base64_to_bitmap](bitmap-functions/base64_to_bitmap.md) と同等です。
+  base64 エンコードされた文字列をビットマップに変換します。これは StarRocks の組み込み関数 [base64_to_bitmap](bitmap-functions/base64_to_bitmap.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBitmapAnd
 
-  2 つのビットマップの交差を計算します。これは、StarRocks の組み込み関数 [bitmap_and](bitmap-functions/bitmap_and.md) と同等です。
+  2 つのビットマップの交差を計算します。これは StarRocks の組み込み関数 [bitmap_and](bitmap-functions/bitmap_and.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBitmapCount
 
-  ビットマップ内の値の数をカウントします。これは、StarRocks の組み込み関数 [bitmap_count](bitmap-functions/bitmap_count.md) と同等です。
+  ビットマップ内の値の数をカウントします。これは StarRocks の組み込み関数 [bitmap_count](bitmap-functions/bitmap_count.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBitmapFromString
 
-  カンマ区切りの文字列をビットマップに変換します。これは、StarRocks の組み込み関数 [bitmap_from_string](bitmap-functions/bitmap_from_string.md) と同等です。
+  カンマ区切りの文字列をビットマップに変換します。これは StarRocks の組み込み関数 [bitmap_from_string](bitmap-functions/bitmap_from_string.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBitmapOr
 
-  2 つのビットマップの和集合を計算します。これは、StarRocks の組み込み関数 [bitmap_or](bitmap-functions/bitmap_or.md) と同等です。
+  2 つのビットマップの和集合を計算します。これは StarRocks の組み込み関数 [bitmap_or](bitmap-functions/bitmap_or.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBitmapToBase64
 
-  Bitmap を Base64 文字列に変換します。これは、StarRocks の組み込み関数 [bitmap_to_base64](bitmap-functions/bitmap_to_base64.md) と同等です。
+  Bitmap を Base64 文字列に変換します。これは StarRocks の組み込み関数 [bitmap_to_base64](bitmap-functions/bitmap_to_base64.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBitmapToString
 
-  ビットマップをカンマ区切りの文字列に変換します。これは、StarRocks の組み込み関数 [bitmap_to_string](bitmap-functions/bitmap_to_string.md) と同等です。
+  ビットマップをカンマ区切りの文字列に変換します。これは StarRocks の組み込み関数 [bitmap_to_string](bitmap-functions/bitmap_to_string.md) に相当します。
 
 - com.starrocks.hive.udf.UDFBitmapXor
 
-  2 つのビットマップのユニークな要素の集合を計算します。これは、StarRocks の組み込み関数 [bitmap_xor](bitmap-functions/bitmap_xor.md) と同等です。
+  2 つのビットマップのユニークな要素の集合を計算します。これは StarRocks の組み込み関数 [bitmap_xor](bitmap-functions/bitmap_xor.md) に相当します。
 
 ## 使用方法
 
@@ -74,7 +74,7 @@ Hive Bitmap UDF で定義された Bitmap フォーマットは、StarRocks の�
 2. JAR パッケージを HDFS にアップロードします。
 
    ```bash
-   hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar
+   hadoop fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar
    ```
 
 3. JAR パッケージを Hive にロードします。
@@ -132,10 +132,10 @@ Hive Bitmap UDF で定義された Bitmap フォーマットは、StarRocks の�
 3. StarRocks ビットマップテーブルを作成します。
 
    ```sql
-   mysql> create table t1(c1 int, c2 bitmap bitmap_union) aggregate key(c1)  distributed by hash(c1);
+   mysql> create table t1(c1 int, c2 bitmap bitmap_union) aggregate key(c1) distributed by hash(c1);
    ```
 
-4. Bitmap データを StarRocks にさまざまな方法でロードします。
+4. Bitmap データを異なる方法で StarRocks にロードします。
 
    - [files](table-functions/files.md) 関数を使用してデータをロードします。
 
@@ -165,7 +165,7 @@ Hive Bitmap UDF で定義された Bitmap フォーマットは、StarRocks の�
    +------+----------------------+
    ```
 
-### StarRocks から Hive への Bitmap のエクスポート
+### StarRocks から Hive へ Bitmap をエクスポートする
 
 1. StarRocks に Bitmap テーブルを作成し、このテーブルにデータを書き込みます。
 
@@ -187,7 +187,7 @@ Hive Bitmap UDF で定義された Bitmap フォーマットは、StarRocks の�
    hive> create table t_bitmap(c1 bigint, c2 binary) stored as parquet;
    ```
 
-3. さまざまな方法でデータをエクスポートします。
+3. 異なる方法でデータをエクスポートします。
 
    - INSERT INTO FILES (Binary フォーマット) を使用してデータをエクスポートします。
 

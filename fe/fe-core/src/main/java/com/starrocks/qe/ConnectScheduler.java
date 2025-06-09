@@ -37,12 +37,14 @@ package com.starrocks.qe;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.HttpConnectContext;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
@@ -71,6 +73,7 @@ public class ConnectScheduler {
     private final AtomicInteger numberConnection;
     private final AtomicInteger nextConnectionId;
 
+    // mysql connectContext/ http connectContext/ arrowFlight connextContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
     private final ReentrantLock connStatsLock = new ReentrantLock();
@@ -241,7 +244,9 @@ public class ConnectScheduler {
             }
 
             // Check whether it's the connection for the specified user.
-            if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
+            if ((forUser != null && !ctx.getQualifiedUser().equals(forUser)) ||
+                    (Config.authorization_enable_admin_user_protection &&
+                            ctx.getQualifiedUser().equals(AuthenticationMgr.ROOT_USER))) {
                 continue;
             }
 
@@ -321,4 +326,24 @@ public class ConnectScheduler {
             }
         }
     }
+
+    public void printAllRunningQuery() {
+        connectionMap.values().stream().forEach(ctx -> {
+            if (ctx.getCommand() == MysqlCommand.COM_QUERY || ctx.getCommand() == MysqlCommand.COM_STMT_EXECUTE ||
+                    ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE) {
+                if (ctx.getExecutor() != null && ctx.getExecutor().getParsedStmt() != null &&
+                        ctx.getExecutor().getParsedStmt().getOrigStmt() != null) {
+                    long threadId = ctx.getCurrentThreadId();
+                    long theadAllocatedBytes = 0;
+                    if (threadId != 0) {
+                        theadAllocatedBytes = ConnectProcessor.getThreadAllocatedBytes(threadId) -
+                                ctx.getCurrentThreadAllocatedMemory();
+                    }
+                    LOG.warn("FE ShutDown! Running Query:{},  QueryFEAllocatedMemory: {}",
+                            ctx.getExecutor().getParsedStmt().getOrigStmt().getOrigStmt(), theadAllocatedBytes);
+                }
+            }
+        });
+    }
+
 }

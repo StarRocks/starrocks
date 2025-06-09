@@ -19,6 +19,7 @@ displayed_sidebar: docs
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
+- [删除主键索引](#删除主键索引-339-版本起))
 
 :::tip
 该操作需要有对应表的 ALTER 权限。
@@ -44,6 +45,7 @@ alter_clause1[, alter_clause2, ...]
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
+- drop persistent index: 存算分离下删除主键索引。**从 3.3.9 版本开始支持。**
 
 ## 使用限制和注意事项
 
@@ -598,11 +600,11 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 
 :::note
 
-- 目前仅支持存算一体集群。
-- 对应表必须开启 `fast_schema_evolution`。
-- 不支持向 MAP 类型中的 STRUCT 增删字段。
-- 新增字段不支持指定默认值，Nullable 等属性。默认为 Nullable，默认值为 null。
-- 使用该功能后，不支持直接将集群降级至不具备该功能的版本。
+- 目前，此功能仅在存算一体集群中支持。
+- 表必须启用`fast_schema_evolution`属性。
+- 不支持在 STRUCT 类型中修改一个 MAP 子字段的 Value 类型，不管该 Value 类型是 ARRAY、STRUCT 还是 MAP。
+- 新添加的字段不能有默认值或可空等属性。它们默认为可空，默认值为null。
+- 使用此功能后，不允许直接降级集群到不支持此功能的版本。
 
 :::
 
@@ -792,6 +794,19 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
 执行完 Compaction 后，您可以通过查询 `information_schema` 数据库下的 `be_compactions` 表来查看 Compaction 后的数据版本变化 （`SELECT * FROM information_schema.be_compactions;`）。
+
+### 删除主键索引 (3.3.9 版本起)
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
+```
+
+> **说明**
+>
+> 只支持在存算分离集群中删除 CLOUD_NATIVE 类型的主键索引
 
 ## 示例
 
@@ -1240,6 +1255,14 @@ ALTER TABLE compaction_test COMPACT (p202302,p203303);
 ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
 
 ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
+```
+
+### 删除主键索引
+
+删除 `db1.test_tbl` 中 Tablet `100` 和 `101` 的主键索引 。
+
+```sql
+ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
 ## 相关参考

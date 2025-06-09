@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # cardinality
 
-MAP 値の要素数を返します。MAP はキーと値のペアの無順序コレクションで、例えば `{"a":1, "b":2}` のようなものです。1 つのキーと値のペアが 1 つの要素を構成します。`{"a":1, "b":2}` は 2 つの要素を含みます。
+## 説明
 
-この関数は v3.0 以降でサポートされています。[map_size()](map_size.md) の別名です。
+MAP 値の要素数を返します。MAP はキーと値のペアの無順序コレクションで、例えば `{"a":1, "b":2}` のようなものです。1つのキーと値のペアが1つの要素を構成します。`{"a":1, "b":2}` は2つの要素を含んでいます。
+
+この関数は v3.0 以降でサポートされています。[map_size()](map_size.md) のエイリアスです。
 
 ## 構文
 
@@ -20,7 +22,7 @@ INT cardinality(any_map)
 
 ## 戻り値
 
-INT 型の値を返します。
+INT 値を返します。
 
 入力が NULL の場合、NULL が返されます。
 
@@ -30,7 +32,7 @@ MAP 値のキーまたは値が NULL の場合、NULL は通常の値として�
 
 ### StarRocks 内部テーブルから MAP データをクエリする
 
-v3.1 以降、StarRocks はテーブル作成時に MAP カラムを定義することをサポートしています。この例では、以下のデータを含むテーブル `test_map` を使用します。
+v3.1 以降、StarRocks ではテーブルを作成する際に MAP カラムを定義することがサポートされています。この例では、以下のデータを含むテーブル `test_map` を使用します。
 
 ```Plain
 CREATE TABLE test_map(
@@ -84,7 +86,7 @@ SELECT * FROM hive_map ORDER BY col_int;
 +---------+---------------+
 ```
 
-クラスター内に [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) が作成された後、この catalog と cardinality() 関数を使用して、`col_map` カラムの各行の要素数を取得できます。
+クラスタ内に [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) が作成された後、この catalog と cardinality() 関数を使用して、`col_map` カラムの各行の要素数を取得できます。
 
 ```Plaintext
 SELECT cardinality(col_map) FROM hive_map ORDER BY col_int;

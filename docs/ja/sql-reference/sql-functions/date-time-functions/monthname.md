@@ -4,17 +4,19 @@ displayed_sidebar: docs
 
 # monthname
 
-指定された日付の月名を返します。
+## 説明
+
+指定された日付の月の名前を返します。
 
 `date` パラメータは DATE または DATETIME 型でなければなりません。
 
-## Syntax
+## 構文
 
 ```Haskell
 VARCHAR MONTHNAME(date)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select monthname('2008-02-03 00:00:00');
@@ -25,6 +27,6 @@ MySQL > select monthname('2008-02-03 00:00:00');
 +----------------------------------+
 ```
 
-## keyword
+## キーワード
 
 MONTHNAME, monthname

@@ -6,21 +6,21 @@ displayed_sidebar: docs
 
 複数の文字列の128ビットチェックサムを計算します。チェックサムは数字の10進文字列で表されます。
 
-## 構文
+## Syntax
 
 ```Haskell
 LARGEINT md5sum_numeric(VARCHAR expr,...);
 ```
 
-## パラメータ
+## Parameters
 
-`expr`: 計算する文字列。VARCHAR 型である必要があります。
+`expr`: 計算する文字列。VARCHAR型でなければなりません。
 
-## 戻り値
+## Return value
 
-LARGEINT 型のチェックサムを返します。入力が空の場合、エラーが返されます。
+LARGEINT型のチェックサムを返します。入力が空の場合、エラーが返されます。
 
-## 例
+## Examples
 
 ```Plain Text
 mysql> select md5sum_numeric("starrocks");

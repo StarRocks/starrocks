@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-この操作には、対象データベースに対する ALTER 権限が必要です。この権限を付与するには、[GRANT](../account-management/GRANT.md) の指示に従ってください。
+この操作には、対象データベースに対する ALTER 権限が必要です。[GRANT](../account-management/GRANT.md) の手順に従って、この権限を付与できます。
 
 :::
 
@@ -37,7 +37,7 @@ displayed_sidebar: docs
 注意:
 
 ```plain text
-- データベースの名前を変更した後、必要に応じて REVOKE と GRANT コマンドを使用して対応するユーザー権限を変更してください。
+- データベースの名前を変更した後、必要に応じて REVOKE および GRANT コマンドを使用して対応するユーザー権限を修正してください。
 - データベースのデフォルトのデータクォータとデフォルトのレプリカクォータは 2^63-1 です。
 ```
 
@@ -65,7 +65,7 @@ displayed_sidebar: docs
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
     ```
 
-## 参考
+## 参照
 
 - [CREATE DATABASE](CREATE_DATABASE.md)
 - [USE](USE.md)

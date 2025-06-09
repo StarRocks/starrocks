@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # bitmap_has_any
 
+## Description
+
 2 つの Bitmap 列の間に交差する要素があるかどうかを計算し、戻り値は Boolean 値です。
 
 ## Syntax

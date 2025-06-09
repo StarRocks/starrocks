@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # array_avg
 
+## Description
+
 ARRAY 内のすべてのデータの平均値を計算し、この結果を返します。
 
 ## Syntax
@@ -12,7 +14,7 @@ ARRAY 内のすべてのデータの平均値を計算し、この結果を返�
 array_avg(array(type))
 ```
 
-`array(type)` は次のタイプの要素をサポートします: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMALV2.
+`array(type)` は、次のタイプの要素をサポートします: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMALV2.
 
 ## Examples
 
@@ -34,4 +36,4 @@ mysql> select array_avg([11.33, 11.11, 12.324]);
 
 ## keyword
 
-ARRAY_AVG,ARRAY
+ARRAY_AVG, ARRAY

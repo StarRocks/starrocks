@@ -6,17 +6,17 @@ displayed_sidebar: docs
 
 辞書オブジェクトのリフレッシュをキャンセルします。
 
-## 構文
+## Syntax
 
 ```SQL
 CANCEL REFRESH DICTIONARY <dictionary_object_name>
 ```
 
-## パラメータ
+## Parameters
 
 - **dictionary_object_name**: REFRESHING 状態にある辞書オブジェクトの名前。
 
-## 例
+## Examples
 
 辞書オブジェクト `dict_obj` のリフレッシュをキャンセルします。
 

@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Deploy StarRocks with Helm
+# Helm を使用して StarRocks をデプロイする
 
 [Helm](https://helm.sh/) は Kubernetes のパッケージマネージャーです。[Helm Chart](https://helm.sh/docs/topics/charts/) は Helm パッケージであり、Kubernetes クラスタ上でアプリケーションを実行するために必要なすべてのリソース定義を含んでいます。このトピックでは、Helm を使用して Kubernetes クラスタ上に StarRocks クラスタを自動的にデプロイする方法について説明します。
 
@@ -13,7 +13,7 @@ displayed_sidebar: docs
 
 ## 手順
 
-1. StarRocks 用の Helm Chart リポジトリを追加します。Helm Chart には StarRocks Operator とカスタムリソース StarRocksCluster の定義が含まれています。
+1. StarRocks の Helm Chart リポジトリを追加します。Helm Chart には、StarRocks Operator とカスタムリソース StarRocksCluster の定義が含まれています。
    1. Helm Chart リポジトリを追加します。
 
       ```Bash
@@ -36,7 +36,7 @@ displayed_sidebar: docs
       starrocks/starrocks           1.8.0            3.1-latest   A Helm chart for StarRocks cluster
       ```
 
-2. Helm Chart のデフォルト **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** を使用して StarRocks Operator と StarRocks クラスタをデプロイするか、YAML ファイルを作成してデプロイメント設定をカスタマイズします。
+2. Helm Chart のデフォルトの **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** を使用して StarRocks Operator と StarRocks クラスタをデプロイするか、YAML ファイルを作成してデプロイメント設定をカスタマイズします。
    1. デフォルト設定でのデプロイメント
 
       次のコマンドを実行して、1 つの FE と 1 つの BE からなる StarRocks Operator と StarRocks クラスタをデプロイします。
@@ -51,7 +51,7 @@ displayed_sidebar: docs
 
       ```Bash
       $ helm install starrocks starrocks/kube-starrocks
-      # 次の結果が返された場合、StarRocks Operator と StarRocks クラスタがデプロイされています。
+      # 次の結果が返された場合、StarRocks Operator と StarRocks クラスタがデプロイ中です。
       NAME: starrocks
       LAST DEPLOYED: Tue Aug 15 15:12:00 2023
       NAMESPACE: starrocks
@@ -102,7 +102,7 @@ displayed_sidebar: docs
 - StarRocks operator と StarRocks クラスタを管理する
 
   - StarRocks operator と StarRocks クラスタの設定を更新する必要がある場合は、[Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/) を参照してください。
-  - StarRocks Operator と StarRocks クラスタをアンインストールする必要がある場合は、次のコマンドを実行してください。
+  - StarRocks Operator と StarRocks クラスタをアンインストールする必要がある場合は、次のコマンドを実行します。
 
     ```bash
     helm uninstall starrocks
@@ -112,15 +112,15 @@ displayed_sidebar: docs
 
 - GitHub リポジトリのアドレス: [starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)。
 
-- GitHub リポジトリのドキュメントには、さらに詳しい情報が提供されています。例えば:
+- GitHub リポジトリのドキュメントには、例えば次のような情報が含まれています:
 
   - Kubernetes API を介して StarRocks クラスタのようなオブジェクトを管理する必要がある場合は、[API reference](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) を参照してください。
 
-  - FE と BE ポッドに永続ボリュームをマウントして、FE のメタデータとログ、および BE のデータとログを保存する必要がある場合は、[Mount Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart) を参照してください。
+  - FE と BE ポッドに永続ボリュームをマウントして FE メタデータとログ、および BE データとログを保存する必要がある場合は、[Mount Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart) を参照してください。
 
     :::danger
 
-    永続ボリュームがマウントされていない場合、StarRocks Operator は emptyDir を使用して FE のメタデータとログ、および BE のデータとログを保存します。コンテナが再起動すると、データは失われます。
+    永続ボリュームがマウントされていない場合、StarRocks Operator は emptyDir を使用して FE メタデータとログ、および BE データとログを保存します。コンテナが再起動すると、データは失われます。
 
     :::
 
@@ -128,7 +128,7 @@ displayed_sidebar: docs
 
     - StarRocks クラスタをデプロイした後に手動でルートユーザーのパスワードを設定するには、[Change root user password HOWTO](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md) を参照してください。
 
-    - StarRocks クラスタをデプロイする際にルートユーザーのパスワードを自動的に設定するには、[Initialize root user password](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md) を参照してください。
+    - StarRocks クラスタをデプロイする際に自動的にルートユーザーのパスワードを設定するには、[Initialize root user password](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md) を参照してください。
 
 - StarRocks 共有データクラスタで CREATE TABLE ステートメントを実行した後に発生する次のエラーを解決する方法。
 
@@ -140,6 +140,6 @@ displayed_sidebar: docs
 
   - **解決策**
 
-       これは、StarRocks 共有データクラスタに 1 つの BE しか存在せず、1 つのレプリカのみをサポートしているためかもしれません。しかし、デフォルトのレプリカ数は 3 です。PROPERTIES でレプリカ数を 1 に変更することができます。例えば、`PROPERTIES( "replication_num" = "1" )` のようにします。
+       これは、StarRocks 共有データクラスタに BE が 1 つしか存在せず、1 つのレプリカしかサポートしていないためかもしれません。しかし、デフォルトのレプリカ数は 3 です。レプリカ数を 1 に変更するには、`PROPERTIES( "replication_num" = "1" )` のように PROPERTIES で設定します。
 
 - Artifact Hub 上で StarRocks によって維持されている Helm Chart のアドレス: [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。

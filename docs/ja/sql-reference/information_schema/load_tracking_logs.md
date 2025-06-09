@@ -6,15 +6,15 @@ displayed_sidebar: docs
 
 `load_tracking_logs` は、ロードジョブのエラーログを提供します。このビューは StarRocks v3.0 以降でサポートされています。
 
-`load_tracking_logs` には次のフィールドが提供されています:
+`load_tracking_logs` には以下のフィールドが提供されています:
 
 | **Field**     | **Description**                            |
 | ------------- | ------------------------------------------ |
 | ID            | ロードの ID。                              |
-| JOB_ID        | ロードジョブの ID (非推奨)。               |
+| JOB_ID        | ロードジョブの ID（非推奨）。              |
 | LABEL         | ロードジョブのラベル。                     |
 | DATABASE_NAME | ロードジョブが属するデータベース。         |
-| TRACKING_LOG  | ロードジョブのエラー (あれば)。            |
+| TRACKING_LOG  | ロードジョブのエラー（あれば）。           |
 
 :::tip
 ビュー `load_tracking_logs` をクエリするには、`JOB_ID` または `LABEL` でフィルタリングする必要があります。

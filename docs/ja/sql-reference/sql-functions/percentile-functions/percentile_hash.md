@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # percentile_hash
 
+## 説明
+
 DOUBLE 値を PERCENTILE 値として構築します。
 
-## Syntax
+## 構文
 
 ```Haskell
 PERCENTILE_HASH(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: サポートされているデータ型は DOUBLE です。
 
-## Return value
+## 戻り値
 
 PERCENTILE 値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select percentile_approx_raw(percentile_hash(234.234), 0.99);

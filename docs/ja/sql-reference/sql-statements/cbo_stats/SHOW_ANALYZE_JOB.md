@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 カスタムコレクションタスクの情報とステータスを表示します。
 
-デフォルトでは、StarRocks はテーブルの完全な統計情報を自動的に収集します。5 分ごとにデータの更新をチェックし、データの変更が検出されると、データ収集が自動的にトリガーされます。自動完全収集を使用したくない場合は、FE の設定項目 `enable_collect_full_statistic` を `false` に設定し、コレクションタスクをカスタマイズできます。
+デフォルトでは、StarRocks はテーブルの完全な統計を自動的に収集します。5 分ごとにデータの更新をチェックし、データの変更が検出されると、データ収集が自動的にトリガーされます。自動の完全収集を使用したくない場合は、FE の設定項目 `enable_collect_full_statistic` を `false` に設定し、コレクションタスクをカスタマイズできます。
 
 このステートメントは v2.4 からサポートされています。
 
@@ -31,7 +31,7 @@ WHERE 句を使用して結果をフィルタリングできます。このス�
 | Properties   | カスタムパラメータ。                                         |
 | Status       | タスクのステータス。PENDING、RUNNING、SUCCESS、FAILED を含みます。|
 | LastWorkTime | 最後の収集時間。                                             |
-| Reason       | タスクが失敗した理由。タスクが成功した場合は NULL が返されます。|
+| Reason       | タスクが失敗した理由。タスクの実行が成功した場合は NULL が返されます。|
 
 ## 例
 
@@ -43,7 +43,7 @@ SHOW ANALYZE JOB
 SHOW ANALYZE JOB where `database` = 'test';
 ```
 
-## 参考文献
+## 参考
 
 [CREATE ANALYZE](CREATE_ANALYZE.md): 自動コレクションタスクをカスタマイズします。
 
@@ -51,4 +51,4 @@ SHOW ANALYZE JOB where `database` = 'test';
 
 [KILL ANALYZE](KILL_ANALYZE.md): 実行中のカスタムコレクションタスクをキャンセルします。
 
-CBO の統計情報収集についての詳細は、[Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md) を参照してください。
+CBO の統計収集についての詳細は、[Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md) を参照してください。

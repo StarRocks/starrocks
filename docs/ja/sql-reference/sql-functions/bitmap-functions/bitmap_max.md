@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # bitmap_max
 
-ビットマップの最大値を取得します。ビットマップが `NULL` の場合、この関数は `NULL` を返します。ビットマップが空の場合、この関数はデフォルトで `NULL` を返します。
+## 説明
+
+bitmap の最大値を取得します。bitmap が `NULL` の場合、この関数は `NULL` を返します。bitmap が空の場合、この関数はデフォルトで `NULL` を返します。
 
 ## 構文
 
@@ -14,7 +16,7 @@ bitmap_max(bitmap)
 
 ## パラメータ
 
-`bitmap`: 最大値を取得したいビットマップ。BITMAP データ型のみがサポートされています。[bitmap_from_string](bitmap_from_string.md) などの関数を使用して構築したビットマップを指定できます。
+`bitmap`: 最大値を取得したい bitmap。BITMAP データ型のみがサポートされます。[bitmap_from_string](bitmap_from_string.md) などの関数を使用して構築した bitmap を指定できます。
 
 ## 戻り値
 

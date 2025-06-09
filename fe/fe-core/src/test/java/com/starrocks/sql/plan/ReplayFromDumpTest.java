@@ -1022,4 +1022,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  \n" +
                 "  25:EXCHANGE"));
     }
+
+    @Test
+    public void testUnionWithEmptyInput() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/union_with_empty_input");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("" +
+                "RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET"));
+    }
 }

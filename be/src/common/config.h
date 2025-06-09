@@ -594,6 +594,10 @@ CONF_Bool(thrift_rpc_strict_mode, "true");
 // rpc max string body size. 0 means unlimited
 CONF_Int32(thrift_rpc_max_body_size, "0");
 
+// Maximum valid time for a thrift rpc connection. Just be consistent with FE's thrift_client_timeout_ms.
+// The connection will be closed if it has existed in the connection pool for longer than this value.
+CONF_Int32(thrift_rpc_connection_max_valid_time_ms, "5000");
+
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
@@ -787,6 +791,8 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // pipeline poller timeout guard
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
+// whether to enable large column detection in the pipeline execution framework.
+CONF_mBool(pipeline_enable_large_column_checker, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
@@ -1030,6 +1036,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
+CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1116,6 +1123,11 @@ CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
+// The retry times of rpc request to report exec rpc request to FE. The default value is 10,
+// which means that the rpc request will be retried 10 times if it fails if it's fragment instatnce finish rpc.
+// Report exec rpc request is important for load job, if one fragment instance finish report failed,
+// the load job will be hang until timeout.
+CONF_mInt32(report_exec_rpc_request_retry_num, "10");
 
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
@@ -1370,6 +1382,18 @@ CONF_mBool(enable_compaction_flat_json, "true");
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
+// enable flat json remain filter
+CONF_mBool(enable_json_flat_remain_filter, "true");
+
+// enable flat complex type (/array/object/hyper type), diables for save storage
+CONF_mBool(enable_json_flat_complex_type, "false");
+
+// flat json use dict-encoding
+CONF_mBool(json_flat_use_dict_encoding, "true");
+
+// if disable flat complex type, check complex type rate in hyper-type column
+CONF_mDouble(json_flat_complex_type_factor, "0.3");
+
 // extract flat json column when row_num * null_factor > null_row_num
 CONF_mDouble(json_flat_null_factor, "0.3");
 
@@ -1440,7 +1464,10 @@ CONF_mBool(enable_core_file_size_optimization, "true");
 // 9. wg_driver_executor
 // use commas to separate:
 // * means release all above
-CONF_mString(try_release_resource_before_core_dump, "data_cache");
+// TODO(zhangqiang)
+// can not set data_cache right now because release datacache may cause BE hang
+// https://github.com/StarRocks/starrocks/issues/59226
+CONF_mString(try_release_resource_before_core_dump, "");
 
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.

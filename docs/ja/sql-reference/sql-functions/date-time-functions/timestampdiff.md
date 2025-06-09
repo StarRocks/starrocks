@@ -4,28 +4,30 @@ displayed_sidebar: docs
 
 # timestampdiff
 
-`datetime_expr2` から `datetime_expr1` までの間隔を返します。`datetime_expr1` と `datetime_expr2` は DATE または DATETIME 型でなければなりません。
+## 説明
 
-整数結果と間隔の単位は次のいずれかである必要があります。
+`datetime_expr2` から `datetime_expr1` までの間隔を返します。`datetime_expr1` と `datetime_expr2` は DATE または DATETIME 型である必要があります。
+
+整数結果と間隔の単位は、以下のいずれかでなければなりません：
 
 MILLISECOND (3.2 以降)、SECOND、MINUTE、HOUR、DAY、WEEK、MONTH、または YEAR。
 
-## Syntax
+## 構文
 
 ```Haskell
 INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 ```
 
-## Parameters
+## パラメータ
 
 - `datetime_expr`: 比較したい 2 つの DATE または DATETIME 式。
 - `unit`: 時間差の単位。サポートされている単位には MILLISECOND (3.2 以降)、SECOND、MINUTE、HOUR、DAY、WEEK、MONTH、YEAR が含まれます。
 
-## Return value
+## 戻り値
 
 INT 値を返します。
 
-## Examples
+## 例
 
 ```plain text
 MySQL> SELECT TIMESTAMPDIFF(MONTH,'2003-02-01','2003-05-01');
@@ -57,6 +59,6 @@ MySQL > SELECT TIMESTAMPDIFF(MILLISECOND,'2003-02-01','2003-05-01');
 +--------------------------------------------------------+
 ```
 
-## keyword
+## キーワード
 
 TIMESTAMPDIFF

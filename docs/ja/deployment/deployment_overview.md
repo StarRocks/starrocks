@@ -10,9 +10,9 @@ displayed_sidebar: docs
 
 デプロイ手順の概要は以下の通りで、詳細は後のトピックで説明します。
 
-StarRocks のデプロイは、一般的に以下の手順に従います。
+StarRocks のデプロイは一般的に以下のステップに従います。
 
-1. StarRocks デプロイメントの[ハードウェアおよびソフトウェア要件](../deployment/deployment_prerequisites.md)を確認します。
+1. StarRocks デプロイのための [ハードウェアとソフトウェアの要件](../deployment/deployment_prerequisites.md) を確認します。
 
    StarRocks をデプロイする前に、サーバーが満たすべき前提条件を確認します。これには、CPU、メモリ、ストレージ、ネットワーク、オペレーティングシステム、および依存関係が含まれます。
 
@@ -32,19 +32,19 @@ StarRocks のデプロイは、一般的に以下の手順に従います。
 
 5. StarRocks をデプロイします。
 
-   - 共有データ StarRocks クラスターをデプロイしたい場合、これはストレージとコンピュートが分離されたアーキテクチャを特徴としています。[Deploy and use shared-data StarRocks](../deployment/shared_data/s3.md) の指示を参照してください。
-   - 共有なし StarRocks クラスターをデプロイしたい場合、これはローカルストレージを使用します。以下のオプションがあります：
+   - 共有データ StarRocks クラスターをデプロイしたい場合、これはストレージとコンピュートアーキテクチャが分離されたものです。[Deploy and use shared-data StarRocks](../deployment/shared_data/s3.md) を参照してください。
+   - 共有なし StarRocks クラスターをデプロイしたい場合、これはローカルストレージを使用します。以下のオプションがあります。
 
      - [StarRocks を手動でデプロイします](../deployment/deploy_manually.md)。
-     - [Kubernetes 上で Operator を使用して StarRocks をデプロイします](../deployment/sr_operator.md)。
-     - [Kubernetes 上で Helm を使用して StarRocks をデプロイします](../deployment/helm.md)。
+     - [Kubernetes 上でオペレーターを使用して StarRocks をデプロイします](../deployment/sr_operator.md)。
+     - [Helm を使用して Kubernetes 上で StarRocks をデプロイします](../deployment/helm.md)。
 
-6. 必要な[デプロイ後のセットアップ](../deployment/post_deployment_setup.md)を行います。
+6. 必要な [デプロイ後のセットアップ](../deployment/post_deployment_setup.md) を行います。
 
    StarRocks クラスターを本番環境に投入する前に、さらなるセットアップが必要です。これには、初期アカウントのセキュリティ確保や、パフォーマンス関連のシステム変数の設定が含まれます。
 
 ## Upgrade and downgrade
 
-既存の StarRocks クラスターを新しいバージョンにアップグレードする予定がある場合、初めて StarRocks をインストールするのではなく、[Upgrade StarRocks](../deployment/upgrade.md) を参照して、アップグレード手順やアップグレード前に考慮すべき問題についての情報を確認してください。
+既存の StarRocks クラスターを新しいバージョンにアップグレードする予定がある場合は、初めて StarRocks をインストールするのではなく、[Upgrade StarRocks](../deployment/upgrade.md) を参照して、アップグレード手順やアップグレード前に考慮すべき問題についての情報を確認してください。
 
 StarRocks クラスターをダウングレードする手順については、[Downgrade StarRocks](../deployment/downgrade.md) を参照してください。

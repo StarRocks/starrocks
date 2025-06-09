@@ -4,33 +4,35 @@ displayed_sidebar: docs
 
 # percentile_cont
 
-`expr` の線形補間によるパーセンタイル値を計算します。
+## 説明
 
-## Syntax
+`expr` のパーセンタイル値を線形補間で計算します。
+
+## 構文
 
 ```Haskell
 PERCENTILE_CONT (expr, percentile) 
 ```
 
-## Parameters
+## パラメータ
 
-- `expr`: 値を並べ替えるための式です。数値データ型、DATE、または DATETIME である必要があります。例えば、物理の中央値を見つけたい場合は、物理のスコアを含む列を指定します。
+- `expr`: 値を順序付けるための式です。数値データ型、DATE、または DATETIME でなければなりません。例えば、物理の中央値を見つけたい場合は、物理のスコアを含む列を指定します。
 
 - `percentile`: 見つけたい値のパーセンタイルです。0 から 1 までの定数の浮動小数点数です。例えば、中央値を見つけたい場合、このパラメータを `0.5` に設定します。
 
-## Return value
+## 戻り値
 
-指定されたパーセンタイルにある値を返します。入力値がちょうど希望のパーセンタイルにない場合、最も近い2つの入力値の線形補間を使用して結果が計算されます。
+指定されたパーセンタイルにある値を返します。入力値が正確に希望のパーセンタイルにない場合、最も近い2つの入力値の線形補間を使用して結果が計算されます。
 
 データ型は `expr` と同じです。
 
-## Usage notes
+## 使用上の注意
 
 この関数は NULL を無視します。
 
-## Examples
+## 例
 
-`exam` という名前のテーブルが次のデータを持っているとします。
+`exam` という名前のテーブルがあり、以下のデータが含まれているとします。
 
 ```Plain
 select * from exam order by Subject;
@@ -52,13 +54,13 @@ select * from exam order by Subject;
 
 NULL を無視して各科目の中央値を計算します。
 
-Query:
+クエリ:
 
 ```SQL
 SELECT Subject, PERCENTILE_CONT (Score, 0.5)  FROM exam group by Subject;
 ```
 
-Result:
+結果:
 
 ```Plain
 +-----------+-----------------------------+

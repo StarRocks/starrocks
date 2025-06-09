@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # count_if
 
+## 説明
+
 指定された条件を満たすレコードの数を返します。条件を満たすレコードがない場合は `0` を返します。
 
 この関数は `DISTINCT` をサポートしていません。例えば、`count_if(DISTINCT x)` は使用できません。
@@ -71,7 +73,7 @@ SELECT * FROM test_count_if;
 +------+------+---------------------+------+
 ```
 
-例 1: テーブル `test_count_if` で `v2` が null の行数をカウントします。
+例1: テーブル `test_count_if` で `v2` が null の行数をカウントします。
 
 ```Plain
 select count_if(v2 is null) from test_count_if;
@@ -82,10 +84,10 @@ select count_if(v2 is null) from test_count_if;
 +----------------------+
 ```
 
-例 2: `v1 >= v2 または v4 = 1` の行数をカウントします。
+例2: `v1 >= v2 または v4 = 1` の行数をカウントします。
 
 ```Plain
-select count_if(v1 >= v2 or v4 = 1)from test_count_if;
+select count_if(v1 >= v2 or v4 = 1) from test_count_if;
 +----------------------------------+
 | count_if((v1 >= v2) OR (v4 = 1)) |
 +----------------------------------+
@@ -93,7 +95,7 @@ select count_if(v1 >= v2 or v4 = 1)from test_count_if;
 +----------------------------------+
 ```
 
-例 3: 複数の条件を指定します。
+例3: 複数の条件を指定します。
 
 ```Plain
 select count_if(v1 >= v2), count_if(v1 >= v2 or v4 = 1), count_if(v1 >= v2 and v4 = 1) from test_count_if;

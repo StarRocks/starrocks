@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # bitmap_or
 
+## Description
+
 2 つの入力ビットマップの和集合を計算し、新しいビットマップを返します。
 
-## 構文
+## Syntax
 
 ```Haskell
 BITMAP BITMAP_OR(BITMAP lhs, BITMAP rhs)
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(2))) cnt;
@@ -30,6 +32,6 @@ MySQL > select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(1))) cnt;
 +------+
 ```
 
-## キーワード
+## keyword
 
 BITMAP_OR,BITMAP

@@ -6,7 +6,9 @@ import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.m
 
 # regexp_extract
 
-この関数は、正規表現パターンに一致するターゲット値の最初の一致する部分文字列を返します。パターンに一致する pos の項目を抽出します。パターンは str の一部に完全に一致する必要があり、関数はパターン内で一致する必要がある部分を返します。一致が見つからない場合、空の文字列を返します。
+## 説明
+
+この関数は、正規表現パターンに一致するターゲット値内の最初の一致する部分文字列を返します。パターンに一致する pos の項目を抽出します。パターンは str の一部に完全に一致する必要があり、関数はパターン内で一致する必要のある部分を返します。一致が見つからない場合、空の文字列を返します。
 
 ## 構文
 
@@ -18,7 +20,7 @@ VARCHAR regexp_extract(VARCHAR str, VARCHAR pattern, int pos)
 
 <Tip />
 
-次のデータを考えます:
+このデータを考えてみましょう:
 
 ```SQL
 SELECT HourlySkyConditions FROM quickstart.weatherdata
@@ -44,7 +46,7 @@ LIMIT 10;
 10 rows in set (0.03 sec)
 ```
 
-### 文字列 `OVC: ` に続く2つの数字のセットを返す
+### 文字列 `OVC: ` に続く2組の数字を返す
 
 ```SQL
 SELECT regexp_extract(HourlySkyConditions, 'OVC:(\\d+ \\d+)', 1) FROM quickstart.weatherdata
@@ -70,7 +72,7 @@ LIMIT 10;
 10 rows in set (0.01 sec)
 ```
 
-### 文字列 `OVC: ` に続く2番目の数字のセットのみを返す
+### 文字列 `OVC: ` に続く2番目の数字のみを返す
 
 ```SQL
 SELECT regexp_extract(HourlySkyConditions, 'OVC:(\\d+) (\\d+)', 2) FROM quickstart.weatherdata WHERE HourlySkyConditions LIKE '%OVC%' LIMIT 10;

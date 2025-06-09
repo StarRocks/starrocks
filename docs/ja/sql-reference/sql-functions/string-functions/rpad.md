@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # rpad
 
-この関数は、`str` の最初の音節から数えて `len` の長さの文字列を返します。`len` が `str` より長い場合、返される値は `str` の後ろにパッド文字を追加して `len` 文字に伸ばされます。`str` が `len` より長い場合、返される値は `len` 文字に短縮されます。`len` はバイト数ではなく、文字数を意味します。
+## 説明
 
-## Syntax
+この関数は、`str` の中で最初の音節から数えて `len` の長さの文字列を返します。`len` が `str` より長い場合、`str` の後ろにパッド文字を追加して `len` 文字に長くします。`str` が `len` より長い場合、返される値は `len` 文字に短縮されます。`len` はバイト数ではなく文字数を意味します。
+
+## 構文
 
 ```Haskell
 VARCHAR rpad(VARCHAR str, INT len[, VARCHAR pad])
 ```
 
-## Parameters
+## パラメータ
 
 `str`: 必須、パディングされる文字列で、VARCHAR 値に評価される必要があります。
 
@@ -20,11 +22,11 @@ VARCHAR rpad(VARCHAR str, INT len[, VARCHAR pad])
 
 `pad`: オプション、`str` の後ろに追加される文字で、VARCHAR 値である必要があります。このパラメータが指定されていない場合、デフォルトでスペースが追加されます。
 
-## Return value
+## 戻り値
 
 VARCHAR 値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > SELECT rpad("hi", 5, "xy");
@@ -49,6 +51,6 @@ MySQL > SELECT rpad("hi", 5);
 +---------------------+
 ```
 
-## keyword
+## キーワード
 
 RPAD

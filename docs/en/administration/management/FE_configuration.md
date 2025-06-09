@@ -783,7 +783,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-##### ignore_unknown_log_id
+##### metadata_ignore_unknown_operation_type
 
 - Default: false
 - Type: Boolean

@@ -4,25 +4,25 @@ displayed_sidebar: docs
 
 # md5
 
-MD5 メッセージダイジェストアルゴリズムを使用して、文字列の 128 ビットチェックサムを計算します。チェックサムは 32 文字の 16 進文字列で表されます。
+MD5 メッセージダイジェストアルゴリズムを使用して、文字列の128ビットチェックサムを計算します。チェックサムは32文字の16進数文字列で表されます。
 
-## 構文
+## Syntax
 
 ```sql
 md5(expr)
 ```
 
-## パラメータ
+## Parameters
 
-`expr`: 計算する文字列。VARCHAR 型である必要があります。
+`expr`: 計算する文字列。VARCHAR 型でなければなりません。
 
-## 戻り値
+## Return value
 
-VARCHAR 型のチェックサムを返します。これは 32 文字の 16 進文字列です。
+VARCHAR 型のチェックサムを返します。これは32文字の16進数文字列です。
 
 入力が NULL の場合、NULL が返されます。
 
-## 例
+## Examples
 
 ```sql
 select md5('abc');
@@ -50,6 +50,6 @@ select md5(null);
 1 row in set (0.00 sec)
 ```
 
-## キーワード
+## Keywords
 
 MD5, ENCRYPTION

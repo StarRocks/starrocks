@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # url_encode
 
+## 説明
+
 文字列を [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 形式に変換します。
 
 この関数は v3.2 からサポートされています。
@@ -16,7 +18,7 @@ VARCHAR url_encode(VARCHAR str)
 
 ## パラメータ
 
-- `str`: エンコードする文字列。`str` が文字列でない場合、この関数は最初に暗黙的なキャストを試みます。
+- `str`: エンコードする文字列。`str` が文字列でない場合、この関数はまず暗黙的なキャストを試みます。
 
 ## 戻り値
 

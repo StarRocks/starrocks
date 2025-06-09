@@ -367,8 +367,8 @@ public class OdpsMetadata implements ConnectorMetadata {
             return Lists.newArrayList(remoteFileInfo);
         } catch (Exception e) {
             LOG.error("getRemoteFileInfos error", e);
+            throw new StarRocksConnectorException("Encounter error when try to split the maxcompute table: " + e.getMessage(), e);
         }
-        return Collections.emptyList();
     }
 
     private OdpsSplitsInfo callSizeSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder)

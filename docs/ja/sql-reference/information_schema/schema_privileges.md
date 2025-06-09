@@ -16,8 +16,8 @@ displayed_sidebar: docs
 
 | **Field**      | **Description**                                              |
 | -------------- | ------------------------------------------------------------ |
-| GRANTEE        | 権限が付与されているユーザーの名前。                         |
-| TABLE_CATALOG  | スキーマが属する catalog の名前。この値は常に `def` です。    |
-| TABLE_SCHEMA   | スキーマの名前。                                              |
-| PRIVILEGE_TYPE | 付与された権限。各行は単一の権限をリストするため、付与されたスキーマ権限ごとに1行あります。 |
-| IS_GRANTABLE   | ユーザーが `GRANT OPTION` 権限を持っている場合は `YES`、そうでない場合は `NO`。出力には `PRIVILEGE_TYPE='GRANT OPTION'` として `GRANT OPTION` を別行でリストしません。 |
+| GRANTEE        | 権限が付与されているユーザーの名前。                        |
+| TABLE_CATALOG  | スキーマが属する catalog の名前。この値は常に `def` です。   |
+| TABLE_SCHEMA   | スキーマの名前。                                             |
+| PRIVILEGE_TYPE | 付与された権限。各行は単一の権限をリストしているため、被付与者が持つスキーマ権限ごとに1行あります。 |
+| IS_GRANTABLE   | ユーザーが `GRANT OPTION` 権限を持っている場合は `YES`、それ以外の場合は `NO`。出力には `PRIVILEGE_TYPE='GRANT OPTION'` として `GRANT OPTION` を別行でリストしません。 |

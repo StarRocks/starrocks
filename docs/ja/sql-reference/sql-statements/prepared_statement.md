@@ -4,27 +4,27 @@ displayed_sidebar: docs
 
 # Prepared statements
 
-バージョン 3.2 以降、StarRocks は、同じ構造で異なる変数を持つ SQL ステートメントを複数回実行するための prepared statements を提供しています。この機能により、実行効率が大幅に向上し、SQL インジェクションを防止できます。
+バージョン 3.2 以降、StarRocks は、同じ構造で異なる変数を持つ SQL ステートメントを複数回実行するための prepared statements を提供しています。この機能は、実行効率を大幅に向上させ、SQL インジェクションを防ぎます。
 
 ## 説明
 
-prepared statements は基本的に次のように動作します。
+prepared statements は基本的に以下のように動作します。
 
 1. **準備**: ユーザーは変数をプレースホルダー `?` で表した SQL ステートメントを準備します。FE は SQL ステートメントを解析し、実行計画を生成します。
 2. **実行**: 変数を宣言した後、ユーザーはこれらの変数をステートメントに渡して実行します。ユーザーは異なる変数で同じステートメントを複数回実行できます。
 
 **利点**
 
-- **解析のオーバーヘッドを削減**: 実際のビジネスシナリオでは、アプリケーションは同じ構造で異なる変数を持つステートメントを複数回実行することがよくあります。prepared statements がサポートされている場合、StarRocks は準備段階でステートメントを一度だけ解析する必要があります。異なる変数で同じステートメントを後続で実行する際には、事前に生成された解析結果を直接使用できます。このようにして、特に複雑なクエリにおいてステートメントの実行パフォーマンスが大幅に向上します。
-- **SQL インジェクション攻撃を防止**: ステートメントを変数から分離し、ユーザー入力データを直接変数に連結するのではなくパラメータとして渡すことで、StarRocks は悪意のあるユーザーが悪意のある SQL コードを実行するのを防ぐことができます。
+- **解析のオーバーヘッドを削減**: 実際のビジネスシナリオでは、アプリケーションは同じ構造で異なる変数を持つステートメントを複数回実行することがよくあります。prepared statements がサポートされている場合、StarRocks は準備段階で一度だけステートメントを解析する必要があります。異なる変数を持つ同じステートメントの後続の実行は、事前に生成された解析結果を直接使用できます。このようにして、特に複雑なクエリのステートメント実行パフォーマンスが大幅に向上します。
+- **SQL インジェクション攻撃を防止**: ステートメントを変数から分離し、ユーザー入力データを直接ステートメントに変数として連結するのではなく、パラメータとして渡すことで、StarRocks は悪意のあるユーザーが悪意のある SQL コードを実行するのを防ぐことができます。
 
-**使用法**
+**使用方法**
 
 prepared statements は現在のセッションでのみ有効であり、他のセッションでは使用できません。現在のセッションが終了すると、そのセッションで作成された prepared statements は自動的に削除されます。
 
 ## 構文
 
-prepared statement の実行は次のフェーズで構成されます。
+prepared statement の実行は以下のフェーズで構成されます。
 
 - PREPARE: 変数をプレースホルダー `?` で表したステートメントを準備します。
 - SET: ステートメント内で変数を宣言します。
@@ -41,7 +41,7 @@ PREPARE <stmt_name> FROM <preparable_stmt>
 
 **パラメータ:**
 
-- `stmt_name`: prepared statement に与えられる名前で、この名前を使用してその prepared statement を実行または解放します。名前は単一のセッション内で一意でなければなりません。
+- `stmt_name`: prepared statement に与えられる名前で、後にその prepared statement を実行または解放するために使用されます。この名前は単一のセッション内でユニークでなければなりません。
 - `preparable_stmt`: 準備される SQL ステートメントで、変数のプレースホルダーは疑問符 (`?`) です。現在、**`SELECT` ステートメントのみ**がサポートされています。
 
 **例:**
@@ -88,7 +88,7 @@ EXECUTE <stmt_name> [USING @var_name [, @var_name] ...]
 
 **例:**
 
-変数を `SELECT` ステートメントに渡してそのステートメントを実行します。
+変数を `SELECT` ステートメントに渡し、そのステートメントを実行します。
 
 ```SQL
 EXECUTE select_by_id_stmt USING @id1;
@@ -118,9 +118,9 @@ DROP PREPARE select_by_id_stmt;
 
 ### prepared statements を使用する
 
-次の例は、StarRocks テーブルからデータを挿入、削除、更新、クエリするために prepared statements を使用する方法を示しています。
+以下の例は、StarRocks テーブルからデータを挿入、削除、更新、クエリするために prepared statements を使用する方法を示しています。
 
-次のような `demo` という名前のデータベースと `users` という名前のテーブルが既に作成されていると仮定します。
+以下のようなデータベース `demo` とテーブル `users` が既に作成されていると仮定します。
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS demo;
@@ -161,12 +161,12 @@ DISTRIBUTED BY HASH(id);
 
 ### Java アプリケーションでの Prepared Statements の使用
 
-次の例は、Java アプリケーションが JDBC ドライバを使用して StarRocks テーブルからデータを挿入、削除、更新、クエリする方法を示しています。
+以下の例は、Java アプリケーションが JDBC ドライバーを使用して StarRocks テーブルからデータを挿入、削除、更新、クエリする方法を示しています。
 
-1. JDBC で StarRocks の接続 URL を指定する際に、サーバーサイドの prepared statements を有効にする必要があります。
+1. JDBC で StarRocks の接続 URL を指定する際、サーバーサイドの prepared statements を有効にする必要があります。
 
     ```Plaintext
     jdbc:mysql://<fe_ip>:<fe_query_port>/useServerPrepStmts=true
     ```
 
-2. StarRocks GitHub プロジェクトは、JDBC ドライバを通じて StarRocks テーブルからデータを挿入、削除、更新、クエリする方法を説明する [Java コード例](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/test/java/com/starrocks/analysis/PreparedStmtTest.java) を提供しています。
+2. StarRocks GitHub プロジェクトは、JDBC ドライバーを通じて StarRocks テーブルからデータを挿入、削除、更新、クエリする方法を説明する [Java コード例](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/test/java/com/starrocks/analysis/PreparedStmtTest.java) を提供しています。

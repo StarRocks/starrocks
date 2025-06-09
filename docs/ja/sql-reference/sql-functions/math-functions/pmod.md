@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # pmod
 
-`dividend` を `divisor` で割った正の余りを返します。
+## 説明
+
+`dividend` を `divisor` で割ったときの正の余りを返します。
 
 ## 構文
 
@@ -22,9 +24,9 @@ pmod(dividend, divisor)
 - BIGINT
 - DOUBLE
 
-> **NOTE**
+> **注意**
 >
-> `dividend` と `divisor` はデータ型が一致している必要があります。StarRocks はデータ型が一致しない場合、暗黙的な変換を行います。
+> `dividend` と `divisor` はデータ型が一致している必要があります。StarRocks はデータ型が一致しない場合、暗黙の型変換を行います。
 
 ## 戻り値
 

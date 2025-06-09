@@ -2,7 +2,9 @@
 displayed_sidebar: docs
 ---
 
-# ST_GeometryFromText,ST_GeomFromText
+# ST_GeometryFromText, ST_GeomFromText
+
+## 説明
 
 WKT (Well Known Text) を対応するメモリジオメトリに変換します。
 
@@ -25,4 +27,4 @@ MySQL > SELECT ST_AsText(ST_GeometryFromText("LINESTRING (1 1, 2 2)"));
 
 ## キーワード
 
-ST_GEOMETRYFROMTEXT,ST_GEOMFROMTEXT,ST,GEOMETRYFROMTEXT,GEOMFROMTEXT
+ST_GEOMETRYFROMTEXT, ST_GEOMFROMTEXT, ST, GEOMETRYFROMTEXT, GEOMFROMTEXT

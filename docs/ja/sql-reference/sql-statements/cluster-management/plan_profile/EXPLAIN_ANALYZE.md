@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-指定された SQL ステートメントを実行し、そのステートメントの Query Profile を表示します。Query Profile についての詳細は、[Query Profile Overview](../../../../administration/query_profile_overview.md) を参照してください。
+指定された SQL ステートメントを実行し、このステートメントの Query Profile を表示します。Query Profile の詳細については、[Query Profile Overview](../../../../administration/query_profile_overview.md) を参照してください。
 
 この機能は v3.1 以降でサポートされています。
 
@@ -22,7 +22,7 @@ EXPLAIN ANALYZE <statement>
 
 ## パラメータ
 
-`statement`: Query Profile を表示する SQL ステートメントです。[SELECT](../../table_bucket_part_index/SELECT.md) と [INSERT INTO](../../loading_unloading/INSERT.md) の両方がサポートされています。
+`statement`: Query Profile を表示する SQL ステートメント。[SELECT](../../table_bucket_part_index/SELECT.md) と [INSERT INTO](../../loading_unloading/INSERT.md) の両方がサポートされています。
 
 ## 使用上の注意
 
@@ -38,7 +38,7 @@ INSERT INTO ステートメントのプロファイルを分析する際、実�
 
 ![img](../../../../_assets/Profile/text_based_explain_analyze_insert.jpeg)
 
-## 関連する SQL
+## 関連 SQL
 
 - [SHOW PROFILELIST](./SHOW_PROFILELIST.md)
 - [ANALYZE PROFILE](./ANALYZE_PROFILE.md)

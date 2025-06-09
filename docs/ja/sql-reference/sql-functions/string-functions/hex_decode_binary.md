@@ -4,30 +4,32 @@ displayed_sidebar: docs
 
 # hex_decode_binary
 
+## 説明
+
 16 進数でエンコードされた文字列をバイナリにデコードします。
 
 この関数は v3.0 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 hex_decode_binary(str);
 ```
 
-## Parameters
+## パラメータ
 
 `str`: 変換する文字列。サポートされているデータ型は VARCHAR です。
 
-以下のいずれかの状況が発生した場合、空のバイナリが返されます:
+以下のいずれかの状況が発生した場合、空のバイナリが返されます。
 
 - 文字列の長さが 0 または文字列内の文字数が奇数である。
-- 文字列に `[0-9]`、`[a-z]`、`[A-Z]` 以外の文字が含まれている。
+- 文字列に `[0-9]`、`[a-z]`、および `[A-Z]` 以外の文字が含まれている。
 
-## Return value
+## 戻り値
 
 VARBINARY 型の値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select hex(hex_decode_binary(hex("Hello StarRocks")));
@@ -45,6 +47,6 @@ mysql> select hex_decode_binary(NULL);
 +--------------------------------------------------+
 ```
 
-## Keywords
+## キーワード
 
 HEX_DECODE_BINARY

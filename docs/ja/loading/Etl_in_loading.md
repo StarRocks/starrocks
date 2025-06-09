@@ -14,17 +14,17 @@ StarRocks はロード時のデータ変換をサポートしています。
 
 このトピックでは、CSV データを例にとり、ロード時にデータを抽出および変換する方法を説明します。サポートされるデータファイル形式は、選択したロード方法によって異なります。
 
-> **注意**
+> **NOTE**
 >
-> CSV データの場合、UTF-8 文字列（カンマ (,)、タブ、パイプ (|) など）をテキスト区切り文字として使用できますが、その長さは 50 バイトを超えないようにしてください。
+> CSV データの場合、UTF-8 文字列（カンマ (,) 、タブ、またはパイプ (|) など）をテキスト区切り文字として使用できますが、その長さは 50 バイトを超えないようにしてください。
 
 ## シナリオ
 
-データファイルを StarRocks テーブルにロードする際、データファイルのデータが StarRocks テーブルのデータに完全にマッピングされない場合があります。このような場合、データを StarRocks テーブルにロードする前に抽出または変換する必要はありません。StarRocks はロード中にデータを抽出および変換するのを支援します。
+データファイルを StarRocks テーブルにロードする際、データファイルのデータが StarRocks テーブルのデータに完全にマッピングされない場合があります。このような場合、データを StarRocks テーブルにロードする前に抽出や変換を行う必要はありません。StarRocks はロード中にデータの抽出と変換を支援します。
 
 - ロードする必要のない列をスキップする。
   
-  ロードする必要のない列をスキップできます。また、データファイルの列が StarRocks テーブルの列と異なる順序である場合、データファイルと StarRocks テーブルの間で列マッピングを作成できます。
+  ロードする必要のない列をスキップできます。また、データファイルの列が StarRocks テーブルの列と異なる順序である場合、データファイルと StarRocks テーブルの間に列マッピングを作成できます。
 
 - ロードしたくない行をフィルタリングする。
   
@@ -51,7 +51,7 @@ StarRocks はロード時のデータ変換をサポートしています。
       687,male,2020-05-23,2
       ```
 
-   b. `file2.csv` という名前のデータファイルを作成します。このファイルは日付を表す 1 つの列のみで構成されています。
+   b. `file2.csv` という名前のデータファイルを作成します。このファイルは、日付を表す 1 つの列のみで構成されています。
 
       ```Plain
       2020-05-20
@@ -62,9 +62,9 @@ StarRocks はロード時のデータ変換をサポートしています。
 
 2. StarRocks データベース `test_db` にテーブルを作成します。
 
-   > **注意**
+   > **NOTE**
    >
-   > バージョン 2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細については、[バケット数を設定する](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
+   > バージョン v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際に、バケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細については、[バケット数を設定する](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
    a. `table1` という名前のテーブルを作成します。このテーブルは、`event_date`、`event_type`、`user_id` の 3 つの列で構成されています。
 
@@ -103,21 +103,21 @@ StarRocks テーブルにロードしたいデータファイルには、StarRoc
 
 - HDFS およびクラウドストレージ
   
-  > **注意**
+  > **NOTE**
   >
-  > このセクションでは HDFS を例として使用します。
+  > このセクションでは HDFS を例にとります。
 
 - Kafka
 
-ほとんどの場合、CSV ファイルの列には名前が付けられていません。一部の CSV ファイルでは、最初の行が列名で構成されていますが、StarRocks は最初の行の内容を一般的なデータとして処理し、列名としては扱いません。したがって、CSV ファイルをロードする際には、ジョブ作成ステートメントまたはコマンドで CSV ファイルの列を**順番に**一時的に命名する必要があります。これらの一時的に命名された列は、StarRocks テーブルの列に**名前で**マッピングされます。データファイルの列については、以下の点に注意してください。
+ほとんどの場合、CSV ファイルの列には名前が付けられていません。一部の CSV ファイルでは、最初の行が列名で構成されていますが、StarRocks は最初の行の内容を列名ではなく一般的なデータとして処理します。したがって、CSV ファイルをロードする際には、ジョブ作成文やコマンドで CSV ファイルの列を一時的に **順番に** 名前を付ける必要があります。これらの一時的に名前を付けられた列は、StarRocks テーブルの列に **名前で** マッピングされます。データファイルの列については、以下の点に注意してください。
 
-- StarRocks テーブルの列にマッピングでき、StarRocks テーブルの列名を使用して一時的に命名された列のデータは、直接ロードされます。
+- StarRocks テーブルの列にマッピングでき、StarRocks テーブルの列の名前を使用して一時的に名前を付けられた列のデータは、直接ロードされます。
 
 - StarRocks テーブルの列にマッピングできない列は無視され、これらの列のデータはロードされません。
 
-- StarRocks テーブルの列にマッピングできるが、ジョブ作成ステートメントまたはコマンドで一時的に命名されていない列がある場合、ロードジョブはエラーを報告します。
+- StarRocks テーブルの列にマッピングできるが、ジョブ作成文やコマンドで一時的に名前を付けられていない列がある場合、ロードジョブはエラーを報告します。
 
-このセクションでは、`file1.csv` と `table1` を例として使用します。`file1.csv` の 4 つの列は、順番に `user_id`、`user_gender`、`event_date`、`event_type` として一時的に命名されます。`file1.csv` の一時的に命名された列の中で、`user_id`、`event_date`、`event_type` は `table1` の特定の列にマッピングできますが、`user_gender` は `table1` のどの列にもマッピングできません。したがって、`user_id`、`event_date`、`event_type` は `table1` にロードされますが、`user_gender` はロードされません。
+このセクションでは、`file1.csv` と `table1` を例にとります。`file1.csv` の 4 つの列は、順に `user_id`、`user_gender`、`event_date`、`event_type` と一時的に名前を付けられています。`file1.csv` の一時的に名前を付けられた列の中で、`user_id`、`event_date`、`event_type` は `table1` の特定の列にマッピングできますが、`user_gender` は `table1` のいかなる列にもマッピングできません。したがって、`user_id`、`event_date`、`event_type` は `table1` にロードされますが、`user_gender` はロードされません。
 
 ### データのロード
 
@@ -134,15 +134,15 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-> **注意**
+> **NOTE**
 >
-> Stream Load を選択する場合、データファイルと StarRocks テーブルの間で列マッピングを作成するために、`columns` パラメーターを使用してデータファイルの列を一時的に命名する必要があります。
+> Stream Load を選択する場合、データファイルと StarRocks テーブルの間に列マッピングを作成するために、`columns` パラメータを使用してデータファイルの列に一時的に名前を付ける必要があります。
 
-詳細な構文とパラメーターの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
 
 #### HDFS クラスターからデータをロードする
 
-`file1.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
+`file1.csv` が HDFS クラスターに保存されている場合、次の文を実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -156,15 +156,15 @@ LOAD LABEL test_db.label1
 WITH BROKER;
 ```
 
-> **注意**
+> **NOTE**
 >
-> Broker Load を選択する場合、データファイルと StarRocks テーブルの間で列マッピングを作成するために、`column_list` パラメーターを使用してデータファイルの列を一時的に命名する必要があります。
+> Broker Load を選択する場合、データファイルと StarRocks テーブルの間に列マッピングを作成するために、`column_list` パラメータを使用してデータファイルの列に一時的に名前を付ける必要があります。
 
-詳細な構文とパラメーターの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
 
 #### Kafka クラスターからデータをロードする
 
-`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次のステートメントを実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
+`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次の文を実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table101 ON table1
@@ -178,15 +178,15 @@ FROM KAFKA
 );
 ```
 
-> **注意**
+> **NOTE**
 >
-> Routine Load を選択する場合、データファイルと StarRocks テーブルの間で列マッピングを作成するために、`COLUMNS` パラメーターを使用してデータファイルの列を一時的に命名する必要があります。
+> Routine Load を選択する場合、データファイルと StarRocks テーブルの間に列マッピングを作成するために、`COLUMNS` パラメータを使用してデータファイルの列に一時的に名前を付ける必要があります。
 
-詳細な構文とパラメーターの説明については、[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
 
 ### データのクエリ
 
-ローカルファイルシステム、HDFS クラスター、または Kafka クラスターからのデータのロードが完了したら、`table1` のデータをクエリしてロードが成功したことを確認します。
+ローカルファイルシステム、HDFS クラスター、または Kafka クラスターからのデータロードが完了したら、`table1` のデータをクエリしてロードが成功したことを確認します。
 
 ```SQL
 MySQL [test_db]> SELECT * FROM table1;
@@ -203,20 +203,20 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ## ロードしたくない行をフィルタリングする
 
-データファイルを StarRocks テーブルにロードする際、特定の行をロードしたくない場合があります。このような場合、WHERE 句を使用してロードしたい行を指定できます。StarRocks は、WHERE 句で指定されたフィルター条件を満たさないすべての行をフィルタリングします。
+データファイルを StarRocks テーブルにロードする際、特定の行をロードしたくない場合があります。このような場合、WHERE 句を使用してロードしたい行を指定できます。StarRocks は WHERE 句で指定されたフィルタ条件を満たさないすべての行をフィルタリングします。
 
 この機能は、以下のデータソースからのデータロードをサポートしています。
 
 - ローカルファイルシステム
 
 - HDFS およびクラウドストレージ
-  > **注意**
+  > **NOTE**
   >
-  > このセクションでは HDFS を例として使用します。
+  > このセクションでは HDFS を例にとります。
 
 - Kafka
 
-このセクションでは、`file1.csv` と `table1` を例として使用します。`file1.csv` から `table1` にロードする際に、イベントタイプが `1` の行のみをロードしたい場合、WHERE 句を使用してフィルター条件 `event_type = 1` を指定できます。
+このセクションでは、`file1.csv` と `table1` を例にとります。`file1.csv` から `table1` にロードしたい行が `event_type` が `1` の行のみである場合、WHERE 句を使用してフィルタ条件 `event_type = 1` を指定できます。
 
 ### データのロード
 
@@ -234,11 +234,11 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-詳細な構文とパラメーターの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
 
 #### HDFS クラスターからデータをロードする
 
-`file1.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
+`file1.csv` が HDFS クラスターに保存されている場合、次の文を実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -253,11 +253,11 @@ LOAD LABEL test_db.label2
 WITH BROKER;
 ```
 
-詳細な構文とパラメーターの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
 
 #### Kafka クラスターからデータをロードする
 
-`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次のステートメントを実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
+`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次の文を実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
@@ -272,11 +272,11 @@ FROM KAFKA
 );
 ```
 
-詳細な構文とパラメーターの説明については、[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
 
 ### データのクエリ
 
-ローカルファイルシステム、HDFS クラスター、または Kafka クラスターからのデータのロードが完了したら、`table1` のデータをクエリしてロードが成功したことを確認します。
+ローカルファイルシステム、HDFS クラスター、または Kafka クラスターからのデータロードが完了したら、`table1` のデータをクエリしてロードが成功したことを確認します。
 
 ```SQL
 MySQL [test_db]> SELECT * FROM table1;
@@ -291,20 +291,20 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ## 元の列から新しい列を生成する
 
-データファイルを StarRocks テーブルにロードする際、データファイルの一部のデータは、StarRocks テーブルにロードする前に変換が必要な場合があります。このような場合、ジョブ作成コマンドまたはステートメントで関数や式を使用してデータ変換を実装できます。
+データファイルを StarRocks テーブルにロードする際、データファイルの一部のデータは、StarRocks テーブルにロードする前に変換が必要な場合があります。このような場合、ジョブ作成コマンドや文で関数や式を使用してデータ変換を実装できます。
 
 この機能は、以下のデータソースからのデータロードをサポートしています。
 
 - ローカルファイルシステム
 
 - HDFS およびクラウドストレージ
-  > **注意**
+  > **NOTE**
   >
-  > このセクションでは HDFS を例として使用します。
+  > このセクションでは HDFS を例にとります。
 
 - Kafka
 
-このセクションでは、`file2.csv` と `table2` を例として使用します。`file2.csv` は日付を表す 1 つの列のみで構成されています。`file2.csv` から各日付の年、月、日を抽出し、抽出したデータを `table2` の `year`、`month`、`day` 列にロードするために、[year](../sql-reference/sql-functions/date-time-functions/year.md)、[month](../sql-reference/sql-functions/date-time-functions/month.md)、および [day](../sql-reference/sql-functions/date-time-functions/day.md) 関数を使用できます。
+このセクションでは、`file2.csv` と `table2` を例にとります。`file2.csv` は日付を表す 1 つの列のみで構成されています。`file2.csv` から各日付の年、月、日を抽出し、抽出したデータを `table2` の `year`、`month`、`day` 列にロードするために、[year](../sql-reference/sql-functions/date-time-functions/year.md)、[month](../sql-reference/sql-functions/date-time-functions/month.md)、および [day](../sql-reference/sql-functions/date-time-functions/day.md) 関数を使用できます。
 
 ### データのロード
 
@@ -321,17 +321,17 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
 
-> **注意**
+> **NOTE**
 >
-> - `columns` パラメーターでは、まずデータファイルの**すべての列**を一時的に命名し、次にデータファイルの元の列から生成したい新しい列を一時的に命名する必要があります。前述の例では、`file2.csv` の唯一の列が `date` として一時的に命名され、その後 `year=year(date)`, `month=month(date)`, `day=day(date)` 関数が呼び出され、`year`、`month`、`day` として一時的に命名された 3 つの新しい列が生成されます。
+> - `columns` パラメータでは、まずデータファイルの **すべての列** に一時的に名前を付け、その後、データファイルの元の列から生成したい新しい列に一時的に名前を付ける必要があります。前述の例では、`file2.csv` の唯一の列は `date` と一時的に名前を付けられ、その後、`year=year(date)`、`month=month(date)`、`day=day(date)` 関数が呼び出され、3 つの新しい列が生成され、それぞれ `year`、`month`、`day` と一時的に名前を付けられます。
 >
 > - Stream Load は `column_name = function(column_name)` をサポートしていませんが、`column_name = function(column_name)` をサポートしています。
 
-詳細な構文とパラメーターの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
 
 #### HDFS クラスターからデータをロードする
 
-`file2.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
+`file2.csv` が HDFS クラスターに保存されている場合、次の文を実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -346,15 +346,15 @@ LOAD LABEL test_db.label3
 WITH BROKER;
 ```
 
-> **注意**
+> **NOTE**
 >
-> まず `column_list` パラメーターを使用してデータファイルの**すべての列**を一時的に命名し、次に SET 句を使用してデータファイルの元の列から生成したい新しい列を一時的に命名する必要があります。前述の例では、`file2.csv` の唯一の列が `column_list` パラメーターで `date` として一時的に命名され、その後 SET 句で `year=year(date)`, `month=month(date)`, `day=day(date)` 関数が呼び出され、`year`、`month`、`day` として一時的に命名された 3 つの新しい列が生成されます。
+> まず `column_list` パラメータを使用してデータファイルの **すべての列** に一時的に名前を付け、その後、SET 句を使用してデータファイルの元の列から生成したい新しい列に一時的に名前を付ける必要があります。前述の例では、`file2.csv` の唯一の列は `column_list` パラメータで `date` と一時的に名前を付けられ、その後、SET 句で `year=year(date)`、`month=month(date)`、`day=day(date)` 関数が呼び出され、3 つの新しい列が生成され、それぞれ `year`、`month`、`day` と一時的に名前を付けられます。
 
-詳細な構文とパラメーターの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
 
 #### Kafka クラスターからデータをロードする
 
-`file2.csv` のデータが Kafka クラスターの `topic2` に公開されている場合、次のステートメントを実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
+`file2.csv` のデータが Kafka クラスターの `topic2` に公開されている場合、次の文を実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table201 ON table2
@@ -368,15 +368,15 @@ FROM KAFKA
 );
 ```
 
-> **注意**
+> **NOTE**
 >
-> `COLUMNS` パラメーターでは、まずデータファイルの**すべての列**を一時的に命名し、次にデータファイルの元の列から生成したい新しい列を一時的に命名する必要があります。前述の例では、`file2.csv` の唯一の列が `date` として一時的に命名され、その後 `year=year(date)`, `month=month(date)`, `day=day(date)` 関数が呼び出され、`year`、`month`、`day` として一時的に命名された 3 つの新しい列が生成されます。
+> `COLUMNS` パラメータでは、まずデータファイルの **すべての列** に一時的に名前を付け、その後、データファイルの元の列から生成したい新しい列に一時的に名前を付ける必要があります。前述の例では、`file2.csv` の唯一の列は `date` と一時的に名前を付けられ、その後、`year=year(date)`、`month=month(date)`、`day=day(date)` 関数が呼び出され、3 つの新しい列が生成され、それぞれ `year`、`month`、`day` と一時的に名前を付けられます。
 
-詳細な構文とパラメーターの説明については、[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
 
 ### データのクエリ
 
-ローカルファイルシステム、HDFS クラスター、または Kafka クラスターからのデータのロードが完了したら、`table2` のデータをクエリしてロードが成功したことを確認します。
+ローカルファイルシステム、HDFS クラスター、または Kafka クラスターからのデータロードが完了したら、`table2` のデータをクエリしてロードが成功したことを確認します。
 
 ```SQL
 MySQL [test_db]> SELECT * FROM table2;
@@ -393,7 +393,7 @@ MySQL [test_db]> SELECT * FROM table2;
 
 ## ファイルパスからパーティションフィールドの値を抽出する
 
-指定したファイルパスにパーティションフィールドが含まれている場合、`COLUMNS FROM PATH AS` パラメーターを使用して、ファイルパスから抽出したいパーティションフィールドを指定できます。ファイルパス内のパーティションフィールドは、データファイル内の列と同等です。`COLUMNS FROM PATH AS` パラメーターは、HDFS クラスターからデータをロードする場合にのみサポートされています。
+指定したファイルパスにパーティションフィールドが含まれている場合、`COLUMNS FROM PATH AS` パラメータを使用して、ファイルパスから抽出したいパーティションフィールドを指定できます。ファイルパスのパーティションフィールドは、データファイルの列と同等です。`COLUMNS FROM PATH AS` パラメータは、HDFS クラスターからデータをロードする場合にのみサポートされています。
 
 たとえば、Hive から生成された次の 4 つのデータファイルをロードしたいとします。
 
@@ -408,11 +408,11 @@ MySQL [test_db]> SELECT * FROM table2;
 2,687
 ```
 
-これらの 4 つのデータファイルは、HDFS クラスターの `/user/starrocks/data/input/` パスに保存されています。各データファイルは、パーティションフィールド `date` でパーティション化され、イベントタイプとユーザー ID を順に表す 2 つの列で構成されています。
+これらの 4 つのデータファイルは、HDFS クラスターの `/user/starrocks/data/input/` パスに保存されています。これらのデータファイルはそれぞれ `date` というパーティションフィールドでパーティション分けされ、イベントタイプとユーザー ID を順に表す 2 つの列で構成されています。
 
 ### HDFS クラスターからデータをロードする
 
-次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。このジョブでは、`/user/starrocks/data/input/` ファイルパスから `date` パーティションフィールドの値を抽出し、ワイルドカード (*) を使用してファイルパス内のすべてのデータファイルを `table1` にロードすることを指定します。
+次の文を実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。このジョブでは、`/user/starrocks/data/input/` ファイルパスから `date` パーティションフィールドの値を抽出し、ワイルドカード (*) を使用してファイルパス内のすべてのデータファイルを `table1` にロードすることを指定します。
 
 ```SQL
 LOAD LABEL test_db.label4
@@ -428,15 +428,15 @@ LOAD LABEL test_db.label4
 WITH BROKER;
 ```
 
-> **注意**
+> **NOTE**
 >
-> 前述の例では、指定されたファイルパス内の `date` パーティションフィールドは、`table1` の `event_date` 列と同等です。したがって、SET 句を使用して `date` パーティションフィールドを `event_date` 列にマッピングする必要があります。指定されたファイルパス内のパーティションフィールドが StarRocks テーブルの列と同じ名前を持つ場合、マッピングを作成するために SET 句を使用する必要はありません。
+> 前述の例では、指定されたファイルパスの `date` パーティションフィールドは `table1` の `event_date` 列と同等です。したがって、SET 句を使用して `date` パーティションフィールドを `event_date` 列にマッピングする必要があります。指定されたファイルパスのパーティションフィールドが StarRocks テーブルの列と同じ名前を持つ場合、マッピングを作成するために SET 句を使用する必要はありません。
 
-詳細な構文とパラメーターの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
+詳細な構文とパラメータの説明については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
 
 ### データのクエリ
 
-HDFS クラスターからのデータのロードが完了したら、`table1` のデータをクエリしてロードが成功したことを確認します。
+HDFS クラスターからのデータロードが完了したら、`table1` のデータをクエリしてロードが成功したことを確認します。
 
 ```SQL
 MySQL [test_db]> SELECT * FROM table1;

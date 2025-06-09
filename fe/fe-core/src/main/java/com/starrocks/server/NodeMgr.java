@@ -219,6 +219,10 @@ public class NodeMgr {
         return result;
     }
 
+    public long getAliveFrontendsCnt() {
+        return frontends.values().stream().filter(Frontend::isAlive).count();
+    }
+
     public List<String> getRemovedFrontendNames() {
         return Lists.newArrayList(removedFrontends);
     }

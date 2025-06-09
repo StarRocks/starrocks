@@ -13,7 +13,7 @@ LDAP 認証を使用するには、まず FE ノードの設定に LDAP サー�
 * `authentication_ldap_simple_server_host`: サービスの IP を指定します。
 * `authentication_ldap_simple_server_port`: サービスのポートを指定します。デフォルト値は 389 です。
 
-ユーザーを作成する際、認証方法を LDAP 認証として `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'` と指定します。xxx は LDAP 内のユーザーの DN (Distinguished Name) です。
+ユーザーを作成する際に、認証方法を LDAP 認証として `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'` と指定します。xxx は LDAP 内のユーザーの DN (Distinguished Name) です。
 
 例 1:
 
@@ -21,7 +21,7 @@ LDAP 認証を使用するには、まず FE ノードの設定に LDAP サー�
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ~~~
 
-LDAP 内でユーザーの DN を指定せずにユーザーを作成することも可能です。ユーザーがログインすると、StarRocks は LDAP システムにユーザー情報を取得しに行きます。一致するものが一つだけあれば、認証は成功します。
+LDAP 内のユーザーの DN を指定せずにユーザーを作成することも可能です。ユーザーがログインすると、StarRocks は LDAP システムにユーザー情報を取得しに行きます。1 つだけ一致する場合、認証は成功します。
 
 例 2:
 
@@ -36,7 +36,7 @@ CREATE USER tom IDENTIFIED WITH authentication_ldap_simple
 * `authentication_ldap_simple_bind_root_dn`: ユーザー情報を取得するために使用する管理者アカウントの DN。
 * `authentication_ldap_simple_bind_root_pwd`: ユーザー情報を取得する際に使用する管理者アカウントのパスワード。
 
-LDAP 認証では、クライアントが StarRocks にプレーンテキストのパスワードを渡す必要があります。プレーンテキストのパスワードを渡す方法は3つあります。
+LDAP 認証では、クライアントがクリアテキストのパスワードを StarRocks に渡す必要があります。クリアテキストのパスワードを渡す方法は 3 つあります。
 
 * **MySQL コマンドライン**
 
@@ -71,4 +71,4 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.M
 
 * **ODBC**
 
-ODBC の DSN に `default\_auth=mysql_clear_password` と `ENABLE_CLEARTEXT\_PLUGIN=1` を追加し、ユーザー名とパスワードを含めます。
+ODBC の DSN に `default\_auth=mysql_clear_password` と `ENABLE_CLEARTEXT\_PLUGIN=1` を追加します。ユーザー名とパスワードも含めます。

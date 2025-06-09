@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_remove
 
-`input` を Bitmap 値 `lhs` から削除し、結果セットを返します。
+## 説明
 
-## Syntax
+Bitmap 値 `lhs` から `input` を削除し、結果セットを返します。
+
+## 構文
 
 ```Haskell
 bitmap_remove(BITMAP lhs, BIGINT input)

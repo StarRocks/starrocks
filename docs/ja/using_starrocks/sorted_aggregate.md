@@ -7,13 +7,13 @@ sidebar_position: 90
 
 データベースシステムにおける一般的な集計方法には、ハッシュ集計とソート集計があります。
 
-バージョン 2.5 以降、StarRocks は **sorted streaming aggregate** をサポートしています。
+バージョン v2.5 以降、StarRocks は **sorted streaming aggregate** をサポートしています。
 
 ## 動作原理
 
-集計ノード (AGG) は主に GROUP BY と集計関数を処理する役割を担っています。
+集計ノード (AGG) は主に GROUP BY と集計関数の処理を担当します。
 
-Sorted streaming aggregate は、ハッシュテーブルを作成することなく、キーの順序に従って GROUP BY キーを比較することでデータをグループ化します。これにより、集計に消費されるメモリリソースが効果的に削減されます。高い集計カーディナリティを持つクエリに対して、sorted streaming aggregate は集計パフォーマンスを向上させ、メモリ使用量を削減します。
+Sorted streaming aggregate は、キーの順序に従って GROUP BY キーを比較することでデータをグループ化し、ハッシュテーブルを作成する必要がありません。これにより、集計に消費されるメモリリソースを効果的に削減します。高い集計カーディナリティを持つクエリに対して、sorted streaming aggregate は集計パフォーマンスを向上させ、メモリ使用量を削減します。
 
 次の変数を設定することで、sorted streaming aggregate を有効にできます。
 
@@ -23,15 +23,15 @@ set enable_sort_aggregate=true;
 
 ## 制限事項
 
-- StarRocks 共有データクラスタは、sorted streaming aggregate をサポートしていません。
+- StarRocks 共有データクラスタは sorted streaming aggregate をサポートしていません。
 - GROUP BY のキーには順序が必要です。例えば、ソートキーが `k1, k2, k3` の場合:
-  - `GROUP BY k1` および `GROUP BY k1, k2` は許可されます。
+  - `GROUP BY k1` と `GROUP BY k1, k2` は許可されます。
   - `GROUP BY k1, k3` はソートキーの順序に従っていません。したがって、このような句には sorted streaming aggregate は適用されません。
-- 選択されたパーティションは単一のパーティションでなければなりません（同じキーが異なるパーティションの異なるマシンに分散される可能性があるため）。
-- GROUP BY のキーは、テーブル作成時に指定されたバケットキーと同じ分布でなければなりません。例えば、テーブルに `k1, k2, k3` の3つの列がある場合、バケットキーは `k1` または `k1, k2` になり得ます。
+- 選択されたパーティションは単一のパーティションでなければなりません（同じキーが異なるパーティションの異なるマシンに分散されている可能性があるため）。
+- GROUP BY のキーは、テーブル作成時に指定されたバケットキーと同じ分布でなければなりません。例えば、テーブルに `k1, k2, k3` の3つのカラムがある場合、バケットキーは `k1` または `k1, k2` になり得ます。
   - バケットキーが `k1` の場合、`GROUP BY` キーは `k1`, `k1, k2`, または `k1, k2, k3` になり得ます。
   - バケットキーが `k1, k2` の場合、GROUP BY キーは `k1, k2` または `k1, k2, k3` になり得ます。
-  - クエリプランがこの要件を満たさない場合、この機能が有効になっていても、sorted streaming aggregate 機能は適用されません。
+  - クエリプランがこの要件を満たさない場合、この機能が有効であっても sorted streaming aggregate 機能は適用されません。
 - Sorted streaming aggregate は、最初の段階の集計（つまり、AGG ノードの下に Scan ノードが1つだけある場合）にのみ機能します。
 
 ## 例
@@ -69,7 +69,7 @@ set enable_sort_aggregate=true;
 
 ## Sorted streaming aggregate が有効かどうかを確認する
 
-`EXPLAIN costs` の結果を確認します。AGG ノードの `sorted streaming` フィールドが `true` であれば、この機能は有効です。
+`EXPLAIN costs` の結果を確認します。AGG ノード内の `sorted streaming` フィールドが `true` であれば、この機能は有効です。
 
 ```Plain
 |                                                                                                                                    |

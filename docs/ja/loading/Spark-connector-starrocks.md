@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Spark コネクタを使用してデータをロードする（推奨）
 
-StarRocks は、Apache Spark™ 用に開発したコネクタである StarRocks Connector for Apache Spark™（以下、Spark コネクタ）を提供しています。これを使用して、Spark を介して StarRocks テーブルにデータをロードできます。基本的な原理は、データを蓄積し、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を通じて一度に StarRocks にロードすることです。Spark コネクタは Spark DataSource V2 に基づいて実装されています。DataSource は Spark DataFrames または Spark SQL を使用して作成できます。バッチモードと構造化ストリーミングモードの両方がサポートされています。
+StarRocks は、Apache Spark™ 用に開発されたコネクタである StarRocks Connector for Apache Spark（以下、Spark コネクタ）を提供しています。このコネクタを使用して、Spark を通じて StarRocks テーブルにデータをロードすることができます。基本的な原理は、データを蓄積し、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を通じて一度に StarRocks にロードすることです。Spark コネクタは Spark DataSource V2 に基づいて実装されています。DataSource は Spark DataFrames または Spark SQL を使用して作成できます。バッチモードと構造化ストリーミングモードの両方がサポートされています。
 
 > **注意**
 >
@@ -20,16 +20,16 @@ StarRocks は、Apache Spark™ 用に開発したコネクタである StarRock
 
 > **注意**
 >
-> - Spark コネクタの異なるバージョン間の動作の変更については、[Upgrade Spark connector](#upgrade-spark-connector) を参照してください。
+> - Spark コネクタのバージョン間の動作変更については、[Upgrade Spark connector](#upgrade-spark-connector) を参照してください。
 > - Spark コネクタはバージョン 1.1.1 以降、MySQL JDBC ドライバを提供していません。ドライバを手動で Spark クラスパスにインポートする必要があります。ドライバは [MySQL サイト](https://dev.mysql.com/downloads/connector/j/) または [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/) で見つけることができます。
 
 ## Spark コネクタの取得
 
 Spark コネクタの JAR ファイルは以下の方法で取得できます：
 
-- コンパイル済みの Spark コネクタ JAR ファイルを直接ダウンロードする。
-- Maven プロジェクトに Spark コネクタを依存関係として追加し、JAR ファイルをダウンロードする。
-- Spark コネクタのソースコードを自分でコンパイルして JAR ファイルを作成する。
+- コンパイル済みの Spark コネクタ JAR ファイルを直接ダウンロードします。
+- Maven プロジェクトに Spark コネクタを依存関係として追加し、JAR ファイルをダウンロードします。
+- Spark コネクタのソースコードを自分でコンパイルして JAR ファイルを作成します。
 
 Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector-${spark_version}_${scala_version}-${connector_version}.jar` です。
 
@@ -37,7 +37,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 > **注意**
 >
-> 一般的に、最新バージョンの Spark コネクタは Spark の最新の 3 つのバージョンとのみ互換性を維持します。
+> 一般に、最新バージョンの Spark コネクタは、Spark の最新の 3 バージョンとの互換性のみを維持します。
 
 ### コンパイル済みの Jar ファイルをダウンロード
 
@@ -45,7 +45,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 ### Maven 依存関係
 
-1. Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Spark コネクタを依存関係として追加します。`spark_version`、`scala_version`、`connector_version` をそれぞれのバージョンに置き換えてください。
+1. Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Spark コネクタを依存関係として追加します。`spark_version`、`scala_version`、および `connector_version` をそれぞれのバージョンに置き換えます。
 
     ```xml
     <dependency>
@@ -55,7 +55,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
     </dependency>
     ```
 
-2. 例えば、環境の Spark バージョンが 3.2、Scala バージョンが 2.12 で、Spark コネクタ 1.1.0 を選択した場合、以下の依存関係を追加する必要があります：
+2. 例えば、環境の Spark バージョンが 3.2、Scala バージョンが 2.12 で、Spark コネクタ 1.1.0 を選択する場合、以下の依存関係を追加する必要があります：
 
     ```xml
     <dependency>
@@ -68,7 +68,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 ### 自分でコンパイル
 
 1. [Spark コネクタパッケージ](https://github.com/StarRocks/starrocks-connector-for-apache-spark) をダウンロードします。
-2. Spark コネクタのソースコードを JAR ファイルにコンパイルするために、以下のコマンドを実行します。`spark_version` は対応する Spark バージョンに置き換えてください。
+2. 以下のコマンドを実行して、Spark コネクタのソースコードを JAR ファイルにコンパイルします。`spark_version` は対応する Spark バージョンに置き換えてください。
 
       ```bash
       sh build.sh <spark_version>
@@ -92,7 +92,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 **必須**:  YES<br/>
 **デフォルト値**:  なし<br/>
-**説明**:  StarRocks クラスター内の FE の HTTP URL。複数の URL を指定することができ、カンマ（,）で区切る必要があります。形式: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`。バージョン 1.1.1 以降、URL に `http://` プレフィックスを追加することもできます。例：`http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`。
+**説明**:  StarRocks クラスター内の FE の HTTP URL。複数の URL を指定でき、カンマ (,) で区切る必要があります。形式: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`。バージョン 1.1.1 以降、URL に `http://` プレフィックスを追加することもできます。例：`http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`。
 
 ### starrocks.fe.jdbc.url
 
@@ -110,7 +110,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 **必須**:  YES<br/>
 **デフォルト値**:  なし<br/>
-**説明**:  StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [SELECT および INSERT 権限](../sql-reference/sql-statements/account-management/GRANT.md) を持っている必要があります。
+**説明**:  StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [SELECT および INSERT 権限](../sql-reference/sql-statements/account-management/GRANT.md) を持つ必要があります。
 
 ### starrocks.password
 
@@ -128,25 +128,25 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 **必須**:  NO<br/>
 **デフォルト値**:  TRUE<br/>
-**説明**:  [Stream Load トランザクションインターフェース](../loading/Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないためです。
+**説明**:  [Stream Load トランザクションインターフェース](../loading/Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないからです。
 
 ### starrocks.write.buffer.size
 
 **必須**:  NO<br/>
 **デフォルト値**:  104857600<br/>
-**説明**:  一度に StarRocks に送信される前にメモリ内に蓄積できるデータの最大サイズ。このパラメータを大きな値に設定すると、ロードパフォーマンスが向上しますが、ロードの遅延が増加する可能性があります。
+**説明**:  一度に StarRocks に送信される前にメモリに蓄積できるデータの最大サイズ。このパラメータを大きな値に設定すると、ロードパフォーマンスが向上しますが、ロード遅延が増加する可能性があります。
 
 ### starrocks.write.buffer.rows
 
 **必須**:  NO<br/>
 **デフォルト値**:  Integer.MAX_VALUE<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。一度に StarRocks に送信される前にメモリ内に蓄積できる行の最大数。
+**説明**:  バージョン 1.1.1 以降でサポートされています。一度に StarRocks に送信される前にメモリに蓄積できる行の最大数。
 
 ### starrocks.write.flush.interval.ms
 
 **必須**:  NO<br/>
 **デフォルト値**:  300000<br/>
-**説明**:  データが StarRocks に送信される間隔。このパラメータはロードの遅延を制御するために使用されます。
+**説明**:  データが StarRocks に送信される間隔。このパラメータはロード遅延を制御するために使用されます。
 
 ### starrocks.write.max.retries
 
@@ -164,25 +164,25 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 **必須**:  NO<br/>
 **デフォルト値**:  なし<br/>
-**説明**:  データをロードしたい StarRocks テーブルの列。複数の列を指定することができ、カンマ（,）で区切る必要があります。例：`"col0,col1,col2"`。
+**説明**:  データをロードしたい StarRocks テーブルの列。複数の列を指定でき、カンマ (,) で区切る必要があります。例：`"col0,col1,col2"`。
 
 ### starrocks.column.types
 
 **必須**: NO<br/>
 **デフォルト値**:  なし<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。StarRocks テーブルから推測されるデフォルトのデータ型と[デフォルトマッピング](#data-type-mapping-between-spark-and-starrocks)を使用する代わりに、Spark 用の列データ型をカスタマイズします。パラメータ値は Spark の [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) の出力と同じ DDL 形式のスキーマです。例：`col0 INT, col1 STRING, col2 BIGINT`。カスタマイズが必要な列のみを指定する必要があります。使用例として、[BITMAP](#load-data-into-columns-of-bitmap-type) または [HLL](#load-data-into-columns-of-hll-type) 型の列にデータをロードすることが挙げられます。
+**説明**:  バージョン 1.1.1 以降でサポートされています。StarRocks テーブルから推測されるデフォルトや [デフォルトマッピング](#data-type-mapping-between-spark-and-starrocks) を使用する代わりに、Spark の列データ型をカスタマイズします。パラメータ値は、Spark の [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) の出力と同じ DDL 形式のスキーマです。例：`col0 INT, col1 STRING, col2 BIGINT`。カスタマイズが必要な列のみを指定する必要があります。使用例として、[BITMAP](#load-data-into-columns-of-bitmap-type) または [HLL](#load-data-into-columns-of-hll-type) 型の列にデータをロードすることがあります。
 
 ### starrocks.write.properties.*
 
 **必須**:  NO<br/>
 **デフォルト値**:  なし<br/>
-**説明**:  Stream Load の動作を制御するために使用されるパラメータ。例えば、パラメータ `starrocks.write.properties.format` はロードされるデータの形式を指定します。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+**説明**:  Stream Load の動作を制御するために使用されるパラメータ。例えば、パラメータ `starrocks.write.properties.format` はロードされるデータの形式を指定します。CSV や JSON などです。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
 
 ### starrocks.write.properties.format
 
 **必須**:  NO<br/>
 **デフォルト値**:  CSV<br/>
-**説明**:  Spark コネクタがデータを StarRocks に送信する前に各バッチのデータを変換する際のファイル形式。有効な値：CSV および JSON。
+**説明**:  Spark コネクタが各バッチのデータを StarRocks に送信する前に変換するファイル形式。有効な値：CSV および JSON。
 
 ### starrocks.write.properties.row_delimiter
 
@@ -206,13 +206,13 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 **必須**:  NO<br/>
 **デフォルト値**: `row`<br/>
-**説明**: 部分更新のモードを指定します。有効な値：`row` および `column`。<ul><li>値 `row`（デフォルト）は行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。</li><li>値 `column` は列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。例えば、100 列のテーブルで、すべての行に対して 10 列（全体の 10%）のみが更新される場合、列モードの更新速度は 10 倍速くなります。</li></ul>
+**説明**: 部分更新のモードを指定します。有効な値：`row` および `column`。<ul><li> 値 `row`（デフォルト）は行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。</li><li>値 `column` は列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。例えば、100 列のテーブルで、すべての行に対して 10 列（全体の 10%）のみが更新される場合、列モードの更新速度は 10 倍速くなります。</li></ul>
 
 ### starrocks.write.num.partitions
 
 **必須**:  NO<br/>
 **デフォルト値**:  なし<br/>
-**説明**:  Spark がデータを書き込む際に並行して使用できるパーティションの数。データ量が少ない場合、パーティションの数を減らしてロードの同時実行性と頻度を下げることができます。このパラメータのデフォルト値は Spark によって決定されます。ただし、この方法は Spark Shuffle コストを引き起こす可能性があります。
+**説明**:  Spark がデータを書き込む際に並列で使用できるパーティションの数。データ量が少ない場合、パーティション数を減らしてロードの同時実行性と頻度を下げることができます。このパラメータのデフォルト値は Spark によって決定されます。ただし、この方法は Spark Shuffle コストを引き起こす可能性があります。
 
 ### starrocks.write.partition.columns
 
@@ -224,7 +224,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 **必須**:  NO<br/>
 **デフォルト値**:  JVM のデフォルトタイムゾーン<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。Spark の `TimestampType` を StarRocks の `DATETIME` に変換する際に使用されるタイムゾーン。デフォルトは `ZoneId#systemDefault()` によって返される JVM のタイムゾーンです。形式は `Asia/Shanghai` のようなタイムゾーン名、または `+08:00` のようなゾーンオフセットで指定できます。
+**説明**:  バージョン 1.1.1 以降でサポートされています。Spark の `TimestampType` を StarRocks の `DATETIME` に変換するために使用されるタイムゾーン。デフォルトは `ZoneId#systemDefault()` によって返される JVM のタイムゾーンです。形式は `Asia/Shanghai` のようなタイムゾーン名、または `+08:00` のようなゾーンオフセットです。
 
 ## Spark と StarRocks のデータ型マッピング
 
@@ -251,18 +251,18 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 - データ型マッピングをカスタマイズすることもできます。
 
-  例えば、StarRocks テーブルに BITMAP および HLL 列が含まれているが、Spark はこれらのデータ型をサポートしていません。Spark で対応するデータ型をカスタマイズする必要があります。詳細な手順については、[BITMAP](#load-data-into-columns-of-bitmap-type) および [HLL](#load-data-into-columns-of-hll-type) 列にデータをロードする方法を参照してください。**BITMAP および HLL はバージョン 1.1.1 以降でサポートされています**。
+  例えば、StarRocks テーブルに BITMAP および HLL 列が含まれている場合、Spark はこれらのデータ型をサポートしていません。Spark で対応するデータ型をカスタマイズする必要があります。詳細な手順については、[BITMAP](#load-data-into-columns-of-bitmap-type) および [HLL](#load-data-into-columns-of-hll-type) 列にデータをロードする方法を参照してください。**BITMAP および HLL はバージョン 1.1.1 以降でサポートされています**。
 
 ## Spark コネクタのアップグレード
 
 ### バージョン 1.1.0 から 1.1.1 へのアップグレード
 
-- バージョン 1.1.1 以降、Spark コネクタは MySQL の公式 JDBC ドライバである `mysql-connector-java` を提供していません。これは `mysql-connector-java` が使用する GPL ライセンスの制限によるものです。しかし、Spark コネクタは StarRocks のテーブルメタデータに接続するために MySQL JDBC ドライバを必要とするため、ドライバを手動で Spark クラスパスに追加する必要があります。ドライバは [MySQL サイト](https://dev.mysql.com/downloads/connector/j/) または [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/) で見つけることができます。
-- バージョン 1.1.1 以降、コネクタはデフォルトで Stream Load インターフェースを使用し、バージョン 1.1.0 の Stream Load トランザクションインターフェースではありません。Stream Load トランザクションインターフェースを引き続き使用したい場合は、オプション `starrocks.write.max.retries` を `0` に設定できます。詳細については、`starrocks.write.enable.transaction-stream-load` および `starrocks.write.max.retries` の説明を参照してください。
+- バージョン 1.1.1 以降、Spark コネクタは MySQL の公式 JDBC ドライバである `mysql-connector-java` を提供しません。これは `mysql-connector-java` に使用されている GPL ライセンスの制限によるものです。しかし、Spark コネクタは StarRocks のテーブルメタデータに接続するために MySQL JDBC ドライバを必要とするため、ドライバを手動で Spark クラスパスに追加する必要があります。ドライバは [MySQL サイト](https://dev.mysql.com/downloads/connector/j/) または [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/) で見つけることができます。
+- バージョン 1.1.1 以降、コネクタはデフォルトで Stream Load インターフェースを使用し、バージョン 1.1.0 では Stream Load トランザクションインターフェースを使用していました。Stream Load トランザクションインターフェースを引き続き使用したい場合は、オプション `starrocks.write.max.retries` を `0` に設定できます。詳細については、`starrocks.write.enable.transaction-stream-load` および `starrocks.write.max.retries` の説明を参照してください。
 
 ## 例
 
-以下の例は、Spark DataFrames または Spark SQL を使用して Spark コネクタで StarRocks テーブルにデータをロードする方法を示しています。Spark DataFrames はバッチモードと構造化ストリーミングモードの両方をサポートしています。
+以下の例は、Spark DataFrames または Spark SQL を使用して Spark コネクタを使用して StarRocks テーブルにデータをロードする方法を示しています。Spark DataFrames はバッチモードと構造化ストリーミングモードの両方をサポートしています。
 
 詳細な例については、[Spark Connector Examples](https://github.com/StarRocks/starrocks-connector-for-apache-spark/tree/main/src/test/java/com/starrocks/connector/spark/examples) を参照してください。
 
@@ -287,7 +287,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`);
 ```
 
-#### ネットワーク設定
+#### ネットワーク構成
 
 Spark が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認します。
 
@@ -303,17 +303,17 @@ Spark が配置されているマシンが、StarRocks クラスターの FE ノ
 
 メモリ内でデータを構築し、StarRocks テーブルにデータをロードします。
 
-1. Scala または Python を使用して Spark アプリケーションを書くことができます。
+1. Scala または Python を使用して Spark アプリケーションを記述できます。
 
   Scala の場合、`spark-shell` で以下のコードスニペットを実行します：
 
   ```Scala
-  // 1. シーケンスから DataFrame を作成します。
+  // 1. Create a DataFrame from a sequence.
   val data = Seq((1, "starrocks", 100), (2, "spark", 100))
   val df = data.toDF("id", "name", "score")
 
-  // 2. フォーマットを "starrocks" として設定し、以下のオプションを設定して StarRocks に書き込みます。
-  // 自分の環境に応じてオプションを変更する必要があります。
+  // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+  // You need to modify the options according your own environment.
   df.write.format("starrocks")
       .option("starrocks.fe.http.url", "127.0.0.1:8030")
       .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
@@ -334,13 +334,13 @@ Spark が配置されているマシンが、StarRocks クラスターの FE ノ
         .appName("StarRocks Example") \
         .getOrCreate()
    
-    # 1. シーケンスから DataFrame を作成します。
+    # 1. Create a DataFrame from a sequence.
     data = [(1, "starrocks", 100), (2, "spark", 100)]
     df = spark.sparkContext.parallelize(data) \
             .toDF(["id", "name", "score"])
 
-    # 2. フォーマットを "starrocks" として設定し、以下のオプションを設定して StarRocks に書き込みます。
-    # 自分の環境に応じてオプションを変更する必要があります。
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
     df.write.format("starrocks") \
         .option("starrocks.fe.http.url", "127.0.0.1:8030") \
         .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
@@ -366,7 +366,7 @@ Spark が配置されているマシンが、StarRocks クラスターの FE ノ
 
 #### 構造化ストリーミング
 
-CSV ファイルからデータのストリーミング読み取りを構築し、StarRocks テーブルにデータをロードします。
+CSV ファイルからのデータのストリーミング読み取りを構築し、StarRocks テーブルにデータをロードします。
 
 1. ディレクトリ `csv-data` に、以下のデータを含む CSV ファイル `test.csv` を作成します：
 
@@ -375,14 +375,14 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
     4,spark,100
     ```
 
-2. Scala または Python を使用して Spark アプリケーションを書くことができます。
+2. Scala または Python を使用して Spark アプリケーションを記述できます。
 
   Scala の場合、`spark-shell` で以下のコードスニペットを実行します：
 
     ```Scala
     import org.apache.spark.sql.types.StructType
 
-    // 1. CSV から DataFrame を作成します。
+    // 1. Create a DataFrame from CSV.
     val schema = (new StructType()
             .add("id", "integer")
             .add("name", "string")
@@ -392,19 +392,19 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
             .option("sep", ",")
             .schema(schema)
             .format("csv") 
-            // ディレクトリ "csv-data" へのパスに置き換えてください。
+            // Replace it with your path to the directory "csv-data".
             .load("/path/to/csv-data")
         )
     
-    // 2. フォーマットを "starrocks" として設定し、以下のオプションを設定して StarRocks に書き込みます。
-    // 自分の環境に応じてオプションを変更する必要があります。
+    // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    // You need to modify the options according your own environment.
     val query = (df.writeStream.format("starrocks")
             .option("starrocks.fe.http.url", "127.0.0.1:8030")
             .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
             .option("starrocks.table.identifier", "test.score_board")
             .option("starrocks.user", "root")
             .option("starrocks.password", "")
-            // チェックポイントディレクトリに置き換えてください
+            // replace it with your checkpoint directory
             .option("checkpointLocation", "/path/to/checkpoint")
             .outputMode("append")
             .start()
@@ -422,7 +422,7 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
         .appName("StarRocks SS Example") \
         .getOrCreate()
    
-    # 1. CSV から DataFrame を作成します。
+    # 1. Create a DataFrame from CSV.
     schema = StructType([
             StructField("id", IntegerType()),
             StructField("name", StringType()),
@@ -433,12 +433,12 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
         .option("sep", ",")
         .schema(schema)
         .format("csv")
-        # ディレクトリ "csv-data" へのパスに置き換えてください。
+        # Replace it with your path to the directory "csv-data".
         .load("/path/to/csv-data")
     )
 
-    # 2. フォーマットを "starrocks" として設定し、以下のオプションを設定して StarRocks に書き込みます。
-    # 自分の環境に応じてオプションを変更する必要があります。
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
     query = (
         df.writeStream.format("starrocks")
         .option("starrocks.fe.http.url", "127.0.0.1:8030")
@@ -446,7 +446,7 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
         .option("starrocks.table.identifier", "test.score_board")
         .option("starrocks.user", "root")
         .option("starrocks.password", "")
-        # チェックポイントディレクトリに置き換えてください
+        # replace it with your checkpoint directory
         .option("checkpointLocation", "/path/to/checkpoint")
         .outputMode("append")
         .start()
@@ -473,8 +473,8 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
 1. `spark-sql` で以下の SQL ステートメントを実行します：
 
     ```SQL
-    -- 1. データソースを `starrocks` として設定し、以下のオプションを設定してテーブルを作成します。
-    -- 自分の環境に応じてオプションを変更する必要があります。
+    -- 1. Create a table by configuring the data source as  `starrocks` and the following options. 
+    -- You need to modify the options according your own environment.
     CREATE TABLE `score_board`
     USING starrocks
     OPTIONS(
@@ -485,7 +485,7 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
     "starrocks.password"=""
     );
 
-    -- 2. テーブルに 2 行を挿入します。
+    -- 2. Insert two rows into the table.
     INSERT INTO `score_board` VALUES (5, "starrocks", 100), (6, "spark", 100);
     ```
 
@@ -548,8 +548,8 @@ DISTRIBUTED BY HASH(`id`);
 
 2. Spark SQL クライアントで Spark テーブル `score_board` を作成します。
 
-   - コネクタに部分更新を行うことを伝えるために、オプション `starrocks.write.properties.partial_update` を `true` に設定します。
-   - コネクタに書き込む列を伝えるために、オプション `starrocks.columns` を `"id,name"` に設定します。
+   - コネクタに部分更新を行うように指示するオプション `starrocks.write.properties.partial_update` を `true` に設定します。
+   - コネクタに書き込む列を指示するオプション `starrocks.columns` を `"id,name"` に設定します。
 
    ```SQL
    CREATE TABLE `score_board`
@@ -607,8 +607,8 @@ DISTRIBUTED BY HASH(`id`);
 
 2. Spark テーブル `score_board` を以下の方法で作成します。
 
-   - コネクタに `score` 列を条件として使用することを伝えるために、オプション `starrocks.write.properties.merge_condition` を `score` に設定します。
-   - コネクタが Stream Load インターフェースを使用してデータをロードすることを確認します。Stream Load トランザクションインターフェースはこの機能をサポートしていません。
+   - コネクタに `score` 列を条件として使用するよう指示するオプション `starrocks.write.properties.merge_condition` を `score` に設定します。
+   - Spark コネクタが Stream Load トランザクションインターフェースではなく、Stream Load インターフェースを使用してデータをロードすることを確認します。後者はこの機能をサポートしていません。
 
    ```SQL
    CREATE TABLE `score_board`
@@ -623,7 +623,7 @@ DISTRIBUTED BY HASH(`id`);
     );
    ```
 
-3. Spark SQL クライアントでテーブルにデータを挿入し、`id` が 1 の行を小さい `score` 値で更新し、`id` が 2 の行を大きい `score` 値で更新します。
+3. Spark SQL クライアントでテーブルにデータを挿入し、`id` が 1 の行を小さいスコア値で更新し、`id` が 2 の行を大きいスコア値で更新します。
 
    ```SQL
    INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'spark-update', 101);
@@ -644,13 +644,13 @@ DISTRIBUTED BY HASH(`id`);
    2 rows in set (0.03 sec)
    ```
 
-### BITMAP 型の列にデータをロード
+### BITMAP 型の列にデータをロードする
 
-[`BITMAP`](../sql-reference/data-types/other-data-types/BITMAP.md) は、UV のカウントのような count distinct を高速化するためによく使用されます。[Use Bitmap for exact Count Distinct](../using_starrocks/distinct_values/Using_bitmap.md) を参照してください。ここでは、UV のカウントを例に、`BITMAP` 型の列にデータをロードする方法を示します。**`BITMAP` はバージョン 1.1.1 以降でサポートされています**。
+[`BITMAP`](../sql-reference/data-types/other-data-types/BITMAP.md) は、UV のカウントなどの正確なカウントディスティンクトを高速化するためによく使用されます。[Use Bitmap for exact Count Distinct](../using_starrocks/distinct_values/Using_bitmap.md) を参照してください。ここでは、UV のカウントを例にとり、`BITMAP` 型の列にデータをロードする方法を示します。**`BITMAP` はバージョン 1.1.1 以降でサポートされています**。
 
 1. StarRocks 集計テーブルを作成します。
 
-   データベース `test` に、`visit_users` 列が `BITMAP` 型として定義され、集計関数 `BITMAP_UNION` で設定された集計テーブル `page_uv` を作成します。
+   データベース `test` に、列 `visit_users` が `BITMAP` 型として定義され、集計関数 `BITMAP_UNION` が設定された集計テーブル `page_uv` を作成します。
 
     ```SQL
     CREATE TABLE `test`.`page_uv` (
@@ -711,15 +711,15 @@ DISTRIBUTED BY HASH(`id`);
 >
 > コネクタは [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して、Spark の `TINYINT`、`SMALLINT`、`INTEGER`、および `BIGINT` 型のデータを StarRocks の `BITMAP` 型に変換し、他の Spark データ型には [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 関数を使用します。
 
-### HLL 型の列にデータをロード
+### HLL 型の列にデータをロードする
 
-[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) は、近似 count distinct に使用できます。[Use HLL for approximate count distinct](../using_starrocks/distinct_values/Using_HLL.md) を参照してください。
+[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) は、近似カウントディスティンクトに使用できます。[Use HLL for approximate count distinct](../using_starrocks/distinct_values/Using_HLL.md) を参照してください。
 
-ここでは、UV のカウントを例に、`HLL` 型の列にデータをロードする方法を示します。**`HLL` はバージョン 1.1.1 以降でサポートされています**。
+ここでは、UV のカウントを例にとり、`HLL` 型の列にデータをロードする方法を示します。**`HLL` はバージョン 1.1.1 以降でサポートされています**。
 
 1. StarRocks 集計テーブルを作成します。
 
-   データベース `test` に、`visit_users` 列が `HLL` 型として定義され、集計関数 `HLL_UNION` で設定された集計テーブル `hll_uv` を作成します。
+   データベース `test` に、列 `visit_users` が `HLL` 型として定義され、集計関数 `HLL_UNION` が設定された集計テーブル `hll_uv` を作成します。
 
     ```SQL
     CREATE TABLE `hll_uv` (
@@ -774,13 +774,13 @@ DISTRIBUTED BY HASH(`id`);
     2 rows in set (0.01 sec)
     ```
 
-### ARRAY 型の列にデータをロード
+### ARRAY 型の列にデータをロードする
 
 以下の例は、[`ARRAY`](../sql-reference/data-types/semi_structured/Array.md) 型の列にデータをロードする方法を説明しています。
 
 1. StarRocks テーブルを作成します。
 
-   データベース `test` に、1 つの `INT` 列と 2 つの `ARRAY` 列を含む主キーテーブル `array_tbl` を作成します。
+   データベース `test` に、`INT` 列と 2 つの `ARRAY` 列を含む主キーテーブル `array_tbl` を作成します。
 
    ```SQL
    CREATE TABLE `array_tbl` (

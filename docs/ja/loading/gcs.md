@@ -8,24 +8,24 @@ keywords: ['Broker Load']
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks は、GCS からデータをロードするための以下のオプションを提供しています:
+StarRocks は、GCS からデータをロードするために以下のオプションを提供しています。
 
 - [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) を使用した同期ロード
 - [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を使用した非同期ロード
 
 これらのオプションにはそれぞれの利点があり、詳細は以下のセクションで説明します。
 
-ほとんどの場合、使用が簡単な INSERT+`FILES()` メソッドを推奨します。
+ほとんどの場合、使用が簡単な INSERT+`FILES()` メソッドをお勧めします。
 
-ただし、INSERT+`FILES()` メソッドは現在、Parquet、ORC、および CSV ファイル形式のみをサポートしています。そのため、JSON などの他のファイル形式のデータをロードする必要がある場合や、[データロード中に DELETE などのデータ変更を行う](../loading/Load_to_Primary_Key_tables.md)場合は、Broker Load を利用できます。
+ただし、INSERT+`FILES()` メソッドは現在、Parquet、ORC、および CSV ファイル形式のみをサポートしています。そのため、JSON などの他のファイル形式のデータをロードする必要がある場合や、[データロード中に DELETE などのデータ変更を行う](../loading/Load_to_Primary_Key_tables.md)必要がある場合は、Broker Load を使用できます。
 
 ## 始める前に
 
 ### ソースデータを準備する
 
-StarRocks にロードしたいソースデータが GCS バケットに適切に保存されていることを確認してください。また、データとデータベースの場所を考慮することもお勧めします。バケットと StarRocks クラスタが同じ地域にある場合、データ転送コストは大幅に低くなります。
+StarRocks にロードしたいソースデータが GCS バケットに適切に保存されていることを確認してください。また、データとデータベースがどこにあるかを考慮することもお勧めします。バケットと StarRocks クラスタが同じリージョンにある場合、データ転送コストははるかに低くなります。
 
-このトピックでは、GCS バケット内のサンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` を提供します。このオブジェクトは GCP ユーザーであれば誰でも読み取れるため、有効な資格情報を使用してデータセットにアクセスできます。
+このトピックでは、GCS バケット内のサンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` を提供します。このオブジェクトは、任意の GCP ユーザーが読み取れるため、有効な資格情報を使用してデータセットにアクセスできます。
 
 ### 権限を確認する
 
@@ -33,14 +33,14 @@ StarRocks にロードしたいソースデータが GCS バケットに適切�
 
 ### 認証情報を収集する
 
-このトピックの例では、サービスアカウントベースの認証を使用しています。IAM ユーザーベースの認証を実践するには、以下の GCS リソースに関する情報を収集する必要があります:
+このトピックの例では、サービスアカウントベースの認証を使用します。IAM ユーザーベースの認証を実践するには、以下の GCS リソースに関する情報を収集する必要があります。
 
 - データを保存する GCS バケット
 - バケット内の特定のオブジェクトにアクセスする場合の GCS オブジェクトキー（オブジェクト名）。GCS オブジェクトがサブフォルダに保存されている場合、オブジェクトキーにはプレフィックスを含めることができます。
-- GCS バケットが所属する GCS リージョン
+- GCS バケットが属する GCS リージョン
 - Google Cloud サービスアカウントの `private_key_id`、`private_key`、および `client_email`
 
-利用可能なすべての認証方法については、[Google Cloud Storage への認証](../integrations/authenticate_to_gcs.md)を参照してください。
+利用可能なすべての認証方法については、[Authenticate to Google Cloud Storage](../integrations/authenticate_to_gcs.md) を参照してください。
 
 ## INSERT+FILES() を使用する
 
@@ -50,7 +50,7 @@ StarRocks にロードしたいソースデータが GCS バケットに適切�
 
 `FILES()` は、指定したパス関連のプロパティに基づいてクラウドストレージに保存されたファイルを読み取り、ファイル内のデータのテーブルスキーマを推測し、ファイルからデータをデータ行として返すことができます。
 
-`FILES()` を使用すると、以下が可能です:
+`FILES()` を使用すると、以下のことができます。
 
 - [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して GCS から直接データをクエリする。
 - [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS) を使用してテーブルを作成し、ロードする。
@@ -60,13 +60,13 @@ StarRocks にロードしたいソースデータが GCS バケットに適切�
 
 #### SELECT を使用して GCS から直接クエリする
 
-SELECT+`FILES()` を使用して GCS から直接クエリすることで、テーブルを作成する前にデータセットの内容をプレビューできます。例えば:
+SELECT+`FILES()` を使用して GCS から直接クエリすることで、テーブルを作成する前にデータセットの内容をプレビューすることができます。例えば：
 
 - データを保存せずにデータセットをプレビューする。
-- 最小値と最大値をクエリし、使用するデータ型を決定する。
-- `NULL` 値をチェックする。
+- 最小値と最大値をクエリして、使用するデータ型を決定する。
+- `NULL` 値を確認する。
 
-以下の例は、サンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` をクエリします:
+以下の例は、サンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` をクエリします。
 
 ```SQL
 SELECT * FROM FILES
@@ -82,9 +82,9 @@ LIMIT 3;
 
 > **NOTE**
 >
-> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは GCP 認証済みユーザーであれば誰でも読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
+> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは任意の GCP 認証済みユーザーが読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
 
-システムは次のようなクエリ結果を返します:
+システムは次のようなクエリ結果を返します。
 
 ```Plain
 +--------+---------+------------+--------------+---------------------+
@@ -102,24 +102,24 @@ LIMIT 3;
 
 #### CTAS を使用してテーブルを作成し、ロードする
 
-これは前の例の続きです。前のクエリは CREATE TABLE AS SELECT (CTAS) にラップされ、スキーマ推測を使用してテーブル作成を自動化します。これは、StarRocks がテーブルスキーマを推測し、作成したいテーブルを作成し、そのテーブルにデータをロードすることを意味します。Parquet ファイルを使用する場合、Parquet 形式には列名が含まれているため、`FILES()` テーブル関数を使用する際にテーブルを作成するための列名と型は必要ありません。
+これは前の例の続きです。前のクエリは CREATE TABLE AS SELECT (CTAS) でラップされ、スキーマ推測を使用してテーブル作成を自動化します。これは、StarRocks がテーブルスキーマを推測し、希望のテーブルを作成し、データをテーブルにロードすることを意味します。Parquet ファイルを使用する場合、Parquet 形式には列名が含まれているため、`FILES()` テーブル関数を使用する場合、テーブルを作成するために列名と型を指定する必要はありません。
 
 > **NOTE**
 >
-> スキーマ推測を使用する場合の CREATE TABLE の構文では、レプリカの数を設定することはできません。StarRocks 共有なしクラスタを使用している場合は、テーブルを作成する前にレプリカの数を設定してください。以下の例は、3 つのレプリカを持つシステムの例です:
+> スキーマ推測を使用する場合の CREATE TABLE の構文では、レプリカの数を設定することはできません。StarRocks 共有なしクラスタを使用している場合は、テーブルを作成する前にレプリカの数を設定してください。以下の例は、3 つのレプリカを持つシステムの例です。
 >
 > ```SQL
 > ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
-データベースを作成し、切り替えます:
+データベースを作成し、切り替えます。
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-CTAS を使用してテーブルを作成し、サンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` のデータをテーブルにロードします:
+CTAS を使用してテーブルを作成し、サンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` のデータをテーブルにロードします。
 
 ```SQL
 CREATE TABLE user_behavior_inferred AS
@@ -135,15 +135,15 @@ SELECT * FROM FILES
 
 > **NOTE**
 >
-> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは GCP 認証済みユーザーであれば誰でも読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
+> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは任意の GCP 認証済みユーザーが読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
 
-テーブルを作成した後、[DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) を使用してそのスキーマを表示できます:
+テーブルを作成した後、[DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) を使用してそのスキーマを表示できます。
 
 ```SQL
 DESCRIBE user_behavior_inferred;
 ```
 
-システムは次のようなクエリ結果を返します:
+システムは次のようなクエリ結果を返します。
 
 ```Plain
 +--------------+-----------+------+-------+---------+-------+
@@ -157,13 +157,13 @@ DESCRIBE user_behavior_inferred;
 +--------------+-----------+------+-------+---------+-------+
 ```
 
-テーブルにデータがロードされていることを確認するためにテーブルをクエリします。例:
+テーブルをクエリして、データがロードされたことを確認します。例：
 
 ```SQL
 SELECT * from user_behavior_inferred LIMIT 3;
 ```
 
-次のようなクエリ結果が返され、データが正常にロードされたことを示しています:
+次のようなクエリ結果が返され、データが正常にロードされたことを示しています。
 
 ```Plain
 +--------+--------+------------+--------------+---------------------+
@@ -177,30 +177,30 @@ SELECT * from user_behavior_inferred LIMIT 3;
 
 #### INSERT を使用して既存のテーブルにロードする
 
-挿入するテーブルをカスタマイズしたい場合があります。例えば、以下のような場合です:
+挿入するテーブルをカスタマイズしたい場合があります。例えば：
 
-- 列のデータ型、NULL 許可設定、またはデフォルト値
-- キーの種類と列
+- 列データ型、NULL 設定、またはデフォルト値
+- キータイプと列
 - データのパーティショニングとバケッティング
 
 > **NOTE**
 >
-> 最も効率的なテーブル構造を作成するには、データの使用方法と列の内容に関する知識が必要です。このトピックではテーブル設計については扱いません。テーブル設計についての情報は、[テーブルタイプ](../table_design/StarRocks_table_design.md)を参照してください。
+> 最も効率的なテーブル構造を作成するには、データの使用方法と列の内容に関する知識が必要です。このトピックではテーブル設計については説明しません。テーブル設計に関する情報は、[Table types](../table_design/StarRocks_table_design.md) を参照してください。
 
-この例では、テーブルがどのようにクエリされ、Parquet ファイル内のデータに基づいてテーブルを作成しています。Parquet ファイル内のデータに関する知識は、GCS でファイルを直接クエリすることで得られます。
+この例では、テーブルがどのようにクエリされるか、および Parquet ファイル内のデータに関する知識に基づいてテーブルを作成します。Parquet ファイル内のデータに関する知識は、GCS でファイルを直接クエリすることで得られます。
 
-- GCS でのデータセットのクエリにより、`Timestamp` 列が VARBINARY データ型に一致するデータを含んでいることが示されたため、以下の DDL で列型を指定しています。
-- GCS でのデータのクエリにより、データセットに `NULL` 値がないことがわかるため、DDL ではどの列も NULL 許可として設定していません。
-- 予想されるクエリタイプに基づいて、ソートキーとバケッティング列を `UserID` 列に設定しています。このデータに対するユースケースが異なる場合は、ソートキーとして `ItemID` を使用することも考えられます。
+- GCS のデータセットをクエリすると、`Timestamp` 列が VARBINARY データ型に一致するデータを含んでいることが示されるため、以下の DDL で列型が指定されています。
+- GCS のデータをクエリすることで、データセットに `NULL` 値がないことがわかるため、DDL では任意の列を NULL 設定にしていません。
+- 予想されるクエリタイプに基づいて、ソートキーとバケッティング列は `UserID` 列に設定されています。このデータに対するユースケースが異なる場合は、ソートキーとして `ItemID` を使用することもできます。
 
-データベースを作成し、切り替えます:
+データベースを作成し、切り替えます。
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-手動でテーブルを作成します（GCS からロードしたい Parquet ファイルと同じスキーマを持つことをお勧めします）:
+手動でテーブルを作成します（GCS からロードしたい Parquet ファイルと同じスキーマを持つことをお勧めします）。
 
 ```SQL
 CREATE TABLE user_behavior_declared
@@ -216,7 +216,7 @@ DUPLICATE KEY(UserID)
 DISTRIBUTED BY HASH(UserID);
 ```
 
-スキーマを表示して、`FILES()` テーブル関数で推測されたスキーマと比較できるようにします:
+スキーマを表示して、`FILES()` テーブル関数で推測されたスキーマと比較できるようにします。
 
 ```sql
 DESCRIBE user_behavior_declared;
@@ -237,17 +237,17 @@ DESCRIBE user_behavior_declared;
 
 :::tip
 
-作成したスキーマを、`FILES()` テーブル関数を使用して以前に推測されたスキーマと比較してください。以下を確認します:
+先ほど作成したスキーマと、`FILES()` テーブル関数を使用して以前に推測されたスキーマを比較してください。以下を確認します。
 
 - データ型
-- NULL 許可
+- NULL 設定
 - キーフィールド
 
 宛先テーブルのスキーマをよりよく制御し、クエリパフォーマンスを向上させるために、本番環境では手動でテーブルスキーマを指定することをお勧めします。
 
 :::
 
-テーブルを作成した後、INSERT INTO SELECT FROM FILES() を使用してロードできます:
+テーブルを作成した後、INSERT INTO SELECT FROM FILES() を使用してロードできます。
 
 ```SQL
 INSERT INTO user_behavior_declared
@@ -263,15 +263,15 @@ INSERT INTO user_behavior_declared
 
 > **NOTE**
 >
-> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは GCP 認証済みユーザーであれば誰でも読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
+> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは任意の GCP 認証済みユーザーが読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
 
-ロードが完了したら、テーブルをクエリしてデータがロードされたことを確認できます。例:
+ロードが完了したら、テーブルをクエリしてデータがロードされたことを確認します。例：
 
 ```SQL
 SELECT * from user_behavior_declared LIMIT 3;
 ```
 
-システムは次のようなクエリ結果を返し、データが正常にロードされたことを示しています:
+システムは次のようなクエリ結果を返し、データが正常にロードされたことを示しています。
 
 ```Plain
 +--------+---------+------------+--------------+---------------------+
@@ -285,7 +285,7 @@ SELECT * from user_behavior_declared LIMIT 3;
 
 #### ロードの進捗を確認する
 
-StarRocks Information Schema の [`loads`](../sql-reference/information_schema/loads.md) ビューから INSERT ジョブの進捗をクエリできます。この機能は v3.1 以降でサポートされています。例:
+StarRocks Information Schema の [`loads`](../sql-reference/information_schema/loads.md) ビューから INSERT ジョブの進捗をクエリできます。この機能は v3.1 以降でサポートされています。例：
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
@@ -293,7 +293,7 @@ SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 
 `loads` ビューで提供されるフィールドに関する情報は、[`loads`](../sql-reference/information_schema/loads.md) を参照してください。
 
-複数のロードジョブを送信した場合、ジョブに関連付けられた `LABEL` でフィルタリングできます。例:
+複数のロードジョブを送信した場合、ジョブに関連付けられた `LABEL` でフィルタリングできます。例：
 
 ```SQL
 SELECT * FROM information_schema.loads WHERE LABEL = 'insert_f3fc2298-a553-11ee-92f4-00163e0842bd' \G
@@ -329,9 +329,9 @@ REJECTED_RECORD_PATH: NULL
 
 ## Broker Load を使用する
 
-非同期の Broker Load プロセスは、GCS への接続を確立し、データを取得し、StarRocks にデータを保存する処理を行います。
+非同期の Broker Load プロセスは、GCS への接続を行い、データを取得し、StarRocks にデータを保存します。
 
-このメソッドは以下のファイル形式をサポートしています:
+このメソッドは以下のファイル形式をサポートしています。
 
 - Parquet
 - ORC
@@ -341,7 +341,7 @@ REJECTED_RECORD_PATH: NULL
 ### Broker Load の利点
 
 - Broker Load はバックグラウンドで実行され、クライアントはジョブが続行するために接続を維持する必要がありません。
-- Broker Load は長時間実行されるジョブに適しており、デフォルトのタイムアウトは 4 時間です。
+- Broker Load は長時間実行されるジョブに適しており、デフォルトのタイムアウトは4時間です。
 - Parquet および ORC ファイル形式に加えて、Broker Load は CSV ファイル形式と JSON ファイル形式（JSON ファイル形式は v3.2.3 以降でサポート）をサポートしています。
 
 ### データフロー
@@ -349,7 +349,7 @@ REJECTED_RECORD_PATH: NULL
 ![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. ユーザーがロードジョブを作成します。
-2. フロントエンド (FE) がクエリプランを作成し、そのプランをバックエンドノード (BEs) またはコンピュートノード (CNs) に配布します。
+2. フロントエンド（FE）がクエリプランを作成し、そのプランをバックエンドノード（BEs）またはコンピュートノード（CNs）に配布します。
 3. BEs または CNs がソースからデータを取得し、StarRocks にデータをロードします。
 
 ### 典型的な例
@@ -358,14 +358,14 @@ REJECTED_RECORD_PATH: NULL
 
 #### データベースとテーブルを作成する
 
-データベースを作成し、切り替えます:
+データベースを作成し、切り替えます。
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-手動でテーブルを作成します（GCS からロードしたい Parquet ファイルと同じスキーマを持つことをお勧めします）:
+手動でテーブルを作成します（GCS からロードしたい Parquet ファイルと同じスキーマを持つことをお勧めします）。
 
 ```SQL
 CREATE TABLE user_behavior
@@ -383,7 +383,7 @@ DISTRIBUTED BY HASH(UserID);
 
 #### Broker Load を開始する
 
-以下のコマンドを実行して、サンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` から `user_behavior` テーブルにデータをロードする Broker Load ジョブを開始します:
+次のコマンドを実行して、サンプルデータセット `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` から `user_behavior` テーブルにデータをロードする Broker Load ジョブを開始します。
 
 ```SQL
 LOAD LABEL user_behavior
@@ -407,9 +407,9 @@ PROPERTIES
 
 > **NOTE**
 >
-> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは GCP 認証済みユーザーであれば誰でも読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
+> 上記のコマンドの資格情報を自分の資格情報に置き換えてください。オブジェクトは任意の GCP 認証済みユーザーが読み取れるため、有効なサービスアカウントのメール、キー、およびシークレットを使用できます。
 
-このジョブには 4 つの主要なセクションがあります:
+このジョブには4つの主要なセクションがあります。
 
 - `LABEL`: ロードジョブの状態をクエリする際に使用される文字列。
 - `LOAD` 宣言: ソース URI、ソースデータ形式、および宛先テーブル名。
@@ -428,16 +428,16 @@ SELECT * FROM information_schema.loads;
 
 `loads` ビューで提供されるフィールドに関する情報は、[`loads`](../sql-reference/information_schema/loads.md) を参照してください。
 
-複数のロードジョブを送信した場合、ジョブに関連付けられた `LABEL` でフィルタリングできます。例:
+複数のロードジョブを送信した場合、ジョブに関連付けられた `LABEL` でフィルタリングできます。例：
 
 ```SQL
 SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior';
 ```
 
-以下の出力には、ロードジョブ `user_behavior` の 2 つのエントリがあります:
+以下の出力には、ロードジョブ `user_behavior` の2つのエントリがあります。
 
-- 最初のレコードは `CANCELLED` の状態を示しています。`ERROR_MSG` までスクロールすると、ジョブが `listPath failed` により失敗したことがわかります。
-- 2 番目のレコードは `FINISHED` の状態を示しており、ジョブが成功したことを意味します。
+- 最初のレコードは `CANCELLED` 状態を示しています。`ERROR_MSG` までスクロールすると、ジョブが `listPath failed` のために失敗したことがわかります。
+- 2番目のレコードは `FINISHED` 状態を示しており、ジョブが成功したことを意味します。
 
 ```Plain
 JOB_ID|LABEL                                      |DATABASE_NAME|STATE    |PROGRESS           |TYPE  |PRIORITY|SCAN_ROWS|FILTERED_ROWS|UNSELECTED_ROWS|SINK_ROWS|ETL_INFO|TASK_INFO                                           |CREATE_TIME        |ETL_START_TIME     |ETL_FINISH_TIME    |LOAD_START_TIME    |LOAD_FINISH_TIME   |JOB_DETAILS                                                                                                                                                                                                                                                    |ERROR_MSG                             |TRACKING_URL|TRACKING_SQL|REJECTED_RECORD_PATH|
@@ -446,13 +446,13 @@ JOB_ID|LABEL                                      |DATABASE_NAME|STATE    |PROGR
  10106|user_behavior                              |mydatabase   |FINISHED |ETL:100%; LOAD:100%|BROKER|NORMAL  | 86953525|            0|              0| 86953525|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:50:15|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:55:10|{"All backends":{"a5fe5e1d-d7d0-4826-ba99-c7348f9a5f2f":[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":2710603082,"InternalTableLoadRows":86953525,"ScanBytes":1225637388,"ScanRows":86953525,"TaskNumber":1,"Unfinished backends":{"a5|                                      |            |            |                    |
 ```
 
-ロードジョブが完了したことを確認したら、宛先テーブルのサブセットをチェックしてデータが正常にロードされたかどうかを確認できます。例:
+ロードジョブが完了したことを確認した後、宛先テーブルのサブセットを確認して、データが正常にロードされたかどうかを確認できます。例：
 
 ```SQL
 SELECT * from user_behavior LIMIT 3;
 ```
 
-システムは次のようなクエリ結果を返し、データが正常にロードされたことを示しています:
+システムは次のようなクエリ結果を返し、データが正常にロードされたことを示しています。
 
 ```Plain
 +--------+---------+------------+--------------+---------------------+
@@ -462,4 +462,5 @@ SELECT * from user_behavior LIMIT 3;
 |    142 | 2522236 |    1669167 | pv           | 2017-11-25 15:14:12 |
 |    142 | 3031639 |    3607361 | pv           | 2017-11-25 15:19:25 |
 +--------+---------+------------+--------------+---------------------+
+```
 ```

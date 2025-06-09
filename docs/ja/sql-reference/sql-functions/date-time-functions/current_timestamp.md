@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # current_timestamp
 
+## Description
+
 現在の日付を取得し、DATETIME 型の値を返します。
 
 この関数は [now()](./now.md) 関数の同義語です。
@@ -27,7 +29,7 @@ MySQL > select current_timestamp();
 +---------------------+
 ```
 
-Example 2: テーブルを作成する際に、この関数をカラムに使用して、カラムのデフォルト値として現在の時刻を設定できます。
+Example 2: テーブルを作成する際に、この関数を列に使用して、現在の時刻をその列のデフォルト値にすることができます。
 
 ```SQL
 CREATE TABLE IF NOT EXISTS sr_member (
@@ -41,4 +43,4 @@ CREATE TABLE IF NOT EXISTS sr_member (
 
 ## keyword
 
-CURRENT_TIMESTAMP,CURRENT,TIMESTAMP
+CURRENT_TIMESTAMP, CURRENT, TIMESTAMP

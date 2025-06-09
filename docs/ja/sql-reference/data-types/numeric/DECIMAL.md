@@ -22,13 +22,13 @@ DECIMAL(P[,S])
   
   主な最適化:
   
-  ​1. Fast Decimal は可変幅の整数を使用して小数を表現します。例えば、精度が18以下の小数を表現するために64ビット整数を使用します。一方、Decimal V2 はすべての小数に対して128ビット整数を一様に使用します。64ビットプロセッサ上での算術演算や変換操作は、より少ない命令を使用し、パフォーマンスを大幅に向上させます。
+  ​1. Fast Decimal は可変幅の整数を使用して小数を表現します。例えば、精度が18以下の小数を表現するために64ビットの整数を使用します。一方、Decimal V2 はすべての小数に対して128ビットの整数を一様に使用します。64ビットプロセッサでの算術演算や変換操作は、より少ない命令を使用し、パフォーマンスを大幅に向上させます。
   
-  ​2. Decimal V2 と比較して、Fast Decimal はいくつかのアルゴリズム、特に乗算において大幅な最適化を行い、パフォーマンスを約4倍向上させました。
+  ​2. Decimal V2 と比較して、Fast Decimal はいくつかのアルゴリズムで大幅な最適化を行い、特に乗算においてパフォーマンスを約4倍向上させました。
 
-Fast Decimal は FE の動的パラメータ `enable_decimal_v3` によって制御され、デフォルトでは `true` です。
+Fast Decimal は、FE の動的パラメータ `enable_decimal_v3` によって制御され、デフォルトでは `true` です。
 
-バージョン 3.1 以降、StarRocks は [ARRAY](../semi_structured/Array.md)、[MAP](../semi_structured/Map.md)、および [STRUCT](../semi_structured/STRUCT.md) における Fast Decimal エントリをサポートしています。
+バージョン3.1以降、StarRocks は [ARRAY](../semi_structured/Array.md)、[MAP](../semi_structured/Map.md)、および [STRUCT](../semi_structured/STRUCT.md) における Fast Decimal エントリをサポートしています。
 
 ## 例
 

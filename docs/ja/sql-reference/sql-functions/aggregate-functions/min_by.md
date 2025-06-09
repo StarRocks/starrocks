@@ -4,34 +4,36 @@ displayed_sidebar: docs
 
 # min_by
 
+## 説明
+
 `y` の最小値に関連付けられた `x` の値を返します。
 
-例えば、`SELECT min_by(subject, exam_result) FROM exam;` は、最低の試験スコアを持つ科目を返します。
+例えば、`SELECT min_by(subject, exam_result) FROM exam;` は、最も低い試験スコアを持つ科目を返します。
 
 この関数は v2.5 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 min_by(x,y)
 ```
 
-## Parameters
+## パラメータ
 
-- `x`: 任意のタイプの式。
-- `y`: 順序付け可能なタイプの式。
+- `x`: 任意の型の式。
+- `y`: 順序付け可能な型の式。
 
-## Return value
+## 戻り値
 
-`x` と同じタイプの値を返します。
+`x` と同じ型の値を返します。
 
-## Usage notes
+## 使用上の注意
 
-- `y` はソート可能なタイプでなければなりません。`bitmap` や `hll` のようなソート不可能なタイプの `y` を使用すると、エラーが返されます。
+- `y` はソート可能な型でなければなりません。`bitmap` や `hll` のようなソート不可能な型を `y` に使用すると、エラーが返されます。
 - `y` に null 値が含まれている場合、その null 値に対応する行は無視されます。
 - 複数の `x` の値が同じ最小値の `y` を持つ場合、この関数は最初に見つかった `x` の値を返します。
 
-## Examples
+## 例
 
 1. テーブル `exam` を作成します。
 
@@ -68,8 +70,8 @@ min_by(x,y)
     6 rows in set (0.03 sec)
     ```
 
-3. 最低スコアを持つ科目を取得します。
-   最低スコア `70` を持つ科目 `english` が返されます。
+3. 最も低いスコアを持つ科目を取得します。
+   最も低いスコア `70` を持つ科目 `english` が返されます。
 
     ```Plain
     SELECT min_by(subject, exam_result) FROM exam;

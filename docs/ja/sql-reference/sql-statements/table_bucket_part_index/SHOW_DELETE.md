@@ -4,13 +4,13 @@ displayed_sidebar: docs
 
 # SHOW DELETE
 
-## Description
+## 説明
 
-指定されたデータベース内で、Duplicate Key、Unique Key、および集計テーブルに対して正常に実行された過去の DELETE 操作をクエリします。データ削除の詳細については、[DELETE](DELETE.md) を参照してください。
+指定されたデータベース内の Duplicate Key、Unique Key、集計テーブルで正常に実行された過去の DELETE 操作をクエリします。データ削除の詳細については、 [DELETE](DELETE.md) を参照してください。
 
 このコマンドは、主キーテーブルで実行された DELETE 操作をクエリするためには使用できないことに注意してください。
 
-## Syntax
+## 構文
 
 ```sql
 SHOW DELETE [FROM <db_name>]
@@ -26,7 +26,7 @@ SHOW DELETE [FROM <db_name>]
 - `DeleteCondition`: 指定された DELETE 条件。
 - `State`: DELETE タスクのステータス。
 
-## Examples
+## 例
 
 `database` のすべての過去の DELETE 操作を表示します。
 

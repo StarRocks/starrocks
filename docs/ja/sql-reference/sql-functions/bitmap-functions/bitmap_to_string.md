@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # bitmap_to_string
 
+## 説明
+
 入力されたビットマップをカンマ (,) で区切られた文字列に変換します。この文字列にはビットマップ内のすべてのビットが含まれます。入力が null の場合、null が返されます。
 
-## Syntax
+## 構文
 
 ```Haskell
 VARCHAR BITMAP_TO_STRING(BITMAP input)
 ```
 
-## Parameters
+## パラメータ
 
 `input`: 変換したいビットマップ。
 
-## Return value
+## 戻り値
 
 VARCHAR 型の値を返します。
 
-## Examples
+## 例
 
 例 1: 入力が null の場合、null が返されます。
 

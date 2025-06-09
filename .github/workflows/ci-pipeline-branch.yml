@@ -49,6 +49,75 @@ jobs:
           cd ci-tool
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
 
+      - name: Get Title
+        id: get_title
+        run: |
+          PR_TITLE=$(gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json  title -q '.title')
+          echo "PR_TITLE<<EOF" >> $GITHUB_OUTPUT
+          echo "${PR_TITLE}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Check Title Format
+        id: check_title_format
+        env:
+          PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
+        run: |
+          case "${{ env.PR_TITLE }}" in
+            '[BugFix]'* | '[Enhancement]'* | '[Feature]'* | '[UT]'* | '[Doc]'* | '[Tool]'* | '[Refactor]'* | 'Revert'*)
+              exit 0
+              ;;
+            *)
+              echo "::error::Title format is incorrect, please check!"
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout code
+        id: checkout_code
+        if: github.base_ref != 'main'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/pull/${{ github.event.pull_request.number }}/head
+
+      - name: Checkout PR
+        id: checkout_pr
+        if: steps.checkout_code.outcome == 'success'
+        run: |
+          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
+          git fetch upstream
+          git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
+          
+      - name: Branch Access Check
+        id: branch_access_check
+        if: steps.checkout_pr.outcome =='success'
+        env:
+          PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
+        run: |
+          status=$(cat .github/.status || echo open)
+          if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
+            exit 0
+          elif [[ "${status}" == "feature-freeze" && "${PR_TITLE}" == *"[Feature]"* ]]; then
+            comment="⚠️ Branch in feature-freeze state, [Feature] PRs are not allowed!"
+          elif [[ "${status}" == "bugfix-only" ]] && [[ "${PR_TITLE}" == *"[Feature]"* || "${PR_TITLE}" == *"[Enhancement]"* ]]; then
+            comment="⚠️ Branch in bugfix-only state, [Feature] or [Enhancement] PRs are not allowed!"
+          elif [[ "${status}" == "code-freeze" ]] && [[ "${PR_TITLE}" != *"[Bugfix]"* || "${PR_TITLE}" != *"CVE"* ]]; then
+            comment="⚠️ Branch in code-freeze state, only PRs that fix CVE CVE are allowed!"
+          else
+            exit 0
+          fi
+          echo "check_res=false" >> $GITHUB_OUTPUT
+          echo "comment=${comment}" >> $GITHUB_OUTPUT
+
+      - name: Check Approve
+        if: steps.branch_access_check.outputs.check_res == 'false'
+        env:
+          TEAM: feature-reviewer
+          PRE_COMMENT: ${{ steps.branch_access_check.outputs.comment }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
   be-checker:
     runs-on: ubuntu-latest
     needs: basic-checker

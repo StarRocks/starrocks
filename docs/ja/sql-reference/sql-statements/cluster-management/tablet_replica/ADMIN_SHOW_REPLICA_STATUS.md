@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
@@ -29,7 +29,7 @@ WHERE STATUS [!]= "replica_status"
 ```plain text
 replica_status:
 OK:            レプリカは正常です
-DEAD:          レプリカのバックエンドが利用できません
+DEAD:          レプリカのBackendが利用できません
 VERSION_ERROR: レプリカのデータバージョンが欠落しています
 SCHEMA_ERROR:  レプリカのスキーマハッシュが正しくありません
 MISSING:       レプリカが存在しません
@@ -43,7 +43,7 @@ MISSING:       レプリカが存在しません
     ADMIN SHOW REPLICA STATUS FROM db1.tbl1;
     ```
 
-2. VERSION_ERROR のステータスを持つパーティションのレプリカを表示します。
+2. VERSION_ERROR ステータスのパーティションのレプリカを表示します。
 
     ```sql
     ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2)

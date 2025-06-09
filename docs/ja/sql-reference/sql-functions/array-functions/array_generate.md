@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # array_generate
 
-`start` と `end` で指定された範囲内の異なる値の配列を `step` の増分で返します。
+## Description
+
+`start` と `end` で指定された範囲内の異なる値の配列を、`step` の増分で返します。
 
 この関数は v3.1 からサポートされています。
 
-## 構文
+## Syntax
 
 ```Haskell
 ARRAY array_generate([start,] end [, step])
 ```
 
-## パラメータ
+## Parameters
 
-- `start`: 任意。開始値です。TINYINT、SMALLINT、INT、BIGINT、または LARGEINT に評価される定数または列でなければなりません。デフォルト値は 1 です。
-- `end`: 必須。終了値です。TINYINT、SMALLINT、INT、BIGINT、または LARGEINT に評価される定数または列でなければなりません。
-- `step`: 任意。増分です。TINYINT、SMALLINT、INT、BIGINT、または LARGEINT に評価される定数または列でなければなりません。`start` が `end` より小さい場合、デフォルト値は 1 です。`start` が `end` より大きい場合、デフォルト値は -1 です。
+- `start`: オプション、開始値。TINYINT、SMALLINT、INT、BIGINT、または LARGEINT に評価される定数または列でなければなりません。デフォルト値は 1 です。
+- `end`: 必須、終了値。TINYINT、SMALLINT、INT、BIGINT、または LARGEINT に評価される定数または列でなければなりません。
+- `step`: オプション、増分。TINYINT、SMALLINT、INT、BIGINT、または LARGEINT に評価される定数または列でなければなりません。`start` が `end` より小さい場合、デフォルト値は 1 です。`start` が `end` より大きい場合、デフォルト値は -1 です。
 
-## 戻り値
+## Return value
 
-入力パラメータと同じデータ型の要素を持つ配列を返します。
+入力パラメータと同じデータ型を持つ要素の配列を返します。
 
-## 使用上の注意
+## Usage notes
 
 - 入力パラメータが列の場合、その列が属するテーブルを指定する必要があります。
 - 入力パラメータが列の場合、他のパラメータを指定する必要があります。デフォルト値はサポートされていません。
@@ -32,7 +34,7 @@ ARRAY array_generate([start,] end [, step])
 - `step` が 0 の場合、空の配列が返されます。
 - `start` が `end` と等しい場合、その値が返されます。
 
-## 例
+## Examples
 
 ### 入力パラメータが定数の場合
 

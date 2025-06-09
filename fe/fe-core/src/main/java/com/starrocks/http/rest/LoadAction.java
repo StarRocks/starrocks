@@ -43,6 +43,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -63,6 +64,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
@@ -75,6 +77,36 @@ public class LoadAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.PUT,
                 "/api/{" + DB_KEY + "}/{" + TABLE_KEY + "}/_stream_load",
                 new LoadAction(controller));
+    }
+
+    public static List<Long> selectNodes(String warehouseName) throws DdlException {
+        // Choose a backend sequentially, or choose a cn in shared_data mode
+        List<Long> nodeIds = new ArrayList<>();
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            for (long nodeId : computeIds) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAvailable()) {
+                    nodeIds.add(nodeId);
+                }
+            }
+        } else {
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            nodeIds = systemInfoService.getAvailableBackends().stream().map(be -> be.getId()).collect(Collectors.toList());
+        }
+
+        List<Long> filterNodeIds = nodeIds.stream()
+                                            .filter(id -> !SimpleScheduler.isInBlocklist(id)).collect(Collectors.toList());
+        if (filterNodeIds != null && !filterNodeIds.isEmpty()) {
+            nodeIds = filterNodeIds;
+        }
+
+        if (CollectionUtils.isEmpty(nodeIds)) {
+            throw new DdlException("No backend alive.");
+        }
+
+        Collections.shuffle(nodeIds);
+        return nodeIds;
     }
 
     @Override
@@ -141,25 +173,7 @@ public class LoadAction extends RestBaseAction {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
         }
 
-        // Choose a backend sequentially, or choose a cn in shared_data mode
-        List<Long> nodeIds = new ArrayList<>();
-        if (RunMode.isSharedDataMode()) {
-            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
-            for (long nodeId : computeIds) {
-                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-                if (node != null && node.isAvailable()) {
-                    nodeIds.add(nodeId);
-                }
-            }
-            Collections.shuffle(nodeIds);
-        } else {
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, true, false, null);
-        }
-
-        if (CollectionUtils.isEmpty(nodeIds)) {
-            throw new DdlException("No backend alive.");
-        }
+        List<Long> nodeIds = LoadAction.selectNodes(warehouseName);
 
         // TODO: need to refactor after be split into cn + dn
         ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));

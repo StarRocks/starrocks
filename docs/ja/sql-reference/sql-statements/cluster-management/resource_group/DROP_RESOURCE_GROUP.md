@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-この操作には、対象のリソースグループに対する DROP 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作には、対象のリソースグループに対する DROP 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
@@ -20,11 +20,11 @@ displayed_sidebar: docs
 DROP RESOURCE GROUP <resource_group_name>
 ```
 
-## パラメーター
+## パラメータ
 
-| **パラメーター**    | **説明**                                   |
+| **パラメータ**      | **説明**                                  |
 | ------------------- | ----------------------------------------- |
-| resource_group_name | 削除するリソースグループの名前です。       |
+| resource_group_name | 削除するリソースグループの名前です。      |
 
 ## 例
 

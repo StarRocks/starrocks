@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # std
 
+## 説明
+
 式の標準偏差を返します。バージョン v2.5.10 以降、この関数はウィンドウ関数としても使用できます。
 
-## Syntax
+## 構文
 
 ```Haskell
 STD(expr)
 ```
 
-## Parameters
+## パラメータ
 
-`expr`: 式です。テーブルのカラムの場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、または DECIMAL に評価される必要があります。
+`expr`: 式です。テーブルの列である場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、または DECIMAL に評価される必要があります。
 
-## Return value
+## 戻り値
 
 DOUBLE 値を返します。
 
-## Examples
+## 例
 
 ```plaintext
 MySQL > select * from std_test;
@@ -46,6 +48,6 @@ MySQL > select std(col0) as std_of_col0, std(col1) as std_of_col1 from std_test;
 +--------------------+--------------------+
 ```
 
-## keyword
+## キーワード
 
 STD

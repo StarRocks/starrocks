@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # bitor
 
-2 つの数値式のビット単位の OR を返します。
+## 説明
+
+2つの数値式のビット単位のORを返します。
 
 ## 構文
 
@@ -14,15 +16,15 @@ BITOR(x,y);
 
 ## パラメータ
 
-- `x`: この式は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT のいずれかのデータ型に評価される必要があります。
+- `x`: この式は次のいずれかのデータ型に評価されなければなりません: TINYINT, SMALLINT, INT, BIGINT, LARGEINT。
 
-- `y`: この式は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT のいずれかのデータ型に評価される必要があります。
+- `y`: この式は次のいずれかのデータ型に評価されなければなりません: TINYINT, SMALLINT, INT, BIGINT, LARGEINT。
 
 > `x` と `y` はデータ型が一致している必要があります。
 
 ## 戻り値
 
-戻り値は `x` と同じ型です。いずれかの値が NULL の場合、結果は NULL です。
+戻り値は `x` と同じ型です。いずれかの値がNULLの場合、結果はNULLです。
 
 ## 例
 

@@ -22,12 +22,12 @@ SHOW TABLES [FROM <catalog_name>.<db_name>]
 
 | **パラメータ**          | **必須** | **説明**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
-| catalog_name | いいえ       | 内部 catalog または external catalog の名前。<ul><li>このパラメータを指定しないか、`default_catalog` に設定した場合、StarRocks データベースのテーブルが返されます。</li><li>このパラメータを external catalog の名前に設定した場合、外部データソースのデータベースのテーブルが返されます。</li></ul> 内部および外部の catalogs を表示するには、[SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md) を実行できます。|
+| catalog_name | いいえ       | 内部 catalog または external catalog の名前。<ul><li>このパラメータを指定しないか `default_catalog` に設定した場合、StarRocks データベースのテーブルが返されます。</li><li>このパラメータを external catalog の名前に設定した場合、外部データソースのデータベースのテーブルが返されます。</li></ul> 内部および external catalog を表示するには [SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md) を実行できます。|
 | db_name | いいえ       | データベース名。指定しない場合、デフォルトで現在のデータベースが使用されます。 |
 
 ## 例
 
-例 1: StarRocks クラスターに接続した後、`default_catalog` のデータベース `example_db` のテーブルを表示します。次の2つのステートメントは同等です。
+例 1: StarRocks クラスターに接続した後、`default_catalog` のデータベース `example_db` 内のテーブルを表示します。次の2つのステートメントは同等です。
 
 ```plain
 show tables from example_db;
@@ -51,7 +51,7 @@ show tables from default_catalog.example_db;
 +----------------------------+
 ```
 
-例 2: データベース `example_db` に接続した後、現在のデータベースのテーブルを表示します。
+例 2: データベース `example_db` に接続した後、現在のデータベース内のテーブルを表示します。
 
 ```plain
 show tables;
@@ -65,7 +65,7 @@ show tables;
 +----------------------------+
 ```
 
-例 3: external catalog `hudi_catalog` のデータベース `hudi_db` のテーブルを表示します。
+例 3: external catalog `hudi_catalog` のデータベース `hudi_db` 内のテーブルを表示します。
 
 ```plain
 show tables from hudi_catalog.hudi_db;
@@ -79,8 +79,8 @@ show tables from hudi_catalog.hudi_db;
 
 または、SET CATALOG を実行して external catalog `hudi_catalog` に切り替え、その後 `SHOW TABLES FROM hudi_db;` を実行することもできます。
 
-## 参考
+## 参考文献
 
-- [SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md): StarRocks クラスター内のすべての catalogs を表示します。
+- [SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md): StarRocks クラスター内のすべての catalog を表示します。
 - [SHOW DATABASES](../Database/SHOW_DATABASES.md): 内部 catalog または external catalog 内のすべてのデータベースを表示します。
-- [SET CATALOG](../Catalog/SET_CATALOG.md): catalogs 間を切り替えます。
+- [SET CATALOG](../Catalog/SET_CATALOG.md): catalog 間を切り替えます。

@@ -4,11 +4,13 @@ displayed_sidebar: docs
 
 # array_filter
 
+## 説明
+
 指定されたフィルターに一致する配列から値を返します。
 
-この関数は次の2つの形式で使用できます。ラムダの採用により、より柔軟な配列フィルタリングが可能になります。ラムダ関数の詳細については、[Lambda expression](../Lambda_expression.md)を参照してください。この関数は v2.5 からサポートされています。
+この関数は次の2つの形式があります。ラムダの採用により、より柔軟な配列フィルタリングが可能です。ラムダ関数の詳細については、 [Lambda expression](../Lambda_expression.md) を参照してください。この関数は v2.5 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 array_filter(array, array<bool>)
@@ -23,7 +25,7 @@ array_filter(lambda_function, arr1,arr2...)
 
   ラムダ関数に一致する配列から値を返します。
 
-## Parameters
+## パラメーター
 
 `array`: 値をフィルタリングする配列。
 
@@ -31,13 +33,13 @@ array_filter(lambda_function, arr1,arr2...)
 
 `lambda_function`: 値をフィルタリングするために使用されるラムダ関数。
 
-## Usage notes
+## 使用上の注意
 
-- `array_filter(array, array<bool>)` の2つの入力パラメータは ARRAY でなければならず、フィルター式は `array<bool>` に評価されることができます。
-- `array_filter(lambda_function, arr1,arr2...)` のラムダ関数は [array_map()](array_map.md) の使用ノートに従います。
+- `array_filter(array, array<bool>)` の2つの入力パラメーターは ARRAY でなければならず、フィルター式は `array<bool>` に評価されることができます。
+- `array_filter(lambda_function, arr1,arr2...)` のラムダ関数は [array_map()](array_map.md) の使用上の注意に従います。
 - 入力配列が null の場合、null が返されます。フィルター配列が null の場合、空の配列が返されます。
 
-## Examples
+## 例
 
 - ラムダ関数を使用しない例
 
@@ -105,7 +107,7 @@ array_filter(lambda_function, arr1,arr2...)
     1 row in set (0.00 sec)
     ```
 
-- ラムダ関数を使用する例
+- ラムダ関数を使用した例
 
   ```Plain
     -- x の要素が y の要素より小さいものを返します。

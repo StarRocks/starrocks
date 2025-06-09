@@ -25,8 +25,8 @@ SET [ GLOBAL | SESSION ] <variable_name> = <value> [, <variable_name> = <value>]
 | **Parameter**          | **Description**                                              |
 | ---------------------- | ------------------------------------------------------------ |
 | Modifier:<ul><li>GLOBAL</li><li>SESSION</li></ul> | <ul><li>`GLOBAL` 修飾子を使用すると、ステートメントは変数をグローバルに設定します。</li><li>`SESSION` 修飾子を使用すると、ステートメントはセッション内で変数を設定します。`LOCAL` は `SESSION` の同義語です。</li><li>修飾子がない場合、デフォルトは `SESSION` です。</li></ul>グローバル変数とセッション変数の詳細については、[System Variables](../../../System_variable.md) を参照してください。<br/>**NOTE**<br/>ADMIN 権限を持つユーザーのみが変数をグローバルに設定できます。 |
-| variable_name          | 変数の名前です。                                    |
-| value                  | 変数の値です。                                   |
+| variable_name          | 変数の名前。                                    |
+| value                  | 変数の値。                                   |
 
 ## Examples
 

@@ -49,6 +49,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -91,6 +92,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -180,6 +183,24 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
+    public static long getThreadAllocatedBytes(long threadId) {
+        try {
+            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+            if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+                com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
+                if (casted.isThreadAllocatedMemorySupported() && casted.isThreadAllocatedMemoryEnabled()) {
+                    long allocatedBytes = casted.getThreadAllocatedBytes(threadId);
+                    if (allocatedBytes != -1) {
+                        return allocatedBytes;
+                    }
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
@@ -238,11 +259,14 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
 
-        // Build Digest for SELECT/INSERT/UPDATE/DELETE
+        // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
         if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
             if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
+            long threadAllocatedMemory =
+                    getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
+            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
@@ -252,7 +276,8 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
-            ctx.getAuditEventBuilder().setStmt(origStmt);
+            // but redact sensitive credentials first
+            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
         } else {
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
@@ -280,6 +305,9 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        long beginMemory = getThreadAllocatedBytes(Thread.currentThread().getId());
+        ctx.setCurrentThreadAllocatedMemory(beginMemory);
+
         // convert statement to Java string
         String originStmt = null;
         byte[] bytes = packetBuf.array();

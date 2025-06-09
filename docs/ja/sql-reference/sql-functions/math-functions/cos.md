@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # cos
 
+## 説明
+
 引数のコサインを計算します。
 
-## Syntax
+## 構文
 
 ```Haskell
 DOUBLE cos(DOUBLE arg)
 ```
 
-### Parameters
+### パラメータ
 
-`arg`: 数値のみを指定できます。この関数は、数値をコサイン計算する前に DOUBLE 値に変換します。
+`arg`: 数値のみ指定できます。この関数は、数値をコサインを計算する前に DOUBLE 値に変換します。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Usage notes
+## 使用上の注意
 
 非数値を指定した場合、この関数は `NULL` を返します。
 
-## Examples
+## 例
 
 ```Plain
 mysql> select cos(-1);
@@ -56,6 +58,6 @@ mysql> select cos("");
 +---------+
 ```
 
-## keyword
+## キーワード
 
 COS

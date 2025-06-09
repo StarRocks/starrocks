@@ -630,7 +630,8 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
     }
 
     if (rowset->rowset_meta()->check_schema_id(_max_version_schema->id())) {
-        _committed_rs_map[rowset->rowset_id()] = rowset;
+        // make sure the operation of _committed_rs_map is atomic, otherwise you need to hold lock
+        _committed_rs_map.insert_or_assign(rowset->rowset_id(), rowset);
         return true;
     }
     return false;

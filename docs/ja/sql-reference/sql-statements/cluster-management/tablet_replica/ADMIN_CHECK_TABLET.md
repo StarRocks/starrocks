@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-この操作には、SYSTEM レベルの OPERATE 権限が必要です。[GRANT](../../account-management/GRANT.md) の指示に従って、この権限を付与できます。
+この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 

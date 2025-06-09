@@ -8,11 +8,11 @@ displayed_sidebar: docs
 
 パーティションを特定のデータバージョンに設定します。
 
-パーティションバージョンを手動で設定することは高リスクな操作であり、クラスターメタデータに問題が発生した場合にのみ推奨されます。通常、パーティションのバージョンはその中の tablets のバージョンと一致しています。
+パーティションバージョンを手動で設定することは高リスクな操作であり、クラスタメタデータに問題が発生した場合にのみ推奨されます。通常の状況では、パーティションのバージョンはその中の tablets のバージョンと一致しています。
 
 :::tip
 
-この操作には SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作には SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
@@ -26,8 +26,8 @@ VERSION TO <version>
 ## パラメータ
 
 - `table_name`: パーティションが属するテーブルの名前。
-- `partition_name`: パーティションの名前。`partition_name` または `partition_id` のいずれかを指定する必要があります。非パーティションテーブルの場合、`partition_name` はテーブル名と同じです。
-- `partition_id`: パーティションの ID。`partition_name` または `partition_id` のいずれかを指定する必要があります。ランダムバケット法を使用するテーブルでは、`partition_id` のみでパーティションを指定できます。
+- `partition_name`: パーティションの名前。`partition_name` または `partition_id` のいずれかを使用してパーティションを指定する必要があります。非パーティションテーブルの場合、`partition_name` はテーブル名と同じです。
+- `partition_id`: パーティションの ID。`partition_name` または `partition_id` のいずれかを使用してパーティションを指定する必要があります。ランダムバケット法を使用するテーブルでは、`partition_id` のみを使用してパーティションを指定できます。
 - `version`: パーティションに設定したいバージョン。
 
 ## 例

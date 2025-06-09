@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # transform_keys
 
-マップ内のキーを [Lambda expression](../Lambda_expression.md) を使用して変換し、マップ内の各エントリに対して新しいキーを生成します。
+## 説明
+
+[Lambda expression](../Lambda_expression.md) を使用してマップ内のキーを変換し、マップ内の各エントリに対して新しいキーを生成します。
 
 この関数は v3.1 以降でサポートされています。
 
@@ -28,11 +30,11 @@ MAP transform_keys(any_map, lambda_func)
 
 ## 戻り値
 
-キーのデータ型は Lambda expression の結果によって決定され、値のデータ型は `any_map` 内の値と同じであるマップ値を返します。
+キーのデータ型は Lambda expression の結果によって決定され、値のデータ型は `any_map` の値と同じであるマップ値を返します。
 
 入力パラメータが NULL の場合、NULL が返されます。
 
-元のマップ内のキーまたは値が NULL の場合、NULL は通常の値として処理されます。
+元のマップのキーまたは値が NULL の場合、NULL は通常の値として処理されます。
 
 Lambda expression は 2 つのパラメータを持つ必要があります。最初のパラメータはキーを表します。2 番目のパラメータは値を表します。
 

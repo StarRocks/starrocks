@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # aes_encrypt
 
+## Description
+
 AES_128_ECB アルゴリズムを使用して文字列を暗号化し、バイナリ文字列を返します。
 
 AES は advanced encryption standard の略で、ECB は electronic code book の略です。文字列を暗号化するために使用されるキーは 128 ビットの文字列です。
 
-## 構文
+## Syntax
 
 ```Haskell
 aes_encrypt(str,key_str);
 ```
 
-## パラメータ
+## Parameters
 
 `str`: 暗号化する文字列。VARCHAR 型でなければなりません。
 
 `key_str`: `str` を暗号化するために使用されるキー。VARCHAR 型でなければなりません。
 
-## 戻り値
+## Return value
 
 VARCHAR 型の値を返します。入力が NULL の場合、NULL が返されます。
 
-## 例
+## Examples
 
 この関数を使用して `starrocks` を AES 暗号化し、暗号化された文字列を Base64 エンコードされた文字列に変換します。
 

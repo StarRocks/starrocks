@@ -6,6 +6,12 @@ displayed_sidebar: docs
 
 値を JSON 型と SQL 型の間で変換します。
 
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
 ## 構文
 
 - JSON から SQL への変換
@@ -24,35 +30,35 @@ cast(sql_expr AS JSON)
 
 - `json_expr`: SQL 値に変換したい JSON 値を表す式。
 
-- `sql_data_type`: JSON 値を変換したい SQL データ型。STRING、VARCHAR、CHAR、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT のみがサポートされています。
+- `sql_data_type`: JSON 値を変換したい SQL データ型。STRING、VARCHAR、CHAR、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT のデータ型のみサポートされています。
 
 - `sql_expr`: JSON 値に変換したい SQL 値を表す式。このパラメータは、`sql_data_type` パラメータでサポートされているすべての SQL データ型をサポートします。
 
 ## 戻り値
 
-- `cast(json_expr AS sql_data_type)` 構文を使用した場合、キャスト関数は `sql_data_type` パラメータで指定された SQL データ型の値を返します。
+- `cast(json_expr AS sql_data_type)` 構文を使用した場合、cast 関数は `sql_data_type` パラメータで指定された SQL データ型の値を返します。
 
-- `cast(sql_expr AS JSON)` 構文を使用した場合、キャスト関数は JSON 値を返します。
+- `cast(sql_expr AS JSON)` 構文を使用した場合、cast 関数は JSON 値を返します。
 
 ## 使用上の注意
 
 - SQL から JSON への変換
 
-  - SQL 値が JSON でサポートされている精度を超える場合、キャスト関数は算術オーバーフローを防ぐために `NULL` を返します。
+  - SQL 値が JSON によってサポートされる精度を超える場合、cast 関数は算術オーバーフローを防ぐために `NULL` を返します。
 
-  - SQL 値が `NULL` の場合、キャスト関数は SQL 値 `NULL` を JSON 値の `NULL` に変換しません。戻り値は依然として SQL 値の `NULL` です。
+  - SQL 値が `NULL` の場合、cast 関数は SQL 値 `NULL` を JSON 値の `NULL` に変換しません。戻り値は依然として SQL 値の `NULL` です。
 
 - JSON から SQL への変換
 
-  - キャスト関数は、互換性のある JSON と SQL データ型間の変換のみをサポートします。たとえば、JSON 文字列を SQL 文字列に変換できます。
+  - cast 関数は、互換性のある JSON と SQL データ型間の変換のみをサポートします。たとえば、JSON 文字列を SQL 文字列に変換できます。
 
-  - キャスト関数は、互換性のない JSON と SQL データ型間の変換をサポートしません。たとえば、JSON 数値を SQL 文字列に変換すると、関数は `NULL` を返します。
+  - cast 関数は、互換性のない JSON と SQL データ型間の変換をサポートしません。たとえば、JSON 数値を SQL 文字列に変換すると、関数は `NULL` を返します。
 
-  - 算術オーバーフローが発生した場合、キャスト関数は SQL 値の `NULL` を返します。
+  - 算術オーバーフローが発生した場合、cast 関数は SQL 値の `NULL` を返します。
 
   - JSON 値の `NULL` を SQL 値に変換すると、関数は SQL 値の `NULL` を返します。
 
-  - JSON 文字列を VARCHAR 値に変換すると、関数は二重引用符 (") で囲まれていない VARCHAR 値を返します。
+  - JSON 文字列を VARCHAR 値に変換すると、関数はダブルクォーテーションマーク (") で囲まれていない VARCHAR 値を返します。
 
 ## 例
 

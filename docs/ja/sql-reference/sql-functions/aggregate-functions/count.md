@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # count
 
-指定された式に基づいて、行の総数を返します。
+## 説明
 
-この関数には3つのバリエーションがあります:
+式で指定された行の総数を返します。
+
+この関数には3つのバリエーションがあります。
 
 - `COUNT(*)` は、NULL 値を含むかどうかに関係なく、テーブル内のすべての行をカウントします。
 
@@ -14,28 +16,28 @@ displayed_sidebar: docs
 
 - `COUNT(DISTINCT expr)` は、列内の重複排除された非 NULL 値の数をカウントします。
 
-`COUNT(DISTINCT expr)` は、正確な重複排除カウントに使用されます。より高い重複排除カウントのパフォーマンスが必要な場合は、[Use bitmap for exact count discount](../../../using_starrocks/distinct_values/Using_bitmap.md)を参照してください。
+`COUNT(DISTINCT expr)` は、正確な重複排除カウントに使用されます。より高い重複排除カウントのパフォーマンスが必要な場合は、[Use bitmap for exact count discount](../../../using_starrocks/distinct_values/Using_bitmap.md) を参照してください。
 
-StarRocks 2.4以降では、1つのステートメントで複数の COUNT(DISTINCT) を使用できます。
+StarRocks 2.4 以降では、1つのステートメントで複数の COUNT(DISTINCT) を使用できます。
 
-## Syntax
+## 構文
 
 ~~~Haskell
 COUNT(expr)
 COUNT(DISTINCT expr [,expr,...])`
 ~~~
 
-## Parameters
+## パラメータ
 
-`expr`: `count()` が実行される基準となる列または式。`expr` が列名の場合、その列は任意のデータ型でかまいません。
+`expr`: `count()` が実行される基準となる列または式。`expr` が列名の場合、その列は任意のデータ型で構いません。
 
-## Return value
+## 戻り値
 
 数値を返します。行が見つからない場合は、0 が返されます。この関数は NULL 値を無視します。
 
-## Examples
+## 例
 
-`test` という名前のテーブルがあるとします。`id` によって各注文の国、カテゴリ、サプライヤーをクエリします。
+`test` という名前のテーブルがあるとします。`id` で各注文の国、カテゴリ、サプライヤーをクエリします。
 
 ~~~Plain
 select * from test order by id;
@@ -52,7 +54,7 @@ select * from test order by id;
 +------+----------+----------+------------+
 ~~~
 
-Example 1: テーブル `test` の行数をカウントします。
+例 1: テーブル `test` の行数をカウントします。
 
 ~~~Plain
     select count(*) from test;
@@ -63,7 +65,7 @@ Example 1: テーブル `test` の行数をカウントします。
     +----------+
 ~~~
 
-Example 2: `id` 列の値の数をカウントします。
+例 2: `id` 列の値の数をカウントします。
 
 ~~~Plain
     select count(id) from test;
@@ -74,7 +76,7 @@ Example 2: `id` 列の値の数をカウントします。
     +-----------+
 ~~~
 
-Example 3: `category` 列の値の数を NULL 値を無視してカウントします。
+例 3: `category` 列の値の数を NULL 値を無視してカウントします。
 
 ~~~Plain
 select count(category) from test;
@@ -85,7 +87,7 @@ select count(category) from test;
   +-----------------+
 ~~~
 
-Example 4: `category` 列の重複排除された値の数をカウントします。
+例 4: `category` 列の重複排除された値の数をカウントします。
 
 ~~~Plain
 select count(distinct category) from test;
@@ -96,7 +98,7 @@ select count(distinct category) from test;
 +-------------------------+
 ~~~
 
-Example 5: `category` と `supplier` の組み合わせの数をカウントします。
+例 5: `category` と `supplier` で形成できる組み合わせの数をカウントします。
 
 ~~~Plain
 select count(distinct category, supplier) from test;
@@ -107,9 +109,9 @@ select count(distinct category, supplier) from test;
 +------------------------------------+
 ~~~
 
-出力では、`id` 1004 の組み合わせは `id` 1002 の組み合わせと重複しています。それらは一度だけカウントされます。`id` 1007 の組み合わせは NULL 値を含んでおり、カウントされません。
+出力では、`id` 1004 の組み合わせは `id` 1002 の組み合わせと重複しています。それらは一度だけカウントされます。`id` 1007 の組み合わせは NULL 値を持っており、カウントされません。
 
-Example 6: 1つのステートメントで複数の COUNT(DISTINCT) を使用します。
+例 6: 1つのステートメントで複数の COUNT(DISTINCT) を使用します。
 
 ~~~Plain
 select count(distinct country, category), count(distinct country,supplier) from test;

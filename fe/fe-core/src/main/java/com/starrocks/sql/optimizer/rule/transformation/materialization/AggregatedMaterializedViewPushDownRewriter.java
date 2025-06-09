@@ -97,7 +97,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             Optional<OptExpression> res = rewriteInfo.getOp();
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite success");
             OptExpression result = res.get();
-            setOptScanOpsHavePushDown(result);
+            setOpHasPushDown(result);
             return result;
         } else {
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite failed");
@@ -139,11 +139,6 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
         }
         deriveLogicalProperty(newQueryInput);
         return newQueryInput;
-    }
-
-    public static void setOptScanOpsHavePushDown(OptExpression input) {
-        List<LogicalScanOperator> scanOps = MvUtils.getScanOperator(input);
-        scanOps.stream().forEach(op -> op.setOpRuleMask(op.getOpRuleMask() | Operator.OP_PUSH_DOWN_BIT));
     }
 
     public static void setOpHasPushDown(OptExpression input) {

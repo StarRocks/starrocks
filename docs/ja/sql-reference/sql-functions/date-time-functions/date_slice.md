@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # date_slice
 
+## 説明
+
 指定された時間の粒度に基づいて、与えられた時間を時間間隔の始まりまたは終わりに変換します。
 
 この関数は v2.5 からサポートされています。
@@ -16,11 +18,11 @@ DATE date_slice(DATE dt, INTERVAL N type[, boundary])
 
 ## パラメータ
 
-- `dt`: 変換する時間、DATE 型。
+- `dt`: 変換する時間、DATE。
 - `INTERVAL N type`: 時間の粒度。例えば、`interval 5 day`。
   - `N` は時間間隔の長さです。INT 値でなければなりません。
-  - `type` は単位で、YEAR, QUARTER, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND のいずれかです。DATE 値に対して `type` が HOUR, MINUTE, SECOND に設定されている場合、エラーが返されます。
-- `boundary`: オプションです。時間間隔の始まり (`FLOOR`) または終わり (`CEIL`) を返すかどうかを指定します。有効な値は FLOOR, CEIL です。このパラメータが指定されていない場合、デフォルトは `FLOOR` です。
+  - `type` は単位で、YEAR、QUARTER、MONTH、WEEK、DAY、HOUR、MINUTE、SECOND のいずれかです。`type` が DATE 値に対して HOUR、MINUTE、SECOND に設定されている場合、エラーが返されます。
+- `boundary`: 任意です。時間間隔の始まり (`FLOOR`) または終わり (`CEIL`) を返すかどうかを指定するために使用されます。有効な値は FLOOR、CEIL です。このパラメータが指定されていない場合、デフォルトは `FLOOR` です。
 
 ## 戻り値
 
@@ -32,7 +34,7 @@ DATE 型の値を返します。
 
 ## 例
 
-例 1: `boundary` パラメータを指定せずに、与えられた時間を 5 年間の時間間隔の始まりに変換します。
+例 1: `boundary` パラメータを指定せずに、与えられた時間を 5 年間隔の始まりに変換します。
 
 ```Plaintext
 select date_slice('2022-04-26', interval 5 year);
@@ -43,7 +45,7 @@ select date_slice('2022-04-26', interval 5 year);
 +--------------------------------------------------+
 ```
 
-例 2: 与えられた時間を 5 日間の時間間隔の終わりに変換します。
+例 2: 与えられた時間を 5 日間隔の終わりに変換します。
 
 ```Plaintext
 select date_slice('0001-01-07', interval 5 day, CEIL);
@@ -70,7 +72,7 @@ select * from test_all_type_select order by id_int;
 5 rows in set (0.06 sec)
 ```
 
-例 3: 与えられた DATE 値を 5 秒間の時間間隔の始まりに変換します。
+例 3: 与えられた DATE 値を 5 秒間隔の始まりに変換します。
 
 ```Plaintext
 select date_slice(id_date, interval 5 second, FLOOR)
@@ -79,9 +81,9 @@ order by id_int;
 ERROR 1064 (HY000): can't use date_slice for date with time(hour/minute/second)
 ```
 
-DATE 値の秒の部分を見つけることができないため、エラーが返されます。
+DATE 値の秒部分を見つけることができないため、エラーが返されます。
 
-例 4: 与えられた DATE 値を 5 日間の時間間隔の始まりに変換します。
+例 4: 与えられた DATE 値を 5 日間隔の始まりに変換します。
 
 ```Plaintext
 select date_slice(id_date, interval 5 day, FLOOR)
@@ -99,7 +101,7 @@ order by id_int;
 5 rows in set (0.14 sec)
 ```
 
-例 5: 与えられた DATE 値を 5 日間の時間間隔の終わりに変換します。
+例 5: 与えられた DATE 値を 5 日間隔の終わりに変換します。
 
 ```Plaintext
 select date_slice(id_date, interval 5 day, CEIL)

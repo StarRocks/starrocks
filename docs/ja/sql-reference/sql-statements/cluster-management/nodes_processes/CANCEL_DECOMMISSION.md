@@ -6,11 +6,11 @@ displayed_sidebar: docs
 
 ## 説明
 
-このステートメントは、ノードのデコミッションを取り消すために使用されます。
+このステートメントは、ノードのデコミッションを元に戻すために使用されます。
 
 :::tip
 
-この操作を実行する権限は `cluster_admin` ロールのみが持っています。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作を実行する権限は `cluster_admin` ロールのみにあります。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
@@ -22,7 +22,7 @@ CANCEL DECOMMISSION BACKEND "<host>:<heartbeat_port>"[,"<host>:<heartbeat_port>"
 
 ## 例
 
-1. 2つのノードのデコミッションを取り消します。
+1. 2つのノードのデコミッションをキャンセルします。
 
     ```sql
     CANCEL DECOMMISSION BACKEND "host1:port", "host2:port";

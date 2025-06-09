@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # isnull
 
-値が `NULL` かどうかを確認し、`NULL` の場合は `1` を返し、`NULL` でない場合は `0` を返します。
+## 説明
+
+値が `NULL` かどうかをチェックし、`NULL` の場合は `1` を返し、`NULL` でない場合は `0` を返します。
 
 ## 構文
 

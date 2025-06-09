@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # bitmap_min
 
+## Description
+
 ビットマップの最小値を取得します。ビットマップが `NULL` の場合、この関数は `NULL` を返します。ビットマップが空の場合、この関数はデフォルトで `NULL` を返します。
 
-## 構文
+## Syntax
 
 ```Haskell
 bitmap_min(bitmap)
 ```
 
-## パラメータ
+## Parameters
 
-`bitmap`: 最小値を取得したいビットマップ。BITMAP データ型のみがサポートされています。[bitmap_from_string](bitmap_from_string.md) などの関数を使用して構築したビットマップを指定できます。
+`bitmap`: 最小値を取得したいビットマップ。BITMAP データ型のみサポートされています。[bitmap_from_string](bitmap_from_string.md) などの関数を使用して構築したビットマップを指定できます。
 
-## 戻り値
+## Return value
 
 LARGEINT データ型の値を返します。
 
-## 例
+## Examples
 
 ```Plain
 MySQL > select bitmap_min(bitmap_from_string("0, 1, 2, 3"));

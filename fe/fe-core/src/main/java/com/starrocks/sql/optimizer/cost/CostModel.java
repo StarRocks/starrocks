@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -53,6 +54,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -512,6 +515,24 @@ public class CostModel {
                 Group group = context.getGroupExpression().getGroup();
                 boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
                 if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+                    // Don't limited to multi-stage aggregate node, refs: invalidOneStageAggCost
+                    // split aggregate node lose distinct flag, check the group's origin
+                    // aggregate
+                    LogicalAggregationOperator originAgg = group.getFirstLogicalExpression().getOp().cast();
+                    for (CallOperator callOperator : originAgg.getAggregations().values()) {
+                        if (callOperator.isDistinct()) {
+                            String fnName = callOperator.getFnName();
+                            List<ScalarOperator> children = callOperator.getChildren();
+                            if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())
+                                    || FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)
+                                    || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+                                return Optional.empty();
+                            } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && (children.size() > 1
+                                    || children.get(0).getType().isDecimalOfAnyVersion())) {
+                                return Optional.empty();
+                            }
+                        }
+                    }
                     return Optional.of(CostEstimate.infinite());
                 }
             }

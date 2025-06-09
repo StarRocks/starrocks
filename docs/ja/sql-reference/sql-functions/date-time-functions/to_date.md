@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # to_date
 
+## 説明
+
 DATETIME 値を日付に変換します。
 
-## Syntax
+## 構文
 
 ```Haskell
 DATE TO_DATE(DATETIME datetime)

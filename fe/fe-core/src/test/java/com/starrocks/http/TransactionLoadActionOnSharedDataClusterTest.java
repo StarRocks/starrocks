@@ -19,6 +19,7 @@ import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpMethod;
@@ -27,6 +28,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 
@@ -53,6 +57,15 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
             @Mock
             boolean isLeader() {
                 return true;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(String warehouseName) {
+                List<Long> nodes = new ArrayList<>();
+                nodes.add(1234L);
+                return nodes;
             }
         };
 

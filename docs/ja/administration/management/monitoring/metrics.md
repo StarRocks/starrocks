@@ -6,12 +6,12 @@ displayed_sidebar: docs
 
 このトピックでは、StarRocks の重要な一般メトリクスを紹介します。
 
-マテリアライズドビューや共有データクラスタに特化したメトリクスについては、該当するセクションを参照してください。
+マテリアライズドビューや共有データクラスタに特化したメトリクスについては、対応するセクションを参照してください。
 
-- [非同期マテリアライズドビューのメトリクス](./metrics-materialized_view.md)
+- [非同期マテリアライズドビューメトリクス](./metrics-materialized_view.md)
 - [共有データダッシュボードメトリクス、および Starlet ダッシュボードメトリクス](./metrics-shared-data.md)
 
-StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./Monitor_and_Alert.md)を参照してください。
+StarRocks クラスタのモニタリングサービスの構築方法については、[Monitor and Alert](./Monitor_and_Alert.md) を参照してください。
 
 ## メトリック項目
 
@@ -43,31 +43,31 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Bytes/s
 - タイプ: Average
-- 説明: BE のベース Compaction 速度。
+- 説明: BE のベースコンパクション速度。
 
 ### be_cumulative_compaction_bytes_per_second
 
 - 単位: Bytes/s
 - タイプ: Average
-- 説明: BE の累積 Compaction 速度。
+- 説明: BE の累積コンパクション速度。
 
 ### be_base_compaction_rowsets_per_second
 
 - 単位: Count
 - タイプ: Average
-- 説明: BE のベース Compaction の rowset 速度。
+- 説明: BE のベースコンパクション速度（行セット）。
 
 ### be_cumulative_compaction_rowsets_per_second
 
 - 単位: Count
 - タイプ: Average
-- 説明: BE の累積 Compaction の rowset 速度。
+- 説明: BE の累積コンパクション速度（行セット）。
 
 ### be_base_compaction_failed
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE のベース Compaction の失敗。
+- 説明: BE のベースコンパクション失敗。
 
 ### be_clone_failed
 
@@ -85,13 +85,13 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の tablet 作成失敗。
+- 説明: BE のタブレット作成失敗。
 
 ### be_cumulative_compaction_failed
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の累積 Compaction の失敗。
+- 説明: BE の累積コンパクション失敗。
 
 ### be_delete_failed
 
@@ -127,7 +127,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の tablet レポート失敗。
+- 説明: BE のタブレットレポート失敗。
 
 ### be_report_task_failed
 
@@ -139,13 +139,13 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の schema change 失敗。
+- 説明: BE のスキーマ変更失敗。
 
 ### be_base_compaction_requests
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE のベース Compaction リクエスト。
+- 説明: BE のベースコンパクションリクエスト。
 
 ### be_clone_total_requests
 
@@ -163,13 +163,13 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の tablet 作成リクエスト。
+- 説明: BE のタブレット作成リクエスト。
 
 ### be_cumulative_compaction_requests
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の累積 Compaction リクエスト。
+- 説明: BE の累積コンパクションリクエスト。
 
 ### be_delete_requests
 
@@ -193,7 +193,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の tablet レポートリクエスト。
+- 説明: BE のタブレットレポートリクエスト。
 
 ### be_report_disk_requests
 
@@ -205,7 +205,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の tablet レポートリクエスト。
+- 説明: BE のタブレットレポートリクエスト。
 
 ### be_report_task_requests
 
@@ -217,7 +217,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count/s
 - タイプ: Average
-- 説明: BE の schema change レポートリクエスト。
+- 説明: BE のスキーマ変更レポートリクエスト。
 
 ### be_storage_migrate_requests
 
@@ -271,7 +271,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - タイプ: Cumulative
-- 説明: FE の接続の総数。
+- 説明: FE 接続の総数。
 
 ### fe_edit_log_read
 
@@ -331,103 +331,103 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - タイプ: Average
-- 説明: 保留中の insert ジョブの数。
+- 説明: 保留中の挿入ジョブの数。
 
 ### fe_loading_insert_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: ロード中の insert ジョブの数。
+- 説明: ロード中の挿入ジョブの数。
 
 ### fe_committed_insert_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: コミットされた insert ジョブの数。
+- 説明: コミットされた挿入ジョブの数。
 
 ### fe_finished_insert_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: 完了した insert ジョブの数。
+- 説明: 完了した挿入ジョブの数。
 
 ### fe_cancelled_insert_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: キャンセルされた insert ジョブの数。
+- 説明: キャンセルされた挿入ジョブの数。
 
 ### fe_pending_broker_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: 保留中の broker ジョブの数。
+- 説明: 保留中のブローカージョブの数。
 
 ### fe_loading_broker_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: ロード中の broker ジョブの数。
+- 説明: ロード中のブローカージョブの数。
 
 ### fe_committed_broker_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: コミットされた broker ジョブの数。
+- 説明: コミットされたブローカージョブの数。
 
 ### fe_finished_broker_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: 完了した broker ジョブの数。
+- 説明: 完了したブローカージョブの数。
 
 ### fe_cancelled_broker_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: キャンセルされた broker ジョブの数。
+- 説明: キャンセルされたブローカージョブの数。
 
 ### fe_pending_delete_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: 保留中の delete ジョブの数。
+- 説明: 保留中の削除ジョブの数。
 
 ### fe_loading_delete_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: ロード中の delete ジョブの数。
+- 説明: ロード中の削除ジョブの数。
 
 ### fe_committed_delete_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: コミットされた delete ジョブの数。
+- 説明: コミットされた削除ジョブの数。
 
 ### fe_finished_delete_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: 完了した delete ジョブの数。
+- 説明: 完了した削除ジョブの数。
 
 ### fe_cancelled_delete_load_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: キャンセルされた delete ジョブの数。
+- 説明: キャンセルされた削除ジョブの数。
 
 ### fe_rollup_running_alter_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: rollup で作成されたジョブの数。
+- 説明: ロールアップで作成されたジョブの数。
 
 ### fe_schema_change_running_job
 
 - 単位: Count
 - タイプ: Average
-- 説明: schema change のジョブの数。
+- 説明: スキーマ変更中のジョブの数。
 
 ### cpu_util
 
@@ -547,7 +547,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Seconds
 - タイプ: Average
-- 説明: 各リソースグループのクエリレイテンシーのパーセンタイル。
+- 説明: 各リソースグループのクエリレイテンシー百分位数。
 
 ### starrocks_fe_query_resource_group_err
 
@@ -565,7 +565,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: -
 - タイプ: Average
-- 説明: リソースグループが使用した CPU 時間の比率。
+- 説明: リソースグループによって使用された CPU 時間の割合。
 
 ### starrocks_be_resource_group_mem_limit_bytes
 
@@ -589,7 +589,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: -
 - タイプ: Instantaneous
-- 説明: セーフモードが有効かどうかを示します。有効な値: `0` (無効) と `1` (有効)。セーフモードが有効になると、クラスタはロードリクエストを受け付けなくなります。
+- 説明: セーフモードが有効かどうかを示します。有効な値: `0` (無効) と `1` (有効)。セーフモードが有効な場合、クラスタはロードリクエストを受け付けません。
 
 ### starrocks_fe_unfinished_backup_job
 
@@ -643,23 +643,23 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - タイプ: Instantaneous
-- 説明: 各 BE ノード上の tablet の数を示します。
+- 説明: 各 BE ノード上のタブレットの数を示します。
 
 ### starrocks_fe_tablet_max_compaction_score
 
 - 単位: Count
 - タイプ: Instantaneous
-- 説明: 各 BE ノード上の最高の Compaction Score を示します。
+- 説明: 各 BE ノード上の最高のコンパクションスコアを示します。
 
 ### update_compaction_outputs_total
 
 - 単位: Count
-- 説明: 主キーテーブルの Compaction の総数。
+- 説明: 主キーテーブルのコンパクションの総数。
 
 ### update_del_vector_bytes_total
 
 - 単位: Bytes
-- 説明: 主キーテーブルで DELETE ベクトルをキャッシュするために使用されるメモリの総量。
+- 説明: 主キーテーブルで DELETE ベクトルをキャッシュするために使用される総メモリ。
 
 ### push_request_duration_us
 
@@ -670,7 +670,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 ### disks_data_used_capacity
 
-- 説明: 各ディスクの使用済み容量（ストレージパスで表される）。
+- 説明: 各ディスクの使用容量（ストレージパスで表される）。
 
 ### query_scan_rows
 
@@ -685,7 +685,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### result_buffer_block_count
 
 - 単位: Count
-- 説明: 結果バッファ内のブロック数。
+- 説明: 結果バッファ内のブロックの数。
 
 ### query_scan_bytes
 
@@ -695,7 +695,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### disk_reads_completed
 
 - 単位: Count
-- 説明: 正常に完了したディスク読み取りの数。
+- 説明: 成功したディスク読み取りの数。
 
 ### query_cache_hit_count
 
@@ -705,26 +705,26 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### jemalloc_resident_bytes
 
 - 単位: Bytes
-- 説明: アロケータによってマッピングされた物理的に存在するデータページの最大バイト数で、アロケータメタデータ、アクティブな割り当てをサポートするページ、および未使用のダーティページを含みます。
+- 説明: アロケータによってマッピングされた物理的に存在するデータページの最大バイト数で、アロケータメタデータに専用されたすべてのページ、アクティブな割り当てをサポートするページ、および未使用のダーティページを含みます。
 
 ### blocks_open_writing (Deprecated)
 
 ### disk_io_time_weigthed
 
 - 単位: ms
-- 説明: I/O に費やされた加重時間。
+- 説明: I/O に費やされた重み付き時間。
 
 ### update_compaction_task_byte_per_second
 
 - 単位: Bytes/s
-- 説明: 主キーテーブルの Compaction の推定速度。
+- 説明: 主キーテーブルのコンパクションの推定速度。
 
 ### blocks_open_reading (Deprecated)
 
 ### tablet_update_max_compaction_score
 
 - 単位: -
-- 説明: 現在の BE における主キーテーブルの最高の Compaction スコア。
+- 説明: 現在の BE における主キーテーブルのタブレットの最高コンパクションスコア。
 
 ### segment_read
 
@@ -744,12 +744,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### delta_column_group_get_non_pk_total
 
 - 単位: Count
-- 説明: デルタカラムグループを取得する総回数（非主キーテーブルのみ）。
+- 説明: デルタカラムグループを取得する回数（非主キーテーブルのみ）。
 
 ### query_scan_bytes_per_second
 
 - 単位: Bytes/s
-- 説明: 秒あたりのスキャンされたバイトの推定速度。
+- 説明: 秒あたりのスキャンバイトの推定速度。
 
 ### active_scan_context_count
 
@@ -764,22 +764,22 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### update_compaction_task_cost_time_ns
 
 - 単位: ns
-- 説明: 主キーテーブルの Compaction に費やされた総時間。
+- 説明: 主キーテーブルのコンパクションに費やされた総時間。
 
 ### delta_column_group_get_hit_cache
 
 - 単位: Count
-- 説明: デルタカラムグループキャッシュのヒット総数（主キーテーブルのみ）。
+- 説明: デルタカラムグループキャッシュのヒット数（主キーテーブルのみ）。
 
 ### data_stream_receiver_count
 
 - 単位: Count
-- 説明: BE で Exchange レシーバーとして機能するインスタンスの累積数。
+- 説明: BE で Exchange 受信者として機能するインスタンスの累積数。
 
 ### bytes_written_total
 
 - 単位: Bytes
-- 説明: 書き込まれた総バイト数（セクター書き込み * 512）。
+- 説明: 書き込まれた総バイト数（セクタ書き込み * 512）。
 
 ### transaction_streaming_load_bytes
 
@@ -789,7 +789,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### running_cumulative_compaction_task_num
 
 - 単位: Count
-- 説明: 実行中の累積 Compaction の総数。
+- 説明: 実行中の累積コンパクションの総数。
 
 ### transaction_streaming_load_requests_total
 
@@ -804,7 +804,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### update_del_vector_num
 
 - 単位: Count
-- 説明: 主キーテーブルにおける DELETE ベクターキャッシュアイテムの数。
+- 説明: 主キーテーブルの DELETE ベクターキャッシュ項目の数。
 
 ### disks_avail_capacity
 
@@ -828,44 +828,44 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### schema_change_mem_bytes
 
 - 単位: Bytes
-- 説明: Schema Change に使用されるメモリ。
+- 説明: スキーマ変更に使用されるメモリ。
 
 ### thrift_connections_total
 
 - 単位: Count
-- 説明: thrift 接続の総数（完了した接続を含む）。
+- 説明: Thrift 接続の総数（完了した接続を含む）。
 
 ### thrift_opened_clients
 
 - 単位: Count
-- 説明: 現在開かれている thrift クライアントの数。
+- 説明: 現在開かれている Thrift クライアントの数。
 
 ### thrift_used_clients
 
 - 単位: Count
-- 説明: 現在使用中の thrift クライアントの数。
+- 説明: 現在使用中の Thrift クライアントの数。
 
 ### thrift_current_connections (Deprecated)
 
 ### disk_bytes_read
 
 - 単位: Bytes
-- 説明: ディスクから読み取られた総バイト数（セクター読み取り * 512）。
+- 説明: ディスクから読み取られた総バイト数（セクタ読み取り * 512）。
 
 ### base_compaction_task_cost_time_ms
 
 - 単位: ms
-- 説明: ベース Compaction に費やされた総時間。
+- 説明: ベースコンパクションに費やされた総時間。
 
 ### update_primary_index_bytes_total
 
 - 単位: Bytes
-- 説明: 主キーインデックスのメモリコストの総量。
+- 説明: 主キーインデックスのメモリコストの総数。
 
 ### compaction_deltas_total
 
 - 単位: Count
-- 説明: ベース Compaction と累積 Compaction からマージされた rowset の総数。
+- 説明: ベースコンパクションと累積コンパクションからマージされた行セットの総数。
 
 ### max_network_receive_bytes_rate
 
@@ -890,7 +890,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### process_fd_num_limit_soft
 
 - 単位: Count
-- 説明: ファイルディスクリプタの最大数のソフトリミット。この項目はソフトリミットを示します。ハードリミットは `ulimit` コマンドを使用して設定できます。
+- 説明: ファイルディスクリプタの最大数のソフトリミット。この項目はソフトリミットを示します。ハードリミットは `ulimit` コマンドで設定できます。
 
 ### query_cache_hit_ratio
 
@@ -900,17 +900,17 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### tablet_metadata_mem_bytes
 
 - 単位: Bytes
-- 説明: tablet メタデータによって使用されるメモリ。
+- 説明: タブレットメタデータによって使用されるメモリ。
 
 ### jemalloc_retained_bytes
 
 - 単位: Bytes
-- 説明: アロケータメタデータ、アクティブな割り当てをサポートするページ、および未使用のダーティページを含む、オペレーティングシステムに返されることなく保持された仮想メモリマッピングの総バイト数。
+- 説明: munmap(2) などの操作によってオペレーティングシステムに返されるのではなく、保持された仮想メモリマッピングの総バイト数。
 
 ### unused_rowsets_count
 
 - 単位: Count
-- 説明: 未使用の rowset の総数。これらの rowset は後で回収されます。
+- 説明: 未使用の行セットの総数。これらの行セットは後で回収されます。
 
 ### update_rowset_commit_apply_total
 
@@ -925,7 +925,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### base_compaction_task_byte_per_second
 
 - 単位: Bytes/s
-- 説明: ベース Compaction の推定速度。
+- 説明: ベースコンパクションの推定速度。
 
 ### transaction_streaming_load_duration_ms
 
@@ -950,12 +950,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### segment_flush_queue_count
 
 - 単位: Count
-- 説明: セグメントフラッシュスレッドプールにおけるキュータスクの数。
+- 説明: セグメントフラッシュスレッドプールのキューにあるタスクの数。
 
 ### jemalloc_metadata_bytes
 
 - 単位: Bytes
-- 説明: メタデータに専用のバイト数の合計で、ブートストラップに敏感なアロケータメタデータ構造と内部割り当てに使用されるベース割り当てを含みます。この項目には透過的な巨大ページの使用は含まれていません。
+- 説明: メタデータに専用されたバイト数の総数で、ブートストラップに敏感なアロケータメタデータ構造と内部割り当てに使用されるベース割り当てを含みます。この項目には透過的な巨大ページの使用は含まれません。
 
 ### network_send_bytes
 
@@ -977,7 +977,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### memtable_flush_duration_us
 
 - 単位: us
-- 説明: memtable フラッシュに費やされた総時間。
+- 説明: メモリテーブルフラッシュに費やされた総時間。
 
 ### push_request_write_bytes
 
@@ -997,7 +997,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### publish_version_queue_count
 
 - 単位: Count
-- 説明: Publish Version スレッドプールにおけるキュータスクの数。
+- 説明: Publish Version スレッドプールのキューにあるタスクの数。
 
 ### chunk_pool_system_free_count
 
@@ -1054,39 +1054,39 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### jit_cache_mem_bytes
 
 - 単位: Bytes
-- 説明: jit コンパイルされた関数キャッシュによって使用されるメモリ。
+- 説明: JIT コンパイルされた関数キャッシュによって使用されるメモリ。
 
 ### column_partial_update_apply_total
 
 - 単位: Count
-- 説明: 部分更新のためのカラムの APPLY タスクの総数（カラムモード）。
+- 説明: カラムごとの部分更新の APPLY の総数（カラムモード）。
 
 ### disk_writes_completed
 
 - 単位: Count
-- 説明: 正常に完了したディスク書き込みの総数。
+- 説明: 成功したディスク書き込みの総数。
 
 ### memtable_flush_total
 
 - 単位: Count
-- 説明: memtable フラッシュの総数。
+- 説明: メモリテーブルフラッシュの総数。
 
 ### page_cache_hit_count
 
 - 単位: Count
-- 説明: ストレージページキャッシュのヒット総数。
+- 説明: ストレージページキャッシュのヒット数。
 
 ### bytes_read_total (Deprecated)
 
 ### update_rowset_commit_request_total
 
 - 単位: Count
-- 説明: 主キーテーブルにおける rowset COMMIT リクエストの総数。
+- 説明: 主キーテーブルの行セット COMMIT リクエストの総数。
 
 ### tablet_cumulative_max_compaction_score
 
 - 単位: -
-- 説明: この BE における tablet の最高累積 Compaction スコア。
+- 説明: この BE におけるタブレットの最高累積コンパクションスコア。
 
 ### column_zonemap_index_mem_bytes
 
@@ -1106,7 +1106,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### query_cache_lookup_count
 
 - 単位: Count
-- 説明: クエリキャッシュのルックアップ総数。
+- 説明: クエリキャッシュのルックアップの総数。
 
 ### http_requests_total (Deprecated)
 
@@ -1115,7 +1115,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### cumulative_compaction_task_cost_time_ms
 
 - 単位: ms
-- 説明: 累積 Compaction に費やされた総時間。
+- 説明: 累積コンパクションに費やされた総時間。
 
 ### column_metadata_mem_bytes
 
@@ -1130,7 +1130,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### page_cache_lookup_count
 
 - 単位: Count
-- 説明: ストレージページキャッシュのルックアップ総数。
+- 説明: ストレージページキャッシュのルックアップの総数。
 
 ### query_mem_bytes
 
@@ -1150,7 +1150,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### running_base_compaction_task_num
 
 - 単位: Count
-- 説明: 実行中のベース Compaction タスクの総数。
+- 説明: 実行中のベースコンパクションタスクの総数。
 
 ### fragment_request_duration_us
 
@@ -1170,7 +1170,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### segment_replicate_queue_count
 
 - 単位: Count
-- 説明: セグメントレプリケートスレッドプールにおけるキュータスクの数。
+- 説明: セグメントレプリケートスレッドプールのキューにあるタスクの数。
 
 ### brpc_endpoint_stub_count
 
@@ -1182,17 +1182,17 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### delta_column_group_get_non_pk_hit_cache
 
 - 単位: Count
-- 説明: デルタカラムグループキャッシュのヒット総数（非主キーテーブル用）。
+- 説明: デルタカラムグループキャッシュのヒット数（非主キーテーブル用）。
 
 ### update_del_vector_deletes_new
 
 - 単位: Count
-- 説明: 主キーテーブルで使用される新しく生成された DELETE ベクトルの総数。
+- 説明: 主キーテーブルで使用される新しく生成された DELETE ベクターの総数。
 
 ### compaction_bytes_total
 
 - 単位: Bytes
-- 説明: ベース Compaction と累積 Compaction からマージされた総バイト数。
+- 説明: ベースコンパクションと累積コンパクションからマージされた総バイト数。
 
 ### segment_metadata_mem_bytes
 
@@ -1217,7 +1217,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### delta_column_group_get_total
 
 - 単位: Count
-- 説明: デルタカラムグループを取得する総回数（主キーテーブル用）。
+- 説明: デルタカラムグループを取得する回数（主キーテーブル用）。
 
 ### disk_read_time_ms
 
@@ -1227,12 +1227,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### update_compaction_outputs_bytes_total
 
 - 単位: Bytes
-- 説明: 主キーテーブルの Compaction によって書き込まれた総バイト数。
+- 説明: 主キーテーブルのコンパクションによって書き込まれた総バイト数。
 
 ### memtable_flush_queue_count
 
 - 単位: Count
-- 説明: memtable フラッシュスレッドプールにおけるキュータスクの数。
+- 説明: メモリテーブルフラッシュスレッドプールのキューにあるタスクの数。
 
 ### query_cache_capacity
 
@@ -1266,17 +1266,17 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### meta_request_total
 
 - 単位: Count
-- 説明: メタデータの読み取り/書き込みリクエストの総数。
+- 説明: メタ読み取り/書き込みリクエストの総数。
 
 ### meta_request_duration
 
 - 単位: us
-- 説明: メタデータの読み取り/書き込みに費やされた総時間。
+- 説明: メタ読み取り/書き込みに費やされた総時間。
 
 ### tablet_base_max_compaction_score
 
 - 単位: -
-- 説明: この BE における tablet の最高ベース Compaction スコア。
+- 説明: この BE におけるタブレットの最高ベースコンパクションスコア。
 
 ### page_cache_capacity
 
@@ -1285,12 +1285,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### cumulative_compaction_task_byte_per_second
 
 - 単位: Bytes/s
-- 説明: 累積 Compaction 中に処理されたバイトの速度。
+- 説明: 累積コンパクション中に処理されたバイトの速度。
 
 ### stream_load
 
 - 単位: -
-- 説明: ロードされた総行数と受信されたバイト数。
+- 説明: ロードされた総行数と受信バイト数。
 
 ### stream_load_pipe_count
 
@@ -1371,22 +1371,22 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### wait_base_compaction_task_num
 
 - 単位: Count
-- 説明: 実行待ちのベース Compaction タスクの数。
+- 説明: 実行待ちのベースコンパクションタスクの数。
 
 ### wait_cumulative_compaction_task_num
 
 - 単位: Count
-- 説明: 実行待ちの累積 Compaction タスクの数。
+- 説明: 実行待ちの累積コンパクションタスクの数。
 
 ### jemalloc_allocated_bytes
 
 - 単位: Bytes
-- 説明: アプリケーションによって割り当てられたバイト数の合計。
+- 説明: アプリケーションによって割り当てられたバイト数の総数。
 
 ### pk_index_compaction_queue_count
 
 - 単位: Count
-- 説明: 主キーインデックス Compaction スレッドプールにおけるキュータスクの数。
+- 説明: 主キーインデックスコンパクションスレッドプールのキューにあるタスクの数。
 
 ### disks_total_capacity
 
@@ -1404,12 +1404,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### result_block_queue_count
 
 - 単位: Count
-- 説明: 結果ブロックキュー内の結果の数。
+- 説明: 結果ブロックキューの結果の数。
 
 ### engine_requests_total
 
 - 単位: Count
-- 説明: BE と FE 間のすべてのタイプのリクエストの総数（CREATE TABLE、Publish Version、tablet クローンを含む）。
+- 説明: BE と FE 間のすべてのタイプのリクエストの総数（CREATE TABLE、Publish Version、タブレットクローンを含む）。
 
 ### snmp
 
@@ -1419,7 +1419,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### compaction_mem_bytes
 
 - 単位: Bytes
-- 説明: Compaction によって使用されるメモリ。
+- 説明: コンパクションによって使用されるメモリ。
 
 ### txn_request
 
@@ -1434,22 +1434,22 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### rowset_metadata_mem_bytes
 
 - 単位: Bytes
-- 説明: rowset メタデータのバイト数の合計。
+- 説明: 行セットメタデータのバイト数の総数。
 
 ### update_apply_queue_count
 
 - 単位: Count
-- 説明: 主キーテーブルトランザクション APPLY スレッドプールにおけるキュータスクの数。
+- 説明: 主キーテーブルトランザクション APPLY スレッドプールのキューにあるタスクの数。
 
 ### async_delta_writer_queue_count
 
 - 単位: Count
-- 説明: tablet デルタライタースレッドプールにおけるキュータスクの数。
+- 説明: タブレットデルタライタースレッドプールのキューにあるタスクの数。
 
 ### update_compaction_duration_us
 
 - 単位: us
-- 説明: 主キーテーブルの Compaction に費やされた総時間。
+- 説明: 主キーテーブルのコンパクションに費やされた総時間。
 
 ### transaction_streaming_load_current_processing
 
@@ -1464,12 +1464,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### consistency_mem_bytes
 
 - 単位: Bytes
-- 説明: レプリカの整合性チェックによって使用されるメモリ。
+- 説明: レプリカ整合性チェックによって使用されるメモリ。
 
 ### tablet_schema_mem_bytes
 
 - 単位: Bytes
-- 説明: tablet スキーマによって使用されるメモリ。
+- 説明: タブレットスキーマによって使用されるメモリ。
 
 ### fd_num_used
 
@@ -1479,12 +1479,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### running_update_compaction_task_num
 
 - 単位: Count
-- 説明: 現在実行中の主キーテーブル Compaction タスクの総数。
+- 説明: 現在実行中の主キーテーブルコンパクションタスクの総数。
 
 ### rowset_count_generated_and_in_use
 
 - 単位: Count
-- 説明: 現在使用中の rowset ID の数。
+- 説明: 現在使用中の行セット ID の数。
 
 ### bitmap_index_mem_bytes
 
@@ -1499,7 +1499,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### process_fd_num_used
 
 - 単位: Count
-- 説明: この BE プロセスで現在使用中のファイルディスクリプタの数。
+- 説明: この BE プロセスで現在使用されているファイルディスクリプタの数。
 
 ### network_send_packets
 
@@ -1516,7 +1516,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### push_requests_total
 
 - 単位: Count
-- 説明: 成功および失敗した Spark Load リクエストの総数。
+- 説明: 成功した Spark Load リクエストと失敗したリクエストの総数。
 
 ### blocks_deleted_total (Deprecated)
 
@@ -1533,12 +1533,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### jemalloc_metadata_thp
 
 - 単位: Count
-- 説明: メタデータに使用される透過的巨大ページの数。
+- 説明: メタデータに使用される透過的な巨大ページの数。
 
 ### update_rowset_commit_request_failed
 
 - 単位: Count
-- 説明: 主キーテーブルにおける失敗した rowset COMMIT リクエストの総数。
+- 説明: 主キーテーブルの失敗した行セット COMMIT リクエストの総数。
 
 ### streaming_load_requests_total
 
@@ -1558,7 +1558,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### resource_group_bigquery_count
 
 - 単位: Count
-- 説明: 各リソースグループで大規模クエリの制限を超えたクエリの数。これは瞬時値です。
+- 説明: 各リソースグループでビッグクエリの制限を超えたクエリの数。これは瞬時値です。
 
 ### resource_group_concurrency_overflow_count
 
@@ -1573,37 +1573,37 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### resource_group_mem_inuse_bytes
 
 - 単位: Bytes
-- 説明: 各リソースグループで現在使用中のメモリ（バイト単位）。これは瞬時値です。
+- 説明: 各リソースグループで現在使用されているメモリ（バイト単位）。これは瞬時値です。
 
 ### resource_group_cpu_limit_ratio
 
 - 単位: -
-- 説明: 各リソースグループの CPU コア制限の比率と、すべてのリソースグループの合計 CPU コア制限の比率。これは瞬時値です。
+- 説明: 各リソースグループの CPU コア制限の比率と、すべてのリソースグループの総 CPU コア制限の比率。これは瞬時値です。
 
 ### resource_group_inuse_cpu_cores
 
 - 単位: Count
-- 説明: 各リソースグループで現在使用中の CPU コアの推定数。これはメトリクス取得間の時間間隔にわたる平均値です。
+- 説明: 各リソースグループで現在使用されている CPU コアの推定数。これはメトリクス取得間の時間間隔にわたる平均値です。
 
 ### resource_group_cpu_use_ratio (Deprecated)
 
 - 単位: -
-- 説明: 各リソースグループで使用されたパイプラインスレッド時間スライスの比率と、すべてのリソースグループで使用された合計の比率。これはメトリクス取得間の時間間隔にわたる平均値です。
+- 説明: 各リソースグループで使用されたパイプラインスレッド時間スライスの割合と、すべてのリソースグループで使用された総時間スライスの割合。これはメトリクス取得間の時間間隔にわたる平均値です。
 
 ### resource_group_connector_scan_use_ratio (Deprecated)
 
 - 単位: -
-- 説明: 各リソースグループで使用された外部テーブルスキャンスレッド時間スライスの比率と、すべてのリソースグループで使用された合計の比率。これはメトリクス取得間の時間間隔にわたる平均値です。
+- 説明: 各リソースグループで使用された外部テーブルスキャンスレッド時間スライスの割合と、すべてのリソースグループで使用された総時間スライスの割合。これはメトリクス取得間の時間間隔にわたる平均値です。
 
 ### resource_group_scan_use_ratio (Deprecated)
 
 - 単位: -
-- 説明: 各リソースグループで使用された内部テーブルスキャンスレッド時間スライスの比率と、すべてのリソースグループで使用された合計の比率。これはメトリクス取得間の時間間隔にわたる平均値です。
+- 説明: 各リソースグループで使用された内部テーブルスキャンスレッド時間スライスの割合と、すべてのリソースグループで使用された総時間スライスの割合。これはメトリクス取得間の時間間隔にわたる平均値です。
 
 ### pipe_poller_block_queue_len
 
 - 単位: Count
-- 説明: パイプラインエンジンにおける PipelineDriverPoller のブロックキューの現在の長さ。
+- 説明: パイプラインエンジンの PipelineDriverPoller のブロックキューの現在の長さ。
 
 ### pip_query_ctx_cnt
 
@@ -1613,31 +1613,31 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### pipe_driver_schedule_count
 
 - 単位: Count
-- 説明: BE におけるパイプラインエグゼキュータのドライバースケジューリング回数の累積数。
+- 説明: BE のパイプラインエグゼキュータのドライバスケジューリング回数の累積数。
 
 ### pipe_scan_executor_queuing
 
 - 単位: Count
-- 説明: スキャンオペレーターによって開始された保留中の非同期 I/O タスクの現在の数。
+- 説明: スキャンオペレーターによって起動された保留中の非同期 I/O タスクの現在の数。
 
 ### pipe_driver_queue_len
 
 - 単位: Count
-- 説明: BE でスケジューリングを待っている準備完了キュー内の準備完了ドライバーの現在の数。
+- 説明: BE でスケジューリングを待っている準備完了キュー内の準備完了ドライバの現在の数。
 
 ### pipe_driver_execution_time
 
-- 説明: PipelineDriver エグゼキュータが PipelineDrivers を処理するのに費やした累積時間。
+- 説明: PipelineDriver エグゼキュータが PipelineDrivers の処理に費やした累積時間。
 
 ### pipe_prepare_pool_queue_len
 
 - 単位: Count
-- 説明: パイプライン PREPARE スレッドプールにおけるキュータスクの数。これは瞬時値です。
+- 説明: パイプライン PREPARE スレッドプールのキューにあるタスクの数。これは瞬時値です。
 
 ### starrocks_fe_routine_load_jobs
 
 - 単位: Count
-- 説明: 異なる状態の Routine Load ジョブの総数。例えば:
+- 説明: 異なる状態の Routine Load ジョブの総数。例えば：
 
   ```plaintext
   starrocks_fe_routine_load_jobs{state="NEED_SCHEDULE"} 0
@@ -1651,12 +1651,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 ### starrocks_fe_routine_load_paused
 
 - 単位: Count
-- 説明: Routine Load ジョブが一時停止された総回数。
+- 説明: Routine Load ジョブが一時停止された回数の総数。
 
 ### starrocks_fe_routine_load_rows
 
 - 単位: Count
-- 説明: すべての Routine Load ジョブによってロードされた総行数。
+- 説明: すべての Routine Load ジョブによってロードされた行の総数。
 
 ### starrocks_fe_routine_load_receive_bytes
 

@@ -691,6 +691,8 @@ TEST_F(LakeServiceTest, test_abort) {
         log.mutable_op_compaction()->mutable_output_rowset()->set_data_size(4096);
         log.mutable_op_compaction()->mutable_output_rowset()->add_segments(generate_segment_file(txn_id));
         log.mutable_op_compaction()->mutable_output_rowset()->add_segments(generate_segment_file(txn_id));
+        log.mutable_op_compaction()->set_new_segment_offset(0);
+        log.mutable_op_compaction()->set_new_segment_count(2);
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);

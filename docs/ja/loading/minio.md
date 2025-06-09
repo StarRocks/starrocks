@@ -7,7 +7,7 @@ toc_max_heading_level: 4
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks は、MinIO からデータをロードするために次のオプションを提供しています。
+StarRocks は、MinIO からデータをロードするために以下のオプションを提供しています。
 
 - [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) を使用した同期ロード
 - [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) を使用した非同期ロード
@@ -16,13 +16,13 @@ StarRocks は、MinIO からデータをロードするために次のオプシ�
 
 ほとんどの場合、使用が簡単な INSERT+`FILES()` メソッドをお勧めします。
 
-ただし、INSERT+`FILES()` メソッドは現在、Parquet、ORC、および CSV ファイル形式のみをサポートしています。そのため、JSON などの他のファイル形式のデータをロードする必要がある場合や、[データロード中に DELETE などのデータ変更を行う](../loading/Load_to_Primary_Key_tables.md)必要がある場合は、Broker Load を使用できます。
+ただし、INSERT+`FILES()` メソッドは現在、Parquet、ORC、および CSV ファイル形式のみをサポートしています。そのため、JSON などの他のファイル形式のデータをロードする必要がある場合や、[データロード中に DELETE などのデータ変更を行う](../loading/Load_to_Primary_Key_tables.md)必要がある場合は、Broker Load を利用できます。
 
 ## 始める前に
 
 ### ソースデータの準備
 
-StarRocks にロードしたいソースデータが MinIO バケットに適切に保存されていることを確認してください。また、データとデータベースの場所を考慮することもお勧めします。バケットと StarRocks クラスターが同じリージョンにある場合、データ転送コストははるかに低くなります。
+StarRocks にロードしたいソースデータが MinIO バケットに正しく保存されていることを確認してください。また、データとデータベースの場所を考慮することもお勧めします。バケットと StarRocks クラスターが同じ地域にある場合、データ転送コストは大幅に低くなります。
 
 このトピックでは、サンプルデータセットを提供します。`curl` を使用してダウンロードできます。
 
@@ -30,7 +30,7 @@ StarRocks にロードしたいソースデータが MinIO バケットに適切
 curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_rows.parquet
 ```
 
-Parquet ファイルを MinIO システムにロードし、バケット名をメモしておいてください。このガイドの例では、バケット名として `/starrocks` を使用します。
+Parquet ファイルを MinIO システムにロードし、バケット名をメモしておいてください。このガイドの例では、バケット名として `/starrocks` を使用しています。
 
 ### 権限の確認
 
@@ -40,26 +40,26 @@ Parquet ファイルを MinIO システムにロードし、バケット名を�
 
 簡単に言うと、MinIO アクセスキー認証を使用するには、次の情報を収集する必要があります。
 
-- データを保存するバケット
+- データを格納するバケット
 - バケット内の特定のオブジェクトにアクセスする場合のオブジェクトキー（オブジェクト名）
 - MinIO エンドポイント
-- アクセス資格情報として使用されるアクセスキーとシークレットキー
+- アクセス認証情報として使用されるアクセスキーとシークレットキー
 
 ![MinIO access key](../_assets/quick-start/MinIO-create.png)
 
 ## INSERT+FILES() の使用
 
-このメソッドは v3.1 以降で利用可能で、現在は Parquet、ORC、および CSV（v3.3.0 以降）ファイル形式のみをサポートしています。
+このメソッドは v3.1 以降で利用可能で、現在 Parquet、ORC、および CSV（v3.3.0 以降）ファイル形式のみをサポートしています。
 
 ### INSERT+FILES() の利点
 
-[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) は、指定したパス関連のプロパティに基づいてクラウドストレージに保存されたファイルを読み取り、ファイル内のデータのテーブルスキーマを推測し、ファイルからデータをデータ行として返すことができます。
+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) は、指定したパス関連のプロパティに基づいてクラウドストレージに保存されたファイルを読み取り、ファイル内のデータのテーブルスキーマを推測し、データをデータ行として返すことができます。
 
-`FILES()` を使用すると、次のことができます。
+`FILES()` を使用すると、次のことが可能です。
 
-- [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して MinIO から直接データをクエリする。
+- [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して MinIO からデータを直接クエリする。
 - [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS) を使用してテーブルを作成し、ロードする。
-- [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用して既存のテーブルにデータをロードする。
+- 既存のテーブルにデータをロードするために [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用する。
 
 ### 典型的な例
 
@@ -71,7 +71,7 @@ SELECT+`FILES()` を使用して MinIO から直接クエリすることで、�
 - 最小値と最大値をクエリし、使用するデータ型を決定する。
 - `NULL` 値をチェックする。
 
-以下の例は、以前に MinIO システムに追加されたサンプルデータセットをクエリします。
+次の例は、以前に MinIO システムに追加したサンプルデータセットをクエリします。
 
 :::tip
 
@@ -116,17 +116,17 @@ LIMIT 3;
 
 :::info
 
-上記で返された列名は Parquet ファイルによって提供されていることに注意してください。
+上記で返された列名は Parquet ファイルによって提供されています。
 
 :::
 
-#### CTAS を使用してテーブルを作成し、ロードする
+#### CTAS を使用してテーブルを作成しロードする
 
-これは前の例の続きです。前のクエリは CREATE TABLE AS SELECT (CTAS) にラップされており、スキーマ推論を使用してテーブル作成を自動化します。これは、StarRocks がテーブルスキーマを推測し、必要なテーブルを作成し、データをテーブルにロードすることを意味します。Parquet ファイルは列名を含むため、Parquet ファイルを使用する場合、`FILES()` テーブル関数を使用してテーブルを作成する際に列名と型を指定する必要はありません。
+これは前の例の続きです。前のクエリは CREATE TABLE AS SELECT (CTAS) でラップされ、スキーマ推測を使用してテーブル作成を自動化します。これは、StarRocks がテーブルスキーマを推測し、希望するテーブルを作成し、データをテーブルにロードすることを意味します。Parquet ファイルを使用する場合、Parquet 形式には列名が含まれているため、`FILES()` テーブル関数を使用する際にテーブルを作成するための列名と型は必要ありません。
 
 :::note
 
-スキーマ推論を使用する場合の CREATE TABLE の構文では、レプリカの数を設定することはできませんので、テーブルを作成する前に設定してください。以下の例は、単一レプリカのシステム用です。
+スキーマ推測を使用する場合の CREATE TABLE の構文では、レプリカの数を設定することはできませんので、テーブルを作成する前に設定してください。以下の例は、単一レプリカのシステム用です。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ('default_replication_num' = '1');
@@ -134,14 +134,14 @@ ADMIN SET FRONTEND CONFIG ('default_replication_num' = '1');
 
 :::
 
-データベースを作成し、それに切り替えます。
+データベースを作成し、そこに切り替えます。
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-CTAS を使用してテーブルを作成し、以前に MinIO システムに追加されたサンプルデータセットのデータをロードします。
+CTAS を使用してテーブルを作成し、以前に MinIO システムに追加したサンプルデータセットのデータをロードします。
 
 :::tip
 
@@ -218,23 +218,23 @@ SELECT * from user_behavior_inferred LIMIT 3;
 
 挿入するテーブルをカスタマイズしたい場合があります。例えば：
 
-- 列データ型、NULL 設定、またはデフォルト値
-- キータイプと列
-- データのパーティショニングとバケット化
+- 列のデータ型、NULL 設定、またはデフォルト値
+- キーの種類と列
+- データのパーティショニングとバケッティング
 
 :::tip
 
-最も効率的なテーブル構造を作成するには、データの使用方法と列の内容に関する知識が必要です。このトピックではテーブル設計については扱いません。テーブル設計についての情報は、[Table types](../table_design/StarRocks_table_design.md) を参照してください。
+最も効率的なテーブル構造を作成するには、データの使用方法と列の内容についての知識が必要です。このトピックではテーブル設計については扱いません。テーブル設計についての情報は [Table types](../table_design/StarRocks_table_design.md) を参照してください。
 
 :::
 
-この例では、テーブルがどのようにクエリされるか、Parquet ファイル内のデータに関する知識に基づいてテーブルを作成しています。Parquet ファイル内のデータに関する知識は、MinIO でファイルを直接クエリすることで得られます。
+この例では、テーブルがどのようにクエリされるか、および Parquet ファイル内のデータに関する知識に基づいてテーブルを作成しています。Parquet ファイル内のデータに関する知識は、MinIO でファイルを直接クエリすることで得られます。
 
-- MinIO のデータセットのクエリにより、`Timestamp` 列が `datetime` データ型に一致するデータを含んでいることが示されているため、次の DDL で列型が指定されています。
-- MinIO のデータをクエリすることで、データセットに `NULL` 値がないことがわかるため、DDL ではどの列も NULL 設定されていません。
-- 予想されるクエリタイプに基づいて、ソートキーとバケット化列は `UserID` 列に設定されています。このデータに対するユースケースが異なる場合は、ソートキーとして `ItemID` を `UserID` と一緒に、または代わりに使用することを決定するかもしれません。
+- MinIO でのデータセットのクエリにより、`Timestamp` 列が `datetime` データ型に一致するデータを含んでいることが示されたため、以下の DDL で列型が指定されています。
+- MinIO でデータをクエリすることで、データセットに `NULL` 値がないことがわかるため、DDL ではどの列も NULL 設定されていません。
+- 予想されるクエリタイプに基づいて、ソートキーとバケッティング列は `UserID` 列に設定されています。このデータに対するユースケースは異なるかもしれないので、ソートキーとして `ItemID` を `UserID` と一緒にまたは代わりに使用することを決定するかもしれません。
 
-データベースを作成し、それに切り替えます。
+データベースを作成し、そこに切り替えます。
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS mydatabase;
@@ -261,7 +261,7 @@ PROPERTIES
 );
 ```
 
-スキーマを表示して、`FILES()` テーブル関数によって生成された推論スキーマと比較できるようにします。
+スキーマを表示して、`FILES()` テーブル関数によって生成された推測スキーマと比較できるようにします。
 
 ```sql
 DESCRIBE user_behavior_declared;
@@ -282,13 +282,13 @@ DESCRIBE user_behavior_declared;
 
 :::tip
 
-作成したスキーマと、以前に `FILES()` テーブル関数を使用して推論されたスキーマを比較します。以下を確認してください。
+先ほど作成したスキーマを、`FILES()` テーブル関数を使用して以前に推測されたスキーマと比較してください。以下を確認します。
 
 - データ型
 - NULL 設定
 - キーフィールド
 
-宛先テーブルのスキーマをよりよく制御し、クエリパフォーマンスを向上させるために、運用環境では手動でテーブルスキーマを指定することをお勧めします。タイムスタンプフィールドに `datetime` データ型を使用することは、`varchar` を使用するよりも効率的です。
+ターゲットテーブルのスキーマをよりよく制御し、クエリパフォーマンスを向上させるために、運用環境では手動でテーブルスキーマを指定することをお勧めします。タイムスタンプフィールドに `datetime` データ型を使用することは、`varchar` を使用するよりも効率的です。
 
 :::
 
@@ -322,7 +322,7 @@ SELECT * FROM FILES
 );
 ```
 
-ロードが完了したら、テーブルをクエリしてデータがロードされたことを確認できます。例：
+ロードが完了したら、テーブルをクエリしてデータがロードされたことを確認します。例：
 
 ```SQL
 SELECT * from user_behavior_declared LIMIT 3;
@@ -348,9 +348,9 @@ StarRocks Information Schema の [`loads`](../sql-reference/information_schema/l
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
-提供される `loads` ビューのフィールドに関する情報については、[`loads`](../sql-reference/information_schema/loads.md) を参照してください。
+フィールドが提供される `loads` ビューについての情報は、[`loads`](../sql-reference/information_schema/loads.md) を参照してください。
 
-複数のロードジョブを送信した場合、ジョブに関連付けられた `LABEL` でフィルタリングできます。例：
+複数のロードジョブを送信した場合は、ジョブに関連付けられた `LABEL` でフィルタリングできます。例：
 
 ```SQL
 SELECT * FROM information_schema.loads WHERE LABEL = 'insert_e3b882f5-7eb3-11ee-ae77-00163e267b60' \G
@@ -388,7 +388,7 @@ INSERT は同期コマンドです。INSERT ジョブがまだ実行中の場合
 
 ### ディスク上のテーブルサイズを比較する
 
-このクエリは、推論されたスキーマを持つテーブルと、スキーマが宣言されたテーブルを比較します。推論されたスキーマには NULL 可能な列とタイムスタンプ用の varchar があるため、データ長が大きくなります。
+このクエリは、推測されたスキーマを持つテーブルと、スキーマが宣言されたテーブルを比較します。推測されたスキーマには NULL 許可の列とタイムスタンプの varchar が含まれているため、データ長が大きくなります。
 
 ```sql
 SELECT TABLE_NAME,
@@ -415,7 +415,7 @@ AVG_ROW_LENGTH: 17
 
 ## Broker Load の使用
 
-非同期の Broker Load プロセスは、MinIO への接続を処理し、データを取得し、StarRocks にデータを保存します。
+非同期の Broker Load プロセスは、MinIO への接続を処理し、データを取得し、StarRocks にデータを格納します。
 
 このメソッドは次のファイル形式をサポートしています。
 
@@ -427,7 +427,7 @@ AVG_ROW_LENGTH: 17
 ### Broker Load の利点
 
 - Broker Load はバックグラウンドで実行され、クライアントはジョブが続行するために接続を維持する必要がありません。
-- Broker Load は長時間実行されるジョブに推奨され、デフォルトのタイムアウトは 4 時間です。
+- Broker Load は長時間実行されるジョブに適しており、デフォルトのタイムアウトは 4 時間です。
 - Parquet および ORC ファイル形式に加えて、Broker Load は CSV ファイル形式と JSON ファイル形式（JSON ファイル形式は v3.2.3 以降でサポート）をサポートしています。
 
 ### データフロー
@@ -435,16 +435,16 @@ AVG_ROW_LENGTH: 17
 ![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. ユーザーがロードジョブを作成します。
-2. フロントエンド (FE) がクエリプランを作成し、そのプランをバックエンドノード (BEs) またはコンピュートノード (CNs) に配布します。
+2. フロントエンド (FE) がクエリプランを作成し、プランをバックエンドノード (BEs) またはコンピュートノード (CNs) に配布します。
 3. BEs または CNs がソースからデータを取得し、StarRocks にデータをロードします。
 
 ### 典型的な例
 
-データベースを作成し、MinIO システムに以前にロードされたサンプルデータセットを取得するロードプロセスを開始します。
+データベースを作成し、MinIO システムに以前にロードしたサンプルデータセットを取得するロードプロセスを開始します。
 
-#### データベースとテーブルを作成する
+#### データベースとテーブルの作成
 
-データベースを作成し、それに切り替えます。
+データベースを作成し、そこに切り替えます。
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS mydatabase;
@@ -471,7 +471,7 @@ PROPERTIES
 );
 ```
 
-#### Broker Load を開始する
+#### Broker Load の開始
 
 次のコマンドを実行して、サンプルデータセット `user_behavior_ten_million_rows.parquet` から `user_behavior` テーブルにデータをロードする Broker Load ジョブを開始します。
 
@@ -528,9 +528,9 @@ StarRocks Information Schema の [`loads`](../sql-reference/information_schema/l
 SELECT * FROM information_schema.loads;
 ```
 
-提供される `loads` ビューのフィールドに関する情報については、[`loads`](../sql-reference/information_schema/loads.md) を参照してください。
+フィールドが提供される `loads` ビューについての情報は、[`loads`](../sql-reference/information_schema/loads.md) を参照してください。
 
-複数のロードジョブを送信した場合、ジョブに関連付けられた `LABEL` でフィルタリングできます。例：
+複数のロードジョブを送信した場合は、ジョブに関連付けられた `LABEL` でフィルタリングできます。例：
 
 ```sql
 SELECT * FROM information_schema.loads
@@ -565,7 +565,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.02 sec)
 ```
 
-ロードジョブが完了したことを確認した後、宛先テーブルのサブセットを確認して、データが正常にロードされたかどうかを確認できます。例：
+ロードジョブが終了したことを確認した後、宛先テーブルのサブセットをチェックしてデータが正常にロードされたかどうかを確認できます。例：
 
 ```SQL
 SELECT * from user_behavior LIMIT 3;

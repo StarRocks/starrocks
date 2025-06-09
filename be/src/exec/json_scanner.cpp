@@ -37,6 +37,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
+#include "util/simdjson_util.h"
 
 namespace starrocks {
 
@@ -494,11 +495,12 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
 Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
     _parsed_columns.assign(chunk->num_columns(), false);
 
+    faststring buffer;
     try {
         uint32_t key_index = 0;
         for (auto field : *row) {
             int column_index;
-            std::string_view key = field.unescaped_key();
+            std::string_view key = field_unescaped_key_safe(field, &buffer);
 
             // _prev_parsed_position records the chunk column index for each key of previous parsed json object.
             // For example, if previous json object is

@@ -38,13 +38,13 @@ TimeoutMs: 300000
 * Coordinator: トランザクション調整を担当するノード
 * TransactionStatus: トランザクションのステータス
 * PREPARE: 準備段階
-* COMMITTED: トランザクションは成功したが、データは見えない
-* VISIBLE: トランザクションは成功し、データが見える
-* ABORTED: トランザクションが失敗
+* COMMITTED: トランザクションは成功したが、データは表示されない
+* VISIBLE: トランザクションは成功し、データは表示される
+* ABORTED: トランザクションは失敗
 * LoadJobSourceType: インポートタスクのタイプ
-* PrepareTime: トランザクションの開始時間
+* PrepareTime: トランザクション開始時間
 * CommitTime: トランザクションが正常にコミットされた時間
-* FinishTime: データが見えるようになった時間
+* FinishTime: データが表示される時間
 * Reason: エラーメッセージ
 * ErrorReplicasCount: エラーのあるレプリカの数
 * ListenerId: 関連するインポートジョブの ID
@@ -52,13 +52,13 @@ TimeoutMs: 300000
 
 ## 例
 
-1. ID 4005 のトランザクションを表示するには:
+1. ID が 4005 のトランザクションを表示するには:
 
     ```sql
     SHOW TRANSACTION WHERE ID=4005;
     ```
 
-2. 指定されたデータベースで、ID 4005 のトランザクションを表示するには:
+2. 指定されたデータベースで、ID が 4005 のトランザクションを表示するには:
 
     ```sql
     SHOW TRANSACTION FROM db WHERE ID=4005;

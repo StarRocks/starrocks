@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # SHOW TABLE STATUS
 
-## 説明
+## Description
 
-このステートメントは、テーブルのいくつかの情報を表示するために使用されます。
+このステートメントは、テーブル内のいくつかの情報を表示するために使用されます。
 
 :::tip
 
@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 :::
 
-## 構文
+## Syntax
 
 ```sql
 SHOW TABLE STATUS
@@ -23,9 +23,9 @@ SHOW TABLE STATUS
 
 > Note
 >
-> このステートメントは主に MySQL 構文と互換性があります。現在のところ、Comment などのいくつかの情報のみを表示します。
+> このステートメントは主に MySQL の構文と互換性があります。現在のところ、Comment などのいくつかの情報のみを表示します。
 
-## 例
+## Examples
 
 1. 現在のデータベース内のすべてのテーブル情報を表示します。
 

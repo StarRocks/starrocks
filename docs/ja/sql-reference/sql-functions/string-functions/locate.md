@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # locate
 
-この関数は、文字列内の部分文字列の位置を見つけるために使用されます（1から数え始め、文字単位で測定します）。第3引数の pos が指定されている場合、pos より後の位置で substr を見つけ始めます。str が見つからない場合は、0 を返します。
+## 説明
 
-## Syntax
+この関数は、文字列内の部分文字列の位置を見つけるために使用されます（1から数え始め、文字単位で測定されます）。第3引数 pos が指定されている場合、pos より下の位置で substr の位置を見つけ始めます。str が見つからない場合、0 を返します。
+
+## 構文
 
 ```Haskell
 INT locate(VARCHAR substr, VARCHAR str[, INT pos])
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > SELECT LOCATE('bar', 'foobarbar');
@@ -37,6 +39,6 @@ MySQL > SELECT LOCATE('bar', 'foobarbar', 5);
 +-------------------------------+
 ```
 
-## keyword
+## キーワード
 
 LOCATE

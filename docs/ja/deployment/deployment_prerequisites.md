@@ -4,13 +4,13 @@ displayed_sidebar: docs
 
 # Deployment prerequisites
 
-このトピックでは、StarRocks をデプロイする前にサーバーが満たすべきハードウェアおよびソフトウェアの要件について説明します。StarRocks クラスターの推奨ハードウェア仕様については、[Plan your StarRocks cluster](../deployment/plan_cluster.md) を参照してください。
+このトピックでは、StarRocks をデプロイする前にサーバーが満たすべきハードウェアおよびソフトウェアの要件について説明します。StarRocks クラスターの推奨ハードウェア仕様については、 [Plan your StarRocks cluster](../deployment/plan_cluster.md) を参照してください。
 
 ## Hardware
 
 ### CPU
 
-StarRocks は、そのベクトル化機能を完全に発揮するために AVX2 命令セットに依存しています。したがって、実稼働環境では、x86 アーキテクチャの CPU を搭載したマシンに StarRocks をデプロイすることを強くお勧めします。
+StarRocks は AVX2 命令セットに依存しており、そのベクトル化機能を最大限に発揮します。そのため、本番環境では x86 アーキテクチャの CPU を搭載したマシンに StarRocks をデプロイすることを強くお勧めします。
 
 マシンの CPU が AVX2 命令セットをサポートしているかどうかを確認するには、ターミナルで次のコマンドを実行します。
 
@@ -20,7 +20,7 @@ cat /proc/cpuinfo | grep avx2
 
 ### Memory
 
-StarRocks に使用されるメモリキットに特定の要件はありません。推奨されるメモリサイズについては、[Plan StarRocks cluster - CPU and Memory](../deployment/plan_cluster.md#cpu-and-memory) を参照してください。
+StarRocks に使用するメモリキットには特定の要件はありません。推奨されるメモリサイズについては、 [Plan StarRocks cluster - CPU and Memory](../deployment/plan_cluster.md#cpu-and-memory) を参照してください。
 
 ### Storage
 
@@ -40,9 +40,9 @@ StarRocks は、Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、または Ubun
 
 ## Software
 
-StarRocks を実行するには、サーバーに JDK 8 をインストールする必要があります。バージョン 2.5 以降では、JDK 11 が推奨されます。
+StarRocks を実行するには、サーバーに JDK 8 をインストールする必要があります。v2.5 以降のバージョンでは、JDK 11 が推奨されます。
 
-> **注意**
+> **CAUTION**
 >
 > - StarRocks は JRE をサポートしていません。
 > - Ubuntu 22.04 に StarRocks をインストールする場合は、JDK 11 をインストールする必要があります。

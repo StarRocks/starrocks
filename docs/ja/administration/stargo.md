@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-# StarGo を使用した StarRocks のデプロイと管理
+# Deploy and Manage StarRocks with StarGo
 
 このトピックでは、StarGo を使用して StarRocks クラスターをデプロイおよび管理する方法について説明します。
 
-StarGo は、複数の StarRocks クラスターを管理するためのコマンドラインツールです。StarGo を使用すると、複数のクラスターを簡単にデプロイ、確認、アップグレード、ダウングレード、開始、および停止できます。
+StarGo は、複数の StarRocks クラスターを管理するためのコマンドラインツールです。StarGo を使用すると、複数のクラスターを簡単にデプロイ、確認、アップグレード、ダウングレード、開始、停止できます。
 
-## StarGo のインストール
+## Install StarGo
 
 以下のファイルを中央制御ノードにダウンロードします。
 
@@ -25,23 +25,23 @@ wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/sr-c1.yaml
 wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/repo.yaml
 ```
 
-**sr-ctl** のアクセス権を付与します。
+**sr-ctl** にアクセス権を付与します。
 
 ```shell
 chmod 751 sr-ctl
 ```
 
-## StarRocks クラスターのデプロイ
+## Deploy StarRocks cluster
 
 StarGo を使用して StarRocks クラスターをデプロイできます。
 
-### 前提条件
+### Prerequisites
 
-- デプロイするクラスターには、少なくとも 1 つの中央制御ノードと 3 つのデプロイメントノードが必要です。すべてのノードは 1 台のマシンにデプロイできます。
+- デプロイするクラスターには、少なくとも1つの中央制御ノードと3つのデプロイメントノードが必要です。すべてのノードは1台のマシンにデプロイできます。
 - 中央制御ノードに StarGo をデプロイする必要があります。
-- 中央制御ノードと 3 つのデプロイメントノードの間で相互 SSH 認証を構築する必要があります。
+- 中央制御ノードと3つのデプロイメントノード間で相互 SSH 認証を構築する必要があります。
 
-以下の例では、中央制御ノード sr-dev@r0 と 3 つのデプロイメントノード starrocks@r1、starrocks@r2、starrocks@r3 の間で相互認証を構築します。
+以下の例では、中央制御ノード sr-dev@r0 と3つのデプロイメントノード starrocks@r1、starrocks@r2、starrocks@r3 の間で相互認証を構築します。
 
 ```plain text
 ## sr-dev@r0 と starrocks@r1, 2, 3 の間で相互認証を構築します。
@@ -56,9 +56,9 @@ StarGo を使用して StarRocks クラスターをデプロイできます。
 [sr-dev@r0 ~]$ ssh starrocks@r3 date
 ```
 
-### 設定ファイルの作成
+### Create configuration file
 
-以下の YAML テンプレートに基づいて StarRocks デプロイメントトポロジーファイルを作成します。詳細については、[Configuration](../administration/management/FE_configuration.md) を参照してください。
+以下の YAML テンプレートに基づいて StarRocks デプロイメントトポロジファイルを作成します。詳細については [Configuration](../administration/management/FE_configuration.md) を参照してください。
 
 ```yaml
 global:
@@ -75,7 +75,7 @@ fe_servers:
     deploy_dir: StarRocks/fe
     meta_dir: StarRocks/fe/meta
     log_dir: StarRocks/fe/log
-    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードのユニークな IP を指定します。
+    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードの一意の IP を指定します。
     config:
       sys_log_level: "INFO"
   - host: 192.168.XX.XX
@@ -87,7 +87,7 @@ fe_servers:
     deploy_dir: StarRocks/fe
     meta_dir: StarRocks/fe/meta
     log_dir: StarRocks/fe/log
-    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードのユニークな IP を指定します。
+    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードの一意の IP を指定します。
     config:
       sys_log_level: "INFO"
   - host: 192.168.XX.XX
@@ -99,7 +99,7 @@ fe_servers:
     deploy_dir: StarRocks/fe
     meta_dir: StarRocks/fe/meta
     log_dir: StarRocks/fe/log
-    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードのユニークな IP を指定します。
+    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードの一意の IP を指定します。
     config:
       sys_log_level: "INFO"
 be_servers:
@@ -112,7 +112,7 @@ be_servers:
     deploy_dir : StarRocks/be
     storage_dir: StarRocks/be/storage
     log_dir: StarRocks/be/log
-    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードのユニークな IP を指定します。
+    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードの一意の IP を指定します。
     config:
       create_tablet_worker_count: 3
   - host: 192.168.XX.XX
@@ -124,7 +124,7 @@ be_servers:
     deploy_dir : StarRocks/be
     storage_dir: StarRocks/be/storage
     log_dir: StarRocks/be/log
-    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードのユニークな IP を指定します。
+    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードの一意の IP を指定します。
     config:
       create_tablet_worker_count: 3
   - host: 192.168.XX.XX
@@ -136,14 +136,14 @@ be_servers:
     deploy_dir : StarRocks/be
     storage_dir: StarRocks/be/storage
     log_dir: StarRocks/be/log
-    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードのユニークな IP を指定します。
+    priority_networks: 192.168.XX.XX/24 # マシンに複数の IP アドレスがある場合、現在のノードの一意の IP を指定します。
     config:
       create_tablet_worker_count: 3
 ```
 
-### デプロイメントディレクトリの作成（オプション）
+### Create deployment directory (Optional)
 
-StarRocks をデプロイするパスが存在しない場合、またそのパスを作成する権限がある場合は、これらのパスを作成する必要はありません。StarGo は設定ファイルに基づいてそれらを作成します。既にパスが存在する場合は、それらに書き込みアクセス権があることを確認してください。また、次のコマンドを実行して、各ノードに必要なデプロイメントディレクトリを作成することもできます。
+StarRocks をデプロイするパスが存在しない場合、そしてそのパスを作成する権限がある場合は、これらのパスを作成する必要はありません。StarGo は設定ファイルに基づいてそれらを作成します。既にパスが存在する場合は、それらに書き込みアクセス権があることを確認してください。以下のコマンドを実行して、各ノードに必要なデプロイメントディレクトリを作成することもできます。
 
 - FE ノードに **meta** ディレクトリを作成します。
 
@@ -160,9 +160,9 @@ mkdir -p StarRocks/be/storage
 > Caution
 > 上記のパスが設定ファイルの `meta_dir` および `storage_dir` の設定項目と一致していることを確認してください。
 
-### StarRocks のデプロイ
+### Deploy StarRocks
 
-次のコマンドを実行して StarRocks クラスターをデプロイします。
+以下のコマンドを実行して StarRocks クラスターをデプロイします。
 
 ```shell
 ./sr-ctl cluster deploy <cluster_name> <version> <topology_file>
@@ -176,7 +176,7 @@ mkdir -p StarRocks/be/storage
 
 デプロイが成功すると、クラスターは自動的に開始されます。beStatus と feStatus が true の場合、クラスターは正常に開始されています。
 
-例:
+Example:
 
 ```plain text
 [sr-dev@r0 ~]$ ./sr-ctl cluster deploy sr-c1 v2.0.1 sr-c1.yaml
@@ -248,27 +248,27 @@ IP                    ssh auth         storage dir                deploy dir    
                                         beHost = 192.168.xx.xx       beHeartbeatServicePort = 9050      beStatus = true
 ```
 
-クラスターをテストするには、[クラスター情報の表示](#view-cluster-information)を参照してください。
+クラスターをテストするには、[クラスター情報を表示する](#view-cluster-information) を参照してください。
 
-また、MySQL クライアントを使用してクラスターに接続することでもテストできます。
+また、MySQL クライアントでクラスターに接続してテストすることもできます。
 
 ```shell
 mysql -h 127.0.0.1 -P9030 -uroot
 ```
 
-## クラスター情報の表示
+## View cluster information
 
 StarGo が管理するクラスターの情報を表示できます。
 
-### すべてのクラスターの情報を表示
+### View the information of all clusters
 
-次のコマンドを実行して、すべてのクラスターの情報を表示します。
+以下のコマンドを実行して、すべてのクラスターの情報を表示します。
 
 ```shell
 ./sr-ctl cluster list
 ```
 
-例:
+Example:
 
 ```plain text
 [sr-dev@r0 ~]$ ./sr-ctl cluster list
@@ -278,15 +278,15 @@ ClusterName      User        CreateDate                 MetaPath                
 sr-c1            starrocks   2022-03-02 00:08:15        /home/sr-dev/.starrocks-controller/cluster/sr-c1              /home/sr-dev/.ssh/id_rsa
 ```
 
-### 特定のクラスターの情報を表示
+### View the information of a specific cluster
 
-次のコマンドを実行して、特定のクラスターの情報を表示します。
+特定のクラスターの情報を表示するには、以下のコマンドを実行します。
 
 ```shell
 ./sr-ctl cluster display <cluster_name>
 ```
 
-例:
+Example:
 
 ```plain text
 [sr-dev@r0 ~]$ ./sr-ctl cluster display sr-c1
@@ -302,19 +302,19 @@ ID                          ROLE    HOST                  PORT             STAT 
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        UP          StarRocks/be                                   /dataStarRocks/be/storage
 ```
 
-## クラスターの開始
+## Start cluster
 
 StarGo を使用して StarRocks クラスターを開始できます。
 
-### クラスター内のすべてのノードを開始
+### Start all nodes in a cluster
 
-次のコマンドを実行して、クラスター内のすべてのノードを開始します。
+以下のコマンドを実行して、クラスター内のすべてのノードを開始します。
 
 ```shell
 ./sr-ctl cluster start <cluster-name>
 ```
 
-例:
+Example:
 
 ```plain text
 [root@nd1 sr-controller]# ./sr-ctl cluster start sr-c1
@@ -327,21 +327,21 @@ StarGo を使用して StarRocks クラスターを開始できます。
 [20220303-190458    INFO] Starting BE node [BeHost = 192.168.xx.xx, HeartbeatServicePort = 9050]
 ```
 
-### 特定の役割のノードを開始
+### Start nodes of a specific role
 
-- クラスター内のすべての FE ノードを開始。
+- クラスター内のすべての FE ノードを開始します。
 
 ```shell
 ./sr-ctl cluster start <cluster_name> --role FE
 ```
 
-- クラスター内のすべての BE ノードを開始。
+- クラスター内のすべての BE ノードを開始します。
 
 ```shell
 ./sr-ctl cluster start <cluster_name> --role BE
 ```
 
-例:
+Example:
 
 ```plain text
 [root@nd1 sr-controller]# ./sr-ctl cluster start sr-c1 --role FE
@@ -359,7 +359,7 @@ StarGo を使用して StarRocks クラスターを開始できます。
 [20220303-194217    INFO] Starting BE cluster ...
 ```
 
-### 特定のノードを開始
+### Start a specific node
 
 クラスター内の特定のノードを開始します。現在、BE ノードのみがサポートされています。
 
@@ -367,9 +367,9 @@ StarGo を使用して StarRocks クラスターを開始できます。
 ./sr-ctl cluster start <cluster_name> --node <node_ID>
 ```
 
-特定のノードの ID は、[特定のクラスターの情報を表示](#view-the-information-of-a-specific-cluster)することで確認できます。
+特定のノードの ID は、[特定のクラスターの情報を表示する](#view-the-information-of-a-specific-cluster) で確認できます。
 
-例:
+Example:
 
 ```plain text
 [root@nd1 sr-controller]# ./sr-ctl cluster start sr-c1 --node 192.168.xx.xx:9060
@@ -377,19 +377,19 @@ StarGo を使用して StarRocks クラスターを開始できます。
 [20220303-194714    INFO] Start BE node. [BeHost = 192.168.xx.xx, HeartbeatServicePort = 9050]
 ```
 
-## クラスターの停止
+## Stop cluster
 
 StarGo を使用して StarRocks クラスターを停止できます。
 
-### クラスター内のすべてのノードを停止
+### Stop all nodes in a cluster
 
-次のコマンドを実行して、クラスター内のすべてのノードを停止します。
+以下のコマンドを実行して、クラスター内のすべてのノードを停止します。
 
 ```shell
 ./sr-ctl cluster stop <cluster_name>
 ```
 
-例:
+Example:
 
 ```plain text
 [sr-dev@nd1 sr-controller]$ ./sr-ctl cluster stop sr-c1
@@ -410,21 +410,21 @@ StarGo を使用して StarRocks クラスターを停止できます。
 [20220302-180149    INFO] The BE node stop succefully [BeHost = 192.168.xx.xx, HeartbeatServicePort = 9050]
 ```
 
-### 特定の役割のノードを停止
+### Stop nodes of a specific role
 
-- クラスター内のすべての FE ノードを停止。
+- クラスター内のすべての FE ノードを停止します。
 
 ```shell
 ./sr-ctl cluster stop <cluster_name> --role FE
 ```
 
-- クラスター内のすべての BE ノードを停止。
+- クラスター内のすべての BE ノードを停止します。
 
 ```shell
 ./sr-ctl cluster stop <cluster_name> --role BE
 ```
 
-例:
+Example:
 
 ```plain text
 [sr-dev@nd1 sr-controller]$ ./sr-ctl cluster stop sr-c1 --role BE
@@ -452,7 +452,7 @@ StarGo を使用して StarRocks クラスターを停止できます。
 [20220302-180856  OUTPUT] The FE node stop succefully [host = 192.168.xx.xx, queryPort = 9030]
 ```
 
-### 特定のノードを停止
+### Stop a specific node
 
 クラスター内の特定のノードを停止します。
 
@@ -460,9 +460,9 @@ StarGo を使用して StarRocks クラスターを停止できます。
 ./sr-ctl cluster stop <cluster_name> --node <node_ID>
 ```
 
-特定のノードの ID は、[特定のクラスターの情報を表示](#view-the-information-of-a-specific-cluster)することで確認できます。
+特定のノードの ID は、[特定のクラスターの情報を表示する](#view-the-information-of-a-specific-cluster) で確認できます。
 
-例:
+Example:
 
 ```plain text
 [root@nd1 sr-controller]# ./sr-ctl cluster display sr-c1
@@ -484,13 +484,13 @@ ID                          ROLE    HOST                  PORT             STAT 
 [20220303-185510    INFO] Waiting for stoping BE node [BeHost = 192.168.xx.xx]
 ```
 
-## クラスターのスケールアウト
+## Scale cluster out
 
 StarGo を使用してクラスターをスケールアウトできます。
 
-### 設定ファイルの作成
+### Create configuration file
 
-以下のテンプレートに基づいてスケールアウトタスクのトポロジーファイルを作成します。必要に応じて FE および/または BE ノードを追加するファイルを指定できます。詳細については、[Configuration](../administration/management/FE_configuration.md) を参照してください。
+以下のテンプレートに基づいてスケールアウトタスクのトポロジファイルを作成します。必要に応じて FE ノードおよび/または BE ノードを追加するファイルを指定できます。詳細については [Configuration](../administration/management/FE_configuration.md) を参照してください。
 
 ```yaml
 # FE ノードを追加します。
@@ -504,7 +504,7 @@ fe_servers:
     deploy_dir: StarRocks/fe
     meta_dir: StarRocks/fe/meta
     log_dir: StarRocks/fe/log
-    priority_networks: 192.168.xx.xx/24 # マシンに複数の IP アドレスがある場合、現在のノードのユニークな IP を指定します。
+    priority_networks: 192.168.xx.xx/24 # マシンに複数の IP アドレスがある場合、現在のノードの一意の IP を指定します。
     config:
       sys_log_level: "INFO"
       sys_log_delete_age: "1d"
@@ -524,13 +524,13 @@ be_servers:
       create_tablet_worker_count: 3
 ```
 
-### SSH 相互認証の構築
+### Build SSH mutual authentication
 
-クラスターに新しいノードを追加する場合は、新しいノードと中央制御ノードの間で相互認証を構築する必要があります。詳細な手順については、[Prerequisites](#prerequisites) を参照してください。
+クラスターに新しいノードを追加する場合は、新しいノードと中央制御ノード間で相互認証を構築する必要があります。詳細な手順については [Prerequisites](#prerequisites) を参照してください。
 
-### デプロイメントディレクトリの作成（オプション）
+### Create deployment directory (Optional)
 
-新しいノードをデプロイするパスが存在しない場合、またそのパスを作成する権限がある場合は、これらのパスを作成する必要はありません。StarGo は設定ファイルに基づいてそれらを作成します。既にパスが存在する場合は、それらに書き込みアクセス権があることを確認してください。また、次のコマンドを実行して、各ノードに必要なデプロイメントディレクトリを作成することもできます。
+新しいノードをデプロイするパスが存在しない場合、そしてそのパスを作成する権限がある場合は、これらのパスを作成する必要はありません。StarGo は設定ファイルに基づいてそれらを作成します。既にパスが存在する場合は、それらに書き込みアクセス権があることを確認してください。以下のコマンドを実行して、各ノードに必要なデプロイメントディレクトリを作成することもできます。
 
 - FE ノードに **meta** ディレクトリを作成します。
 
@@ -547,15 +547,15 @@ mkdir -p StarRocks/be/storage
 > Caution
 > 上記のパスが設定ファイルの `meta_dir` および `storage_dir` の設定項目と一致していることを確認してください。
 
-### クラスターのスケールアウト
+### Scale the cluster out
 
-次のコマンドを実行してクラスターをスケールアウトします。
+以下のコマンドを実行してクラスターをスケールアウトします。
 
 ```shell
 ./sr-ctl cluster scale-out <cluster_name> <topology_file>
 ```
 
-例:
+Example:
 
 ```plain text
 # スケールアウト前のクラスターの状態。
@@ -568,6 +568,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 192.168.xx.xx:9010          FE      192.168.xx.xx         9010/9030        UP          /opt/starrocks-test/fe                              /opt/starrocks-test/fe/meta                       
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        UP          /opt/starrocks-test/be                              /opt/starrocks-test/be/storage                    
 
+```plain text
 # クラスターをスケールアウトします。
 [sr-dev@nd1 sr-controller]$ ./sr-ctl cluster scale-out sr-test sr-out.yaml
 [20220503-213725  OUTPUT] Scale out cluster. [ClusterName = sr-test]
@@ -626,17 +627,17 @@ ID                          ROLE    HOST                  PORT             STAT 
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        UP          StarRocks/be                                   StarRocks/be/storage                         
 ```
 
-## クラスターのスケールイン
+## Scale cluster in
 
-次のコマンドを実行して、クラスター内のノードを削除します。
+以下のコマンドを実行してクラスター内のノードを削除します。
 
 ```shell
 ./sr-ctl cluster scale-in <cluster_name> --node <node_id>
 ```
 
-特定のノードの ID は、[特定のクラスターの情報を表示](#view-the-information-of-a-specific-cluster)することで確認できます。
+特定のノードの ID は、[特定のクラスターの情報を表示する](#view-the-information-of-a-specific-cluster) で確認できます。
 
-例:
+Example:
 
 ```plain text
 [sr-dev@nd1 sr-controller]$ ./sr-ctl cluster display sr-c1
@@ -669,23 +670,23 @@ ID                          ROLE    HOST                  PORT             STAT 
 192.168.88.85:9060          BE      192.168.xx.xx         9060/9050        UP          StarRocks/be                                   /dataStarRocks/be/storage              
 ```
 
-## クラスターのアップグレードまたはダウングレード
+## Upgrade or downgrade the cluster
 
 StarGo を使用してクラスターをアップグレードまたはダウングレードできます。
 
-- クラスターをアップグレード。
+- クラスターをアップグレードします。
 
 ```shell
 ./sr-ctl cluster upgrade <cluster_name>  <target_version>
 ```
 
-- クラスターをダウングレード。
+- クラスターをダウングレードします。
 
 ```shell
 ./sr-ctl cluster downgrade <cluster_name>  <target_version>
 ```
 
-例:
+Example:
 
 ```plain text
 [sr-dev@nd1 sr-controller]$ ./sr-ctl cluster list
@@ -707,7 +708,7 @@ ClusterName      Version     User        CreateDate                 MetaPath    
 sr-test2         v2.0.1      test222     2022-05-15 20:08:40        /home/sr-dev/.starrocks-controller/cluster/sr-test2           /home/sr-dev/.ssh/id_rsa                
 ```
 
-## 関連コマンド
+## Relevant commands
 
 |Command|Description|
 |----|----|
@@ -720,3 +721,4 @@ sr-test2         v2.0.1      test222     2022-05-15 20:08:40        /home/sr-dev
 |downgrade|クラスターをダウングレードします。|
 |display|特定のクラスターの情報を表示します。|
 |list|すべてのクラスターを表示します。|
+```

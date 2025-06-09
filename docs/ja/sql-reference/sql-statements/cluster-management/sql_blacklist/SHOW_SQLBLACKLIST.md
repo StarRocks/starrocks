@@ -4,32 +4,32 @@ displayed_sidebar: docs
 
 # SHOW SQLBLACKLIST
 
-## Description
+## 説明
 
 SQL ブラックリストにある SQL 正規表現を表示します。
 
-SQL ブラックリストの詳細については、[Manage SQL Blacklist](../../../../administration/management/resource_management/Blacklist.md) を参照してください。
+SQL ブラックリストの詳細については、 [Manage SQL Blacklist](../../../../administration/management/resource_management/Blacklist.md) を参照してください。
 
 :::tip
 
-この操作には SYSTEM レベルの BLACKLIST 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作には SYSTEM レベルの BLACKLIST 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
-## Syntax
+## 構文
 
 ```SQL
 SHOW SQLBLACKLIST
 ```
 
-## Return value
+## 戻り値
 
-| **Return**    | **Description**                                              |
+| **戻り値**    | **説明**                                              |
 | ------------- | ------------------------------------------------------------ |
-| Index         | ブラックリストに追加された SQL 正規表現のインデックス番号です。 |
-| Forbidden SQL | ブラックリストに追加された SQL 正規表現です。 |
+| Index         | ブラックリストに追加された SQL 正規表現のインデックス番号。 |
+| Forbidden SQL | ブラックリストに追加された SQL 正規表現。 |
 
-## Examples
+## 例
 
 ```Plain
 mysql> SHOW SQLBLACKLIST;

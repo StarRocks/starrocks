@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # bitmap_count
 
-入力されたビットマップの 1 ビット数を返します。
+## Description
+
+入力されたビットマップの 1 ビットの数を返します。
 
 ## Syntax
 

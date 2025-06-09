@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -116,7 +117,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
-            throw new UserException("queryId " + queryId + " already exists");
+            throw new AlreadyExistsException("queryId " + queryId + " already exists");
         }
     }
 

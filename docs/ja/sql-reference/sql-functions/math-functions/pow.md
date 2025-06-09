@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # pow, power, dpow, fpow
 
+## 説明
+
 `x` を `y` 乗した結果を返します。
 
 ## 構文

@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 `global_variables` には次のフィールドが含まれています:
 
-| **Field**      | **Description**        |
-| -------------- | ---------------------- |
-| VARIABLE_NAME  | 変数の名前。           |
-| VARIABLE_VALUE | 変数の値。             |
+| **Field**      | **Description**            |
+| -------------- | -------------------------- |
+| VARIABLE_NAME  | 変数の名前。               |
+| VARIABLE_VALUE | 変数の値。                 |

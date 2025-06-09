@@ -16,9 +16,9 @@ SHOW DATABASES [FROM <catalog_name>]
 
 ## パラメータ
 
-| **パラメータ**   | **必須** | **説明**                                                      |
-| ---------------- | -------- | ------------------------------------------------------------ |
-| catalog_name     | いいえ   | 内部 catalog または外部 catalog の名前。<ul><li>パラメータを指定しない場合、または内部 catalog の名前である `default_catalog` を指定した場合、現在の StarRocks クラスター内のデータベースを表示できます。</li><li>パラメータの値を外部 catalog の名前に設定した場合、対応する外部データソース内のデータベースを表示できます。[SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md) を実行して、内部および外部の catalog を表示できます。</li></ul> |
+| **パラメータ**   | **必須** | **説明**                                                  |
+| ---------------- | -------- | --------------------------------------------------------- |
+| catalog_name     | いいえ   | 内部 catalog または外部 catalog の名前。<ul><li>パラメータを指定しない場合、または内部 catalog の名前を指定する場合（`default_catalog`）、現在の StarRocks クラスター内のデータベースを表示できます。</li><li>パラメータの値を外部 catalog の名前に設定すると、対応する外部データソース内のデータベースを表示できます。[SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md) を実行して、内部および外部 catalog を表示できます。</li></ul> |
 
 ## 例
 
@@ -60,7 +60,7 @@ SHOW DATABASES FROM hive1;
 +-----------+
 ```
 
-## 参考
+## 参考文献
 
 - [CREATE DATABASE](CREATE_DATABASE.md)
 - [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)

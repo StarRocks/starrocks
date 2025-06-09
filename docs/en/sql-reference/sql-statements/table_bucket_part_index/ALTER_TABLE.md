@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
-## Description
-
-Modifies an existing table, including:
+ALTER TABLE Modifies an existing table, including:
 
 - [Rename table, partition, index, or column](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
@@ -18,6 +16,7 @@ Modifies an existing table, including:
 - [Modify table properties](#modify-table-properties)
 - [Atomic swap](#swap)
 - [Manual data version compaction](#manual-compaction-from-31)
+- [Drop Primary Key Persistent Index](#drop-primary-key-persistent-index-from-339)
 
 :::tip
 This operation requires the ALTER privilege on the destination table.
@@ -41,6 +40,7 @@ alter_clause1[, alter_clause2, ...]
 - bitmap index: modifies index (only Bitmap index can be modified).
 - swap: atomic exchange of two tables.
 - compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
+- drop persistent index: Drop persistent index for Primary Key table in shared-data cluster. **Supported from v3.3.9 onwards**.
 
 ## Limits and usage notes
 
@@ -608,7 +608,7 @@ For more usage instructions, see [Example - Column -14](#column).
 
 - Currently, this feature is only supported in shared-nothing clusters.
 - The table must have the `fast_schema_evolution` property enabled.
-- Adding or dropping fields in the STRUCT type within a MAP type is not supported.
+- Modifying the Value type of a MAP subfield in a STRUCT type is not supported, regardless of whether the Value type is ARRAY, STRUCT, or MAP.
 - Newly added fields cannot have default values or attributes such as Nullable specified. They default to being Nullable, with a default value of null.
 - After this feature is used, downgrading the cluster directly to a version that does not support this feature is not allowed.
 
@@ -804,6 +804,18 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
 The `be_compactions` table in the `information_schema` database records compaction results. You can run `SELECT * FROM information_schema.be_compactions;` to query data versions after compaction.
+
+### Drop Primary Key Persistent Index (From 3.3.9)
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
+```
+> **NOTE**
+>
+> StarRocks only supports deleting persistent indexes for cloud-native Primary Key tables in shared-data clusters.
 
 ## Examples
 
@@ -1253,6 +1265,14 @@ ALTER TABLE compaction_test COMPACT (p202302,p203303);
 ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
 
 ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
+```
+
+### Drop Primary Key Persistent Index
+
+Drop persistent index on tablets `100` and `101` for Primary Key table `db1.test_tbl` in a shared-data cluster.
+
+```sql
+ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
 ## References

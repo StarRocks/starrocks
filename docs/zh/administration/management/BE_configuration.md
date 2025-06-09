@@ -3542,6 +3542,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 配置项描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
 - 引入版本: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 配置项描述: starlet filesystem 实例的缓存容量。
+- 引入版本: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- 默认值：86400
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 配置项描述: starlet filesystem 实例缓存的过期时间。
+- 引入版本: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
@@ -3897,11 +3915,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_mem_size
 
-- 默认值：10%
+- 默认值：0
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。默认值为 `10%`。推荐将该参数值最低设置成 10 GB。
+- 描述：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。
 - 引入版本：-
 
 ##### datacache_disk_size
@@ -5232,3 +5250,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：bitmap 函数输入值的最大长度。
 - 引入版本：-
+
+##### report_exec_rpc_request_retry_num
+
+- 默认值：10
+- 类型: Int
+- 单位：-
+- 是否动态：是
+- 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
+-引入版本：-

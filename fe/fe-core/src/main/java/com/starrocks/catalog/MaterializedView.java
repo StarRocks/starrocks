@@ -951,6 +951,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public void onDrop(Database db, boolean force, boolean replay) {
         super.onDrop(db, force, replay);
 
+        // NOTE: since super#onDrop will drop all partitions, we need to ensure to doDropImpl without exception,
+        // otherwise it may cause inconsistent state with multi FEs.
+        try {
+            onDropImpl(db, replay);
+        } catch (Exception e) {
+            LOG.warn("failed to drop materialized view {}", this.name, e);
+        }
+    }
+
+    private void onDropImpl(Database db, boolean replay) {
         // 1. Remove from plan cache
         MvId mvId = new MvId(db.getId(), getId());
         CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
@@ -1228,15 +1238,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return matchTable(excludedTriggerTables, dbName, tableName);
     }
 
-    public boolean shouldRefreshTable(String tableName) {
-        long dbId = this.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            LOG.warn("failed to get Database when pending refresh, DBId: {}", dbId);
-            return false;
-        }
-        String dbName = db.getFullName();
-
+    public boolean shouldRefreshTable(String dbName, String tableName) {
         TableProperty tableProperty = getTableProperty();
         if (tableProperty == null) {
             return true;
@@ -1312,7 +1314,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // partition
         PartitionInfo partitionInfo = this.getPartitionInfo();
         if (!partitionInfo.isUnPartitioned()) {
-            sb.append("\n").append(partitionInfo.toSql(this, null));
+            // NOTE: This part of the code is mainly for compatibility with existing materialized views, explicitly by using
+            // isAutomaticPartition.
+            // If isAutoMaticPartition is false, it may generate bad partition sql which will cause error in replay.
+            if (partitionInfo instanceof ListPartitionInfo) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                String sql = listPartitionInfo.toSql(this, true);
+                sb.append("\n").append(sql);
+            } else {
+                sb.append("\n").append(partitionInfo.toSql(this, null));
+            }
         }
 
         // distribution
@@ -1667,8 +1678,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache
                 // the newest table info.
-                Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(table));
-                result.put(refreshedTable, e.getValue());
+                // NOTE: use getTable rather getTableChecked to avoid throwing exception when table has changed/recreated.
+                // If the table has changed, MVPCTMetaRepairer will handle it rather than throwing exception here.
+                Optional<Table> refreshedTableOpt = MvUtils.getTable(tableToBaseTableInfoCache.get(table));
+                if (refreshedTableOpt.isEmpty()) {
+                    LOG.warn("The table {} is not found in metadata catalog", table.getName());
+                    throw MaterializedViewExceptions.reportBaseTableNotExists(table.getName());
+                }
+                result.put(refreshedTableOpt.get(), e.getValue());
             } else {
                 result.put(table, e.getValue());
             }

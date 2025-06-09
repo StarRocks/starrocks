@@ -1,5 +1,5 @@
 ---
-description: "StarRocks in Docker: 実データを使用したジョインによるクエリ"
+description: "StarRocks in Docker: 実際のデータをジョインでクエリする"
 displayed_sidebar: docs
 ---
 import DDL from '../_assets/quick-start/_DDL.mdx'
@@ -9,18 +9,18 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 # Deploy StarRocks with Docker
 
-このチュートリアルでは以下をカバーします：
+このチュートリアルでは以下をカバーします:
 
 - 単一の Docker コンテナで StarRocks を実行する
-- 基本的なデータ変換を含む2つの公開データセットをロードする
+- 基本的なデータ変換を含む 2 つの公開データセットをロードする
 - SELECT と JOIN を使用してデータを分析する
-- 基本的なデータ変換（ETL の **T**）
+- 基本的なデータ変換 (ETL の **T**)
 
 使用するデータは、NYC OpenData と National Centers for Environmental Information によって提供されています。
 
-これらのデータセットは非常に大きいため、このチュートリアルは StarRocks を使用するための入門として設計されています。過去120年分のデータをロードすることはしません。Docker に 4 GB の RAM を割り当てたマシンで Docker イメージを実行し、このデータをロードできます。より大規模でフォールトトレラントなスケーラブルなデプロイメントについては、他のドキュメントを用意しており、後ほど提供します。
+これらのデータセットは非常に大きいため、このチュートリアルは StarRocks を使用するための入門として設計されています。過去 120 年分のデータをロードすることはありません。Docker に 4 GB の RAM を割り当てたマシンで Docker イメージを実行し、このデータをロードすることができます。より大規模でフォールトトレラントなスケーラブルなデプロイメントについては、他のドキュメントを用意しており、後で提供します。
 
-このドキュメントには多くの情報が含まれており、最初にステップバイステップの内容が提示され、最後に技術的な詳細が記載されています。これは次の目的を順に果たすためです：
+このドキュメントには多くの情報が含まれており、ステップバイステップの内容が最初に、技術的な詳細が最後に提示されています。これは以下の目的を順に果たすためです:
 
 1. 読者が StarRocks にデータをロードし、そのデータを分析できるようにする。
 2. ロード中のデータ変換の基本を説明する。
@@ -37,11 +37,11 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### SQL クライアント
 
-Docker 環境で提供される SQL クライアントを使用するか、システム上のクライアントを使用できます。多くの MySQL 互換クライアントが動作し、このガイドでは DBeaver と MySQL Workbench の設定をカバーしています。
+Docker 環境で提供される SQL クライアントを使用するか、システム上のものを使用できます。多くの MySQL 互換クライアントが動作し、このガイドでは DBeaver と MySQL Workbench の設定をカバーしています。
 
 ### curl
 
-`curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行して、インストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/dlwiz/?type=bin)。
+`curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行して、インストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/dlwiz/?type=bin).
 
 ---
 
@@ -49,7 +49,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 ### FE
 
-フロントエンドノードは、メタデータ管理、クライアント接続管理、クエリプランニング、クエリスケジューリングを担当します。各 FE はメモリ内にメタデータの完全なコピーを保存し、維持します。これにより、FEs 間でのサービスの無差別性が保証されます。
+フロントエンドノードは、メタデータ管理、クライアント接続管理、クエリプランニング、クエリスケジューリングを担当します。各 FE はメモリ内にメタデータの完全なコピーを保存し、維持しており、FEs 間でのサービスの無差別性を保証します。
 
 ### BE
 
@@ -74,7 +74,7 @@ docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 -itd \
 
 ## データをダウンロードする
 
-これらの2つのデータセットをマシンにダウンロードします。Docker を実行しているホストマシンにダウンロードできます。コンテナ内にダウンロードする必要はありません。
+これらの 2 つのデータセットをマシンにダウンロードします。Docker を実行しているホストマシンにダウンロードすることができます。コンテナ内にダウンロードする必要はありません。
 
 ### ニューヨーク市のクラッシュデータ
 
@@ -97,7 +97,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 mysql CLI 以外のクライアントを使用している場合は、今すぐ開いてください。
 :::
 
-このコマンドは Docker コンテナ内で `mysql` コマンドを実行します：
+このコマンドは Docker コンテナ内で `mysql` コマンドを実行します:
 
 ```sql
 docker exec -it quickstart \
@@ -112,17 +112,17 @@ mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 
 ---
 
-## 2つのデータセットをロードする
+## 2 つのデータセットをロードする
 
-StarRocks にデータをロードする方法は多数あります。このチュートリアルでは、最も簡単な方法として curl と StarRocks Stream Load を使用します。
+StarRocks にデータをロードする方法はたくさんあります。このチュートリアルでは、最も簡単な方法として curl と StarRocks Stream Load を使用します。
 
 :::tip
-これらの curl コマンドはオペレーティングシステムのプロンプトで実行されるため、新しいシェルを開いてください。`mysql` クライアントではありません。コマンドはダウンロードしたデータセットを参照しているので、ファイルをダウンロードしたディレクトリから実行してください。
+これらの curl コマンドはオペレーティングシステムのプロンプトで実行されるため、新しいシェルを開いてください。コマンドはダウンロードしたデータセットを参照しているので、ファイルをダウンロードしたディレクトリから実行してください。
 
 パスワードを求められます。MySQL の `root` ユーザーにパスワードを設定していない場合は、Enter キーを押してください。
 :::
 
-`curl` コマンドは複雑に見えますが、チュートリアルの最後で詳細に説明されています。今はコマンドを実行し、データを分析するためにいくつかの SQL を実行し、その後でデータロードの詳細を読むことをお勧めします。
+`curl` コマンドは複雑に見えますが、チュートリアルの最後で詳細に説明されています。今は、コマンドを実行してデータを分析するための SQL を実行し、その後でデータロードの詳細を読むことをお勧めします。
 
 ### ニューヨーク市の衝突データ - クラッシュ
 
@@ -138,7 +138,7 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/crashdata/_stream_load
 ```
 
-上記のコマンドの出力です。最初のハイライトされたセクションは、期待される出力（OK と1行を除くすべての行が挿入されたこと）を示しています。1行は正しい列数を含んでいないためフィルタリングされました。
+上記のコマンドの出力です。最初のハイライトされたセクションは、期待される出力 (OK と 1 行を除くすべての行が挿入された) を示しています。1 行は正しい列数を含んでいないためフィルタリングされました。
 
 ```bash
 Enter host password for user 'root':
@@ -166,7 +166,7 @@ Enter host password for user 'root':
 }%
 ```
 
-エラーが発生した場合、出力にはエラーメッセージを確認するための URL が提供されます。ブラウザで開いて、何が起こったかを確認してください。詳細を展開してエラーメッセージを確認します：
+エラーが発生した場合、出力にはエラーメッセージを確認するための URL が提供されます。ブラウザでこれを開いて、何が起こったかを確認してください。詳細を展開してエラーメッセージを確認します:
 
 <details>
 
@@ -183,7 +183,7 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 ### 気象データ
 
-クラッシュデータをロードしたのと同じ方法で、気象データセットをロードします。
+クラッシュデータと同様に気象データセットをロードします。
 
 ```bash
 curl --location-trusted -u root             \
@@ -207,28 +207,28 @@ curl --location-trusted -u root             \
 
 ## まとめ
 
-このチュートリアルであなたは：
+このチュートリアルでは以下を行いました:
 
 - Docker で StarRocks をデプロイしました
 - ニューヨーク市が提供するクラッシュデータと NOAA が提供する気象データをロードしました
-- SQL JOIN を使用してデータを分析し、視界が悪い状態や凍結した道路での運転が悪い考えであることを発見しました
+- SQL JOIN を使用してデータを分析し、視界が悪い状態や凍結した道路での運転が悪いアイデアであることを確認しました
 
-学ぶべきことはまだあります。Stream Load 中に行われたデータ変換については意図的に詳しく説明していません。curl コマンドの詳細は以下のノートに記載されています。
+学ぶべきことはまだあります。Stream Load 中に行われたデータ変換については意図的に詳しく触れていません。curl コマンドに関する詳細は以下のノートにあります。
 
 ---
 
-## curl コマンドのノート
+## curl コマンドに関するノート
 
 <Curl />
 
 ---
 
-## 詳細情報
+## さらなる情報
 
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
-[Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) データセットは、ニューヨーク市によって提供され、[利用規約](https://www.nyc.gov/home/terms-of-use.page) および [プライバシーポリシー](https://www.nyc.gov/home/privacy-policy.page) に従います。
+[Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) データセットは、ニューヨーク市によって提供され、これらの [利用規約](https://www.nyc.gov/home/terms-of-use.page) と [プライバシーポリシー](https://www.nyc.gov/home/privacy-policy.page) に従います。
 
-[Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) は NOAA によって提供され、[免責事項](https://www.noaa.gov/disclaimer) および [プライバシーポリシー](https://www.noaa.gov/protecting-your-privacy) に従います。
+[Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) は、NOAA によって提供され、[免責事項](https://www.noaa.gov/disclaimer) と [プライバシーポリシー](https://www.noaa.gov/protecting-your-privacy) に従います。

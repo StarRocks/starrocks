@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # fmod
 
-浮動小数点数の除算 (`dividend`/`divisor`) の余りを返します。これはモジュロ関数です。
+## 説明
+
+除算 ( `dividend`/`divisor` ) の浮動小数点の余りを返します。これはモジュロ関数です。
 
 ## 構文
 
@@ -14,13 +16,13 @@ fmod(dividend,devisor);
 
 ## パラメータ
 
-- `dividend`: DOUBLE または FLOAT がサポートされています。
+- `dividend`:  DOUBLE または FLOAT がサポートされています。
 
 - `devisor`: DOUBLE または FLOAT がサポートされています。
 
 > **Note**
 >
-> `devisor` のデータ型は `dividend` のデータ型と同じである必要があります。そうでない場合、StarRocks は暗黙の型変換を行います。
+> `devisor` のデータ型は `dividend` のデータ型と同じである必要があります。そうでない場合、StarRocks はデータ型を変換するために暗黙の型変換を行います。
 
 ## 戻り値
 

@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # radians
 
+## 説明
+
 `x` を角度からラジアンに変換します。
 
-## Syntax
+## 構文
 
 ```Haskell
 REDIANS(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: DOUBLE データ型をサポートします。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Examples
+## 例
 
 ```Plain
 mysql> select radians(90);

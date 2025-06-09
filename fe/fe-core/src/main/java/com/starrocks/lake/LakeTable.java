@@ -163,7 +163,8 @@ public class LakeTable extends OlapTable {
         properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(id));
 
         // persistent index type
-        if (enablePersistentIndex() && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
+        if (keysType == KeysType.PRIMARY_KEYS && enablePersistentIndex()
+                && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
 
@@ -253,10 +254,10 @@ public class LakeTable extends OlapTable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        // We should restore column unique id before calling super.gsonPostProcess(), which will rebuild full schema there.
+        // And the max unique id will be reset while rebuilding full schema.
+        LakeTableHelper.restoreColumnUniqueIdIfNeeded(this);
         super.gsonPostProcess();
-        if (getMaxColUniqueId() <= 0) {
-            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
-        }
     }
 
     @Override

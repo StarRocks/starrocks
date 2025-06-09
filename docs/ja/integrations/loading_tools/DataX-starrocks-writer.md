@@ -2,22 +2,22 @@
 displayed_sidebar: docs
 ---
 
-# DataX ライター
+# DataX writer
 
-## はじめに
+## Introduction
 
-StarRocksWriter プラグインは、データを StarRocks の宛先テーブルに書き込むことを可能にします。具体的には、StarRocksWriter は [Stream Load](../../loading/StreamLoad.md) を介して CSV または JSON 形式でデータを StarRocks にインポートし、内部でキャッシュし、`reader` によって読み取られたデータを StarRocks に一括インポートして、書き込みパフォーマンスを向上させます。全体のデータフローは `source -> Reader -> DataX channel -> Writer -> StarRocks` です。
+StarRocksWriter プラグインは、StarRocks の宛先テーブルにデータを書き込むことができます。具体的には、StarRocksWriter は [Stream Load](../../loading/StreamLoad.md) を介して CSV または JSON 形式で StarRocks にデータをインポートし、内部的に `reader` によって読み取られたデータをキャッシュして一括インポートすることで、書き込みパフォーマンスを向上させます。全体のデータフローは `source -> Reader -> DataX channel -> Writer -> StarRocks` です。
 
-[プラグインをダウンロード](https://github.com/StarRocks/DataX/releases)
+[Download the plugin](https://github.com/StarRocks/DataX/releases)
 
 DataX のフルパッケージをダウンロードするには `https://github.com/alibaba/DataX` にアクセスし、starrockswriter プラグインを `datax/plugin/writer/` ディレクトリに配置してください。
 
 以下のコマンドを使用してテストします:
 `python datax.py --jvm="-Xms6G -Xmx6G" --loglevel=debug job.json`
 
-## 機能説明
+## Function Description
 
-### サンプル設定
+### Sample Configuration
 
 ここでは、MySQL からデータを読み取り、StarRocks にロードするための設定ファイルを示します。
 
@@ -79,7 +79,7 @@ DataX のフルパッケージをダウンロードするには `https://github.
 
 ```
 
-## Starrockswriter パラメータ説明
+## Starrockswriter Parameter Description
 
 * **username**
 
@@ -115,7 +115,7 @@ DataX のフルパッケージをダウンロードするには `https://github.
 
 * **loadUrl**
 
-  * 説明: Stream Load 用の StarRocks FE のアドレスで、複数の FE アドレスを `fe_ip:fe_http_port` の形式で指定できます。
+  * 説明: Stream Load 用の StarRocks FE のアドレス。複数の FE アドレスを指定でき、形式は `fe_ip:fe_http_port` です。
 
   * 必須: はい
 
@@ -123,9 +123,9 @@ DataX のフルパッケージをダウンロードするには `https://github.
 
 * **column**
 
-  * 説明: データを書き込む必要がある宛先テーブルのフィールドで、カラムはカンマで区切ります。例: "column": ["id", "name", "age"]。
+  * 説明: 宛先テーブルに書き込む必要があるフィールド。カラムはカンマで区切ります。例: "column": ["id", "name", "age"]。
     >**column 設定項目は指定する必要があり、空白にすることはできません。**
-    >注意: 宛先テーブルのカラム数やタイプなどを変更した場合にジョブが正しく動作しないか失敗する可能性があるため、空白にすることは強くお勧めしません。設定項目は reader の querySQL または column と同じ順序でなければなりません。
+    >注意: 宛先テーブルのカラム数やタイプなどを変更した場合、ジョブが正しく実行されないか失敗する可能性があるため、空白にすることは強くお勧めしません。設定項目は reader の querySQL または column と同じ順序でなければなりません。
 
 * 必須: はい
 
@@ -133,7 +133,7 @@ DataX のフルパッケージをダウンロードするには `https://github.
 
 * **preSql**
 
-* 説明: データを宛先テーブルに書き込む前に実行される標準ステートメント
+* 説明: 宛先テーブルにデータを書き込む前に実行される標準ステートメント。
 
 * 必須: いいえ
 
@@ -141,7 +141,7 @@ DataX のフルパッケージをダウンロードするには `https://github.
 
 * **jdbcUrl**
 
-  * 説明: `preSql` および `postSql` を実行するための宛先データベースの JDBC 接続情報
+  * 説明: `preSql` および `postSql` を実行するための宛先データベースの JDBC 接続情報。
   
   * 必須: いいえ
 
@@ -149,16 +149,16 @@ DataX のフルパッケージをダウンロードするには `https://github.
 
 * **loadProps**
 
-  * 説明: StreamLoad のリクエストパラメータで、詳細は StreamLoad の紹介ページを参照してください。
+  * 説明: StreamLoad のリクエストパラメータ。詳細は StreamLoad の紹介ページを参照してください。
 
   * 必須: いいえ
 
   * デフォルト値: なし
 
-## 型変換
+## Type conversion
 
-デフォルトでは、受信データは文字列に変換され、`t` をカラムセパレータ、`n` を行セパレータとして使用し、StreamLoad インポート用の `csv` ファイルを形成します。
-カラムセパレータを変更するには、`loadProps` を適切に設定します。
+デフォルトでは、受信データは文字列に変換され、`t` がカラムセパレータ、`n` が行セパレータとして使用され、`csv` ファイルを形成して StreamLoad インポートを行います。
+カラムセパレータを変更するには、`loadProps` を適切に設定してください。
 
 ```json
 "loadProps": {
@@ -167,7 +167,7 @@ DataX のフルパッケージをダウンロードするには `https://github.
 }
 ```
 
-インポート形式を `json` に変更するには、`loadProps` を適切に設定します。
+インポート形式を `json` に変更するには、`loadProps` を適切に設定してください。
 
 ```json
 "loadProps": {
@@ -176,11 +176,11 @@ DataX のフルパッケージをダウンロードするには `https://github.
 }
 ```
 
-> `json` 形式は、ライターがデータを JSON 形式で StarRocks にインポートするためのものです。
+> `json` 形式は、writer が JSON 形式で StarRocks にデータをインポートするためのものです。
 
-## タイムゾーンについて
+## About time zone
 
-ソース tp ライブラリが別のタイムゾーンにある場合、datax.py を実行する際に、コマンドラインの後に次のパラメータを追加します
+ソース tp ライブラリが別のタイムゾーンにある場合、datax.py を実行する際に、コマンドラインの後に次のパラメータを追加します。
 
 ```json
 "-Duser.timezone=xx"

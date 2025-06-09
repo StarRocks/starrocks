@@ -4,33 +4,35 @@ displayed_sidebar: docs
 
 # map_apply
 
+## 説明
+
 元の Map のキーと値に [Lambda expression](../Lambda_expression.md) を適用し、新しい Map を生成します。この関数は v3.0 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 MAP map_apply(lambda_func, any_map)
 ```
 
-## Parameters
+## パラメータ
 
 - `lambda_func`: Lambda expression。
 
-- `any_map`: Lambda expression が適用される Map。
+- `any_map`: Lambda expression が適用される map。
 
-## Return value
+## 戻り値
 
-Map 値を返します。結果の Map のキーと値のデータ型は、Lambda expression の結果によって決まります。
+map 値を返します。結果の map のキーと値のデータ型は、Lambda expression の結果によって決まります。
 
 入力パラメータが NULL の場合、NULL が返されます。
 
-元の Map のキーまたは値が NULL の場合、NULL は通常の値として処理されます。
+元の map のキーまたは値が NULL の場合、NULL は通常の値として処理されます。
 
 Lambda expression は 2 つのパラメータを持つ必要があります。最初のパラメータはキーを表します。2 番目のパラメータは値を表します。
 
-## Examples
+## 例
 
-次の例では、[map_from_arrays()](map_from_arrays.md) を使用して Map 値 `{1:"ab",3:"cd"}` を生成します。その後、Lambda expression は各キーを 1 ずつ増加させ、各値の長さを計算します。たとえば、「ab」の長さは 2 です。
+次の例では、[map_from_arrays()](map_from_arrays.md) を使用して map 値 `{1:"ab",3:"cd"}` を生成します。その後、Lambda expression は各キーを 1 増やし、各値の長さを計算します。例えば、「ab」の長さは 2 です。
 
 ```SQL
 mysql> select map_apply((k,v)->(k+1,length(v)), col_map)

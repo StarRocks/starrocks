@@ -8,11 +8,11 @@ displayed_sidebar: docs
 
 SQL ブラックリストから SQL 正規表現を削除します。
 
-SQL ブラックリストの詳細については、[Manage SQL Blacklist](../../../../administration/management/resource_management/Blacklist.md) を参照してください。
+SQL ブラックリストの詳細については、 [Manage SQL Blacklist](../../../../administration/management/resource_management/Blacklist.md) を参照してください。
 
 :::tip
 
-この操作には、SYSTEM レベルの BLACKLIST 権限が必要です。[GRANT](../../account-management/GRANT.md) の指示に従って、この権限を付与することができます。
+この操作には、SYSTEM レベルの BLACKLIST 権限が必要です。 [GRANT](../../account-management/GRANT.md) の指示に従ってこの権限を付与することができます。
 
 :::
 
@@ -24,7 +24,7 @@ DELETE SQLBLACKLIST <sql_index_number>
 
 ## パラメータ
 
-`sql_index_number`: ブラックリスト内の SQL 正規表現のインデックス番号。複数のインデックス番号はカンマ (,) とスペースで区切ります。インデックス番号は [SHOW SQLBLACKLIST](SHOW_SQLBLACKLIST.md) を使用して取得できます。
+`sql_index_number`: ブラックリスト内の SQL 正規表現のインデックス番号です。複数のインデックス番号はカンマ (,) とスペースで区切ります。インデックス番号は [SHOW SQLBLACKLIST](SHOW_SQLBLACKLIST.md) を使用して取得できます。
 
 ## 例
 

@@ -128,14 +128,14 @@ public class QueryRuntimeProfile {
     // ------------------------------------------------------------------------------------
     // Fields for export.
     // ------------------------------------------------------------------------------------
-    private final List<String> exportFiles = Lists.newArrayList();
-    private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
-    private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
+    private final List<String> exportFiles = Lists.newCopyOnWriteArrayList();
+    private final List<TTabletCommitInfo> commitInfos = Lists.newCopyOnWriteArrayList();
+    private final List<TTabletFailInfo> failInfos = Lists.newCopyOnWriteArrayList();
 
     // ------------------------------------------------------------------------------------
     // Fields for external table sink
     // ------------------------------------------------------------------------------------
-    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
+    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newCopyOnWriteArrayList();
 
     // Fields for datacache
     private final DataCacheSelectMetrics dataCacheSelectMetrics = new DataCacheSelectMetrics();
@@ -669,7 +669,11 @@ public class QueryRuntimeProfile {
         for (Pair<RuntimeProfile, Boolean> child : pipelineProfile.getChildList()) {
             RuntimeProfile operatorProfile = child.first;
             RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
-            Preconditions.checkNotNull(commonMetrics);
+            // skip it if it does not contain CommonMetrics
+            if (commonMetrics == null) {
+                LOG.warn("Pipeline profile does not contain CommonMetrics: {}", operatorProfile);
+                continue;
+            }
 
             if (commonMetrics.containsInfoString("IsChild")) {
                 continue;

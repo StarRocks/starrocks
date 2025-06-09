@@ -52,6 +52,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
@@ -207,6 +208,17 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         indexSchemaMap.put(shadowIdxId, shadowIdxSchema);
     }
 
+    private void restoreColumnUniqueIdIfNeed(List<Column> columns) {
+        boolean needRestoreColumnUniqueId = (columns.get(0).getUniqueId() < 0);
+        if (needRestoreColumnUniqueId) {
+            for (int i = 0; i < columns.size(); i++) {
+                Column col = columns.get(i);
+                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+                col.setUniqueId(i);
+            }
+        }
+    }
+
     // REQUIRE: has acquired the exclusive lock of database
     void addShadowIndexToCatalog(@NotNull OlapTable table, long visibleTxnId) {
         Preconditions.checkState(visibleTxnId != -1);
@@ -232,7 +244,17 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 sortKeyColumnUniqueIds = sortKeyUniqueIds;
             }
 
-            table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
+            // If upgraded from an old version and do schema change,
+            // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
+            // so here we initialize column uniqueId here.
+            List<Column> columns = indexSchemaMap.get(shadowIdxId);
+            boolean restored = LakeTableHelper.restoreColumnUniqueId(columns);
+            if (restored) {
+                LOG.info("Columns of index {} in table {} has reset all unique ids, column size: {}", shadowIdxId,
+                        tableName, columns.size());
+            }
+
+            table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), columns, 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
                     table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes,
                     sortKeyColumnUniqueIds);

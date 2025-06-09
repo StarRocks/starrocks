@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # lower
 
+## Description
+
 引数内のすべての文字列を小文字に変換します。
 
-## 構文
+## Syntax
 
 ```Haskell
 INT lower(VARCHAR str)
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > SELECT lower("AbC123");
@@ -23,6 +25,6 @@ MySQL > SELECT lower("AbC123");
 +-----------------+
 ```
 
-## キーワード
+## keyword
 
 LOWER

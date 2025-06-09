@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # hll_cardinality
 
+## 説明
+
 単一の HLL 型の値の基数を計算します。
 
-## Syntax
+## 構文
 
 ```Haskell
 HLL_CARDINALITY(hll)
 ```
 
-## Examples
+## 例
 
 ```plain text
 MySQL > select HLL_CARDINALITY(uv_set) from test_uv;
@@ -23,6 +25,6 @@ MySQL > select HLL_CARDINALITY(uv_set) from test_uv;
 +---------------------------+
 ```
 
-## keyword
+## キーワード
 
 HLL,HLL_CARDINALITY

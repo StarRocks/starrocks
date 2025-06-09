@@ -68,7 +68,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         validatePassword(password);
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         info.setPassword(password.getBytes(StandardCharsets.UTF_8));
-        info.setTextForAuthPlugin(textForAuthPlugin);
+        info.setTextForAuthPlugin(null);
         return info;
     }
 

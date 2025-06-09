@@ -393,8 +393,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "task run ttl")
     public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
-    @Deprecated
-    @ConfField(mutable = true, comment = "[DEPRECATED as enable_task_history_archive] max number of task run history. ")
+    @ConfField(mutable = true, comment = "max number of task run history. ")
     public static int task_runs_max_history_number = 10000;
 
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
@@ -2538,7 +2537,8 @@ public class Config extends ConfigBase {
     /**
      * empty shard group clean threshold (by create time).
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "protection time for FE to clean unused tablet groups in shared-data mode," +
+            " tablet groups created newer than this time period will not be cleaned.")
     public static long shard_group_clean_threshold_sec = 3600L;
 
     /**

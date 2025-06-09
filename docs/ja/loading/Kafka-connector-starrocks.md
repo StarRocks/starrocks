@@ -2,17 +2,17 @@
 displayed_sidebar: docs
 ---
 
-# Kafka コネクタを使用したデータのロード
+# Kafka コネクタを使用してデータをロードする
 
-StarRocks は、Apache Kafka® コネクタ（StarRocks Connector for Apache Kafka®、以下 Kafka コネクタと略します）という独自開発のコネクタを提供しています。このコネクタはシンクコネクタとして、Kafka からメッセージを継続的に消費し、StarRocks にロードします。Kafka コネクタは少なくとも一度のセマンティクスを保証します。
+StarRocks は、Apache Kafka® コネクタ (StarRocks Connector for Apache Kafka®) という独自開発のコネクタを提供しており、Kafka からメッセージを継続的に消費し、それを StarRocks にロードします。Kafka コネクタは、少なくとも一度のセマンティクスを保証します。
 
-Kafka コネクタは Kafka Connect とシームレスに統合でき、StarRocks が Kafka エコシステムとより良く統合されることを可能にします。リアルタイムデータを StarRocks にロードしたい場合には賢明な選択です。Routine Load と比較して、以下のシナリオでは Kafka コネクタの使用が推奨されます：
+Kafka コネクタは Kafka Connect とシームレスに統合でき、StarRocks が Kafka エコシステムとより良く統合されます。リアルタイムデータを StarRocks にロードしたい場合には賢明な選択です。Routine Load と比較して、以下のシナリオでは Kafka コネクタの使用が推奨されます。
 
-- Routine Load は CSV、JSON、Avro フォーマットでのデータロードのみをサポートしていますが、Kafka コネクタは Protobuf など、より多くのフォーマットでデータをロードできます。Kafka Connect のコンバータを使用してデータを JSON や CSV フォーマットに変換できる限り、Kafka コネクタを介して StarRocks にデータをロードできます。
+- Routine Load は CSV、JSON、Avro フォーマットでのデータロードのみをサポートしていますが、Kafka コネクタは Protobuf など、より多くのフォーマットでのデータロードが可能です。Kafka Connect のコンバータを使用してデータを JSON や CSV フォーマットに変換できれば、Kafka コネクタを介して StarRocks にデータをロードできます。
 - Debezium フォーマットの CDC データなど、データ変換をカスタマイズします。
 - 複数の Kafka トピックからデータをロードします。
 - Confluent Cloud からデータをロードします。
-- ロードバッチサイズ、並行性、その他のパラメータを細かく制御して、ロード速度とリソース使用率のバランスを取る必要があります。
+- ロードバッチサイズ、並行性、その他のパラメータを細かく制御して、ロード速度とリソース利用のバランスを取る必要があります。
 
 ## 準備
 
@@ -27,24 +27,24 @@ Kafka コネクタは Kafka Connect とシームレスに統合でき、StarRock
 
 自己管理の Apache Kafka クラスターと Confluent Cloud の両方がサポートされています。
 
-- 自己管理の Apache Kafka クラスターの場合、[Apache Kafka クイックスタート](https://kafka.apache.org/quickstart)を参照して、Kafka クラスターを迅速にデプロイできます。Kafka Connect はすでに Kafka に統合されています。
+- 自己管理の Apache Kafka クラスターの場合、[Apache Kafka クイックスタート](https://kafka.apache.org/quickstart) を参照して、Kafka クラスターを迅速にデプロイできます。Kafka Connect はすでに Kafka に統合されています。
 - Confluent Cloud の場合、Confluent アカウントを持ち、クラスターを作成していることを確認してください。
 
 ### Kafka コネクタのダウンロード
 
-Kafka コネクタを Kafka Connect に提出します：
+Kafka コネクタを Kafka Connect に提出します。
 
-- 自己管理の Kafka クラスター：
+- 自己管理の Kafka クラスター:
 
   [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) をダウンロードして解凍します。
 
-- Confluent Cloud：
+- Confluent Cloud:
 
   現在、Kafka コネクタは Confluent Hub にアップロードされていません。[starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) をダウンロードして解凍し、ZIP ファイルにパッケージして Confluent Cloud にアップロードする必要があります。
 
 ### ネットワーク構成
 
-Kafka が配置されているマシンが StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト：`8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト：`9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（デフォルト：`8040`）を介してアクセスできることを確認してください。
+Kafka が配置されているマシンが StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port) (デフォルト: `8030`) および [`query_port`](../administration/management/FE_configuration.md#query_port) (デフォルト: `9030`) を介してアクセスでき、BE ノードに [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (デフォルト: `8040`) を介してアクセスできることを確認してください。
 
 ## 使用方法
 
@@ -70,16 +70,15 @@ USE example_db;
 CREATE TABLE test_tbl (id INT, city STRING);
 ```
 
-### Kafka コネクタと Kafka Connect の設定、そして Kafka Connect を実行してデータをロード
+### Kafka コネクタと Kafka Connect の設定と実行、データのロード
 
 #### スタンドアロンモードで Kafka Connect を実行
 
 1. Kafka コネクタを設定します。Kafka インストールディレクトリの **config** ディレクトリに、Kafka コネクタ用の設定ファイル **connect-StarRocks-sink.properties** を作成し、以下のパラメータを設定します。詳細なパラメータと説明については、[Parameters](#Parameters) を参照してください。
 
-    :::info
+    :::note
 
-    - この例では、StarRocks が提供する Kafka コネクタは、Kafka からデータを継続的に消費し、StarRocks にデータをロードできるシンクコネクタです。
-    - ソースデータが CDC データ（例えば、Debezium フォーマットのデータ）であり、StarRocks テーブルが主キーテーブルである場合、StarRocks が提供する Kafka コネクタ用の設定ファイル **connect-StarRocks-sink.properties** で [`transform`](#load-debezium-formatted-cdc-data) を設定し、ソースデータの変更を主キーテーブルに同期する必要があります。
+    Kafka コネクタはシンクコネクタです。
 
     :::
 
@@ -91,24 +90,28 @@ CREATE TABLE test_tbl (id INT, city STRING);
     value.converter=org.apache.kafka.connect.json.JsonConverter
     key.converter.schemas.enable=true
     value.converter.schemas.enable=false
-    # StarRocks クラスター内の FE の HTTP URL。デフォルトポートは 8030。
+    # StarRocks クラスター内の FE の HTTP URL。デフォルトポートは 8030 です。
     starrocks.http.url=192.168.xxx.xxx:8030
     # Kafka トピック名が StarRocks テーブル名と異なる場合、それらの間のマッピング関係を設定する必要があります。
     starrocks.topic2table.map=test:test_tbl
-    # StarRocks のユーザー名を入力します。
+    # StarRocks ユーザー名を入力します。
     starrocks.username=user1
-    # StarRocks のパスワードを入力します。
+    # StarRocks パスワードを入力します。
     starrocks.password=123456
     starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
     ```
 
+    > **NOTICE**
+    >
+    > ソースデータが Debezium フォーマットの CDC データであり、StarRocks テーブルが主キーテーブルである場合、ソースデータの変更を主キーテーブルに同期するために [`transform`](#load-debezium-formatted-cdc-data) を設定する必要があります。
+
 2. Kafka Connect を設定して実行します。
 
-   1. Kafka Connect を設定します。**config** ディレクトリの設定ファイル **config/connect-standalone.properties** で、以下のパラメータを設定します。詳細なパラメータと説明については、[Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running) を参照してください。
+   1. Kafka Connect を設定します。**config** ディレクトリ内の設定ファイル **config/connect-standalone.properties** に以下のパラメータを設定します。詳細なパラメータと説明については、[Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running) を参照してください。以下の例では starrocks-kafka-connector バージョン `1.0.3` を使用しています。新しいバージョンを使用する場合は、対応する変更を行う必要があります。
 
         ```yaml
-        # Kafka ブローカーのアドレス。複数の Kafka ブローカーのアドレスはカンマ（,）で区切る必要があります。
+        # Kafka ブローカーのアドレス。複数の Kafka ブローカーのアドレスはカンマ (,) で区切る必要があります。
         # この例では、Kafka クラスターにアクセスするためのセキュリティプロトコルとして PLAINTEXT を使用しています。他のセキュリティプロトコルを使用して Kafka クラスターにアクセスする場合は、このファイルに関連情報を設定する必要があります。
         bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
@@ -117,7 +120,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 解凍後の Kafka コネクタの絶対パス。例：
+        # 解凍後の starrocks-kafka-connector の絶対パス。例:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
@@ -131,10 +134,10 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 1. Kafka Connect を設定して実行します。
 
-    1. Kafka Connect を設定します。**config** ディレクトリの設定ファイル `config/connect-distributed.properties` で、以下のパラメータを設定します。詳細なパラメータと説明については、[Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running) を参照してください。
+    1. Kafka Connect を設定します。**config** ディレクトリ内の設定ファイル `config/connect-distributed.properties` に以下のパラメータを設定します。詳細なパラメータと説明については、[Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running) を参照してください。
 
         ```yaml
-        # Kafka ブローカーのアドレス。複数の Kafka ブローカーのアドレスはカンマ（,）で区切る必要があります。
+        # Kafka ブローカーのアドレス。複数の Kafka ブローカーのアドレスはカンマ (,) で区切る必要があります。
         # この例では、Kafka クラスターにアクセスするためのセキュリティプロトコルとして PLAINTEXT を使用しています。他のセキュリティプロトコルを使用して Kafka クラスターにアクセスする場合は、このファイルに関連情報を設定する必要があります。
         bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
@@ -143,7 +146,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 解凍後の Kafka コネクタの絶対パス。例：
+        # 解凍後の starrocks-kafka-connector の絶対パス。例:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
@@ -155,12 +158,11 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. Kafka コネクタを設定して作成します。分散モードでは、REST API を通じて Kafka コネクタを設定して作成する必要があります。パラメータと説明については、[Parameters](#Parameters) を参照してください。
 
-    :::info
+      :::note
 
-    - この例では、StarRocks が提供する Kafka コネクタは、Kafka からデータを継続的に消費し、StarRocks にデータをロードできるシンクコネクタです。
-    - ソースデータが CDC データ（例えば、Debezium フォーマットのデータ）であり、StarRocks テーブルが主キーテーブルである場合、StarRocks が提供する Kafka コネクタ用の設定ファイル **connect-StarRocks-sink.properties** で [`transform`](#load-debezium-formatted-cdc-data) を設定し、ソースデータの変更を主キーテーブルに同期する必要があります。
+      Kafka コネクタはシンクコネクタです。
 
-    :::
+      :::
 
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
@@ -182,7 +184,13 @@ CREATE TABLE test_tbl (id INT, city STRING);
       }'
       ```
 
-#### StarRocks テーブルをクエリ
+      :::info
+      
+      ソースデータが Debezium フォーマットの CDC データであり、StarRocks テーブルが主キーテーブルである場合、ソースデータの変更を主キーテーブルに同期するために [`transform`](#load-debezium-formatted-cdc-data) を設定する必要があります。
+
+      :::
+
+#### StarRocks テーブルのクエリ
 
 ターゲット StarRocks テーブル `test_tbl` をクエリします。
 
@@ -207,7 +215,7 @@ MySQL [example_db]> select * from test_tbl;
 
 **必須**: YES<br/>
 **デフォルト値**:<br/>
-**説明**: この Kafka コネクタの名前。Kafka Connect クラスター内のすべての Kafka コネクタの中でグローバルにユニークである必要があります。例：starrocks-kafka-connector。
+**説明**: この Kafka コネクタの名前。Kafka Connect クラスター内のすべての Kafka コネクタ間でグローバルに一意である必要があります。例: starrocks-kafka-connector。
 
 ### connector.class
 
@@ -217,15 +225,15 @@ MySQL [example_db]> select * from test_tbl;
 
 ### topics
 
-**必須**:<br/>
+**必須**: YES<br/>
 **デフォルト値**:<br/>
-**説明**: 購読する1つ以上のトピックで、各トピックは StarRocks テーブルに対応します。デフォルトでは、StarRocks はトピック名が StarRocks テーブル名と一致すると仮定します。そのため、StarRocks はトピック名を使用してターゲットの StarRocks テーブルを決定します。`topics` または `topics.regex`（下記）のいずれかを記入してください。ただし、StarRocks テーブル名がトピック名と異なる場合は、オプションの `starrocks.topic2table.map` パラメータ（下記）を使用してトピック名からテーブル名へのマッピングを指定します。
+**説明**: 購読する1つ以上のトピックで、各トピックは StarRocks テーブルに対応します。デフォルトでは、StarRocks はトピック名が StarRocks テーブル名と一致すると仮定します。したがって、StarRocks はトピック名を使用してターゲットの StarRocks テーブルを決定します。`topics` または `topics.regex` (下記) のいずれかを選択して入力してください。ただし、StarRocks テーブル名がトピック名と異なる場合は、オプションの `starrocks.topic2table.map` パラメータ (下記) を使用してトピック名からテーブル名へのマッピングを指定します。
 
 ### topics.regex
 
 **必須**:<br/>
-**デフォルト値**:
-**説明**: 購読する1つ以上のトピックを一致させる正規表現。詳細については `topics` を参照してください。`topics.regex` または `topics`（上記）のいずれかを記入してください。<br/>
+**デフォルト値**: 購読する1つ以上のトピックに一致する正規表現。詳細については `topics` を参照してください。`topics.regex` または `topics` (上記) のいずれかを選択して入力してください。<br/>
+**説明**:
 
 ### starrocks.topic2table.map
 
@@ -237,7 +245,7 @@ MySQL [example_db]> select * from test_tbl;
 
 **必須**: YES<br/>
 **デフォルト値**:<br/>
-**説明**: StarRocks クラスター内の FE の HTTP URL。フォーマットは `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...` です。複数のアドレスはカンマ（,）で区切ります。例：`192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。
+**説明**: StarRocks クラスター内の FE の HTTP URL。フォーマットは `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...` です。複数のアドレスはカンマ (,) で区切ります。例: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。
 
 ### starrocks.database.name
 
@@ -249,7 +257,7 @@ MySQL [example_db]> select * from test_tbl;
 
 **必須**: YES<br/>
 **デフォルト値**:<br/>
-**説明**: StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) 権限を持つ必要があります。
+**説明**: StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) 権限を持っている必要があります。
 
 ### starrocks.password
 
@@ -261,25 +269,25 @@ MySQL [example_db]> select * from test_tbl;
 
 **必須**: NO<br/>
 **デフォルト値**: Kafka Connect クラスターで使用されるキーコンバータ<br/>
-**説明**: このパラメータはシンクコネクタ（Kafka-connector-starrocks）用のキーコンバータを指定し、Kafka データのキーをデシリアライズするために使用されます。デフォルトのキーコンバータは Kafka Connect クラスターで使用されるものです。
+**説明**: このパラメータは、シンクコネクタ (Kafka-connector-starrocks) のキーコンバータを指定し、Kafka データのキーをデシリアライズするために使用されます。デフォルトのキーコンバータは、Kafka Connect クラスターで使用されるものです。
 
 ### value.converter
 
 **必須**: NO<br/>
 **デフォルト値**: Kafka Connect クラスターで使用される値コンバータ<br/>
-**説明**: このパラメータはシンクコネクタ（Kafka-connector-starrocks）用の値コンバータを指定し、Kafka データの値をデシリアライズするために使用されます。デフォルトの値コンバータは Kafka Connect クラスターで使用されるものです。
+**説明**: このパラメータは、シンクコネクタ (Kafka-connector-starrocks) の値コンバータを指定し、Kafka データの値をデシリアライズするために使用されます。デフォルトの値コンバータは、Kafka Connect クラスターで使用されるものです。
 
 ### key.converter.schema.registry.url
 
 **必須**: NO<br/>
 **デフォルト値**:<br/>
-**説明**: キーコンバータ用のスキーマレジストリ URL。
+**説明**: キーコンバータのスキーマレジストリ URL。
 
 ### value.converter.schema.registry.url
 
 **必須**: NO<br/>
 **デフォルト値**:<br/>
-**説明**: 値コンバータ用のスキーマレジストリ URL。
+**説明**: 値コンバータのスキーマレジストリ URL。
 
 ### tasks.max
 
@@ -291,72 +299,72 @@ MySQL [example_db]> select * from test_tbl;
 
 **必須**: NO<br/>
 **デフォルト値**: 94371840(90M)<br/>
-**説明**: 一度に StarRocks に送信される前にメモリに蓄積できるデータの最大サイズ。最大値は 64 MB から 10 GB の範囲です。Stream Load SDK バッファはデータをバッファリングするために複数の Stream Load ジョブを作成することがあります。したがって、ここで言及されている閾値は総データサイズを指します。
+**説明**: 一度に StarRocks に送信される前にメモリに蓄積できるデータの最大サイズ。最大値は 64 MB から 10 GB の範囲です。Stream Load SDK バッファはデータをバッファリングするために複数の Stream Load ジョブを作成する可能性があることに注意してください。したがって、ここで言及されているしきい値は、総データサイズを指します。
 
-### bufferflush.intervalms
+### bufferflush.intervalms              
 
 **必須**: NO<br/>
 **デフォルト値**: 1000<br/>
 **説明**: データのバッチを送信する間隔で、ロードの遅延を制御します。範囲: [1000, 3600000]。
 
-### connect.timeoutms
+### connect.timeoutms                   
 
 **必須**: NO<br/>
 **デフォルト値**: 1000<br/>
 **説明**: HTTP URL への接続のタイムアウト。範囲: [100, 60000]。
 
-### sink.properties.*
+### sink.properties.*                   
 
 **必須**:<br/>
 **デフォルト値**:<br/>
-**説明**: ロード動作を制御するための Stream Load パラメータ。例えば、パラメータ `sink.properties.format` は Stream Load に使用されるフォーマットを指定し、CSV または JSON などがあります。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+**説明**: ロード動作を制御するための Stream Load パラメータ。例えば、パラメータ `sink.properties.format` は Stream Load に使用されるフォーマット (CSV や JSON など) を指定します。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
 
-### sink.properties.format
+### sink.properties.format              
 
 **必須**: NO<br/>
 **デフォルト値**: json<br/>
-**説明**: Stream Load に使用されるフォーマット。Kafka コネクタは、データの各バッチを StarRocks に送信する前にフォーマットに変換します。有効な値: `csv` と `json`。詳細については、[CSV パラメータ](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-parameters) および [JSON パラメータ](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#json-parameters) を参照してください。
+**説明**: Stream Load に使用されるフォーマット。Kafka コネクタは、データの各バッチをこのフォーマットに変換してから StarRocks に送信します。有効な値は `csv` と `json` です。詳細については、[CSV パラメータ](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-parameters) および [JSON パラメータ](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#json-parameters) を参照してください。
 
 ### sink.properties.partial_update
 
 **必須**:  NO<br/>
 **デフォルト値**: `FALSE`<br/>
-**説明**: 部分更新を使用するかどうか。有効な値: `TRUE` と `FALSE`。デフォルト値: `FALSE`、この機能を無効にすることを示します。
+**説明**: 部分更新を使用するかどうか。有効な値は `TRUE` と `FALSE` です。デフォルト値は `FALSE` で、この機能を無効にします。
 
 ### sink.properties.partial_update_mode
 
 **必須**:  NO<br/>
 **デフォルト値**: `row`<br/>
-**説明**: 部分更新のモードを指定します。有効な値: `row` と `column`。<ul><li>値 `row`（デフォルト）は行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。</li><li>値 `column` は列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。例えば、100 列のテーブルで、すべての行に対して 10 列（全体の 10%）のみが更新される場合、列モードの更新速度は 10 倍速くなります。</li></ul>
+**説明**: 部分更新のモードを指定します。有効な値は `row` と `column` です。<ul><li> デフォルトの `row` は行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。</li><li>`column` は列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。例えば、100 列のテーブルで、すべての行に対して 10 列 (全体の 10%) のみが更新される場合、列モードの更新速度は 10 倍速くなります。</li></ul>
 
 ## 使用上の注意
 
 ### フラッシュポリシー
 
-Kafka コネクタはデータをメモリにバッファし、Stream Load を介して StarRocks にバッチでフラッシュします。以下の条件のいずれかが満たされた場合、フラッシュがトリガーされます：
+Kafka コネクタはデータをメモリにバッファし、Stream Load を介して StarRocks にバッチでフラッシュします。以下の条件のいずれかが満たされた場合にフラッシュがトリガーされます。
 
 - バッファされた行のバイト数が `bufferflush.maxbytes` の制限に達したとき。
 - 最後のフラッシュからの経過時間が `bufferflush.intervalms` の制限に達したとき。
-- コネクタがタスクのオフセットをコミットしようとする間隔に達したとき。この間隔は Kafka Connect の設定 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html) によって制御され、デフォルト値は `60000` です。
+- タスクのオフセットをコミットしようとするコネクタの間隔に達したとき。この間隔は Kafka Connect の設定 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html) によって制御され、デフォルト値は `60000` です。
 
 データの遅延を低くするために、これらの設定を Kafka コネクタの設定で調整します。ただし、フラッシュの頻度が増えると CPU と I/O の使用量が増加します。
 
-### 制限事項
+### 制限
 
 - Kafka トピックからの単一メッセージを複数のデータ行にフラット化して StarRocks にロードすることはサポートされていません。
-- StarRocks が提供する Kafka コネクタのシンクは少なくとも一度のセマンティクスを保証します。
+- Kafka コネクタのシンクは少なくとも一度のセマンティクスを保証します。
 
 ## ベストプラクティス
 
-### Debezium フォーマットの CDC データのロード
+### Debezium フォーマットの CDC データをロードする
 
 Debezium は、さまざまなデータベースシステムでのデータ変更を監視し、これらの変更を Kafka にストリーミングすることをサポートする人気のある Change Data Capture (CDC) ツールです。以下の例では、PostgreSQL の変更を StarRocks の **主キーテーブル** に書き込むために Kafka コネクタを設定して使用する方法を示します。
 
 #### ステップ 1: Kafka のインストールと開始
 
-> **注意**
+> **NOTE**
 >
-> 独自の Kafka 環境を持っている場合、このステップをスキップできます。
+> 独自の Kafka 環境を持っている場合、このステップはスキップできます。
 
 1. 公式サイトから最新の Kafka リリースを[ダウンロード](https://dlcdn.apache.org/kafka/)し、パッケージを解凍します。
 
@@ -639,7 +647,7 @@ DISTRIBUTED BY hash(id) buckets 1
 PROPERTIES (
 "bucket_size" = "4294967296",
 "in_memory" = "false",
-"enable_persistent_index" = "true",
+"enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true"
 );
@@ -661,7 +669,7 @@ PROPERTIES (
    plugin.path=/path/to/kafka_2.13-3.7.0/plugins
    ```
 
-2. **pg-source.properties** で PostgreSQL ソースコネクタを設定します。
+2. **pg-source.properties** に PostgreSQL ソースコネクタを設定します。
 
    ```Json
    {
@@ -679,7 +687,7 @@ PROPERTIES (
    }
    ```
 
-3. **sr-sink.properties** で StarRocks シンクコネクタを設定します。
+3. **sr-sink.properties** に StarRocks シンクコネクタを設定します。
 
    ```Json
    {
@@ -704,17 +712,17 @@ PROPERTIES (
    }
    ```
 
-   > **注意**
+   > **NOTE**
    >
    > - StarRocks テーブルが主キーテーブルでない場合、`addfield` トランスフォームを指定する必要はありません。
    > - unwrap トランスフォームは Debezium によって提供され、操作タイプに基づいて Debezium の複雑なデータ構造をアンラップするために使用されます。詳細については、[New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html) を参照してください。
 
 4. Kafka Connect を設定します。
 
-   Kafka Connect 設定ファイル **config/connect-standalone.properties** で以下の設定項目を設定します。
+   Kafka Connect の設定ファイル **config/connect-standalone.properties** に以下の設定項目を設定します。
 
    ```Properties
-   # Kafka ブローカーのアドレス。複数の Kafka ブローカーのアドレスはカンマ（,）で区切る必要があります。
+   # Kafka ブローカーのアドレス。複数の Kafka ブローカーのアドレスはカンマ (,) で区切る必要があります。
    # この例では、Kafka クラスターにアクセスするためのセキュリティプロトコルとして PLAINTEXT を使用しています。
    # 他のセキュリティプロトコルを使用して Kafka クラスターにアクセスする場合は、この部分に関連情報を設定します。
 
@@ -725,7 +733,7 @@ PROPERTIES (
    key.converter.schemas.enable=true
    value.converter.schemas.enable=false
 
-   # 解凍後の starrocks-kafka-connector の絶対パス。例：
+   # 解凍後の starrocks-kafka-connector の絶対パス。例:
    plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
 
    # フラッシュポリシーを制御するパラメータ。詳細については、使用上の注意セクションを参照してください。

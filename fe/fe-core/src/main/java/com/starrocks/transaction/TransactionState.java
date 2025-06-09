@@ -78,6 +78,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -224,6 +225,17 @@ public class TransactionState implements Writable {
     @SerializedName("er")
     private Set<Long> errorReplicas;
 
+    private Set<TabletCommitInfo> tabletCommitInfos = null;
+
+    // tabletCommitInfos is not persistent because it is very large, and it is null in follower FE.
+    // 'OlapTableTxnLogApplier.applyVisibleLog' uses tabletCommitInfos to check whether replica need update version.
+    // null tabletCommitInfos will cause follower wrong version update, and query failed from follower
+    // with version not found error.
+    // so add persistent unknownReplicas to fix this issue, unknownReplicas is much less than tabletCommitInfos.
+    // unknownReplicas = total replicas - tabletCommitInfos - errorReplicas
+    @SerializedName("ur")
+    private Set<Long> unknownReplicas;
+
     @SerializedName("ctl")
     private boolean combinedTxnLog;
 
@@ -295,13 +307,14 @@ public class TransactionState implements Writable {
 
     private Span txnSpan = null;
     private String traceParent = null;
-    private Set<TabletCommitInfo> tabletCommitInfos = null;
 
     // For a transaction, we need to ensure that different clients obtain consistent partition information,
     // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
     // Therefore, a snapshot of this information is maintained here.
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+
+    private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
@@ -331,6 +344,7 @@ public class TransactionState implements Writable {
         this.finishTime = -1;
         this.reason = "";
         this.errorReplicas = Sets.newHashSet();
+        this.unknownReplicas = Sets.newHashSet();
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
@@ -355,6 +369,7 @@ public class TransactionState implements Writable {
         this.finishTime = -1;
         this.reason = "";
         this.errorReplicas = Sets.newHashSet();
+        this.unknownReplicas = Sets.newHashSet();
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
@@ -374,6 +389,10 @@ public class TransactionState implements Writable {
         this.errorReplicas = newErrorReplicas;
     }
 
+    public void addUnknownReplica(long replicaId) {
+        unknownReplicas.add(replicaId);
+    }
+
     public boolean isRunning() {
         return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.PREPARED ||
                 transactionStatus == TransactionStatus.COMMITTED;
@@ -388,16 +407,33 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
-
+    // Not skip check replica version
+    // 1. replica state is not normal and clone
+    // 2. replica is in tabletCommitInfos in leader (or not in errorReplicas and unknownReplicas in follower)
+    // 3. replica current version >= commit version
     public boolean checkReplicaNeedSkip(Tablet tablet, Replica replica, PartitionCommitInfo partitionCommitInfo) {
-        boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getState());
+        ReplicaState state = replica.getState();
+        if (state != ReplicaState.NORMAL && state != ReplicaState.CLONE) {
+            // Not skip check when replica is ALTER or SCHEMA CHANGE.
+            // Should not return false if the state is CLONE, because lastSuccessVersion will be updated incorrectly
+            // in 'OlapTableTxnLogApplier.applyVisibleLog'.
+            if (LOG.isDebugEnabled()) {
+                Backend backend =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId());
+                LOG.debug("skip replica version check because tablet {} backend {} is in state {}",
+                        tablet.getId(), backend != null ? backend.toString() : "", state);
+            }
+            return false;
+        }
+
+        boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getId());
         if (isContain) {
             return false;
         }
 
         // In order for the transaction to complete in time for this scenario: the server machine is not recovered.
         // 1. Transaction TA writes to a two-replicas tablet and enters the committed state.
-        //    The tablet's repliace are replicaA, replicaB.
+        //    The tablet's replicas are replicaA, replicaB.
         // 2. replicaA, replicaB generate tasks: PublishVersionTaskA, PublishVersionTaskB.
         //    PublishVersionTaskA/PublishVersionTaskB successfully submitted to the beA/beB via RPC.
         // 3. The machine where beB is located hangs and is not recoverable.
@@ -417,28 +453,13 @@ public class TransactionState implements Writable {
         tabletCommitInfos = null;
     }
 
-    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
-        TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
-        if (this.tabletCommitInfos == null) {
-            if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
-                // if tabletCommitInfos is null, skip this check and return true
-                LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
-                        tabletId, backend != null ? backend.toString() : "", transactionId);
-            }
-            return true;
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, long replicaId) {
+        if (tabletCommitInfos != null) {
+            return tabletCommitInfos.contains(new TabletCommitInfo(tabletId, backendId));
+        } else {
+            // tabletCommitInfos is not persistent and is null in follower fe
+            return !errorReplicas.contains(replicaId) && !unknownReplicas.contains(replicaId);
         }
-        if (state != ReplicaState.NORMAL) {
-            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
-            // We handle version missing in finishTask when change state to NORMAL
-            if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
-                LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
-                        tabletId, backend != null ? backend.toString() : "", state);
-            }
-            return true;
-        }
-        return this.tabletCommitInfos.contains(info);
     }
 
     // Only for OlapTable
@@ -755,7 +776,13 @@ public class TransactionState implements Writable {
         sb.append(", coordinator: ").append(txnCoordinator.toString());
         sb.append(", transaction status: ").append(transactionStatus);
         sb.append(", error replicas num: ").append(errorReplicas.size());
-        sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        if (!errorReplicas.isEmpty()) {
+            sb.append(", error replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        }
+        sb.append(", unknown replicas num: ").append(unknownReplicas.size());
+        if (!unknownReplicas.isEmpty()) {
+            sb.append(", unknown replica ids: ").append(Joiner.on(",").join(unknownReplicas.stream().limit(5).toArray()));
+        }
         sb.append(", prepare time: ").append(prepareTime);
         sb.append(", write end time: ").append(writeEndTimeMs);
         sb.append(", allow commit time: ").append(allowCommitTimeMs);
@@ -811,7 +838,13 @@ public class TransactionState implements Writable {
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
         sb.append(", error replicas num: ").append(errorReplicas.size());
-        sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        if (!errorReplicas.isEmpty()) {
+            sb.append(", error replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        }
+        sb.append(", unknown replicas num: ").append(unknownReplicas.size());
+        if (!unknownReplicas.isEmpty()) {
+            sb.append(", unknown replica ids: ").append(Joiner.on(",").join(unknownReplicas.stream().limit(5).toArray()));
+        }
         if (commitTime > prepareTime) {
             sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
         }
@@ -1033,6 +1066,14 @@ public class TransactionState implements Writable {
     public void clearAutomaticPartitionSnapshot() {
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
+    }
+
+    public void setIsCreatePartitionFailed(boolean v) {
+        this.isCreatePartitionFailed.set(v);
+    }
+
+    public boolean getIsCreatePartitionFailed() {
+        return this.isCreatePartitionFailed.get();
     }
 
     @Override

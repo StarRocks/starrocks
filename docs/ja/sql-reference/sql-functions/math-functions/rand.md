@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # rand, random
 
-0（含む）から1（含まない）の間のランダムな浮動小数点数を返します。
+## 説明
 
-## Syntax
+0（含む）から1（含まない）までのランダムな浮動小数点数を返します。
+
+## 構文
 
 ```Haskell
 RAND(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: オプションです。データ型は BIGINT です。`x` が指定されているかどうかに関わらず、この関数は完全にランダムな数を返します。
 
-## Return value
+## 戻り値
 
 DOUBLE 型の値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 select rand();
@@ -39,6 +41,6 @@ select rand(3);
 1 row in set (0.00 sec)
 ```
 
-## Keywords
+## キーワード
 
 RAND, RANDOM

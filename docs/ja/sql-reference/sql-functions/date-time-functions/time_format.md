@@ -15,12 +15,12 @@ VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
 ## Parameters
 
 - `time` (必須): フォーマットする TIME 型の時間値。
-- `format` (必須): 使用するフォーマット。使用可能な値:
+- `format` (必須): 使用するフォーマット。 有効な値:
 
 ```Plain Text
 %f	マイクロ秒 (000000 から 999999)
-%H	時間 (00 から 23)
-%h	時間 (00 から 12)
+%H	時 (00 から 23)
+%h	時 (00 から 12)
 %i	分 (00 から 59)
 %p	AM または PM
 %S	秒 (00 から 59)

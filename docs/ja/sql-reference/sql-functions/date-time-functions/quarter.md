@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # quarter
 
-日付の四半期部分を返します。範囲は1から4です。
+## Description
+
+日付の四半期部分を 1 から 4 の範囲で返します。
 
 ## Syntax
 

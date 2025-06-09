@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # parse_url
 
+## 説明
+
 URL を解析し、この URL からコンポーネントを抽出します。
 
 ## 構文
@@ -16,7 +18,7 @@ parse_url(expr1,expr2);
 
 `expr1`: URL。サポートされているデータ型は VARCHAR です。
 
-`expr2`: この URL から抽出するコンポーネント。サポートされているデータ型は VARCHAR です。有効な値は以下の通りです:
+`expr2`: この URL から抽出するコンポーネント。サポートされているデータ型は VARCHAR です。有効な値は以下の通りです：
 
 - PROTOCOL
 - HOST
@@ -25,7 +27,7 @@ parse_url(expr1,expr2);
 - AUTHORITY
 - FILE
 - USERINFO
-- QUERY。QUERY 内のパラメータは返されません。特定のパラメータを返したい場合は、[trim](trim.md) と共に parse_url を使用してこの実装を達成してください。詳細は[例](#examples)を参照してください。
+- QUERY。QUERY 内のパラメータは返されません。特定のパラメータを返したい場合は、[trim](trim.md) と一緒に parse_url を使用してこの実装を達成してください。詳細は [Examples](#examples) を参照してください。
 
 `expr2` は **大文字小文字を区別** します。
 

@@ -8,9 +8,9 @@ displayed_sidebar: docs
 
 StarRocks で SQL クエリを実行する際に次のような問題が発生した場合、query_dump を使用して SQL の詳細を取得し、StarRocks の技術サポートに情報を送信してトラブルシューティングを行うことができます。
 
-* SQL クエリまたは EXPLAIN を実行した際に `Unknown Error` が返される。
-* SQL クエリを実行した際にエラーメッセージや例外が返される。
-* SQL クエリの実行が期待通りに効率的でない、または実行プランを最適化できる（例えば、パーティションをプルーニングしたり、ジョインの順序を調整したりできる）。
+* SQL クエリまたは EXPLAIN を実行すると `Unknown Error` が返される。
+* SQL クエリを実行するとエラーメッセージや例外が返される。
+* SQL クエリの実行が期待通りに効率的でない、または実行プランを最適化できる（例えば、パーティションをプルーニングしたり、Join の順序を調整したりできる）。
 
 ## 機能概要
 
@@ -24,32 +24,38 @@ query_dump インターフェースは、SQL を実行する際に FE が依存�
 * 例外情報（異常スタック）
 * Explain コスト情報
 
-データのプライバシーを確保するために、データベース名、テーブル名、列名などのメタ情報を非表示化します。また、非表示化されたメタデータを使用してクエリ文を再作成します。
+データのプライバシーを確保するため、データベース名、テーブル名、列名などのメタ情報をマスキングします。また、マスキングされたメタデータを使用してクエリ文を再作成します。
 
-メタ情報の非表示化はデフォルトで有効になっています。非表示化プロセス中に例外が発生した場合、元の情報が使用されます。非表示化をバイパスする必要がある場合は、HTTP URI に "mock=false" を追加できます。
+メタ情報のマスキングはデフォルトで有効になっています。マスキング処理中に例外が発生した場合、元の情報が使用されます。マスキングをバイパスする必要がある場合は、HTTP URI に "mock=false" を追加できます。
 
 ## 構文
 
 HTTP Post
 
-`fe_host:fe_http_port/api/query_dump?db=${database}&mock=${value} post_data=${Query}`
+```shell
+ fe_host:fe_http_port/api/query_dump?db=${database}&mock=${value} post_data=${Query}
+```
 
-`wget --user=${username} --password=${password} --post-file ${query_file} "http://${fe_host}:${fe_http_port}/api/query_dump?db=${database}&mock={value}" -O ${dump_file}`
+```shell
+wget --user=${username} --password=${password} --post-file ${query_file} "http://${fe_host}:${fe_http_port}/api/query_dump?db=${database}&mock={value}" -O ${dump_file}
+```
 
-パラメータ説明:
+パラメータの説明:
 
 * query_file: クエリを含むファイル
 * dump_file: 出力ファイル
-* db: SQL クエリが実行されるデータベース。クエリに `use db` が含まれている場合、`db` パラメータはオプションです。それ以外の場合は指定する必要があります。
-* mock: 非表示化を有効または無効にするかどうか
+* db: SQL クエリが実行されるデータベース。クエリに `use db` が含まれている場合は `db` パラメータはオプションです。それ以外の場合は指定する必要があります。
+* mock: マスキングを有効または無効にするかどうか
 
 ## 例
 
-### 非表示化を無効にする
+### マスキングを無効にする
 
 コマンド:
 
+```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch&mock=false" -O dump_file
+```
 
 返されるデータ:
 
@@ -59,7 +65,7 @@ wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/ap
 {
   "statement": "select\n    l_returnflag,\n    l_linestatus,\n    sum(l_quantity) as sum_qty,\n    sum(l_extendedprice) as sum_base_price,\n    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n    avg(l_quantity) as avg_qty,\n    avg(l_extendedprice) as avg_price,\n    avg(l_discount) as avg_disc,\n    count(*) as count_order\nfrom\n    lineitem\nwhere\n    l_shipdate <= date '1998-12-01'\ngroup by\n    l_returnflag,\n    l_linestatus\norder by\n    l_returnflag,\n    l_linestatus ;\n\n",
   "table_meta": {
-    "tpch.lineitem": "CREATE TABLE `lineitem` (\n  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n  `L_QUANTITY` double NOT NULL COMMENT \"\",\n  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n  `L_TAX` double NOT NULL COMMENT \"\",\n  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE=OLAP \nDUPLICATE KEY(`L_ORDERKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" = \"1\",\n\"in_memory\" = \"false\",\n\"enable_persistent_index\" = \"true\",\n\"replicated_storage\" = \"true\",\n\"compression\" = \"LZ4\"\n);"
+    "tpch.lineitem": "CREATE TABLE `lineitem` (\n  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n  `L_QUANTITY` double NOT NULL COMMENT \"\",\n  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n  `L_TAX` double NOT NULL COMMENT \"\",\n  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE=OLAP \nDUPLICATE KEY(`L_ORDERKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" = \"1\",\n\"in_memory\" = \"false\",\n\"enable_persistent_index\" = \"false\",\n\"replicated_storage\" = \"true\",\n\"compression\" = \"LZ4\"\n);"
   },
   "table_row_count": {
     "tpch.lineitem": {
@@ -90,15 +96,17 @@ wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/ap
 }
 ```
 
-### 非表示化を有効にする（デフォルト）
+### マスキングを有効にする（デフォルト）
 
 コマンド:
 
+```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch -O dump_file
+```
 
 返されるデータ:
 
-非表示化されたデータは JSON 形式で返されます。
+マスキングされたデータは JSON 形式で返されます。
 
 ```json
 {
