@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
@@ -116,10 +117,13 @@ public class CatalogMgr {
 
             try {
                 Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+                String accessControl = properties.getOrDefault("catalog.access.control", Config.access_control);
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
                 if (serviceName == null || serviceName.isEmpty()) {
-                    if (Config.access_control.equals("ranger")) {
+                    if (accessControl.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
+                    } else if (accessControl.equals("allowall")) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
                     }
@@ -187,10 +191,13 @@ public class CatalogMgr {
             connectorMgr.addConnector(catalogName, newConnector);
 
             if (newProperties.containsKey("ranger.plugin.hive.service.name")) {
+                String accessControl = newProperties.getOrDefault("catalog.access.control", Config.access_control);
                 String serviceName = newProperties.get("ranger.plugin.hive.service.name");
                 if (StringUtils.isEmpty(serviceName)) {
-                    if ("ranger".equals(Config.access_control)) {
+                    if ("ranger".equals(accessControl)) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
+                    } else if ("allowall".equals(accessControl)) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
                     }
@@ -348,9 +355,12 @@ public class CatalogMgr {
             }
 
             String serviceName = config.get("ranger.plugin.hive.service.name");
+            String accessControl = config.getOrDefault("catalog.access.control", Config.access_control);
             if (serviceName == null || serviceName.isEmpty()) {
-                if (Config.access_control.equals("ranger")) {
+                if (accessControl.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
+                } else if (accessControl.equals("allowall")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
                 }
