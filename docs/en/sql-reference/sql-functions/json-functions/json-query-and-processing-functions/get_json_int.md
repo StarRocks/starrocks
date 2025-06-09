@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # get_json_int
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 This function analyzes and gets the integer value from a specified path in json string.
 
 :::tip
