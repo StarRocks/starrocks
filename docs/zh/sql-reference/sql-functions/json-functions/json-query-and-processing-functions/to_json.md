@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # to_json
 
-<<<<<<< HEAD
-## 功能
-=======
 将 Map 或 Struct 值转换为 JSON 字符串。如果输入值为 NULL，则返回 NULL。
 
 :::tip
-所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
+所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)。
 
 通过[生成列](../../../sql-statements/generated_columns.md)加速查询
 :::
