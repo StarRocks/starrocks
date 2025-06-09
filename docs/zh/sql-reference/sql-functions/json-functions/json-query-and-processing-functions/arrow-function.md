@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # 箭头函数
 
-<<<<<<< HEAD
-## 功能
-=======
 查询可以通过 `json_path` 表达式在 JSON 对象中定位的元素，并返回一个 JSON 值。箭头函数 `->` 比 [json_query](json_query.md) 函数更简洁且易于使用。
 
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和 [概览页面](../overview-of-json-functions-and-operators.md)上。
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过 [生成列](../../../sql-statements/generated_columns.md) 加速查询
 :::
