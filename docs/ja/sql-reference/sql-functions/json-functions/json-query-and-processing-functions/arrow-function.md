@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # Arrow function
 
-## 説明
-
 JSON オブジェクト内で `json_path` 式によって位置を特定できる要素をクエリし、JSON 値を返します。アロー関数 `->` は、[json_query](json_query.md) 関数よりもコンパクトで使いやすいです。
+
+:::tip
+すべての JSON 関数と演算子は、ナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 ## 構文
 
@@ -38,7 +42,7 @@ mysql> SELECT parse_json('{"a": {"b": 1}}') -> '$.a.b';
 
 例 2: 入れ子になったアロー関数を使用して要素をクエリします。別のアロー関数が入れ子になったアロー関数は、入れ子になったアロー関数によって返された結果に基づいて要素をクエリします。
 
-> この例では、`json_path` 式からルート要素 $ が省略されています。
+> この例では、ルート要素 $ は `json_path` 式から省略されています。
 
 ```plaintext
 mysql> SELECT parse_json('{"a": {"b": 1}}')->'a'->'b';
@@ -48,7 +52,7 @@ mysql> SELECT parse_json('{"a": {"b": 1}}')->'a'->'b';
 
 例 3: 指定された JSON オブジェクト内で `'a'` 式によって位置を特定できる要素をクエリします。
 
-> この例では、`json_path` 式からルート要素 $ が省略されています。
+> この例では、ルート要素 $ は `json_path` 式から省略されています。
 
 ```plaintext
 mysql> SELECT parse_json('{"a": "b"}') -> 'a';

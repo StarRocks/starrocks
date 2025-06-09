@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # json_keys
 
-## 説明
-
 JSON オブジェクトからトップレベルのキーを JSON 配列として返します。また、`path` が指定されている場合は、そのパスからトップレベルのキーを返します。
+
+:::tip
+すべての JSON 関数と演算子は、ナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 ## 構文
 

@@ -4,7 +4,13 @@ displayed_sidebar: docs
 
 # json_exists
 
-## 説明
+`json_path` 式によって位置を特定できる要素が JSON オブジェクトに含まれているかどうかを確認します。要素が存在する場合、JSON_EXISTS 関数は `1` を返します。そうでない場合、JSON_EXISTS 関数は `0` を返します。
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 JSON オブジェクトが `json_path` 式で特定できる要素を含んでいるかどうかを確認します。要素が存在する場合、JSON_EXISTS 関数は `1` を返します。そうでない場合、JSON_EXISTS 関数は `0` を返します。
 

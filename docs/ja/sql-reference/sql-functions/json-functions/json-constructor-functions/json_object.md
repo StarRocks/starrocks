@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # json_object
 
-## 説明
-
 1つ以上のキーと値のペアをJSONオブジェクトに変換します。このオブジェクトはキーと値のペアで構成され、キーは辞書順にソートされます。
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 ## 構文
 
@@ -16,9 +20,9 @@ json_object(key, value, ...)
 
 ## パラメータ
 
-- `key`: JSONオブジェクトのキー。VARCHARデータ型のみサポートされます。
+- `key`: JSON オブジェクト内のキー。VARCHAR データ型のみサポートされます。
 
-- `value`: JSONオブジェクトの値。`NULL` 値と以下のデータ型のみサポートされます: STRING, VARCHAR, CHAR, JSON, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, FLOAT, および BOOLEAN。
+- `value`: JSON オブジェクト内の値。`NULL` 値と、次のデータ型のみサポートされます: STRING, VARCHAR, CHAR, JSON, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, FLOAT, および BOOLEAN。
 
 ## 戻り値
 

@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # json_string
 
-## 説明
-
 JSON オブジェクトを JSON 文字列に変換します
+
+:::tip
+すべての JSON 関数と Operator はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に記載されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 ## 構文
 

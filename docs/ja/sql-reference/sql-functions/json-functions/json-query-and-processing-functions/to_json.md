@@ -4,7 +4,13 @@ displayed_sidebar: docs
 
 # to_json
 
-## 説明
+Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
 

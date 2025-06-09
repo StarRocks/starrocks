@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # json_query
 
-## 説明
-
 JSON オブジェクト内で `json_path` 式によって位置を特定できる要素の値をクエリし、JSON 値を返します。
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 ## 構文
 
