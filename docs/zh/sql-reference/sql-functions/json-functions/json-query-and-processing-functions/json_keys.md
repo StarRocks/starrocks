@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # json_keys
 
-<<<<<<< HEAD
-## 功能
-=======
 返回 JSON 对象的顶级键作为 JSON 数组，或者如果指定了 `path`，则返回路径中的顶级键。
 
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和[概览页面](../overview-of-json-functions-and-operators.md)
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过[生成列](../../../sql-statements/generated_columns.md)加速查询
 :::
