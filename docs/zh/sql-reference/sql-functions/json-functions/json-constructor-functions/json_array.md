@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # json_array
 
-<<<<<<< HEAD
-## 功能
-=======
 将 SQL 数组的每个元素转换为 JSON 值，并返回由这些 JSON 值组成的 JSON 数组。
 
 :::tip
 所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过[生成列](../../../sql-statements/generated_columns.md)加速查询
 :::
