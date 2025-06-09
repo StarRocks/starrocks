@@ -151,6 +151,9 @@ public class AuditEvent {
     @AuditField(value = "QueryFEAllocatedMemory")
     public long queryFeMemory = 0;
 
+    @AuditField(value = "SentBytes")
+    public long sentBytes = -1;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -389,6 +392,15 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addSentBytes(long sentBytes) {
+            if (auditEvent.sentBytes == -1) {
+                auditEvent.sentBytes = sentBytes;
+            } else {
+                auditEvent.sentBytes += sentBytes;
+            }
+            return this;
+        }
+
         public AuditEvent build() {
             return this.auditEvent;
         }
@@ -401,6 +413,7 @@ public class AuditEvent {
             this.auditEvent.scanRows = event.scanRows;
             this.auditEvent.spilledBytes = event.spilledBytes;
             this.auditEvent.returnRows = event.returnRows;
+            this.auditEvent.sentBytes = event.sentBytes;
         }
     }
 }
