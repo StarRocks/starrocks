@@ -1293,31 +1293,25 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             return true;
         }
 
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db.getId(), LockType.READ);
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
-            if (table == null) {
+        Table table = db.getTable(tblId);
+        if (table == null) {
+            return true;
+        } else {
+            // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            try {
+                Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
                 return true;
-            } else {
-                // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
+            } catch (AccessDeniedException ae) {
                 try {
-                    Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                     return true;
-                } catch (AccessDeniedException ae) {
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-                        return true;
-                    } catch (AccessDeniedException e) {
-                        return false;
-                    }
+                } catch (AccessDeniedException e) {
+                    return false;
                 }
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
