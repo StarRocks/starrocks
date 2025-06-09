@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # json_length
 
-<<<<<<< HEAD
-## 功能
-=======
 返回 JSON 文档的长度。如果指定了路径，该函数返回路径所标识的值的长度。
 
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和[概览页面](../overview-of-json-functions-and-operators.md)上
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过[生成列](../../../sql-statements/generated_columns.md)加速查询
 :::
