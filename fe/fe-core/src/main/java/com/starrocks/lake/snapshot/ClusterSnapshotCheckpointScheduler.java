@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
