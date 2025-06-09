@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # parse_json
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Converts a string to a JSON value.
 
 :::tip
