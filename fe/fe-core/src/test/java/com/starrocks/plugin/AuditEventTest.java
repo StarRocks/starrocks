@@ -43,6 +43,7 @@ public class AuditEventTest {
                 .setWarehouse("wh")
                 .setSessionId("sessionId")
                 .setCustomQueryId("customQueryId")
+                .setCustomSessionName("customSessionName")
                 .setCNGroup("test_cngroup")
                 .addReadLocalCnt(100)
                 .addReadRemoteCnt(100);
@@ -73,6 +74,7 @@ public class AuditEventTest {
         Assertions.assertEquals("wh", event.warehouse);
         Assertions.assertEquals("sessionId", event.sessionId);
         Assertions.assertEquals("customQueryId", event.customQueryId);
+        Assertions.assertEquals("customSessionName", event.customSessionName);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
         Assertions.assertEquals(100, event.writeClientTimeMs);

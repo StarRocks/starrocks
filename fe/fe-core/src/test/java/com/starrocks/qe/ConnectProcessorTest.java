@@ -639,6 +639,29 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+    public void testQueryWithCustomSessionName(@Mocked StmtExecutor executor) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
+        ctx.getSessionVariable().setCustomSessionName("session_name");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        AtomicReference<String> customSessionName = new AtomicReference<>();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                customSessionName.set(ctx.getCustomSessionName());
+            }
+        };
+        processor.processOnce();
+        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        // verify customSessionName is set during query execution
+        Assert.assertEquals("session_name", customSessionName.get());
+        // customSessionName is NOT cleared after query finished
+        Assert.assertEquals("session_name", ctx.getCustomSessionName());
+        Assert.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
+    }
+
+    @Test
     public void testFieldList() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(fieldListPacket), GlobalStateMgr.getCurrentState());
 
