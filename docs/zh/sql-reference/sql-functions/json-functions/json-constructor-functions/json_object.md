@@ -4,14 +4,10 @@ displayed_sidebar: docs
 
 # json_object
 
-<<<<<<< HEAD
-## 功能
-=======
 将一个或多个键值对转换为由这些键值对组成的 JSON 对象。键值对按字典顺序排序。
 
 :::tip
 所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 通过[生成列](../../../sql-statements/generated_columns.md)加速查询
 :::
