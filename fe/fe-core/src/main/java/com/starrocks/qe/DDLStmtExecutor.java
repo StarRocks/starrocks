@@ -20,6 +20,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
@@ -174,6 +175,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class DDLStmtExecutor {
 
@@ -611,6 +613,14 @@ public class DDLStmtExecutor {
                                                                      ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+                String type = stmt.getPropertyMap().get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
+                if (Objects.equals(type, SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP) &&
+                        !Config.enable_create_ldap_security_integration) {
+                    throw new SemanticException("Not support create ldap security integration, " +
+                            "You can use AUTHENTICATION_LDAP_SIMPLE security integration and ldap group provider instead.");
+                }
+
                 authenticationMgr.createSecurityIntegration(stmt.getName(), stmt.getPropertyMap(), false);
             });
 
