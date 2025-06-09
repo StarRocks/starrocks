@@ -238,7 +238,7 @@ private:
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
     // Partition id -> BundleWritableFileContext
-    std::unordered_map<int64_t, std::unique_ptr<BundleWritableFileContext>> _bwfile_ctxs_by_partition;
+    std::unordered_map<int64_t, std::unique_ptr<BundleWritableFileContext>> _bundle_wfile_ctx_by_partition;
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
@@ -709,10 +709,10 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
         if (_is_data_file_bundle_enabled(params)) {
-            if (_bwfile_ctxs_by_partition.count(tablet.partition_id()) == 0) {
-                _bwfile_ctxs_by_partition[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
+            if (_bundle_wfile_ctx_by_partition.count(tablet.partition_id()) == 0) {
+                _bundle_wfile_ctx_by_partition[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
             }
-            bundle_writable_file_context = _bwfile_ctxs_by_partition[tablet.partition_id()].get();
+            bundle_writable_file_context = _bundle_wfile_ctx_by_partition[tablet.partition_id()].get();
         }
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
             // already created for the tablet, usually in incremental open case
