@@ -4,11 +4,6 @@ displayed_sidebar: docs
 
 # to_json
 
-<<<<<<< HEAD
-## Description
-
-=======
->>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
 
 :::tip
