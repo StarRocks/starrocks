@@ -13,13 +13,13 @@ displayed_sidebar: docs
 - Storage Volume 支持基于 Managed Identity 方式认证的 ADLS2 存储。[#58454](https://github.com/StarRocks/starrocks/pull/58454)
 - 在[混合表达式分区](https://docs.starrocks.io/zh/docs/table_design/data_distribution/expression_partitioning/#混合表达式分区-自-v34)中，大多数基于日期时间相关的函数都能有效支持分区裁剪。
 - 支持使用 `FILES` 函数从 Azure 导入 Avro 数据文件。[#58131](https://github.com/StarRocks/starrocks/pull/58131)
-- Routine Load 导入非法 JSON 格式的数据时，增加打印当前消费的分区和 Offset 信息到 Error Log 中，方便定位问题。[#55772](https://github.com/StarRocks/starrocks/pull/55772)
+- Routine Load 导入非法 JSON 格式的数据时，增加打印当前消费的 Partition 和 Offset 信息到 Error Log 中，方便定位问题。[#55772](https://github.com/StarRocks/starrocks/pull/55772)
 
 ### 问题修复
 
 修复了如下问题：
 
-- 并发查询分区表的相同分区导致 Hive Metastore 挂起。[#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- 并发查询分区表的相同分区导致 Hive Metastore 卡住。[#58089](https://github.com/StarRocks/starrocks/pull/58089)
 - `INSERT` 任务异常退出，导致对应作业一直处于 `QUEUEING` 状态。[#58603](https://github.com/StarRocks/starrocks/pull/58603)
 - 自 v3.4.0 升级至 v3.4.2 之后，大量 Tablet 的副本数据出现异常。[#58518](https://github.com/StarRocks/starrocks/pull/58518)
 - 错误的 UNION 执行计划造成 FE OOM。[#59040](https://github.com/StarRocks/starrocks/pull/59040)
