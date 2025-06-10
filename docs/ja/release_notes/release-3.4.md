@@ -4,6 +4,28 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.4
+
+リリース日：2025 年 6 月 10 日
+
+### 改善点
+
+- Storage Volume が Managed Identity 認証を用いた ADLS2 をサポートしました。[#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- [混合式に基づくパーティション](https://docs.starrocks.io/ja/docs/table_design/data_distribution/expression_partitioning/#混合式に基づくパーティション化v34以降) において、大部分の DATETIME 関連関数で効果的なパーティションプルーニングが可能になりました。
+- `FILES` テーブル関数を使用して、Azure から Avro データファイルのインポートをサポートしました。 [#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- Routine Load で不正な JSON 形式のデータを読み込んだ際、現在処理中のパーティションおよび Offset 情報をエラーログに出力するように改善しました。問題の特定が容易になります。 [#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- パーティションテーブルの同一パーティションへの同時クエリが Hive Metastore をハングさせる問題。 [#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- `INSERT` タスクが異常終了した場合、対応するジョブが `QUEUEING` 状態のままになる問題。 [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- v3.4.0 から v3.4.2 にアップグレードした後、多数のタブレットレプリカが異常状態になる問題。 [#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- 不正な `UNION` 実行プランが FE のメモリ不足 (OOM) を引き起こす問題。 [#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- パーティション回収時に無効なデータベース ID があると FE の起動に失敗する問題。 [#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- CheckPoint 処理の失敗後に FE が正常に終了できず、処理がブロックされる問題。 [#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
 ## 3.4.3
 
 リリース日： 2025 年 4 月 30 日
