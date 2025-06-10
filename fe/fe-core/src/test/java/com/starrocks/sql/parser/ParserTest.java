@@ -180,7 +180,7 @@ class ParserTest {
 
     @Test
     void testParseLargeDecimal() {
-        String sql = "select cast(1 as decimal(65,0))";
+        String sql = "select cast(1 as decimal(85,0))";
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setThreadLocalInfo();
         SessionVariable sessionVariable = ctx.getSessionVariable();
@@ -189,7 +189,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Assert.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
@@ -197,7 +197,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Assert.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
@@ -228,7 +228,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
             Assert.fail(err.getMessage());
         }
@@ -239,7 +239,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
             Assert.fail(err.getMessage());
         }
@@ -263,7 +263,7 @@ class ParserTest {
         Analyzer.analyze(stmt, ctx);
         Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
-        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
         Assert.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
