@@ -1310,8 +1310,13 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while delete path: " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to delete path: " + path, e); // throw unified user exception
         } catch (IOException e) {
+=======
+            throw new StarRocksException("Failed to delete path: " + path, e); // throw unified user exception
+        } catch (Exception e) {
+>>>>>>> 30c79c9424 ([BugFix] Transform all exception for some operation in HdfsFsMgr into StarRocksException to prevent Exception leak for the caller (#59771))
             LOG.error("errors while delete path " + path, e);
             throw new UserException("delete path " + path + "error", e);
         }
@@ -1344,8 +1349,13 @@ public class HdfsFsManager {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while rename path from " + srcPath + " to " + destPath, e);
             // throw unified user exception
+<<<<<<< HEAD
             throw new UserException("Failed to rename path from " + srcPath + " to " + destPath, e);
         } catch (IOException e) {
+=======
+            throw new StarRocksException("Failed to rename path from " + srcPath + " to " + destPath, e);
+        } catch (Exception e) {
+>>>>>>> 30c79c9424 ([BugFix] Transform all exception for some operation in HdfsFsMgr into StarRocksException to prevent Exception leak for the caller (#59771))
             LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
             throw new UserException("errors while rename " + srcPath + "to " + destPath, e);
         }
@@ -1360,8 +1370,13 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while check path exist: " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to check path exist: " + path, e); // throw unified user exception
         } catch (IOException e) {
+=======
+            throw new StarRocksException("Failed to check path exist: " + path, e); // throw unified user exception
+        } catch (Exception e) {
+>>>>>>> 30c79c9424 ([BugFix] Transform all exception for some operation in HdfsFsMgr into StarRocksException to prevent Exception leak for the caller (#59771))
             LOG.error("errors while check path exist: " + path, e);
             throw new UserException("errors while check if path " + path + " exist", e);
         }
@@ -1381,8 +1396,13 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while open file " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to open file " + path, e); // throw unified user exception
         } catch (IOException e) {
+=======
+            throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
+        } catch (Exception e) {
+>>>>>>> 30c79c9424 ([BugFix] Transform all exception for some operation in HdfsFsMgr into StarRocksException to prevent Exception leak for the caller (#59771))
             LOG.error("errors while open path", e);
             throw new UserException("could not open file " + path, e);
         }
@@ -1490,8 +1510,13 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while open file " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to open file " + path, e); // throw unified user exception
         } catch (IOException e) {
+=======
+            throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
+        } catch (Exception e) {
+>>>>>>> 30c79c9424 ([BugFix] Transform all exception for some operation in HdfsFsMgr into StarRocksException to prevent Exception leak for the caller (#59771))
             LOG.error("errors while open path", e);
             throw new UserException("could not open file " + path, e);
         }
