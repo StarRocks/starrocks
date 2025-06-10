@@ -157,6 +157,9 @@ LogicalType thrift_to_type(TPrimitiveType::type ttype) {
         return TYPE_UNKNOWN;
     case TPrimitiveType::NULL_TYPE:
         return TYPE_NULL;
+    // TODO(stephen): compatibility for this will be in the next patch
+    case TPrimitiveType::DECIMAL256:
+        return TYPE_UNKNOWN;
 #define M(ttype)                \
     case TPrimitiveType::ttype: \
         return TYPE_##ttype;
