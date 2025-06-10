@@ -569,7 +569,7 @@ public:
 
 private:
     Status _path_exists(hdfsFS fs, const std::string& path);
-    StatusOr<bool> _is_directory(hdfsFS fs, const std::string& path);
+    static StatusOr<bool> _is_directory(hdfsFS fs, const std::string& path);
 
     FSOptions _options;
 };
