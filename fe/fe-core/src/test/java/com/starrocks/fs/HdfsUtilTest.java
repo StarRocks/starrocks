@@ -17,12 +17,20 @@
 
 package com.starrocks.fs;
 
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.fs.hdfs.HdfsFs;
+import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.thrift.THdfsProperties;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class HdfsUtilTest {
     @Test
@@ -45,5 +53,32 @@ public class HdfsUtilTest {
         } catch (StarRocksException e) {
             Assert.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testException() {
+        new MockUp<HdfsFsManager>() {
+            @Mock
+            public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+                                        throws StarRocksException {
+                return null;
+            }
+        };
+
+        Assert.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.deletePath("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+
+        Assert.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.rename("hdfs://abc/dbf", "hdfs://abc/dba", new BrokerDesc(new HashMap<>()), 1000));
+
+        Assert.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.checkPathExist("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+
+        HdfsFsManager fileSystemManager = new HdfsFsManager();
+        Assert.assertThrows(StarRocksException.class, () ->
+                fileSystemManager.openReader("hdfs://abc/dbf", 0, new HashMap<>()));
+
+        Assert.assertThrows(StarRocksException.class, () ->
+                fileSystemManager.openWriter("hdfs://abc/dbf", new HashMap<>()));
     }
 }
