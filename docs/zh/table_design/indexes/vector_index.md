@@ -287,7 +287,7 @@ CREATE TABLE test_hnsw (
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
 
-INSERT INTO t_test_vector_table VALUES
+INSERT INTO test_hnsw VALUES
     (1, [1,2,3,4,5]),
     (2, [4,5,6,7,8]);
     
@@ -295,11 +295,13 @@ CREATE TABLE test_ivfpq (
     id     BIGINT(20)   NOT NULL COMMENT "",
     vector ARRAY<FLOAT> NOT NULL COMMENT "",
     INDEX index_vector (vector) USING VECTOR (
-        "index_type" = "hnsw",
+        "index_type" = "ivfpq",
         "metric_type" = "l2_distance", 
         "is_vector_normed" = "false", 
         "nlist" = "256", 
-        "nbits"="10")
+        "nbits"="8",
+        "dim"="5",
+        "M_IVFPQ"="1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
@@ -401,16 +403,9 @@ LIMIT 1;
 
 ```SQL
 SELECT 
-    /*+ SET_VAR (ann_params='{
-        nprobe=256,
-        max_codes=0,
-        scan_table_threshold=0,
-        polysemous_ht=0,
-        range_search_confidence=0.1
-    }') */ 
+    /*+ SET_VAR (ann_params='{nprobe=256,max_codes=0,scan_table_threshold=0,polysemous_ht=0,range_search_confidence=0.1}') */ 
     id, approx_l2_distance([1,1,1,1,1], vector) 
 FROM test_ivfpq 
-WHERE id = 1 
 ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
 LIMIT 1;
 ```
