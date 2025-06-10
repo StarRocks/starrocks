@@ -62,7 +62,13 @@ Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>
         for (const auto& [partition_id, logs] : txn_log_map) {
             auto task_logic = create_txn_log_task(&logs, ExecEnv::GetInstance()->lake_tablet_manager(), &has_error,
                                                   &final_status);
-            auto task = std::make_shared<AutoCleanRunnable>(std::move(task_logic), [&latch]() { latch.count_down(); });
+            auto task = std::make_shared<AutoCleanRunnable>(
+                    std::move(task_logic), [&latch, &has_error, &final_status](bool is_done) {
+                        if (!is_done) {
+                            mark_failure(Status::Cancelled("write txn log task cancelled"), &has_error, &final_status);
+                        }
+                        latch.count_down();
+                    });
             tasks.emplace_back(std::move(task));
         }
         for (const auto& task : tasks) {

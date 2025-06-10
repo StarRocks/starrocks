@@ -831,14 +831,21 @@ TEST_F(ThreadPoolTest, TestTokenConcurrency) {
 TEST_F(ThreadPoolTest, TestAutoCleanRunnable) {
     int run_count = 0;
     int exit_count = 0;
-
-    auto run1 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    auto run1 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; },
+                                                    [&](bool is_run) {
+                                                        EXPECT_FALSE(is_run);
+                                                        ++exit_count;
+                                                    });
     run1.reset();
     // run1 doesn't run but will definitely exit
     EXPECT_EQ(0, run_count);
     EXPECT_EQ(1, exit_count);
 
-    auto run2 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    auto run2 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; },
+                                                    [&](bool is_run) {
+                                                        EXPECT_TRUE(is_run);
+                                                        ++exit_count;
+                                                    });
     run2->run();
     run2.reset();
     // run2 runs and exits
@@ -852,7 +859,11 @@ TEST_F(ThreadPoolTest, ConcurrencyLimitedThreadPoolTokenTest) {
 
     int run_count = 0;
     int exit_count = 0;
-    auto task = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    auto task = std::make_shared<AutoCleanRunnable>([&] { ++run_count; },
+                                                    [&](bool is_run) {
+                                                        EXPECT_FALSE(is_run);
+                                                        ++exit_count;
+                                                    });
 
     auto deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(400);
     auto st = thread_token->submit(std::move(task), deadline);
@@ -883,6 +894,7 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
     int exit_count_A = 0;
     int exit_count_B = 0;
 
+    int is_run_count = 0;
     int task_num = 10;
     // group-A
     for (int i = 0; i < task_num; ++i) {
@@ -892,7 +904,10 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
                     ++run_count;
                     ++run_count_A;
                 },
-                [&] {
+                [&](bool is_run) {
+                    if (is_run) {
+                        ++is_run_count;
+                    }
                     ++exit_count;
                     ++exit_count_A;
                 }));
@@ -907,7 +922,10 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
                     ++run_count;
                     ++run_count_B;
                 },
-                [&] {
+                [&](bool is_run) {
+                    if (is_run) {
+                        ++is_run_count;
+                    }
                     ++exit_count;
                     ++exit_count_B;
                 }));
@@ -944,6 +962,7 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
 
     // done_tasks = run_count_A + run_count_B
     EXPECT_EQ(done_tasks, run_count_A + run_count_B);
+    EXPECT_EQ(done_tasks, is_run_count);
 
     // run_count < exit_count
     EXPECT_LT(run_count, exit_count);
