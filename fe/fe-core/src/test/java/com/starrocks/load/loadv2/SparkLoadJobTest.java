@@ -60,7 +60,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.warehouse.LocalWarehouse;
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
@@ -267,9 +266,7 @@ public class SparkLoadJobTest {
 
                 warehouseManager.getWarehouse(anyString);
                 minTimes = 0;
-                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManagerEPack.DEFAULT_CLUSTER_ID,
-                        null,
+                result = LocalWarehouse.createDefaultLocalWarehouse(
                         "An internal warehouse contains all compute nodes in this system");
             }
         };

@@ -28,7 +28,6 @@ import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
@@ -326,9 +325,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouse(String warehouseName) {
-                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManagerEPack.DEFAULT_CLUSTER_ID,
-                        null,
+                return LocalWarehouse.createDefaultLocalWarehouse(
                         "An internal warehouse contains all compute nodes in this system");
             }
 

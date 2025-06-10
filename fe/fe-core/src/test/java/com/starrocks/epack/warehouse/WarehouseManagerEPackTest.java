@@ -60,7 +60,7 @@ public class WarehouseManagerEPackTest {
         WarehouseManagerEPack mgr = new WarehouseManagerEPack();
         Map<Long, Warehouse> idToWh = Deencapsulation.getField(mgr, "idToWh");
         Map<String, Warehouse> nameToWh = Deencapsulation.getField(mgr, "nameToWh");
-        LocalWarehouse wh1 = new LocalWarehouse(1L, "wh1", 1L, null, "");
+        LocalWarehouse wh1 = new LocalWarehouse(1L, "wh1", null, "");
         wh1.suspendSelf();
         idToWh.put(wh1.getId(), wh1);
         nameToWh.put(wh1.getName(), wh1);

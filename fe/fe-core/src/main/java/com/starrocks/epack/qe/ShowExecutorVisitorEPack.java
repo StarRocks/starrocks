@@ -64,6 +64,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -201,6 +202,23 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                     rows.add(computeNodeInfo);
                 }
             }
+        }
+        return new ShowResultSet(statement.getMetaData(), rows);
+    }
+
+    @Override
+    public ShowResultSet visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            throw ErrorReportException.report(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
+        }
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseMgr.getWarehouse(statement.getWarehouseName());
+        List<List<String>> rows = null;
+        if (warehouse instanceof LocalWarehouse) {
+            rows = ((LocalWarehouse) warehouse).getClustersInfo();
+        }
+        if (rows == null) {
+            rows = Lists.newArrayList();
         }
         return new ShowResultSet(statement.getMetaData(), rows);
     }

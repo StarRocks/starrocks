@@ -1,0 +1,215 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.epack.warehouse;
+
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.WarehouseInternalOpLog;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import java.util.List;
+
+public class LocalWarehouseTest extends LocalWarehouseTestBase {
+    @BeforeClass
+    public static void init() {
+        setupBeforeClass();
+    }
+
+    @Test
+    public void testGetWarehouseInfo() {
+        String warehouseName = randomWarehouseName();
+        // remove the milliseconds part
+        long timeLowBound = System.currentTimeMillis() / 1000 * 1000;
+        LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        // remove the milliseconds part
+        long timeUpBound = System.currentTimeMillis() / 1000 * 1000;
+        List<String> whInfo = wh.getWarehouseInfo();
+        // ShowWarehousesStmt.META_DATA
+        Assert.assertEquals(14L, whInfo.size());
+        int index = 0;
+        // 1. ID
+        Assert.assertEquals(String.valueOf(wh.getId()), whInfo.get(index++));
+        // 2. Name
+        Assert.assertEquals(wh.getName(), whInfo.get(index++));
+        // 3. State
+        Assert.assertEquals("AVAILABLE", whInfo.get(index++));
+        // 4. NodeCount
+        Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
+        // 5. CurrentClusterCount
+        Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
+        // 6. MaxClusterCount
+        Assert.assertEquals(String.valueOf(-1), whInfo.get(index++));
+        // 7. StartedClusters
+        Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
+        // 8. RunningSql
+        Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
+        // 9. QueuedSql
+        Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
+        // 10. CreatedOn
+        String createdStr = whInfo.get(index++);
+        long createdTS = TimeUtils.timeStringToLong(createdStr);
+        String msg = String.format(
+                "CreatedTime between [%d, %d], actual ts: %d=%s", timeLowBound, timeUpBound, createdTS, createdStr);
+        Assert.assertTrue(msg, createdTS >= timeLowBound && createdTS <= timeUpBound);
+        // 11. ResumedOn
+        Assert.assertEquals(FeConstants.NULL_STRING, whInfo.get(index++));
+        // 12. UpdatedOn
+        Assert.assertEquals(FeConstants.NULL_STRING, whInfo.get(index++));
+        // 13. Property
+        Assert.assertEquals(wh.getProperty().toString(), whInfo.get(index++));
+        // 14. Comment
+        Assert.assertEquals(13L, index);
+        Assert.assertNull(whInfo.get(index));
+
+        // create a new cngroup and then check the warehouse info again
+        String cngroupName = randomCNGroupName();
+        ensureCnGroupCreated(warehouseName, cngroupName);
+        {
+            List<String> whInfo2 = wh.getWarehouseInfo();
+            // 4. NodeCount
+            Assert.assertEquals(String.valueOf(0), whInfo2.get(3));
+            // 5. CurrentClusterCount
+            Assert.assertEquals(String.valueOf(1), whInfo2.get(4));
+            // 6. MaxClusterCount
+            Assert.assertEquals(String.valueOf(-1), whInfo2.get(5));
+            // 7. StartedClusters
+            Assert.assertEquals(String.valueOf(1), whInfo2.get(6));
+        }
+        ensureCnGroupDropped(warehouseName, cngroupName);
+        ensureWarehouseDropped(warehouseName);
+    }
+
+    @Test
+    public void testReplayCNGroupOpLogs() {
+        WarehouseManager manager = GlobalStateMgr.getServingState().getWarehouseMgr();
+        String warehouseName = randomWarehouseName();
+        LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        String cngroupName = randomCNGroupName();
+
+        { // Create a new CNGROUP
+            Cluster cluster = new Cluster(1024, cngroupName, 1025);
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.createCNGroupOpLog(cluster);
+            WarehouseInternalOpLog whOpLog = new WarehouseInternalOpLog(warehouseName, opLog.toJson());
+
+            Assert.assertEquals(0, wh.getClusters().size());
+            manager.replayInternalOpLog(whOpLog);
+            // the cngroup should be created to the warehouse
+            Assert.assertEquals(1, wh.getClusters().size());
+            Cluster c = wh.getCluster(cngroupName);
+            Assert.assertNotNull(c);
+            Assert.assertEquals(cluster.getId(), c.getId());
+            Assert.assertEquals(cluster.getName(), c.getName());
+            Assert.assertEquals(cluster.getWorkerGroupId(), c.getWorkerGroupId());
+        }
+        { // Disable the cngroup
+            Cluster c = getClusterByName(warehouseName, cngroupName);
+            Assert.assertNotNull(c);
+            Assert.assertTrue(c.isEnabled());
+
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.disableCNGroupOpLog(cngroupName);
+            WarehouseInternalOpLog whOpLog = new WarehouseInternalOpLog(warehouseName, opLog.toJson());
+            manager.replayInternalOpLog(whOpLog);
+            Assert.assertFalse(c.isEnabled());
+        }
+        { // Enable the cngroup
+            Cluster c = getClusterByName(warehouseName, cngroupName);
+            Assert.assertNotNull(c);
+            Assert.assertFalse(c.isEnabled());
+
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.enableCNGroupOpLog(cngroupName);
+            WarehouseInternalOpLog whOpLog = new WarehouseInternalOpLog(warehouseName, opLog.toJson());
+            manager.replayInternalOpLog(whOpLog);
+            Assert.assertTrue(c.isEnabled());
+        }
+        { // Drop the cngroup
+            Cluster c = getClusterByName(warehouseName, cngroupName);
+            Assert.assertNotNull(c);
+
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.dropCNGroupOpLog(cngroupName);
+            WarehouseInternalOpLog whOpLog = new WarehouseInternalOpLog(warehouseName, opLog.toJson());
+            manager.replayInternalOpLog(whOpLog);
+
+            Assert.assertNull(getClusterByName(warehouseName, cngroupName));
+            Assert.assertEquals(0, wh.getClusters().size());
+        }
+        ensureWarehouseDropped(warehouseName);
+    }
+
+    @Test
+    public void testShowCnGroup() {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        { // single cngroup, default warehouse
+            ShowClustersStmt stmt = new ShowClustersStmt("default_warehouse");
+            ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
+            Assert.assertEquals(stmt.getMetaData(), resultSet.getMetaData());
+            Assert.assertEquals(1L, resultSet.getResultRows().size());
+
+            Assert.assertTrue(resultSet.next());
+            // 0. CNGroupId
+            Assert.assertEquals(String.valueOf(LocalWarehouse.DEFAULT_CLUSTER_ID), resultSet.getString(0));
+            // 1. CNGroupName
+            Assert.assertEquals(LocalWarehouse.DEFAULT_CLUSTER_NAME, resultSet.getString(1));
+            // 2. WorkerGroupId
+            Assert.assertEquals(String.valueOf(StarOSAgent.DEFAULT_WORKER_GROUP_ID), resultSet.getString(2));
+            // 3. ComputeNodeIds
+            // NOTE: there is a backend:10001 added when the miniCluster is created.
+            // refer to UtFrameUtils.createMinStarRocksCluster
+            Assert.assertEquals("10001", resultSet.getString(3));
+            // 4. Pending
+            Assert.assertEquals("-1", resultSet.getString(4));
+            // 5. Running
+            Assert.assertEquals("-1", resultSet.getString(5));
+        }
+        { // add a second cngroup into default warehouse
+            LocalWarehouse wh = (LocalWarehouse) warehouseManager.getWarehouseAllowNull("default_warehouse");
+            Assert.assertNotNull(wh);
+            String cngroupName = randomCNGroupName();
+            Cluster c = ensureCnGroupCreated("default_warehouse", cngroupName);
+            Assert.assertEquals(2, wh.getClusters().size());
+
+            ShowClustersStmt stmt = new ShowClustersStmt("default_warehouse");
+            ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
+            Assert.assertEquals(stmt.getMetaData(), resultSet.getMetaData());
+            Assert.assertEquals(2L, resultSet.getResultRows().size());
+
+            // builtin cngroup
+            Assert.assertTrue(resultSet.next());
+            // cngroup_2
+            Assert.assertTrue(resultSet.next());
+            // 0. CNGroupId
+            Assert.assertEquals(String.valueOf(c.getId()), resultSet.getString(0));
+            // 1. CNGroupName
+            Assert.assertEquals(c.getName(), resultSet.getString(1));
+            // 2. WorkerGroupId
+            Assert.assertEquals(String.valueOf(c.getWorkerGroupId()), resultSet.getString(2));
+            // 3. ComputeNodeIds
+            Assert.assertEquals("", resultSet.getString(3));
+            // 4. Pending
+            Assert.assertEquals("-1", resultSet.getString(4));
+            // 5. Running
+            Assert.assertEquals("-1", resultSet.getString(5));
+
+            ensureCnGroupDropped("default_warehouse", cngroupName);
+        }
+    }
+}

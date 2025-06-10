@@ -3472,7 +3472,7 @@ public class PrivilegeCheckerTest {
         new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouseAllowNull(String warehouseName) {
-                return new LocalWarehouse(12343L, "waa", 11L, null, "no comments");
+                return new LocalWarehouse(12343L, "waa", null, "no comments");
             }
         };
 
@@ -4227,7 +4227,7 @@ public class PrivilegeCheckerTest {
         new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouseAllowNull(String warehouseName) {
-                return new LocalWarehouse(12343L, "waa", 11L, null, "no comments");
+                return new LocalWarehouse(12343L, "waa", null, "no comments");
             }
         };
 

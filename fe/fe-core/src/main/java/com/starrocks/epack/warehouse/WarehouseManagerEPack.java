@@ -19,6 +19,7 @@ import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.WarehouseInternalOpLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -33,6 +34,10 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -50,7 +55,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class WarehouseManagerEPack extends WarehouseManager {
     private static final Logger LOG = LogManager.getLogger(WarehouseManagerEPack.class);
-    public static final long DEFAULT_CLUSTER_ID = 0L;
 
     public WarehouseManagerEPack(ComputeResourceProvider computeResourceProvider) {
         super(computeResourceProvider);
@@ -70,9 +74,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
             // the default warehouse, and it's state is always AVAILABLE.
             // If the state of default warehouse is updated, e.g. SUSPENDED, we should not overwrite the state.
             if (!nameToWh.containsKey(DEFAULT_WAREHOUSE_NAME)) {
-                Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
-                        DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID, new WarehouseProperty(),
-                        "An internal warehouse init after FE is ready");
+                Warehouse wh =
+                        LocalWarehouse.createDefaultLocalWarehouse("An internal warehouse init after FE is ready");
                 nameToWh.put(wh.getName(), wh);
                 idToWh.put(wh.getId(), wh);
                 onCreateWarehouse(wh);
@@ -101,6 +104,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
      */
     @Override
     public List<Long> getAllComputeNodeIds(long warehouseId) {
+        // TODO: Fix it under multi-CNGroup
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
         try {
@@ -147,6 +151,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+        // TODO: fix it under multi-CNGroup
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
         return warehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
@@ -245,31 +250,19 @@ public class WarehouseManagerEPack extends WarehouseManager {
                             String.join(", ", properties.keySet())));
                 }
             }
-            long id = GlobalStateMgr.getCurrentState().getNextId();
-            long clusterId = GlobalStateMgr.getCurrentState().getNextId();
-            String comment = stmt.getComment();
-            LocalWarehouse wh = new LocalWarehouse(id, warehouseName, clusterId, warehouseProperty, comment);
 
-            for (Cluster cluster : wh.getClusters().values()) {
-                try {
-                    ReplicationType replicationType = toStarOSReplicationType(warehouseProperty.getReplicationType());
-                    WarmupLevel warmupLevel = toStarOSWarmupLevel(warehouseProperty.getWarmupLevel());
-                    StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", warehouseProperty.getComputeReplica(),
-                                             replicationType, warmupLevel));
-                } catch (DdlException e) {
-                    LOG.warn(e);
-                    throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
-                }
-            }
+            // Create warehouse without any CNGroup
+            long warehouseId = GlobalStateMgr.getCurrentState().getNextId();
+            String comment = stmt.getComment();
+            LocalWarehouse wh = new LocalWarehouse(warehouseId, warehouseName, warehouseProperty, comment);
 
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
 
-            onCreateWarehouse(wh);
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_CREATE_WAREHOUSE, wh);
-            LOG.info("createWarehouse whName = {}, id = {}, comment = {}", warehouseName, id, comment);
+            LOG.info("createWarehouse whName = {}, id = {}, comment = {}", warehouseName, warehouseId, comment);
+            onCreateWarehouse(wh);
         }
     }
 
@@ -310,7 +303,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
 
-            warehouse.dropSelf();
+            warehouse.delete();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_DROP_WAREHOUSE, new DropWarehouseLog(warehouseName));
         }
@@ -321,9 +314,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             String warehouseName = log.getWarehouseName();
             if (nameToWh.containsKey(warehouseName)) {
-                Warehouse warehouse = nameToWh.get(warehouseName);
+                LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
+                warehouse.replayDelete();
                 onDropWarehouse(warehouse);
-
                 nameToWh.remove(warehouseName);
                 idToWh.remove(warehouse.getId());
             }
@@ -389,8 +382,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
     @Override
     public void replayAlterWarehouse(Warehouse warehouse) {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            nameToWh.put(warehouse.getName(), warehouse);
-            idToWh.put(warehouse.getId(), warehouse);
+            // Lightweight update the warehouse info instead of entire replacement
+            LocalWarehouse originWh = (LocalWarehouse) getWarehouse(warehouse.getId());
+            originWh.setProperty(((LocalWarehouse) warehouse).getProperty());
             onCreateWarehouse(warehouse);
         }
     }
@@ -531,6 +525,54 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
                 editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
             }
+        }
+    }
+
+    @Override
+    public void createCnGroup(CreateCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse wh = getWarehouse(stmt.getWarehouseName());
+            wh.createCNGroup(stmt);
+        }
+    }
+
+    @Override
+    public void dropCnGroup(DropCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse wh = getWarehouse(stmt.getWarehouseName());
+            wh.dropCNGroup(stmt);
+        }
+    }
+
+    @Override
+    public void enableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse wh = getWarehouse(stmt.getWarehouseName());
+            wh.enableCNGroup(stmt);
+        }
+    }
+
+    @Override
+    public void disableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse wh = getWarehouse(stmt.getWarehouseName());
+            wh.disableCNGroup(stmt);
+        }
+    }
+
+    @Override
+    public void alterCnGroup(AlterCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse wh = getWarehouse(stmt.getWarehouseName());
+            wh.alterCNGroup(stmt);
+        }
+    }
+
+    @Override
+    public void replayInternalOpLog(WarehouseInternalOpLog log) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse wh = getWarehouse(log.getWarehouseName());
+            wh.replayInternalOpLog(log.getPayload());
         }
     }
 

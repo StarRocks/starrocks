@@ -14,28 +14,34 @@
 
 package com.starrocks.epack.warehouse;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.ReplicationType;
+import com.staros.proto.WarmupLevel;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.WarehouseInternalOpLog;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,10 +55,14 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.warehouse.WarehouseProcDir.WAREHOUSE_PROC_NODE_TITLE_NAMES;
 
-// on-premise
-public class LocalWarehouse extends Warehouse {
+// Hand-managed Warehouse (adding/removing nodes through SQL interface)
+public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(LocalWarehouse.class);
 
+    public static final long DEFAULT_CLUSTER_ID = 0L;
+    public static final String DEFAULT_CLUSTER_NAME = "_builtin_cngroup_0_";
+
+    // Keep it for backwards compatibility so the newer version can be still rolled back to the old version.
     @SerializedName(value = "cluster")
     Cluster cluster;
 
@@ -74,40 +84,49 @@ public class LocalWarehouse extends Warehouse {
     private volatile long updatedTime;
 
     @SerializedName(value = "property")
-    private WarehouseProperty property = new WarehouseProperty();
+    private WarehouseProperty property;
+
+    @SerializedName(value = "clusters")
+    private List<Cluster> clusters;
 
     protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
-    public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("ClusterId")
-            .add("WorkerGroupId")
-            .add("ComputeNodeIds")
-            .add("Pending")
-            .add("Running")
-            .build();
-
-    public LocalWarehouse() {
-        super(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, "");
-        this.property = new WarehouseProperty();
+    // default_warehouse creation
+    public static LocalWarehouse createDefaultLocalWarehouse(String comment) {
+        LocalWarehouse warehouse =
+                new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME,
+                        new WarehouseProperty(), comment);
+        warehouse.cluster = new Cluster(DEFAULT_CLUSTER_ID, DEFAULT_CLUSTER_NAME);
+        warehouse.clusters.add(warehouse.cluster);
+        return warehouse;
     }
 
-    public LocalWarehouse(long id, String name, long clusterId, WarehouseProperty property, String comment) {
+    // Do nothing, for GSON deserialization only
+    private LocalWarehouse() {
+        this(0, "", new WarehouseProperty(), "");
+    }
+
+    // non-default warehouse creation
+    public LocalWarehouse(long id, String name, WarehouseProperty property, String comment) {
         super(id, name, comment);
         this.property = property;
-        cluster = new Cluster(clusterId);
+        this.clusters = new ArrayList<>();
+        this.cluster = null;
+        this.createdTime = System.currentTimeMillis();
     }
 
     public List<String> getWarehouseInfo() {
+        int numOfNodes = clusters.stream().map(x -> x.getComputeNodeIds().size()).reduce(0, Integer::sum);
         return Lists.newArrayList(
                 String.valueOf(getId()),
                 getName(),
                 state.toString(),
-                String.valueOf(cluster.getComputeNodeIds().size()),
-                String.valueOf(1L),
-                String.valueOf(1L),
-                String.valueOf(1L),
-                String.valueOf(0L),   //TODO: need to be filled after
-                String.valueOf(0L),   //TODO: need to be filled after
+                String.valueOf(numOfNodes),
+                String.valueOf(clusters.size()), // CurrentClusterCount
+                String.valueOf(-1L), // MaxClusterCount
+                String.valueOf(clusters.size()), // StartedClusters
+                String.valueOf(0L),   // TODO: need to be filled after, RunningSql
+                String.valueOf(0L),   // TODO: need to be filled after, QueuedSql
                 TimeUtils.longToTimeString(createdTime),
                 TimeUtils.longToTimeString(resumedTime),
                 TimeUtils.longToTimeString(updatedTime),
@@ -128,11 +147,19 @@ public class LocalWarehouse extends Warehouse {
     }
 
     public Map<Long, Cluster> getClusters() {
-        return ImmutableMap.of(cluster.getId(), cluster);
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            ImmutableMap.Builder<Long, Cluster> builder = new ImmutableMap.Builder<>();
+            for (Cluster c : clusters) {
+                builder.put(c.getId(), c);
+            }
+            return builder.build();
+        }
     }
 
     public Cluster getAnyAvailableCluster() {
-        return cluster;
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return clusters.stream().filter(Cluster::isEnabled).findAny().orElse(null);
+        }
     }
 
     @Override
@@ -140,9 +167,21 @@ public class LocalWarehouse extends Warehouse {
         return resumedTime;
     }
 
-    public void dropSelf() throws DdlException {
-        deleteWorkerFromStarMgr();
-        dropNodeFromSystem();
+    public void delete() throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            for (Cluster c : clusters) {
+                c.delete(getName());
+            }
+            clusters.clear();
+            cluster = null;
+        }
+    }
+
+    public void replayDelete() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            clusters.clear();
+            cluster = null;
+        }
     }
 
     public void suspendSelf() {
@@ -161,64 +200,71 @@ public class LocalWarehouse extends Warehouse {
         }
     }
 
-    private void deleteWorkerFromStarMgr() throws DdlException {
-        long workerGroupId = cluster.getWorkerGroupId();
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-        starOSAgent.deleteWorkerGroup(workerGroupId);
+    @Override
+    public Long getAnyWorkerGroupId() {
+        if (cluster == null) {
+            return null;
+        } else {
+            return cluster.getWorkerGroupId();
+        }
     }
 
-    private void dropNodeFromSystem() throws DdlException {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<ComputeNode> nodes = systemInfoService.backendAndComputeNodeStream().
-                filter(cn -> cn.getWarehouseId() == getId()).collect(Collectors.toList());
+    boolean isEmptyCNGroupNameAllowed() {
+        // An empty CNGroupName is permitted only under the following condition:
+        // 1. The warehouse contains exactly one CNGroup whose ID matches the DEFAULT_CLUSTER_NAME.
+        //    - This typically indicates the CNGroup was auto-created during warehouse creation (pre-upgrade).
+        //
+        // Note: This validation ensures backward compatibility for systems upgraded from pre-CNGroup-managed states.
+        return clusters.size() == 1 && cluster != null && LocalWarehouse.DEFAULT_CLUSTER_NAME.equals(cluster.getName());
+    }
 
-        for (ComputeNode node : nodes) {
-            if (node instanceof Backend) {
-                if (systemInfoService.getBackendWithHeartbeatPort(node.getHost(), node.getHeartbeatPort()) == null) {
-                    continue;
+    @Override
+    public void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Cluster c = getClusterByNameCompatibility(cnGroupName);
+            if (c == null) {
+                if (Strings.isNullOrEmpty(cnGroupName)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_CNGROUP_NAME);
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_CNGROUP, cnGroupName);
                 }
+            }
+            node.setWorkerGroupId(c.getWorkerGroupId());
+            node.setWarehouseId(getId());
+        }
+    }
 
-                systemInfoService.dropBackend(node.getHost(), node.getHeartbeatPort(), name, "", false);
-            } else {
-                if (systemInfoService.getComputeNodeWithHeartbeatPort(node.getHost(), node.getHeartbeatPort()) == null) {
-                    continue;
+    // Get the Cluster/CNGroup via its name, accepting empty cnGroupName under certain conditions for backwards compatibility.
+    private Cluster getClusterByNameCompatibility(String cnGroupName) {
+        if (Strings.isNullOrEmpty(cnGroupName) && isEmptyCNGroupNameAllowed()) {
+            return cluster;
+        } else {
+            return clusters.stream().filter(x -> x.getName().equals(cnGroupName)).findFirst().orElse(null);
+        }
+    }
+
+    @Override
+    public void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Cluster c = getClusterByNameCompatibility(cnGroupName);
+            if (c == null) {
+                if (Strings.isNullOrEmpty(cnGroupName)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_CNGROUP_NAME);
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_CNGROUP, cnGroupName);
                 }
-
-                systemInfoService.dropComputeNode(node.getHost(), node.getHeartbeatPort(), name, "");
+            }
+            if (node.getWorkerGroupId() != c.getWorkerGroupId()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_NODE_CNGROUP_MISMATCH);
             }
         }
     }
 
     @Override
-    public Long getAnyWorkerGroupId() {
-        return getAnyAvailableCluster().getWorkerGroupId();
-    }
-
-    @Override
-    public void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
-        // TODO: Fix it
-        if (!Strings.isNullOrEmpty(cnGroupName)) {
-            // NOTE: NOT IMPLEMENTED, so the cnGroupName must be empty!
-            ErrorReport.reportDdlException(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED);
-        }
-        node.setWorkerGroupId(getAnyWorkerGroupId());
-        node.setWarehouseId(getId());
-    }
-
-    @Override
-    public void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
-        // TODO: Fix it
-        if (!Strings.isNullOrEmpty(cnGroupName)) {
-            // NOTE: NOT IMPLEMENTED, so the cnGroupName must be empty!
-            ErrorReport.reportDdlException(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED);
-        }
-    }
-
-    @Override
     public List<Long> getWorkerGroupIds() {
-        List<Long> list = new ArrayList<>(1);
-        list.add(getAnyAvailableCluster().getWorkerGroupId());
-        return list;
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return clusters.stream().map(Cluster::getWorkerGroupId).collect(Collectors.toList());
+        }
     }
 
     @Override
@@ -270,6 +316,22 @@ public class LocalWarehouse extends Warehouse {
         return rows;
     }
 
+    public List<List<String>> getClustersInfo() {
+        List<List<String>> rows = new ArrayList<>();
+        for (Cluster cluster : getClusters().values()) {
+            List<String> row = Lists.newArrayList();
+            row.add(String.valueOf(cluster.getId())); // CNGroupID
+            row.add(String.valueOf(cluster.getName())); // CNGroupName
+            row.add(String.valueOf(cluster.getWorkerGroupId())); // WorkerGroupId
+            String nodeIds = cluster.getComputeNodeIds().stream().map(String::valueOf).collect(Collectors.joining(","));
+            row.add(nodeIds); // ComputeNodeIds
+            row.add(String.valueOf(-1)); // Pending
+            row.add(String.valueOf(-1)); // Running
+            rows.add(row);
+        }
+        return rows;
+    }
+
     public ProcResult fetchResult() {
         BaseProcResult result = new BaseProcResult();
         result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
@@ -282,33 +344,222 @@ public class LocalWarehouse extends Warehouse {
         return result;
     }
 
+    private Cluster getClusterByNameNoExceptionNoLock(String name) {
+        return clusters.stream().filter(x -> x.getName().equals(name)).findAny().orElse(null);
+    }
+
+    @VisibleForTesting
+    Cluster getCluster(String cnGroupName) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return getClusterByNameNoExceptionNoLock(cnGroupName);
+        }
+    }
+
+    private void ensureWarehouseStateNotSuspended() throws DdlException {
+        if (getState() == WarehouseState.SUSPENDED) {
+            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED,
+                    String.format("name: %s", getName()));
+        }
+    }
+
+    private Cluster ensureCnGroupExists(String cnGroupName) throws DdlException {
+        ensureWarehouseStateNotSuspended();
+        Cluster cluster = getClusterByNameNoExceptionNoLock(cnGroupName);
+        if (cluster == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_CNGROUP, cnGroupName);
+        }
+        return cluster;
+    }
+
+    private void ensureCnGroupNotExists(String cnGroupName) throws DdlException {
+        ensureWarehouseStateNotSuspended();
+        Cluster cluster = getClusterByNameNoExceptionNoLock(cnGroupName);
+        if (cluster != null) {
+            throw ErrorReportException.report(ErrorCode.ERR_CNGROUP_EXISTS, cnGroupName);
+        }
+    }
+
     @Override
     public void createCNGroup(CreateCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            ensureCnGroupNotExists(stmt.getCnGroupName());
 
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            ReplicationType replicationType = WarehouseProperty.toStarOSReplicationType(property.getReplicationType());
+            WarmupLevel warmupLevel = WarehouseProperty.toStarOSWarmupLevel(property.getWarmupLevel());
+            long clusterId = GlobalStateMgr.getCurrentState().getNextId();
+            long workerGroupId =
+                    starOSAgent.createWorkerGroup("x0", property.getComputeReplica(), replicationType, warmupLevel);
+            Cluster newCluster = new Cluster(clusterId, stmt.getCnGroupName(), workerGroupId);
+            clusters.add(newCluster);
+            if (cluster == null) {
+                cluster = clusters.get(0);
+            }
+
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.createCNGroupOpLog(newCluster);
+            WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+        }
     }
 
     @Override
     public void dropCNGroup(DropCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            ensureWarehouseStateNotSuspended();
+            Cluster clusterToDel = getClusterByNameNoExceptionNoLock(stmt.getCnGroupName());
+            if (clusterToDel == null) {
+                if (!stmt.isSetIfExists()) {
+                    throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_CNGROUP, stmt.getCnGroupName());
+                }
+                return;
+            }
+            List<Long> computeNodeIds = clusterToDel.getComputeNodeIds();
+            if (!computeNodeIds.isEmpty()) {
+                if (!stmt.isSetForce()) {
+                    throw ErrorReportException.report(ErrorCode.ERR_CNGROUP_NOT_EMPTY, stmt.getCnGroupName());
+                }
+            }
+            clusterToDel.delete(getName());
+            clusters.remove(clusterToDel);
+            if (clusterToDel.getId() == cluster.getId()) {
+                cluster = clusters.isEmpty() ? null : clusters.get(0);
+            }
 
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.dropCNGroupOpLog(clusterToDel.getName());
+            WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+        }
     }
 
     @Override
     public void enableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(stmt.isSetEnable());
+            Cluster c = ensureCnGroupExists(stmt.getCnGroupName());
+            c.setEnabled();
 
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.enableCNGroupOpLog(c.getName());
+            WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+        }
     }
 
     @Override
     public void disableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(!stmt.isSetEnable());
+            Cluster c = ensureCnGroupExists(stmt.getCnGroupName());
+            c.setDisabled();
 
+            LocalWarehouseOpLog opLog = LocalWarehouseOpLog.disableCNGroupOpLog(c.getName());
+            WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+        }
     }
 
     @Override
     public void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException {
+        // delegate the properties management to StarOS
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Cluster c = ensureCnGroupExists(stmt.getCnGroupName());
+            try {
+                c.updateProperties(stmt.getProperties());
+            } catch (DdlException e) {
+                LOG.warn(e);
+                throw new DdlException(String.format("modify cngroup '%s' in warehouse '%s' failed, reason: %s",
+                        getName(), stmt.getCnGroupName(), e.getMessage()));
+            }
+        }
+    }
 
+    private void replayCreateCNGroup(Cluster newCluster) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            try {
+                ensureCnGroupNotExists(newCluster.getName());
+            } catch (Exception exception) {
+                LOG.fatal("cngroup {} already exists while replaying createCNGroup log.", newCluster.getName());
+            }
+            clusters.add(newCluster);
+            if (cluster == null) {
+                cluster = clusters.get(0);
+            }
+        }
+    }
+
+    private void replayDropCNGroup(String cnGroupName) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Cluster clusterToDel = getClusterByNameNoExceptionNoLock(cnGroupName);
+            if (clusterToDel == null) {
+                return;
+            }
+            clusters.remove(clusterToDel);
+            if (clusterToDel.getId() == cluster.getId()) {
+                cluster = clusters.isEmpty() ? null : clusters.get(0);
+            }
+        }
+    }
+
+    private void replayEnableCNGroup(String cnGroupName) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Cluster c = getClusterByNameNoExceptionNoLock(cnGroupName);
+            if (c == null) {
+                return;
+            }
+            c.setEnabled();
+        }
+    }
+
+    private void replayDisableCNGroup(String cnGroupName) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            Cluster c = getClusterByNameNoExceptionNoLock(cnGroupName);
+            if (c == null) {
+                return;
+            }
+            c.setDisabled();
+        }
     }
 
     @Override
     public void replayInternalOpLog(String payload) {
+        LocalWarehouseOpLog log = LocalWarehouseOpLog.fromJson(payload);
+        short op = log.getOp();
+        switch (op) {
+            case LocalWarehouseOpLog.CREATE_CNGROUP: {
+                Cluster c = log.getCluster();
+                replayCreateCNGroup(c);
+                break;
+            }
+            case LocalWarehouseOpLog.DROP_CNGROUP: {
+                replayDropCNGroup(log.getCNGroupName());
+                break;
+            }
+            case LocalWarehouseOpLog.ENABLE_CNGROUP: {
+                replayEnableCNGroup(log.getCNGroupName());
+                break;
+            }
+            case LocalWarehouseOpLog.DISABLE_CNGROUP: {
+                replayDisableCNGroup(log.getCNGroupName());
+                break;
+            }
+            default:
+                LOG.warn("Unknown warehouse internal op type: {}, ignored!", op);
+                break;
+        }
+    }
 
+    @Override
+    public void gsonPostProcess() {
+        if (clusters.isEmpty()) {
+            if (cluster != null) {
+                // this is only true when the warehouse is upgraded from an older version without multi-cngroup implementation
+                cluster.postUpgradeUpdateNameIfNeeded();
+                // make sure `clusters` is usable after upgrading from an older version
+                clusters.add(cluster);
+            }
+        }
     }
 }

@@ -18,7 +18,6 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
-import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
@@ -32,10 +31,6 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
     // ---------------------------------------- Warehouse Statement ----------------------------------------------------
 
     default R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowClusterStatement(ShowClustersStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

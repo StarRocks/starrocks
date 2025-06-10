@@ -28,7 +28,7 @@ public class WarehouseIdleCheckerTest {
     public void getStatus() {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
-        LocalWarehouse warehouse = new LocalWarehouse(1L, "test", 2, new WarehouseProperty(), "");
+        LocalWarehouse warehouse = new LocalWarehouse(1L, "test", new WarehouseProperty(), "");
 
         warehouseManager.addWarehouse(warehouse);
 
@@ -54,7 +54,7 @@ public class WarehouseIdleCheckerTest {
         Config.warehouse_idle_check_enable = true;
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
-        LocalWarehouse warehouse = new LocalWarehouse(1L, "test", 2, new WarehouseProperty(), "");
+        LocalWarehouse warehouse = new LocalWarehouse(1L, "test", new WarehouseProperty(), "");
         warehouseManager.addWarehouse(warehouse);
 
         long now = System.currentTimeMillis();

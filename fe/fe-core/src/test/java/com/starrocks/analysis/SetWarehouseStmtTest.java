@@ -74,7 +74,7 @@ public class SetWarehouseStmtTest {
         };
 
         WarehouseManager warehouseManager = new MockedWarehouseManager();
-        warehouseManager.addWarehouse(new LocalWarehouse(12343L, "aaa", 11L, null, "mock warehouse for ut"));
+        warehouseManager.addWarehouse(new LocalWarehouse(12343L, "aaa", null, "mock warehouse for ut"));
         GlobalStateMgr globalStateMgr = ctx.getGlobalStateMgr();
 
         new Expectations(globalStateMgr) {{

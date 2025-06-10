@@ -170,10 +170,8 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     @Ignore
     @Test
     public void testGetWarehouses() throws IOException, StarRocksException, InterruptedException {
-        List<Warehouse> whs = ImmutableList.of(
-                new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, 1L, null,
-                                   null),
-                new LocalWarehouse(1, "wh-1", 2L, null, null));
+        List<Warehouse> whs = ImmutableList.of(LocalWarehouse.createDefaultLocalWarehouse(""),
+                new LocalWarehouse(1, "wh-1", null, null));
 
         new MockUp<WarehouseManager>() {
             @Mock
@@ -263,11 +261,9 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testGetWarehousesWithMultipleFEs() throws IOException {
-        List<Warehouse> whs = ImmutableList.of(
-                new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, 1L, null,
-                                   null),
-                new LocalWarehouse(1, "wh-1", 2L, null, null),
-                new LocalWarehouse(2, "wh-2", 2L, null, null));
+        List<Warehouse> whs = ImmutableList.of(LocalWarehouse.createDefaultLocalWarehouse(""),
+                new LocalWarehouse(1, "wh-1", null, null),
+                new LocalWarehouse(2, "wh-2", null, null));
         mockWarehouses(whs);
 
         List<Frontend> frontends = ImmutableList.of(

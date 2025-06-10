@@ -31,6 +31,10 @@ public class StarOSAgentEpack extends StarOSAgent {
                 long nodeId = entry.getValue();
                 long workerId = entry.getKey();
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node == null) {
+                    iterator.remove();
+                    continue;
+                }
                 if (node.getWorkerGroupId() == workerGroupId) {
                     iterator.remove();
                     workerToId.entrySet().removeIf(e -> e.getValue() == workerId);
