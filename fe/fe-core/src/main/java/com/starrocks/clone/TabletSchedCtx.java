@@ -1283,28 +1283,22 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             return true;
         }
 
-        Locker locker = new Locker();
+        Table table = db.getTable(tblId);
+        if (table == null) {
+            return true;
+        }
+
+        // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
         try {
-            locker.lockDatabase(db, LockType.READ);
-            Table table = db.getTable(tblId);
-            if (table == null) {
+            Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+            return true;
+        } catch (AccessDeniedException ae) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
                 return true;
-            } else {
-                // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
-                try {
-                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
-                    return true;
-                } catch (AccessDeniedException ae) {
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
-                        return true;
-                    } catch (AccessDeniedException e) {
-                        return false;
-                    }
-                }
+            } catch (AccessDeniedException e) {
+                return false;
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
