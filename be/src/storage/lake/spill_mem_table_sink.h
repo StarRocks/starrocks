@@ -73,6 +73,9 @@ public:
 
     spill::Spiller* get_spiller() { return _spiller.get(); }
 
+    int64_t txn_id() override;
+    int64_t tablet_id() override;
+
 private:
     Status _prepare(const ChunkPtr& chunk_ptr);
     Status _do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output);
