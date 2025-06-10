@@ -1283,8 +1283,17 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             return true;
         }
 
-        Locker locker = new Locker();
+        Table table = db.getTable(tblId);
+        if (table == null) {
+            return true;
+        }
+
+        // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
         try {
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
             Table table = db.getTable(tblId);
             if (table == null) {
@@ -1305,6 +1314,17 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
+=======
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+            return true;
+        } catch (AccessDeniedException ae) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+                return true;
+            } catch (AccessDeniedException e) {
+                return false;
+            }
+>>>>>>> 552f88cc5b ([BugFix] Remove unnecessary database lock when getting tablet schedule (#59744))
         }
     }
 
