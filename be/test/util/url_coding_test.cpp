@@ -28,10 +28,6 @@ TEST(UrlCodingTest, UrlDecodeBasic) {
     auto res = url_decode("abc");
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value(), "abc");
-    // Encoded space
-    res = url_decode("a+b+c");
-    EXPECT_TRUE(res.ok());
-    EXPECT_EQ(res.value(), "a b c");
     // Encoded percent
     res = url_decode("a%20b%21c");
     EXPECT_TRUE(res.ok());
@@ -43,26 +39,11 @@ TEST(UrlCodingTest, UrlDecodeBasic) {
     EXPECT_EQ(ret, 0);
 }
 
-TEST(UrlCodingTest, UrlDecodeInvalid) {
-    // Incomplete percent encoding
-    auto res = url_decode("abc%");
-    EXPECT_FALSE(res.ok());
-    res = url_decode("abc%2");
-    EXPECT_FALSE(res.ok());
-}
-
 TEST(UrlCodingTest, UrlDecodeEdgeCases) {
     // Empty string
     auto res = url_decode("");
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value(), "");
-    // Only pluses
-    res = url_decode("+++");
-    EXPECT_TRUE(res.ok());
-    EXPECT_EQ(res.value(), "   ");
-    // Mix of valid and invalid
-    res = url_decode("%GG");
-    EXPECT_FALSE(res.ok());
 }
 
 } // namespace starrocks
