@@ -285,8 +285,14 @@ void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_t
         EXPECT_EQ(request->sender_id(), 0);
         EXPECT_EQ(request->txn_id(), _txn_id);
         EXPECT_EQ(1, request->tablet_ids().size());
+<<<<<<< HEAD
         EXPECT_EQ(_tablet_id, request->tablet_ids().Get(0));
         EXPECT_EQ(request->reason(), is_empty_tablet ? "" : "primary replica failed to sync data");
+=======
+        EXPECT_EQ(tablet->tablet_id(), request->tablet_ids().Get(0));
+        EXPECT_EQ(request->reason(),
+                  is_empty_tablet ? "" : "primary replica on host [] failed to sync data to secondary replica");
+>>>>>>> 0171f81d01 ([BugFix] Fix load failure caused by a single secondary replica failure​ (#59762))
         google::protobuf::Closure* closure = std::get<1>(*rpc_tuple);
         closure->Run();
         num_cancel += 1;
