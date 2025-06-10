@@ -831,6 +831,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     throw new DdlException("The specified partition is not in the consumed partitions ", e);
                 }
             }
+
+            // validate broker list if provided
+            try {
+                CreateRoutineLoadStmt.validateKafkaBrokerList(dataSourceProperties.getKafkaBrokerList());
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage(), e);
+            }
         }
         super.modifyJob(routineLoadDesc, jobProperties, dataSourceProperties, originStatement, isReplay);
     }
@@ -858,6 +865,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
         if (dataSourceProperties.getConfluentSchemaRegistryUrl() != null) {
             confluentSchemaRegistryUrl = dataSourceProperties.getConfluentSchemaRegistryUrl();
+        }
+
+        // modify broker list
+        if (dataSourceProperties.getKafkaBrokerList() != null) {
+            this.brokerList = dataSourceProperties.getKafkaBrokerList();
         }
 
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",
