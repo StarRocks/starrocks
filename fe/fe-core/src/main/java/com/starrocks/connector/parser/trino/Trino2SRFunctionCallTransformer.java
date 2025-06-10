@@ -303,6 +303,12 @@ public class Trino2SRFunctionCallTransformer {
         // regexp_like -> regexp
         registerFunctionTransformer("regexp_like", 2, "regexp",
                 List.of(Expr.class, Expr.class));
+
+        // support regexp_replace with 2 param
+        registerFunctionTransformer("regexp_replace", 2,
+                new FunctionCallExpr("regexp_replace",
+                        List.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
+                                new StringLiteral(""))));
     }
 
     private static void registerURLFunctionTransformer() {

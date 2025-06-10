@@ -1257,4 +1257,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select null is not distinct from null";
         analyzeSuccess(sql);
     }
+
+    @Test
+    public void testRegexpReplace() throws Exception {
+        String sql = "select regexp_replace('123', '321')";
+        assertPlanContains(sql, "regexp_replace('123', '321', '')");
+    }
 }
