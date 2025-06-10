@@ -36,7 +36,7 @@ SQL Plan Manager 的工作流程如下：
 关于查询改写的注意事项：
 
 - SQL Plan Manager 主要依赖于 SQL 指纹匹配。它检查查询的 SQL 指纹是否与某个 Baseline 匹配。如果查询匹配某个 Baseline，则查询中的参数会自动替换到 Baseline 的执行计划中。
-- 在匹配过程中，如果查询匹配多个 Baseline，优化器会评估并选择最佳 Baseline。
+- 在匹配过程中，如果查询能匹配多个状态为 `enable` 的 Baseline，优化器会评估并选择最佳 Baseline。
 - 在匹配过程中，SQL Plan Manager 会验证 Baseline 和查询是否匹配。如果匹配失败，则不会使用 Baseline 的查询计划。
 - 对于 SQL Plan Manager 改写的执行计划，`EXPLAIN` 语句将返回 `Using baseline plan[id]`。
 
@@ -78,26 +78,53 @@ USING SELECT t1.v2, t2.v3 FROM t1 JOIN[BROADCAST] t2 on t1.v2 = t2.v2 where t1.v
 **语法**：
 
 ```SQL
-SHOW BASELINE
+SHOW BASELINE [WHERE <condition>]
 ```
 
 **示例**：
 
 ```Plain
-mysql> SHOW BASELINE\G;
+MySQL > show baseline\G;
 ***************************[ 1. row ]***************************
-Id            | 435269
-global        | Y
-bindSQLDigest | SELECT `td`.`t1`.`v2`, `td`.`t2`.`v3`
-FROM `td`.`t1` , `td`.`t2` 
-WHERE (`td`.`t1`.`v2` = `td`.`t2`.`v2`) AND (`td`.`t1`.`v1` > ?)
+Id            | 646125
+global        | N
+enable        | N
+bindSQLDigest | SELECT * FROM `td`.`t2` INNER JOIN `td`.`t1` ON `td`.`t2`.`v2` = `td`.`t1`.`v2` LIMIT 2
 bindSQLHash   | 1085294
-bindSQL       | SELECT `td`.`t1`.`v2`, `td`.`t2`.`v3`
-FROM `td`.`t1` , `td`.`t2` 
-WHERE (`td`.`t1`.`v2` = `td`.`t2`.`v2`) AND (`td`.`t1`.`v1` > _spm_const_var(1))
-planSQL       | SELECT c_2, c_5 FROM (SELECT t_0.v2 AS c_2, t2.v3 AS c_5 FROM (SELECT v2 FROM t1 WHERE v1 > _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] t2 ON t_0.v2 = t2.v2) t2
-costs         | 263.0
-updateTime    | 2025-03-10 16:01:50
+bindSQL       | SELECT * FROM `td`.`t2` INNER JOIN `td`.`t1` ON `td`.`t2`.`v2` = `td`.`t1`.`v2` LIMIT 2
+planSQL       | SELECT t2.v1 AS c_1, t2.v2 AS c_2, t2.v3 AS c_3, t1.v1 AS c_4, t1.v2 AS c_5 FROM t2 INNER JOIN[SHUFFLE] t1 ON t2.v2 = t1.v2 LIMIT 2
+costs         | 582.0
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-16 14:50:45
+***************************[ 2. row ]***************************
+Id            | 636134
+global        | Y
+enable        | Y
+bindSQLDigest | SELECT * FROM `td`.`t2` INNER JOIN `td`.`t1` ON `td`.`t2`.`v2` = `td`.`t1`.`v2` WHERE `td`.`t2`.`v3` = ?
+bindSQLHash   | 1085294
+bindSQL       | SELECT * FROM `td`.`t2` INNER JOIN `td`.`t1` ON `td`.`t2`.`v2` = `td`.`t1`.`v2` WHERE `td`.`t2`.`v3` = _spm_const_range(1, 10, 20)
+planSQL       | SELECT t_0.v1 AS c_1, t_0.v2 AS c_2, t_0.v3 AS c_3, t1.v1 AS c_4, t1.v2 AS c_5 FROM (SELECT * FROM t2 WHERE v3 = _spm_const_range(1, 10, 20)) t_0 INNER JOIN[SHUFFLE] t1 ON t_0.v2 = t1.v2
+costs         | 551.0204081632653
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-13 15:29:04
+2 rows in set
+Time: 0.019s
+
+MySQL > show baseline where global = true\G;
+***************************[ 1. row ]***************************
+Id            | 636134
+global        | Y
+enable        | Y
+bindSQLDigest | SELECT * FROM `td`.`t2` INNER JOIN `td`.`t1` ON `td`.`t2`.`v2` = `td`.`t1`.`v2` WHERE `td`.`t2`.`v3` = ?
+bindSQLHash   | 1085294
+bindSQL       | SELECT * FROM `td`.`t2` INNER JOIN `td`.`t1` ON `td`.`t2`.`v2` = `td`.`t1`.`v2` WHERE `td`.`t2`.`v3` = _spm_const_range(1, 10, 20)
+planSQL       | SELECT t_0.v1 AS c_1, t_0.v2 AS c_2, t_0.v3 AS c_3, t1.v1 AS c_4, t1.v2 AS c_5 FROM (SELECT * FROM t2 WHERE v3 = _spm_const_range(1, 10, 20)) t_0 INNER JOIN[SHUFFLE] t1 ON t_0.v2 = t1.v2
+costs         | 551.0204081632653
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-13 15:29:04
 1 row in set
 Time: 0.013s
 ```
@@ -107,7 +134,7 @@ Time: 0.013s
 **语法**：
 
 ```SQL
-DROP BASELINE <id>
+DROP BASELINE <id>,<id>...
 ```
 
 **参数**：
@@ -121,12 +148,35 @@ DROP BASELINE <id>
 DROP BASELINE 140035;
 ```
 
-## 查询改写
-
-您可以通过将变量 `enable_sql_plan_manager_rewrite` 设置为 `true` 来启用 SQL Plan Manager 查询改写功能。
+### 开启或关闭 Baseline
+**语法**：
 
 ```SQL
-SET enable_sql_plan_manager_rewrite = true;
+-- 启用 Baseline
+ENABLE BASELINE <id>,<id>...
+-- 关闭 Baseline
+DISABLE BASELINE <id>,<id>...
+```
+
+**参数**：
+
+`id`：Baseline 的 ID。您可以通过执行 `SHOW BASELINE` 获取 Baseline ID。
+
+**示例**：
+
+```SQL
+-- 开启 ID 为 140035 的 Baseline。
+ENABLE BASELINE 140035;
+-- 关闭 ID 为 140035, 140037 的 Baseline。
+DISABLE BASELINE 140035, 140037;
+```
+
+## 查询改写
+
+您可以通过将变量 `enable_spm_rewrite` 设置为 `true` 来启用 SQL Plan Manager 查询改写功能。
+
+```SQL
+SET enable_spm_rewrite = true;
 ```
 
 在绑定执行计划后，StarRocks 将自动将相应的查询改写为相应的查询计划。
@@ -143,23 +193,7 @@ mysql> EXPLAIN SELECT t1.v2, t2.v3 FROM t1, t2 WHERE t1.v2 = t2.v2 AND t1.v1 > 2
 | PLAN FRAGMENT 0                         |
 |  OUTPUT EXPRS:2: v2 | 5: v3             |
 |   PARTITION: UNPARTITIONED              |
-|                                         |
-|   RESULT SINK                           |
-|                                         |
-|   7:EXCHANGE                            |
-|                                         |
-| PLAN FRAGMENT 1                         |
-|  OUTPUT EXPRS:                          |
-|   PARTITION: HASH_PARTITIONED: 4: v2    |
-|                                         |
-|   STREAM DATA SINK                      |
-|     EXCHANGE ID: 07                     |
-|     UNPARTITIONED                       |
-|                                         |
-|   6:Project                             |
-|   |  <slot 2> : 2: v2                   |
-|   |  <slot 5> : 5: v3                   |
-|   |                                     |
+......
 |   5:HASH JOIN                           |
 |   |  join op: INNER JOIN (PARTITIONED)  |
 |   |  colocate: false, reason:           |
@@ -174,68 +208,50 @@ mysql> EXPLAIN SELECT t1.v2, t2.v3 FROM t1, t2 WHERE t1.v2 = t2.v2 AND t1.v1 > 2
 创建一个 Baseline，将原始 SQL 绑定到具有 Join Hints 的 SQL 执行计划：
 
 ```SQL
-mysql> create global baseline on select t1.v2, t2.v3 from t1, t2 where t1.v2 = t2.v2 and t1.v1 > 1000
+MySQL td> create global baseline on select t1.v2, t2.v3 from t1, t2 where t1.v2 = t2.v2 and t1.v1 > 1000
 using select t1.v2, t2.v3 from t1 join[broadcast] t2 on t1.v2 = t2.v2 where t1.v1 > 1000;
 Query OK, 0 rows affected
-Time: 0.062s
-mysql> show baseline\G;
+Time: 0.074s
+MySQL td> show baseline\G;
 ***************************[ 1. row ]***************************
-Id            | 435269
+Id            | 647139
 global        | Y
-bindSQLDigest | SELECT `td`.`t1`.`v2`, `td`.`t2`.`v3`
-FROM `td`.`t1` , `td`.`t2` 
-WHERE (`td`.`t1`.`v2` = `td`.`t2`.`v2`) AND (`td`.`t1`.`v1` > ?)
+enable        | Y
+bindSQLDigest | SELECT `td`.`t1`.`v2`, `td`.`t2`.`v3` FROM `td`.`t1` , `td`.`t2`  WHERE (`td`.`t1`.`v2` = `td`.`t2`.`v2`) AND (`td`.`t1`.`v1` > ?)
 bindSQLHash   | 1085294
-bindSQL       | SELECT `td`.`t1`.`v2`, `td`.`t2`.`v3`
-FROM `td`.`t1` , `td`.`t2` 
-WHERE (`td`.`t1`.`v2` = `td`.`t2`.`v2`) AND (`td`.`t1`.`v1` > _spm_const_var(1))
-planSQL       | SELECT c_2, c_5 FROM (SELECT t_0.v2 AS c_2, t2.v3 AS c_5 FROM (SELECT v2 FROM t1 WHERE v1 > _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] t2 ON t_0.v2 = t2.v2) t2
-costs         | 263.0
-updateTime    | 2025-03-10 16:01:50
-1 row in set
-Time: 0.013s
+bindSQL       | SELECT `td`.`t1`.`v2`, `td`.`t2`.`v3` FROM `td`.`t1` , `td`.`t2`  WHERE (`td`.`t1`.`v2` = `td`.`t2`.`v2`) AND (`td`.`t1`.`v1` > _spm_const_var(1))
+planSQL       | SELECT t_0.v2 AS c_2, t2.v3 AS c_5 FROM (SELECT v2 FROM t1 WHERE v1 > _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] t2 ON t_0.v2 = t2.v2
+costs         | 1193.0
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-16 15:51:36
+1 rows in set
+Time: 0.016s
 ```
 
 启用 SQL Plan Manager 查询改写并检查原始查询是否被 Baseline 改写：
 
 ```Plain
-mysql> show session variables like "%enable_sql_plan_manager_rewrite%";
-+---------------------------------+-------+
-| Variable_name                   | Value |
-+---------------------------------+-------+
-| enable_sql_plan_manager_rewrite | false |
-+---------------------------------+-------+
+MySQL td> show variables like '%enable_spm_re%'
++--------------------+-------+
+| Variable_name      | Value |
++--------------------+-------+
+| enable_spm_rewrite | false |
++--------------------+-------+
 1 row in set
-Time: 0.006s
-mysql> set enable_sql_plan_manager_rewrite = true;
+Time: 0.007s
+MySQL td> set enable_spm_rewrite=true
 Query OK, 0 rows affected
-Time: 0.002s
-mysql> explain select t1.v2, t2.v3 from t1, t2 where t1.v2 = t2.v2 and t1.v1 > 20;
+Time: 0.001s
+MySQL td> explain select t1.v2, t2.v3 from t1, t2 where t1.v2 = t2.v2 and t1.v1 > 20;
 +-----------------------------------------+
 | Explain String                          |
 +-----------------------------------------+
-| Using baseline plan[435269]             |
+| Using baseline plan[647139]             |
 |                                         |
 | PLAN FRAGMENT 0                         |
 |  OUTPUT EXPRS:2: v2 | 5: v3             |
-|   PARTITION: UNPARTITIONED              |
-|                                         |
-|   RESULT SINK                           |
-|                                         |
-|   6:EXCHANGE                            |
-|                                         |
-| PLAN FRAGMENT 1                         |
-|  OUTPUT EXPRS:                          |
-|   PARTITION: RANDOM                     |
-|                                         |
-|   STREAM DATA SINK                      |
-|     EXCHANGE ID: 06                     |
-|     UNPARTITIONED                       |
-|                                         |
-|   5:Project                             |
-|   |  <slot 2> : 2: v2                   |
-|   |  <slot 5> : 5: v3                   |
-|   |                                     |
+.............
 |   4:HASH JOIN                           |
 |   |  join op: INNER JOIN (BROADCAST)    |
 |   |  colocate: false, reason:           |
@@ -245,21 +261,32 @@ mysql> explain select t1.v2, t2.v3 from t1, t2 where t1.v2 = t2.v2 and t1.v1 > 2
 |   |                                     |
 |   1:Project                             |
 |   |  <slot 2> : 2: v2                   |
-|   |                                     |
-|   0:OlapScanNode                        |
-|      TABLE: t1                          |
-.......
+.............
 ```
 
 ## 高级用法
 
 对于以下场景，您可以尝试使用手动查询计划绑定：
-- 对于复杂的 SQL，SQL Plan Manager 无法自动将 SQL 和查询计划绑定。
+- 对于参数复杂的 SQL，SQL Plan Manager 可能无法自动将 SQL 和查询计划绑定。
 - 对于特定场景（例如，固定参数或条件参数），自动绑定无法满足要求。
 
 与自动绑定相比，手动绑定提供了更大的灵活性，但需要了解 SQL Plan Manager 的一些执行机制。
 
 ### 执行逻辑
+
+#### SQL Plan Manager 函数
+
+SQL Plan Manager 函数是一组特殊的占位符函数，具有两个主要目的：
+- 标记参数化 SQL 中的表达式，以便在过程中进行后续的参数提取和替换。
+- 检查参数条件，通过参数条件将具有不同参数的 SQL 映射到不同的查询计划。
+
+目前，StarRocks 支持以下 SQL Plan Manager 函数：
+- `_spm_const_var(placeholdID)`：用于标记单个常量值。
+- `_spm_const_list(placeholdID)`：用于标记多个常量值，通常用于标记 IN 条件中的多个常量值。
+- `_spm_const_range(placeholdID, min, max)`：用于标记单个常量值，但要求常量值在指定范围`[min, max]`之内。
+- `_spm_const_num(placeholdID, value...)`：用于标记单个常量值，但要求常量值为指定`value...`中的一个值。
+
+其中 `placeholdID` 是一个整数，作为参数的唯一标识符，在绑定 Baseline 和改写 Plan 时，查找对应的参数使用。
 
 #### Baseline 创建过程
 
@@ -280,25 +307,15 @@ mysql> explain select t1.v2, t2.v3 from t1, t2 where t1.v2 = t2.v2 and t1.v1 > 2
 5. 替换 Baseline 的 `PlanSQL` 中的 SQL Plan Manager 参数。
 6. 返回 `PlanSQL` 以替换原始查询。
 
-### SQL Plan Manager 函数
-
-SQL Plan Manager 函数是 SQL Plan Manager 中的占位符函数，具有两个主要目的：
-- 标记参数化 SQL 中的表达式，以便在过程中进行后续的参数提取和替换。
-- 检查参数条件，通过参数条件将具有不同参数的 SQL 映射到不同的查询计划。
-
-目前，StarRocks 支持以下 SQL Plan Manager 函数：
-- `_spm_const_var`：用于标记单个常量值。
-- `_spm_const_list`：用于标记多个常量值，通常用于标记 IN 条件中的多个常量值。
-
-未来将支持新的 SQL Plan Manager 函数，如 `_spm_const_range` 和 `_spm_const_enum`，以提供具有条件参数的占位符函数。
-
 ### 手动绑定查询
 
 您可以使用 SQL Plan Manager 函数将更复杂的 SQL 绑定到 Baseline。
 
+#### 示例 1
 例如，要绑定的 SQL 如下：
 
 ```SQL
+create global baseline using
 with ss as (
     select i_item_id, sum(ss_ext_sales_price) total_sales
     from store_sales, item
@@ -318,7 +335,7 @@ from (  select * from ss
 group by i_item_id;
 ```
 
-由于 `i_color in ('slate', 'blanched', 'burnished')` 中的常量值相同，该 SQL 将基于 SQL Plan Manager 函数被识别为：
+由于 `i_color in ('slate', 'blanched', 'burnished')` 中的常量值相同，该 SQL 会被 SQL Plan Manager 识别为：
 
 ```SQL
 with ss as (
@@ -340,9 +357,77 @@ from (  select * from ss
 group by i_item_id;
 ```
 
-这意味着两个 `i_color in ('xxx', 'xxx')` 实例被识别为相同的参数，使得 SQL Plan Manager 无法在 SQL 中使用不同参数时区分它们。在这种情况下，您可以在 `BindSQL` 和 `PlanSQL` 中手动指定参数：
+这意味着两个 `i_color in ('xxx', 'xxx')` 实例被识别为相同的参数，使得 SQL Plan Manager 无法在 SQL 中使用不同参数时区分它们。例如以下查询：
 
 ```SQL
+-- 可以匹配 baseline 
+MySQL tpcds> explain with ss as ( 
+    select i_item_id, sum(ss_ext_sales_price) total_sales 
+    from store_sales, item 
+    where i_color in ('A', 'B', 'C') and ss_item_sk = i_item_sk 
+    group by i_item_id 
+), 
+cs as ( 
+    select i_item_id, sum(cs_ext_sales_price) total_sales 
+    from catalog_sales, item 
+    where i_color in ('A', 'B', 'C') and cs_item_sk = i_item_sk 
+    group by i_item_id 
+) 
+select i_item_id, sum(total_sales) total_sales 
+from (  select * from ss 
+        union all 
+        select * from cs) tmp1 
+group by i_item_id; 
++-------------------------------------------------------------------------------------------+
+| Explain String                                                                            |
++-------------------------------------------------------------------------------------------+
+| Using baseline plan[646215]                                                               |
+|                                                                                           |
+| PLAN FRAGMENT 0                                                                           |
+|  OUTPUT EXPRS:104: i_item_id | 106: sum                                                   |
+|   PARTITION: UNPARTITIONED                                                                |
+................................                                                            |
+|      avgRowSize=3.0                                                                       |
++-------------------------------------------------------------------------------------------+
+184 rows in set
+Time: 0.095s
+
+-- 无法匹配 basline
+MySQL tpcds> explain with ss as ( 
+    select i_item_id, sum(ss_ext_sales_price) total_sales 
+    from store_sales, item 
+    where i_color in ('A', 'B', 'C') and ss_item_sk = i_item_sk 
+    group by i_item_id 
+), 
+cs as ( 
+    select i_item_id, sum(cs_ext_sales_price) total_sales 
+    from catalog_sales, item 
+    where i_color in ('E', 'F', 'G') and cs_item_sk = i_item_sk 
+    group by i_item_id 
+) 
+select i_item_id, sum(total_sales) total_sales 
+from (  select * from ss 
+        union all 
+        select * from cs) tmp1 
+group by i_item_id; 
++-------------------------------------------------------------------------------------------+
+| Explain String                                                                            |
++-------------------------------------------------------------------------------------------+
+| PLAN FRAGMENT 0                                                                           |
+|  OUTPUT EXPRS:104: i_item_id | 106: sum                                                   |
+|   PARTITION: UNPARTITIONED                                                                |
+................................                                                            |
+|      avgRowSize=3.0                                                                       |
++-------------------------------------------------------------------------------------------+
+182 rows in set
+Time: 0.040s
+```
+
+
+在这种情况下，您可以在 `BindSQL` 和 `PlanSQL` 中手动指定参数：
+
+```SQL
+create global baseline using
 with ss as (
     select i_item_id, sum(ss_ext_sales_price) total_sales
     from store_sales, item
@@ -365,75 +450,206 @@ group by i_item_id;
 检查查询是否被 Baseline 改写：
 
 ```Plain
-mysql> show baseline\G;
+MySQL td> show baseline\G;
 ***************************[ 1. row ]***************************
-Id            | 436115
-global        | N
-bindSQL       | WITH `ss` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales`
-FROM `tpcds`.`store_sales` , `tpcds`.`item` 
-WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(1))) AND (`tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk`)
-GROUP BY `tpcds`.`item`.`i_item_id`) , `cs` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`catalog_sales`.`cs_ext_sales_price`) AS `total_sales`
-FROM `tpcds`.`catalog_sales` , `tpcds`.`item` 
-WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(2))) AND (`tpcds`.`catalog_sales`.`cs_item_sk` = `tpcds`.`item`.`i_item_sk`)
-GROUP BY `tpcds`.`item`.`i_item_id`) SELECT `tmp1`.`i_item_id`, sum(`tmp1`.`total_sales`) AS `total_sales`
-FROM (SELECT *
-FROM `ss` UNION ALL SELECT *
-FROM `cs`) `tmp1`
-GROUP BY `tmp1`.`i_item_id`
-.......
+Id            | 646215
+global        | Y
+enable        | Y
+bindSQLDigest | WITH `ss` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (?)) AND (`tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) , `cs` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`catalog_sales`.`cs_ext_sales_price`) AS `total_sales` FROM `tpcds`.`catalog_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (?)) AND (`tpcds`.`catalog_sales`.`cs_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) SELECT `tmp1`.`i_item_id`, sum(`tmp1`.`total_sales`) AS `total_sales` FROM (SELECT * FROM `ss` UNION ALL SELECT * FROM `cs`) `tmp1` GROUP BY `tmp1`.`i_item_id`
+bindSQLHash   | 203487418
+bindSQL       | WITH `ss` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(1))) AND (`tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) , `cs` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`catalog_sales`.`cs_ext_sales_price`) AS `total_sales` FROM `tpcds`.`catalog_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(1))) AND (`tpcds`.`catalog_sales`.`cs_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) SELECT `tmp1`.`i_item_id`, sum(`tmp1`.`total_sales`) AS `total_sales` FROM (SELECT * FROM `ss` UNION ALL SELECT * FROM `cs`) `tmp1` GROUP BY `tmp1`.`i_item_id`
+planSQL       | SELECT c_104, sum(c_105) AS c_106 FROM (SELECT * FROM (SELECT i_item_id AS c_104, c_46 AS c_105 FROM (SELECT i_item_id, sum(ss_ext_sales_price) AS c_46 FROM (SELECT i_item_id, ss_ext_sales_price FROM store_sales INNER JOIN[BROADCAST] (SELECT i_item_sk, i_item_id FROM item WHERE i_color IN (_spm_const_list(1))) t_0 ON ss_item_sk = i_item_sk) t_1 GROUP BY i_item_id) t_2 UNION ALL SELECT i_item_id AS c_104, c_103 AS c_105 FROM (SELECT i_item_id, sum(cs_ext_sales_price) AS c_103 FROM (SELECT i_item_id, cs_ext_sales_price FROM catalog_sales INNER JOIN[BROADCAST] (SELECT i_item_sk, i_item_id FROM item WHERE i_color IN (_spm_const_list(1))) t_3 ON cs_item_sk = i_item_sk) t_4 GROUP BY i_item_id) t_5) t_6) t_7 GROUP BY c_104
+costs         | 2.608997082E8
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-16 15:30:29
 ***************************[ 2. row ]***************************
-Id            | 436119
-global        | N
-bindSQL       | WITH `ss` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales`
-FROM `tpcds`.`store_sales` , `tpcds`.`item` 
-WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(1))) AND (`tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk`)
-GROUP BY `tpcds`.`item`.`i_item_id`) , `cs` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`catalog_sales`.`cs_ext_sales_price`) AS `total_sales`
-FROM `tpcds`.`catalog_sales` , `tpcds`.`item` 
-WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(1))) AND (`tpcds`.`catalog_sales`.`cs_item_sk` = `tpcds`.`item`.`i_item_sk`)
-GROUP BY `tpcds`.`item`.`i_item_id`) SELECT `tmp1`.`i_item_id`, sum(`tmp1`.`total_sales`) AS `total_sales`
-FROM (SELECT *
-FROM `ss` UNION ALL SELECT *
-FROM `cs`) `tmp1`
-GROUP BY `tmp1`.`i_item_id`
-.......
+Id            | 646237
+global        | Y
+enable        | Y
+bindSQLDigest | WITH `ss` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (?)) AND (`tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) , `cs` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`catalog_sales`.`cs_ext_sales_price`) AS `total_sales` FROM `tpcds`.`catalog_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (?)) AND (`tpcds`.`catalog_sales`.`cs_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) SELECT `tmp1`.`i_item_id`, sum(`tmp1`.`total_sales`) AS `total_sales` FROM (SELECT * FROM `ss` UNION ALL SELECT * FROM `cs`) `tmp1` GROUP BY `tmp1`.`i_item_id`
+bindSQLHash   | 203487418
+bindSQL       | WITH `ss` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(1))) AND (`tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) , `cs` (`i_item_id`, `total_sales`) AS (SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`catalog_sales`.`cs_ext_sales_price`) AS `total_sales` FROM `tpcds`.`catalog_sales` , `tpcds`.`item`  WHERE (`tpcds`.`item`.`i_color` IN (_spm_const_list(2))) AND (`tpcds`.`catalog_sales`.`cs_item_sk` = `tpcds`.`item`.`i_item_sk`) GROUP BY `tpcds`.`item`.`i_item_id`) SELECT `tmp1`.`i_item_id`, sum(`tmp1`.`total_sales`) AS `total_sales` FROM (SELECT * FROM `ss` UNION ALL SELECT * FROM `cs`) `tmp1` GROUP BY `tmp1`.`i_item_id`
+planSQL       | SELECT c_104, sum(c_105) AS c_106 FROM (SELECT * FROM (SELECT i_item_id AS c_104, c_46 AS c_105 FROM (SELECT i_item_id, sum(ss_ext_sales_price) AS c_46 FROM (SELECT i_item_id, ss_ext_sales_price FROM store_sales INNER JOIN[BROADCAST] (SELECT i_item_sk, i_item_id FROM item WHERE i_color IN (_spm_const_list(1))) t_0 ON ss_item_sk = i_item_sk) t_1 GROUP BY i_item_id) t_2 UNION ALL SELECT i_item_id AS c_104, c_103 AS c_105 FROM (SELECT i_item_id, sum(cs_ext_sales_price) AS c_103 FROM (SELECT i_item_id, cs_ext_sales_price FROM catalog_sales INNER JOIN[BROADCAST] (SELECT i_item_sk, i_item_id FROM item WHERE i_color IN (_spm_const_list(2))) t_3 ON cs_item_sk = i_item_sk) t_4 GROUP BY i_item_id) t_5) t_6) t_7 GROUP BY c_104
+costs         | 2.635637082E8
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-16 15:37:35
 2 rows in set
-Time: 0.011s
-
-mysql> explain with ss as (
-    select i_item_id, sum(ss_ext_sales_price) total_sales
-    from store_sales, item
-    where i_color IN ("a", "b", "c") and ss_item_sk = i_item_sk
-    group by i_item_id
-),
-cs as (
-    select i_item_id, sum(cs_ext_sales_price) total_sales
-    from catalog_sales, item
-    where i_color IN ("A", "B", "D") and cs_item_sk = i_item_sk
-    group by i_item_id
-)
-select i_item_id, sum(total_sales) total_sales
-from (  select * from ss
-        union all
-        select * from cs) tmp1
-group by i_item_id;
+Time: 0.013s
+MySQL td> explain with ss as ( 
+    select i_item_id, sum(ss_ext_sales_price) total_sales 
+    from store_sales, item 
+    where i_color in ('A', 'B', 'C') and ss_item_sk = i_item_sk 
+    group by i_item_id 
+), 
+cs as ( 
+    select i_item_id, sum(cs_ext_sales_price) total_sales 
+    from catalog_sales, item 
+    where i_color in ('E', 'F', 'G') and cs_item_sk = i_item_sk 
+    group by i_item_id 
+) 
+select i_item_id, sum(total_sales) total_sales 
+from (  select * from ss 
+        union all 
+        select * from cs) tmp1 
+group by i_item_id; 
 +-------------------------------------------------------------------------------------------+
 | Explain String                                                                            |
 +-------------------------------------------------------------------------------------------+
-| Using baseline plan[436115]                                                               |
+| Using baseline plan[646237]                                                               |
 |                                                                                           |
 | PLAN FRAGMENT 0                                                                           |
 |  OUTPUT EXPRS:104: i_item_id | 106: sum                                                   |
 |   PARTITION: UNPARTITIONED                                                                |
-|                                                                                           |
-|   RESULT SINK                                                                             |
-|                                                                                           |
-|   24:EXCHANGE                                                                             |
-|                                                                                           |
-| PLAN FRAGMENT 1                                                                           |
 ......
 ```
 
 从上面的输出可以看到，查询被 SQL Plan Manager 函数中使用了不同参数的 Baseline 改写。
+
+#### 示例 2
+对于以下查询，想针对 `i_color` 不同参数时，分别使用不同的 baseline 改写。
+```SQL
+select i_item_id, sum(ss_ext_sales_price) total_sales
+from store_sales join item on ss_item_sk = i_item_sk
+where i_color = 25 
+group by i_item_id
+```
+
+可以使用 `_spm_const_range` 来实现：
+```SQL
+-- 10 <= i_color <= 50 时，使用 SHUFFLE JOIN
+MySQL tpcds> create baseline  using select i_item_id, sum(ss_ext_sales_price) total_sales
+from store_sales join[SHUFFLE] item on ss_item_sk = i_item_sk
+where i_color = _spm_const_range(1, 10, 50)
+group by i_item_id
+Query OK, 0 rows affected
+Time: 0.017s
+-- i_color 为 60，70，80 时，使用 BROADCAST JOIN
+MySQL tpcds> create baseline  using select i_item_id, sum(ss_ext_sales_price) total_sales
+from store_sales join[BROADCAST] item on ss_item_sk = i_item_sk
+where i_color = _spm_const_enum(1, 60, 70, 80)
+group by i_item_id
+Query OK, 0 rows affected
+Time: 0.009s
+MySQL tpcds> show baseline\G;
+***************************[ 1. row ]***************************
+Id            | 647167
+global        | N
+enable        | Y
+bindSQLDigest | SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` INNER JOIN `tpcds`.`item` ON `tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk` WHERE `tpcds`.`item`.`i_color` = ? GROUP BY `tpcds`.`item`.`i_item_id`
+bindSQLHash   | 68196091
+bindSQL       | SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` INNER JOIN `tpcds`.`item` ON `tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk` WHERE `tpcds`.`item`.`i_color` = _spm_const_range(1, 10, 50) GROUP BY `tpcds`.`item`.`i_item_id`
+planSQL       | SELECT i_item_id, sum(ss_ext_sales_price) AS c_46 FROM (SELECT i_item_id, ss_ext_sales_price FROM store_sales INNER JOIN[SHUFFLE] (SELECT i_item_sk, i_item_id FROM item WHERE i_color = _spm_const_range(1, '10', '50')) t_0 ON ss_item_sk = i_item_sk) t_1 GROUP BY i_item_id
+costs         | 1.612502146E8
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-16 16:02:46
+***************************[ 2. row ]***************************
+Id            | 647171
+global        | N
+enable        | Y
+bindSQLDigest | SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` INNER JOIN `tpcds`.`item` ON `tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk` WHERE `tpcds`.`item`.`i_color` = ? GROUP BY `tpcds`.`item`.`i_item_id`
+bindSQLHash   | 68196091
+bindSQL       | SELECT `tpcds`.`item`.`i_item_id`, sum(`tpcds`.`store_sales`.`ss_ext_sales_price`) AS `total_sales` FROM `tpcds`.`store_sales` INNER JOIN `tpcds`.`item` ON `tpcds`.`store_sales`.`ss_item_sk` = `tpcds`.`item`.`i_item_sk` WHERE `tpcds`.`item`.`i_color` = _spm_const_enum(1, 60, 70, 80) GROUP BY `tpcds`.`item`.`i_item_id`
+planSQL       | SELECT i_item_id, sum(ss_ext_sales_price) AS c_46 FROM (SELECT i_item_id, ss_ext_sales_price FROM store_sales INNER JOIN[BROADCAST] (SELECT i_item_sk, i_item_id FROM item WHERE i_color = _spm_const_enum(1, '60', '70', '80')) t_0 ON ss_item_sk = i_item_sk) t_1 GROUP BY i_item_id
+costs         | 1.457490986E8
+queryMs       | -1.0
+source        | USER
+updateTime    | 2025-05-16 16:03:23
+2 rows in set
+Time: 0.011s
+MySQL tpcds>
+MySQL tpcds> explain select i_item_id, sum(ss_ext_sales_price) total_sales
+from store_sales join item on ss_item_sk = i_item_sk 
+where i_color = 40 -- 命中 SHUFFLE JOIN
+group by i_item_id
++-------------------------------------------------------------------------------------------+
+| Explain String                                                                            |
++-------------------------------------------------------------------------------------------+
+| Using baseline plan[647167]                                                               |
+|                                                                                           |
+| PLAN FRAGMENT 0                                                                           |
+.................
+|   |                                                                                       |
+|   5:HASH JOIN                                                                             |
+|   |  join op: INNER JOIN (PARTITIONED)                                                    |
+|   |  colocate: false, reason:                                                             |
+|   |  equal join conjunct: 2: ss_item_sk = 24: i_item_sk                                   |
+|   |                                                                                       |
+|   |----4:EXCHANGE                                                                         |
+|   |                                                                                       |
+|   1:EXCHANGE                                                                              |
+.................
+MySQL tpcds> explain select i_item_id, sum(ss_ext_sales_price) total_sales
+from store_sales join item on ss_item_sk = i_item_sk
+where i_color = 70 -- 命中 BROADCAST JOIN
+group by i_item_id
++-------------------------------------------------------------------------------------------+
+| Explain String                                                                            |
++-------------------------------------------------------------------------------------------+
+| Using baseline plan[647171]                                                               |
+|                                                                                           |
+| PLAN FRAGMENT 0                                                                           |
+.................
+|   4:HASH JOIN                                                                             |
+|   |  join op: INNER JOIN (BROADCAST)                                                      |
+|   |  colocate: false, reason:                                                             |
+|   |  equal join conjunct: 2: ss_item_sk = 24: i_item_sk                                   |
+|   |                                                                                       |
+|   |----3:EXCHANGE                                                                         |
+|   |                                                                                       |
+|   0:OlapScanNode                                                                          |
+|      TABLE: store_sales                                                                   |
+.................
+MySQL tpcds> explain select i_item_id, sum(ss_ext_sales_price) total_sales
+from store_sales join item on ss_item_sk = i_item_sk 
+where i_color = 100  -- 未命中 Baseline
+group by i_item_id
++-------------------------------------------------------------------------------------------+
+| Explain String                                                                            |
++-------------------------------------------------------------------------------------------+
+| PLAN FRAGMENT 0                                                                           |
+|  OUTPUT EXPRS:25: i_item_id | 46: sum                                                     |
+|   PARTITION: UNPARTITIONED                                                                |
+|                                                                                           |
+|   RESULT SINK                                                                             |
+.................
+```
+
+### 自动捕获
+
+自动捕获会查询过去一段时间内(默认3小时)的查询 SQL，并基于这些查询生成并保存对应的 baseline，生成 baseline 默认为 `disable` 状态，并不会立刻生效。在以下场景中：
+* 升级后，执行计划变更，导致查询耗时变高
+* 导入数据后，统计信息变更，导致执行计划变更，进一步影响查询耗时变高
+
+可以通过`show baseline`查找历史生成的 baseline，并通过`enable baseline`的方式手动回滚Plan。
+
+自动捕获功能依赖存储查询历史功能，需要设置：
+```SQL
+set global enable_query_history=true;
+```
+开启后查询历史存储在 `_statistics_.query_history` 表中。
+
+开启自动捕获功能：
+```SQL
+set global enable_plan_capture=true;
+```
+
+其他配置：
+```SQL
+-- 存储查询历史时长，单位为秒，默认为 3 天
+set global query_history_keep_seconds = 259200;
+-- 捕获SQL的间隔时间，单位为秒，默认为 3 小时
+set global plan_capture_interval=10800;
+-- 捕获SQL的正则检查，仅捕获匹配 plan_capture_include_pattern 的表名(db.table)，默认为.*，表示所有表
+set global plan_capture_include_pattern=".*";
+```
+
+:::note
+存储查询历史&自动捕获在一定程度上会占用存储和计算资源，请根据自身场景合理设置。
+:::
+
 
 ## 未来计划
 
