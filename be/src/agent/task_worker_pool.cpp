@@ -841,7 +841,7 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         TDataCacheMetrics t_metrics{};
         const LocalCache* cache = DataCache::GetInstance()->local_cache();
         if (cache != nullptr && cache->is_initialized()) {
-            const DataCacheMetrics& metrics = cache->cache_metrics(0);
+            const auto metrics = cache->cache_metrics();
             DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
         } else {
             t_metrics.__set_status(TDataCacheStatus::DISABLED);
