@@ -302,6 +302,7 @@ CONF_Int32(data_page_size, "65536");
 // Page cache is the cache for the decompressed or decoded page of data file.
 // Currently, BE does not support configure the upper limit of the page cache.
 // The memory limit of page cache are uniformly restricted by datacache_mem_size.
+// -1 represents automatic adjustment.
 CONF_mString(storage_page_cache_limit, "-1");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
@@ -1276,7 +1277,7 @@ CONF_Bool(datacache_persistence_enable, "true");
 // `cachelib` is not support now.
 // Set the default value empty to indicate whether it is manually configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
-CONF_String_enum(datacache_engine, "", "starcache,lrucache,cachelib");
+CONF_String_enum(datacache_engine, "", ",starcache,lrucache,cachelib");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
