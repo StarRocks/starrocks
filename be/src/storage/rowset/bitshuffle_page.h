@@ -271,6 +271,7 @@ public:
         case 8:
         case 12:
         case 16:
+        case 32:
             break;
         default:
             std::stringstream ss;
