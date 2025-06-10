@@ -1,0 +1,71 @@
+-- name: test_load_ha
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t`
+(
+    `id` int(11) NOT NULL COMMENT "用户 ID",
+    `name` varchar(65533) NULL COMMENT "用户姓名",
+    `score` int(11) NOT NULL COMMENT "用户得分"
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "write_quorum" = "ONE",
+ "replication_num" = "3"
+);
+-- result:
+-- !result
+[UC]ADMIN ENABLE FAILPOINT 'load_memtable_flush';
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:${uuid1}" -H "format:json" -d '{"id":1,"name":"n1","score":1}' ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "172.26.80.6: load_memtable_flush failpoint triggered failure, be: 172.26.80.6, txn_id: 78, tablet_id: 10925"
+}
+-- !result
+[UC]ADMIN DISABLE FAILPOINT 'load_memtable_flush';
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+[UC]select state, instr(error_msg, 'load_memtable_flush failpoint triggered failure') > 0 from information_schema.loads where label='${uuid1}';
+-- result:
+CANCELLED	1
+-- !result
+[UC]select * from t;
+-- result:
+-- !result
+[UC]ADMIN ENABLE FAILPOINT 'load_segment_flush';
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:${uuid2}" -H "format:json" -d '{"id":2,"name":"n2","score":2}' ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+[UC]ADMIN DISABLE FAILPOINT 'load_segment_flush';
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+[UC]select state, error_msg from information_schema.loads where label='${uuid2}';
+-- result:
+FINISHED	
+-- !result
+[UC]select * from t;
+-- result:
+2	n2	2
+-- !result

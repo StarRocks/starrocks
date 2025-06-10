@@ -232,9 +232,6 @@ private:
     // so a TabletsChannel needs to be created, such that _is_incremental_channel=true
     bool _is_incremental_channel = false;
 
-    mutable bthread::Mutex _status_lock;
-    Status _status = Status::OK();
-
     std::map<string, string> _column_to_expr_value;
 
     // Profile counters
