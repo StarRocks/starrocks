@@ -163,37 +163,15 @@ std::string url_encode(const std::string& decoded) {
     return result;
 }
 
-// Adapted from
-// http://www.boost.org/doc/libs/1_40_0/doc/html/boost_asio/
-//   example/http/server3/request_handler.cpp
-// See http://www.boost.org/LICENSE_1_0.txt for license for this method.
 StatusOr<std::string> url_decode(const std::string& in) {
-    std::string out;
-    out.reserve(in.size());
-
-    for (size_t i = 0; i < in.size(); ++i) {
-        if (in[i] == '%') {
-            if (i + 3 <= in.size()) {
-                int value = 0;
-                std::istringstream is(in.substr(i + 1, 2));
-
-                if (is >> std::hex >> value) {
-                    (out) += static_cast<char>(value);
-                    i += 2;
-                } else {
-                    return Status::InvalidArgument("invalid encoding in URL");
-                }
-            } else {
-                return Status::InvalidArgument("invalid encoding in URL");
-            }
-        } else if (in[i] == '+') {
-            (out) += ' ';
-        } else {
-            (out) += in[i];
-        }
+    int decoded_length = 0;
+    const auto decoded_value = curl_easy_unescape(nullptr, in.c_str(), static_cast<int>(in.length()), &decoded_length);
+    if (decoded_value == nullptr) {
+        return Status::InvalidArgument("invalid encoding in URL");
     }
-
-    return out;
+    std::string result(decoded_value);
+    curl_free(decoded_value);
+    return result;
 }
 
 } // namespace starrocks
