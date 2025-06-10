@@ -34,6 +34,7 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
+#include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
@@ -593,6 +594,9 @@ void LocalTabletsChannel::_abort_replica_tablets(
         });
 
 #ifndef BE_TEST
+        FAIL_POINT_TRIGGER_EXECUTE(
+                load_tablet_writer_cancel,
+                TABLET_WRITER_CANCEL_FP_ACTION(endpoint.host(), closure, closure->cntl, cancel_request));
         stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure);
 #else
         std::tuple<PTabletWriterCancelRequest*, google::protobuf::Closure*, brpc::Controller*> rpc_tuple{

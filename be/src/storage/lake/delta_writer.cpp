@@ -25,6 +25,7 @@
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
@@ -70,6 +71,9 @@ public:
         RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
+
+    int64_t txn_id() override { return _writer->txn_id(); }
+    int64_t tablet_id() override { return _writer->tablet_id(); }
 
 private:
     TabletWriter* _writer;
@@ -671,7 +675,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     auto prepare_txn_log_ts = watch.elapsed_time();
     ADD_COUNTER_RELAXED(_stats.finish_prepare_txn_log_time_ns, prepare_txn_log_ts - wait_flush_ts);
     if (mode == kWriteTxnLog) {
-        RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
+        Status res;
+        FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(load_commit_txn, res, COMMIT_TXN_FP_ACTION(_txn_id, _tablet_id),
+                                                    tablet.put_txn_log(txn_log));
+        RETURN_IF_ERROR(res);
     } else {
         auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
         _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
@@ -683,7 +690,8 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                                                                                 NANOSECS_PER_USEC);
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
         // preload update state here to minimaze the cost when publishing.
-        tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
+        FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(load_pk_preload, (void)PK_PRELOAD_FP_ACTION(_txn_id, _tablet_id),
+                                              tablet.update_mgr()->preload_update_state(*txn_log, &tablet));
     }
     auto pk_preload_duration_ns = watch.elapsed_time() - put_txn_log_ts;
     ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, pk_preload_duration_ns);
