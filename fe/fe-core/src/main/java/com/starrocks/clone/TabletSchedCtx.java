@@ -1298,34 +1298,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
-        ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
         try {
-            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+            Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
             return true;
         } catch (AccessDeniedException ae) {
             try {
-                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+                Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
                 return true;
-<<<<<<< HEAD
-            } else {
-                // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
-                try {
-                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
-                    return true;
-                } catch (AccessDeniedException ae) {
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
-                        return true;
-                    } catch (AccessDeniedException e) {
-                        return false;
-                    }
-                }
-=======
             } catch (AccessDeniedException e) {
                 return false;
->>>>>>> 552f88cc5b ([BugFix] Remove unnecessary database lock when getting tablet schedule (#59744))
             }
         }
     }
