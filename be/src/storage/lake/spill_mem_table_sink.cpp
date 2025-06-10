@@ -313,4 +313,12 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     return Status::OK();
 }
 
+int64_t SpillMemTableSink::txn_id() {
+    return _writer->txn_id();
+}
+
+int64_t SpillMemTableSink::tablet_id() {
+    return _writer->tablet_id();
+}
+
 } // namespace starrocks::lake

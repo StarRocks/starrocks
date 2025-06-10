@@ -20,7 +20,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-[UC]ADMIN ENABLE FAILPOINT 'load_memtable_flush';
+ADMIN ENABLE FAILPOINT 'load_memtable_flush';
 -- result:
 -- !result
 [UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:${uuid1}" -H "format:json" -d '{"id":1,"name":"n1","score":1}' ${url}/api/db_${uuid0}/t/_stream_load
@@ -31,23 +31,23 @@ PROPERTIES (
     "Message": "172.26.80.6: load_memtable_flush failpoint triggered failure, be: 172.26.80.6, txn_id: 78, tablet_id: 10925"
 }
 -- !result
-[UC]ADMIN DISABLE FAILPOINT 'load_memtable_flush';
+ADMIN DISABLE FAILPOINT 'load_memtable_flush';
 -- result:
 -- !result
 sync;
 -- result:
 -- !result
-[UC]select state, instr(error_msg, 'load_memtable_flush failpoint triggered failure') > 0 from information_schema.loads where label='${uuid1}';
+select state, instr(error_msg, 'load_memtable_flush failpoint triggered failure') > 0 from information_schema.loads where label='${uuid1}';
 -- result:
 CANCELLED	1
 -- !result
-[UC]select * from t;
+select * from t;
 -- result:
 -- !result
-[UC]ADMIN ENABLE FAILPOINT 'load_segment_flush';
+ADMIN ENABLE FAILPOINT 'load_segment_flush';
 -- result:
 -- !result
-[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:${uuid2}" -H "format:json" -d '{"id":2,"name":"n2","score":2}' ${url}/api/db_${uuid0}/t/_stream_load
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:${uuid2}" -H "format:json" -d '{"id":2,"name":"n2","score":2}' ${url}/api/db_${uuid0}/t/_stream_load
 -- result:
 0
 {
@@ -55,17 +55,17 @@ CANCELLED	1
     "Message": "OK"
 }
 -- !result
-[UC]ADMIN DISABLE FAILPOINT 'load_segment_flush';
+ADMIN DISABLE FAILPOINT 'load_segment_flush';
 -- result:
 -- !result
 sync;
 -- result:
 -- !result
-[UC]select state, error_msg from information_schema.loads where label='${uuid2}';
+select state, error_msg from information_schema.loads where label='${uuid2}';
 -- result:
 FINISHED	
 -- !result
-[UC]select * from t;
+select * from t;
 -- result:
 2	n2	2
 -- !result
