@@ -343,7 +343,10 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     auto finish_wait_writer_ts = watch.elapsed_time();
 
     if (!node_id_to_abort_tablets.empty()) {
-        _abort_replica_tablets(request, "primary replica failed to sync data", node_id_to_abort_tablets);
+        _abort_replica_tablets(request,
+                               fmt::format("primary replica on host [{}] failed to sync data to secondary replica",
+                                           BackendOptions::get_localhost()),
+                               node_id_to_abort_tablets);
     }
 
     // We need wait all secondary replica commit before we close the channel
@@ -438,14 +441,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
     response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
-    // reset error message if it already set by other replica
-    {
-        std::lock_guard l(_status_lock);
-        if (!_status.ok()) {
-            response->mutable_status()->set_status_code(_status.code());
-            response->mutable_status()->add_error_msgs(std::string(_status.message()));
-        }
-    }
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
     auto wait_replica_ns = finish_wait_replica_ts - finish_wait_writer_ts;
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
@@ -821,12 +816,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
     string tablet_id_list_str;
     JoinInts(tablet_ids, ",", &tablet_id_list_str);
     LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
-              << " index_id: " << _key.index_id << " tablet_ids:" << tablet_id_list_str;
-
-    if (abort_with_exception) {
-        std::lock_guard l(_status_lock);
-        _status = Status::Aborted(reason);
-    }
+              << " index_id: " << _key.index_id << " tablet_ids:" << tablet_id_list_str << ", reason: " << reason;
 }
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
