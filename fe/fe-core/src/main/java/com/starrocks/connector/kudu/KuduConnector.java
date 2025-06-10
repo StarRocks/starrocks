@@ -70,7 +70,7 @@ public class KuduConnector implements Connector {
         validateMetastoreUrisIfNecessary(catalogType, metastoreUris);
 
         if (HIVE.equals(catalogType) || GLUE.equals(catalogType)) {
-            HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+            HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties, catalogName);
             MetastoreType metastoreType = MetastoreType.get(catalogType);
             hiveMetastoreClient = Optional.of(new HiveMetastore(metaClient, catalogName, metastoreType));
         } else {

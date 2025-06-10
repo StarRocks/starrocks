@@ -31,12 +31,14 @@ import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.hudi.HudiRemoteFileIO;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -55,6 +57,12 @@ import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABL
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
 
 public class RemoteFileOperationsTest {
+
+    @After
+    public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
+    }
+
     @Test
     public void testGetHiveRemoteFiles() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());

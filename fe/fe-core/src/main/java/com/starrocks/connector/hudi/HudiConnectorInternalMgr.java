@@ -108,7 +108,7 @@ public class HudiConnectorInternalMgr {
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties, catalogName);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {

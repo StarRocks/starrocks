@@ -28,6 +28,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import mockit.Expectations;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.After;
@@ -62,6 +63,7 @@ public class CachingHiveMetastoreTest {
 
     @After
     public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
         executor.shutdown();
     }
 
