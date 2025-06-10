@@ -1296,21 +1296,21 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         Table table = db.getTable(tblId);
         if (table == null) {
             return true;
-        } else {
-            // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+        }
+
+        // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+            return true;
+        } catch (AccessDeniedException ae) {
             try {
-                Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                 return true;
-            } catch (AccessDeniedException ae) {
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-                    return true;
-                } catch (AccessDeniedException e) {
-                    return false;
-                }
+            } catch (AccessDeniedException e) {
+                return false;
             }
         }
     }
