@@ -260,6 +260,19 @@ StatusOr<int64_t> DataCache::get_storage_page_cache_limit() {
     return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), _global_env->process_mem_limit());
 }
 
+StatusOr<int64_t> DataCache::get_current_mem_limit() {
+#if defined(WITH_STARCACHE)
+    if (config::datacache_engine == "starcache") {
+        starcache::CacheMetrics metrics = _local_cache->cache_metrics(0);
+        return metrics.mem_quota_bytes;
+    }
+#endif
+    if (config::datacache_engine == "lrucache") {
+        return _lru_cache->get_capacity();
+    }
+    return Status::InternalError(strings::Substitute("Not support cache engine $0", config::datacache_engine));
+}
+
 bool DataCache::page_cache_available() const {
     return !config::disable_storage_page_cache && _page_cache != nullptr && _page_cache->get_capacity() > 0;
 }
