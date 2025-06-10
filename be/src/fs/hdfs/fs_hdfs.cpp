@@ -424,6 +424,10 @@ public:
         std::shared_ptr<HdfsFsClient> hdfs_client;
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
 
+        if (hdfsDelete(hdfs_client->hdfs_fs, path.c_str(), 0) == 0) {
+            return Status::OK();
+        }
+
         Status exists_status = _path_exists(hdfs_client->hdfs_fs, path);
         if (!exists_status.ok()) {
             return exists_status;
@@ -434,11 +438,8 @@ public:
             return Status::InvalidArgument(fmt::format("path {} is a directory, not a file", path));
         }
 
-        if (hdfsDelete(hdfs_client->hdfs_fs, path.c_str(), 0) != 0) {
-            return Status::InternalError(
-                    fmt::format("Failed to delete HDFS file: {}, error: {}", path, get_hdfs_err_msg()));
-        }
-        return Status::OK();
+        return Status::InternalError(
+                fmt::format("Failed to delete HDFS file: {}, error: {}", path, get_hdfs_err_msg()));
     }
 
     Status create_dir(const std::string& dirname) override {
@@ -446,10 +447,10 @@ public:
         RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
         std::shared_ptr<HdfsFsClient> hdfs_client;
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
-        
+
         if (hdfsCreateDirectory(hdfs_client->hdfs_fs, dirname.c_str()) != 0) {
-            return Status::InternalError(fmt::format("Failed to create HDFS directory: {}, error: {}", 
-                                                    dirname, get_hdfs_err_msg()));
+            return Status::InternalError(
+                    fmt::format("Failed to create HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
         }
         return Status::OK();
     }
@@ -459,7 +460,7 @@ public:
         RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
         std::shared_ptr<HdfsFsClient> hdfs_client;
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
-        
+
         // Check if directory already exists
         Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
         if (exists_status.ok()) {
@@ -472,13 +473,13 @@ public:
                 return Status::InvalidArgument(fmt::format("Path {} exists but is not a directory", dirname));
             }
         }
-        
+
         // Directory doesn't exist, create it
         if (hdfsCreateDirectory(hdfs_client->hdfs_fs, dirname.c_str()) != 0) {
-            return Status::InternalError(fmt::format("Failed to create HDFS directory: {}, error: {}", 
-                                                    dirname, get_hdfs_err_msg()));
+            return Status::InternalError(
+                    fmt::format("Failed to create HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
         }
-        
+
         if (created) *created = true;
         return Status::OK();
     }
@@ -495,6 +496,10 @@ public:
         std::shared_ptr<HdfsFsClient> hdfs_client;
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
 
+        if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 0) == 0) {
+            return Status::OK();
+        }
+
         Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
         if (!exists_status.ok()) {
             return exists_status;
@@ -505,11 +510,8 @@ public:
             return Status::InvalidArgument(fmt::format("path {} is not a directory", dirname));
         }
 
-        if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 0) != 0) {
-            return Status::InternalError(
-                    fmt::format("Failed to delete HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
-        }
-        return Status::OK();
+        return Status::InternalError(
+                fmt::format("Failed to delete HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
     }
 
     Status delete_dir_recursive(const std::string& dirname) override {
@@ -517,6 +519,10 @@ public:
         RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
         std::shared_ptr<HdfsFsClient> hdfs_client;
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+
+        if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 1) == 0) {
+            return Status::OK();
+        }
 
         Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
         if (exists_status.is_not_found()) {
@@ -531,11 +537,8 @@ public:
             return Status::InvalidArgument(fmt::format("path {} is not a directory", dirname));
         }
 
-        if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 1) != 0) {
-            return Status::InternalError(fmt::format("Failed to recursively delete HDFS directory: {}, error: {}",
-                                                     dirname, get_hdfs_err_msg()));
-        }
-        return Status::OK();
+        return Status::InternalError(
+                fmt::format("Failed to recursively delete HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
     }
 
     Status sync_dir(const std::string& dirname) override { return Status::NotSupported("HdfsFileSystem::sync_dir"); }
@@ -545,7 +548,7 @@ public:
         RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
         std::shared_ptr<HdfsFsClient> hdfs_client;
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
-        
+
         return _is_directory(hdfs_client->hdfs_fs, path);
     }
 
@@ -667,10 +670,10 @@ Status HdfsFileSystem::_path_exists(hdfsFS fs, const std::string& path) {
 StatusOr<bool> HdfsFileSystem::_is_directory(hdfsFS fs, const std::string& path) {
     hdfsFileInfo* file_info = hdfsGetPathInfo(fs, path.c_str());
     if (file_info == nullptr) {
-        return Status::InternalError(fmt::format("Failed to get HDFS path info: {}, error: {}", 
-                                                path, get_hdfs_err_msg()));
+        return Status::InternalError(
+                fmt::format("Failed to get HDFS path info: {}, error: {}", path, get_hdfs_err_msg()));
     }
-    
+
     bool is_dir = (file_info->mKind == kObjectKindDirectory);
     hdfsFreeFileInfo(file_info, 1);
     return is_dir;
