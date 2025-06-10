@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/peer_cache_wrapper.h"
+#include "cache/peer_cache_engine.h"
 
 #include "common/logging.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -23,13 +23,13 @@
 
 namespace starrocks {
 
-Status PeerCacheWrapper::init(const CacheOptions& options) {
+Status PeerCacheEngine::init(const CacheOptions& options) {
     _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
     return Status::OK();
 }
 
-Status PeerCacheWrapper::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                              ReadCacheOptions* options) {
+Status PeerCacheEngine::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                             ReadCacheOptions* options) {
     if (options->use_adaptor && !_cache_adaptor->check_read_cache()) {
         return Status::ResourceBusy("resource is busy");
     }
@@ -70,19 +70,19 @@ Status PeerCacheWrapper::read(const std::string& key, size_t off, size_t size, I
     return st;
 }
 
-void PeerCacheWrapper::record_read_remote(size_t size, int64_t lateny_us) {
+void PeerCacheEngine::record_read_remote(size_t size, int64_t lateny_us) {
     if (_cache_adaptor) {
         return _cache_adaptor->record_read_remote(size, lateny_us);
     }
 }
 
-void PeerCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
+void PeerCacheEngine::record_read_cache(size_t size, int64_t lateny_us) {
     if (_cache_adaptor) {
         return _cache_adaptor->record_read_cache(size, lateny_us);
     }
 }
 
-Status PeerCacheWrapper::shutdown() {
+Status PeerCacheEngine::shutdown() {
     // TODO: starcache implement shutdown to release memory
     return Status::OK();
 }

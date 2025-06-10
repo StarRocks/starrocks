@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-#include "cache/dummy_types.h"
+#include "cache/cache_metrics.h"
 #include "common/status.h"
 
 namespace starrocks {

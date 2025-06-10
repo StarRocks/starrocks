@@ -106,7 +106,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
-            LocalCache* cache = DataCache::GetInstance()->local_cache();
+            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
             if (cache == nullptr || !cache->is_initialized()) {
                 return Status::InternalError("Local cache is not initialized");
             }
@@ -121,7 +121,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return cache->update_mem_quota(mem_size, true);
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
-            LocalCache* cache = DataCache::GetInstance()->local_cache();
+            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
             if (cache == nullptr || !cache->is_initialized()) {
                 return Status::InternalError("Local cache is not initialized");
             }
