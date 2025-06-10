@@ -341,45 +341,47 @@ public class MetadataViewer {
             }
 
             Collections.sort(partitionIds);
+
             for (long partitionId : partitionIds) {
                 Partition partition = olapTable.getPartition(partitionId);
-                DistributionInfo distributionInfo = partition.getDistributionInfo();
-
-                List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(distributionInfo.getBucketNum());
-                List<Long> dataSizeStatistics = Lists.newArrayListWithCapacity(distributionInfo.getBucketNum());
-                for (long i = 0; i < distributionInfo.getBucketNum(); i++) {
-                    rowCountStatistics.add(0L);
-                    dataSizeStatistics.add(0L);
+                if (partition == null) {
+                    continue;
                 }
 
-                long totalRowCount = 0;
-                long totalDataSize = 0;
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    long version = physicalPartition.getVisibleVersion();
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        // TODO(TackY): adapt the modification of bucket number from partition level to materialized index level
-                        List<Long> tabletIds = index.getTabletIds();
-                        for (int i = 0; i < tabletIds.size(); i++) {
-                            Tablet tablet = index.getTablet(tabletIds.get(i));
+                        List<Tablet> tablets = index.getTablets();
+
+                        List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(tablets.size());
+                        List<Long> dataSizeStatistics = Lists.newArrayListWithCapacity(tablets.size());
+
+                        long totalRowCount = 0;
+                        long totalDataSize = 0;
+                        long version = physicalPartition.getVisibleVersion();
+                        for (Tablet tablet : tablets) {
                             long rowCount = tablet.getRowCount(version);
                             long dataSize = tablet.getDataSize(true);
-                            rowCountStatistics.set(i, rowCountStatistics.get(i) + rowCount);
-                            dataSizeStatistics.set(i, dataSizeStatistics.get(i) + dataSize);
+                            rowCountStatistics.add(rowCount);
+                            dataSizeStatistics.add(dataSize);
                             totalRowCount += rowCount;
                             totalDataSize += dataSize;
                         }
-                    }
-                }
 
-                for (int i = 0; i < distributionInfo.getBucketNum(); i++) {
-                    List<String> row = Lists.newArrayList();
-                    row.add(partition.getName());
-                    row.add(String.valueOf(i));
-                    row.add(String.valueOf(rowCountStatistics.get(i)));
-                    row.add(totalRowCount == 0L ? "0.00 %" : df.format((double) rowCountStatistics.get(i) / totalRowCount));
-                    row.add(String.valueOf(dataSizeStatistics.get(i)));
-                    row.add(totalDataSize == 0L ? "0.00 %" : df.format((double) dataSizeStatistics.get(i) / totalDataSize));
-                    result.add(row);
+                        for (int i = 0; i < tablets.size(); i++) {
+                            List<String> row = Lists.newArrayList();
+                            row.add(partition.getName());
+                            row.add(String.valueOf(physicalPartition.getId()));
+                            row.add(olapTable.getIndexNameById(index.getId()));
+                            row.add(index.getVirtualBucketsByTabletId(tablets.get(i).getId()).toString());
+                            row.add(String.valueOf(rowCountStatistics.get(i)));
+                            row.add(totalRowCount == 0L ? "0.00 %"
+                                    : df.format((double) rowCountStatistics.get(i) / totalRowCount));
+                            row.add(String.valueOf(dataSizeStatistics.get(i)));
+                            row.add(totalDataSize == 0L ? "0.00 %"
+                                    : df.format((double) dataSizeStatistics.get(i) / totalDataSize));
+                            result.add(row);
+                        }
+                    }
                 }
             }
         } finally {
