@@ -1311,7 +1311,7 @@ public class HdfsFsManager {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while delete path: " + path, e);
             throw new StarRocksException("Failed to delete path: " + path, e); // throw unified user exception
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("errors while delete path " + path, e);
             throw new StarRocksException("delete path " + path + "error", e);
         }
@@ -1346,7 +1346,7 @@ public class HdfsFsManager {
             LOG.error("Interrupted while rename path from " + srcPath + " to " + destPath, e);
             // throw unified user exception
             throw new StarRocksException("Failed to rename path from " + srcPath + " to " + destPath, e);
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
             throw new StarRocksException("errors while rename " + srcPath + "to " + destPath, e);
         }
@@ -1362,7 +1362,7 @@ public class HdfsFsManager {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while check path exist: " + path, e);
             throw new StarRocksException("Failed to check path exist: " + path, e); // throw unified user exception
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("errors while check path exist: " + path, e);
             throw new StarRocksException("errors while check if path " + path + " exist", e);
         }
@@ -1384,7 +1384,7 @@ public class HdfsFsManager {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while open file " + path, e);
             throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("errors while open path", e);
             throw new StarRocksException("could not open file " + path, e);
         }
@@ -1493,7 +1493,7 @@ public class HdfsFsManager {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while open file " + path, e);
             throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("errors while open path", e);
             throw new StarRocksException("could not open file " + path, e);
         }
