@@ -30,10 +30,14 @@ public class AuditEventTest {
                 .setState("state")
                 .setBigQueryLogCPUSecondThreshold(1)
                 .setCatalog("catalog")
+                .setQueryId("queryId")
+                .setStmtId(123)
+                .setStmt("stmt")
                 .setDigest("digest")
                 .setErrorCode("errorCode")
                 .setIsQuery(true)
-                .setWarehouse("wh");
+                .setWarehouse("wh")
+                .setSessionId("sessionId");
         AuditEvent event = builder.build();
 
         Assert.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
@@ -45,8 +49,13 @@ public class AuditEventTest {
         Assert.assertEquals("state", event.state);
         Assert.assertEquals(1, event.bigQueryLogCPUSecondThreshold);
         Assert.assertEquals("catalog", event.catalog);
+        Assert.assertEquals("queryId", event.queryId);
+        Assert.assertEquals(123, event.stmtId);
+        Assert.assertEquals("stmt", event.stmt);
+        Assert.assertEquals("digest", event.digest);
         Assert.assertEquals("errorCode", event.errorCode);
         Assert.assertEquals(true, event.isQuery);
         Assert.assertEquals("wh", event.warehouse);
+        Assert.assertEquals("sessionId", event.sessionId);
     }
 }
