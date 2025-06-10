@@ -4,6 +4,28 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.4
+
+Release Date: June 10, 2025
+
+### Improvements
+
+- Storage Volume now supports ADLS2 using Managed Identity as the credential. [#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- For [partitions based on complex time function expressions](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/#partitioning-based-on-a-complex-time-function-expression-since-v34), partition pruning works well for partitions based on most DATETIME-related functions
+- Supports loading Avro data files from Azure using the `FILES` function. [#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- When Routine Load encounters invalid JSON data, the consumed partition and offset information is logged in the error log to facilitate troubleshooting. [#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Concurrent queries accessing the same partition in a partitioned table caused Hive Metastore to hang. [#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- Abnormal termination of `INSERT` tasks caused the job to remain in the `QUEUEING` state. [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- After upgrading the cluster from v3.4.0 to v3.4.2, a large number of tablet replicas encounter exceptions. [#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- FE OOM caused by incorrect `UNION` execution plans. [#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- Invalid database IDs during partition recycling could cause FE startup to fail. [#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- After a failed FE CheckPoint operation, the process could not exit properly, resulting in blocking. [#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
 ## 3.4.3
 
 Release Date: April 30, 2025
