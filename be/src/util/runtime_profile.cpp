@@ -68,9 +68,10 @@ RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
           _name(std::move(name)),
           _metadata(-1),
           _is_averaged_profile(is_averaged_profile),
-          _counter_total_time(TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS), 0),
+          _counter_total_time(TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS), 1),
           _local_time_percent(0) {
     _counter_map["TotalTime"] = std::make_pair(&_counter_total_time, ROOT_COUNTER);
+    isUniqueMetric = (name == "UniqueMetrics" || name.starts_with("ChunkSource"));
 }
 
 void RuntimeProfile::merge(RuntimeProfile* other) {
@@ -335,6 +336,9 @@ RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& n
 
     void* mem = _counter_pool.allocate(sizeof(Counter));
     Counter* counter = new (mem) Counter(type, strategy, 0);
+    if (isUniqueMetric) {
+        counter->_strategy.display_threshold = 50;
+    }
 
     _counter_map[name] = std::make_pair(counter, parent_name);
     _child_counter_map[parent_name].insert(name);
@@ -911,19 +915,11 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
     DCHECK(!profiles.empty());
 
     RuntimeProfile* merged_profile;
-    int index;
-    if constexpr (isFinal) {
-        // all metrics will be merged into the first profile
-        merged_profile = profiles[0];
-        index = 1;
-    } else {
-        merged_profile = obj_pool->add(new RuntimeProfile(profiles[0]->name(), profiles[0]->_is_averaged_profile));
-        index = 0;
-    }
+    merged_profile = obj_pool->add(new RuntimeProfile(profiles[0]->name(), profiles[0]->_is_averaged_profile));
 
     // Merge into string, if contents are different, only the last will be preserved;
     {
-        for (int i = index; i < profiles.size(); ++i) {
+        for (int i = 0; i < profiles.size(); ++i) {
             merged_profile->copy_all_info_strings_from(profiles[i]);
         }
     }
@@ -968,22 +964,21 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     const auto& pair = pair_it->second;
                     auto* counter = pair.first;
                     const auto& parent_name = pair.second;
+                    if (!counter->should_display()) {
+                        continue;
+                    }
 
                     // add the counter into merged_profile if not exsited
                     Counter* merged_counter = nullptr;
-                    if (i == 0) {
-                        merged_counter = counter;
+                    if (ROOT_COUNTER != parent_name && merged_profile->get_counter(parent_name) != nullptr) {
+                        merged_counter = merged_profile->add_counter_unlock(name, counter->_type, counter->_strategy,
+                                                                            parent_name);
                     } else {
-                        if (ROOT_COUNTER != parent_name && merged_profile->get_counter(parent_name) != nullptr) {
-                            merged_counter = merged_profile->add_child_counter(name, counter->type(),
-                                                                               counter->strategy(), parent_name);
-                        } else {
-                            if (ROOT_COUNTER != parent_name) {
-                                LOG(WARNING) << "missing parent counter, profile_name=" << merged_profile->name()
-                                             << ", counter_name=" << name << ", parent_counter_name=" << parent_name;
-                            }
-                            merged_counter = merged_profile->add_counter(name, counter->type(), counter->strategy());
-                        }
+                        DCHECK(ROOT_COUNTER == parent_name)
+                                << "missing parent counter, profile_name=" << merged_profile->name()
+                                << ", counter_name=" << name << ", parent_counter_name=" << parent_name;
+                        merged_counter = merged_profile->add_counter_unlock(name, counter->_type, counter->_strategy,
+                                                                            ROOT_COUNTER);
                     }
 
                     // if this counter first appears, set it value and min/max
@@ -1003,11 +998,13 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
 
                     // this counter already exist in merged_profile, update this counter
                     if (merged_counter != counter) {
+                        DCHECK(merged_counter->type() == counter->type())
+                                << "find non-isomorphic counter, profile_name=" << merged_profile->name()
+                                << ", counter_name=" << name
+                                << ", exist_type=" << std::to_string(merged_counter->type())
+                                << ", another_type=" << std::to_string(counter->type());
+
                         if (merged_counter->type() != counter->type()) {
-                            LOG(WARNING) << "find non-isomorphic counter, profile_name=" << merged_profile->name()
-                                         << ", counter_name=" << name
-                                         << ", exist_type=" << std::to_string(merged_counter->type())
-                                         << ", another_type=" << std::to_string(counter->type());
                             continue;
                         }
                         if (counter->skip_merge()) {
