@@ -1,0 +1,604 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#pragma once
+
+#include <fmt/format.h>
+
+#include <cmath>
+#include <string>
+#include <type_traits>
+
+namespace starrocks {
+
+typedef __int128 int128_t;
+typedef unsigned __int128 uint128_t;
+
+/**
+*
+* This file implements a 256-bit signed integer type int256_t for high-precision integer arithmetic.
+*
+* ## Storage Format
+*
+* int256_t uses two 128-bit integers to represent 256-bit data:
+* - high: Upper 128 bits (int128_t, signed)
+* - low:  Lower 128 bits (uint128_t, unsigned)
+*
+* **Structure Member Layout**:
+* The order of members in memory is determined by the conditional compilation:
+* - On little-endian systems: low member declared first, high member declared second
+* - On big-endian systems: high member declared first, low member declared second
+*
+* ## Storage Example (Little Endian)
+*
+* Consider a 256-bit hexadecimal value:
+* 0x123456789ABCDEF0FEDCBA0987654321_0123456789ABCDEFEDCBA09876543210
+*
+* This breaks down as:
+* - high (upper 128 bits): 0x123456789ABCDEF0FEDCBA0987654321
+* - low (lower 128 bits):  0x0123456789ABCDEFEDCBA09876543210
+*
+* ## Memory Layout (Little Endian)
+*
+* ```
+* Memory grows from LEFT to RIGHT →
+*
+* Address:     0x1000                                           0x1010
+*              ↓                                                ↓
+* Structure:   [--------------low (128bit/16bytes)--------------][------------high (128bit/16bytes)------------]
+*
+* Byte order :  10 32 54 76 98 BA DC ED EF CD AB 89 67 45 23 01 | 21 43 65 87 09 BA DC FE F0 DE BC 9A 78 56 34 12
+*              ↑                                            ↑   ↑                                              ↑
+*              0x1000                                   0x100F  0x1010                                     0x101F
+*              LSB of low                           MSB of low  LSB of high                           MSB of high
+*
+* ```
+*
+* **Address Space Breakdown**:
+* - 0x1000 - 0x100F: First 128-bit member (16 bytes) - low part
+* - 0x1010 - 0x101F: Second 128-bit member (16 bytes) - high part
+* - Total: 32 bytes (256 bits) for complete int256_t
+*
+* **Address Calculation**:
+* - 0x1010 - 0x1000 = 0x10 = 16 bytes = 128 bits ✓
+* - 0x1020 - 0x1000 = 0x20 = 32 bytes = 256 bits ✓
+*
+* ## Value Representation
+*
+* The 256-bit value is logically represented as: `high * 2^128 + low`
+*
+* - Positive numbers: high >= 0, standard binary representation
+* - Negative numbers: two's complement representation, high < 0
+* - Zero value: high = 0, low = 0
+*
+* ### Examples:
+*
+* **Simple Values:**
+* - Value 0: high = 0, low = 0
+* - Value 1: high = 0, low = 1
+* - Value 2^128: high = 1, low = 0
+*
+* **Negative Values (Two's Complement):**
+* - Value -1: high = -1 (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF), low = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+* - Value -2^128: high = -1, low = 0
+*
+* **Extreme Values:**
+* - Maximum (2^255 - 1): high = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, low = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+* - Minimum (-2^255): high = 0x80000000000000000000000000000000, low = 0x00000000000000000000000000000000
+*
+*/
+
+struct int256_t {
+public:
+    // =============================================================================
+    // Member Variables
+    // =============================================================================
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+    uint128_t low; // Lower 128 bits
+    int128_t high; // Higher 128 bits
+#else
+    int128_t high;
+    uint128_t low;
+#endif
+    // =============================================================================
+    // Constructors
+    // =============================================================================
+
+    /// Default constructor - initializes to zero
+    constexpr int256_t() : low(0), high(0) {}
+
+    /// Constructor from high and low parts
+    /// @param h High 128 bits
+    /// @param l Low 128 bits
+    constexpr int256_t(int128_t h, uint128_t l) : low(l), high(h) {}
+
+    /// Constructor from signed integer types
+    /// @param value Integer value to convert
+    constexpr int256_t(int value) : low(static_cast<uint128_t>(value)), high(value < 0 ? -1 : 0) {}
+    constexpr int256_t(long value) : low(static_cast<uint128_t>(value)), high(value < 0 ? -1 : 0) {}
+    constexpr int256_t(long long value) : low(static_cast<uint128_t>(value)), high(value < 0 ? -1 : 0) {}
+    constexpr int256_t(__int128 value) : low(static_cast<uint128_t>(value)), high(value < 0 ? -1 : 0) {}
+
+    /// Constructor from floating point types
+    /// @param value Floating point value to convert (truncated to integer)
+    constexpr int256_t(float value)
+            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
+    constexpr int256_t(double value)
+            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
+
+    // =============================================================================
+    // Type Conversion Operators
+    // =============================================================================
+
+    /// Convert to boolean (true if non-zero)
+    operator bool() const { return high != 0 || low != 0; }
+
+    /// High precision conversion using bit manipulation
+    operator double() const {
+        if (*this == 0) return 0.0;
+
+        bool negative = (high < 0);
+        int256_t abs_val = negative ? -*this : *this;
+
+        // Find the position of the most significant bit
+        int bit_count = 0;
+        int256_t temp = abs_val;
+        while (temp > 0) {
+            temp >>= 1;
+            bit_count++;
+        }
+
+        if (bit_count <= 53) {
+            // Can represent exactly in double
+            double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
+            if (abs_val.high != 0) {
+                result += static_cast<double>(static_cast<uint64_t>(abs_val.high)) * (1ULL << 32) * (1ULL << 32) *
+                          (1ULL << 32) * (1ULL << 32);
+            }
+            return negative ? -result : result;
+        } else {
+            // Need to round to fit in double precision
+            int shift = bit_count - 53;
+            int256_t rounded = (abs_val + (int256_t(1) << (shift - 1))) >> shift;
+            double mantissa = static_cast<double>(static_cast<uint64_t>(rounded.low));
+            double result = mantissa * pow(2.0, shift);
+            return negative ? -result : result;
+        }
+    }
+
+    // =============================================================================
+    // Unary Operators
+    // =============================================================================
+
+    /// Unary negation operator
+    /// @return Negated value using two's complement
+    constexpr int256_t operator-() const {
+        if (low == 0) {
+            return int256_t(-high, 0);
+        } else {
+            uint128_t new_low = ~low + 1;
+            int128_t new_high = ~high;
+            if (new_low == 0) {
+                new_high++;
+            }
+            return int256_t(new_high, new_low);
+        }
+    }
+
+    /// Unary plus operator (no-op)
+    /// @return Copy of this value
+    constexpr int256_t operator+() const { return *this; }
+
+    // =============================================================================
+    // Comparison Operators
+    // =============================================================================
+
+    /// Equality comparison with another int256_t
+    /// @param other Value to compare with
+    /// @return true if values are equal
+    constexpr bool operator==(const int256_t& other) const { return high == other.high && low == other.low; }
+
+    /// Inequality comparison with another int256_t
+    /// @param other Value to compare with
+    /// @return true if values are not equal
+    constexpr bool operator!=(const int256_t& other) const { return !(*this == other); }
+
+    /// Less than comparison with another int256_t
+    /// @param other Value to compare with
+    /// @return true if this value is less than other
+    constexpr bool operator<(const int256_t& other) const {
+        if (high != other.high) return high < other.high;
+        return low < other.low;
+    }
+
+    /// Less than or equal comparison with another int256_t
+    /// @param other Value to compare with
+    /// @return true if this value is less than or equal to other
+    constexpr bool operator<=(const int256_t& other) const { return *this < other || *this == other; }
+
+    /// Greater than comparison with another int256_t
+    /// @param other Value to compare with
+    /// @return true if this value is greater than other
+    constexpr bool operator>(const int256_t& other) const { return !(*this <= other); }
+
+    /// Greater than or equal comparison with another int256_t
+    /// @param other Value to compare with
+    /// @return true if this value is greater than or equal to other
+    constexpr bool operator>=(const int256_t& other) const { return !(*this < other); }
+
+    /// Equality comparison with int
+    /// @param other Integer value to compare with
+    /// @return true if values are equal
+    constexpr bool operator==(int other) const { return *this == int256_t(other); }
+
+    /// Inequality comparison with int
+    /// @param other Integer value to compare with
+    /// @return true if values are not equal
+    constexpr bool operator!=(int other) const { return *this != int256_t(other); }
+
+    /// Less than comparison with int
+    /// @param other Integer value to compare with
+    /// @return true if this value is less than other
+    constexpr bool operator<(int other) const { return *this < int256_t(other); }
+
+    /// Less than or equal comparison with int
+    /// @param other Integer value to compare with
+    /// @return true if this value is less than or equal to other
+    constexpr bool operator<=(int other) const { return *this <= int256_t(other); }
+
+    /// Greater than comparison with int
+    /// @param other Integer value to compare with
+    /// @return true if this value is greater than other
+    constexpr bool operator>(int other) const { return *this > int256_t(other); }
+
+    /// Greater than or equal comparison with int
+    /// @param other Integer value to compare with
+    /// @return true if this value is greater than or equal to other
+    constexpr bool operator>=(int other) const { return *this >= int256_t(other); }
+
+    // =============================================================================
+    // Arithmetic Operators - Addition
+    // =============================================================================
+
+    /// Addition with another int256_t
+    /// @param other Value to add
+    /// @return Sum of this value and other
+    constexpr int256_t operator+(const int256_t& other) const {
+        int256_t result;
+        result.low = low + other.low;
+        result.high = high + other.high;
+        if (result.low < low) { // Check for overflow in low part
+            result.high++;
+        }
+        return result;
+    }
+
+    /// Addition with int (optimized version)
+    /// @param other Integer value to add
+    /// @return Sum of this value and other
+    constexpr int256_t operator+(int other) const { return *this + int256_t(other); }
+
+    // =============================================================================
+    // Arithmetic Operators - Subtraction
+    // =============================================================================
+
+    /// Subtraction with another int256_t
+    /// @param other Value to subtract
+    /// @return Difference of this value and other
+    constexpr int256_t operator-(const int256_t& other) const { return *this + (-other); }
+
+    /// Subtraction with int
+    /// @param other Integer value to subtract
+    /// @return Difference of this value and other
+    int256_t operator-(int other) const { return *this - int256_t(other); }
+
+    /// Subtraction with __int128
+    /// @param other 128-bit integer value to subtract
+    /// @return Difference of this value and other
+    int256_t operator-(__int128 other) const { return *this - int256_t(other); }
+
+    /// Subtraction with double (returns double)
+    /// @param other Double value to subtract
+    /// @return Difference as double
+    double operator-(double other) const { return static_cast<double>(*this) - other; }
+
+    // =============================================================================
+    // Arithmetic Operators - Multiplication
+    // =============================================================================
+
+    /// Multiplication with another int256_t
+    /// @param other Value to multiply by
+    /// @return Product of this value and other
+    /// TODO(stephen): optimize this operator in the next patch
+    constexpr int256_t operator*(const int256_t& other) const {
+        if (other == 0 || *this == 0) {
+            return int256_t(0);
+        }
+        if (other == 1) {
+            return *this;
+        }
+        if (*this == 1) {
+            return other;
+        }
+
+        bool result_negative = (high < 0) ^ (other.high < 0);
+        int256_t abs_a = (high < 0) ? -*this : *this;
+        int256_t abs_b = (other.high < 0) ? -other : other;
+
+        int256_t result(0);
+        int256_t multiplicand = abs_a;
+        int256_t multiplier = abs_b;
+
+        while (multiplier > 0) {
+            if (multiplier.low & 1) {
+                result += multiplicand;
+            }
+
+            multiplicand = multiplicand << 1;
+
+            multiplier = multiplier >> 1;
+        }
+
+        return result_negative ? -result : result;
+    }
+
+    /// Multiplication with int
+    /// @param other Integer value to multiply by
+    /// @return Product of this value and other
+    int256_t operator*(int other) const { return *this * int256_t(other); }
+
+    // =============================================================================
+    // Arithmetic Operators - Division (Declaration only)
+    // =============================================================================
+
+    /// Division with another int256_t
+    /// @param other Value to divide by
+    /// @return Quotient of this value divided by other
+    /// @throws std::domain_error if other is zero
+    int256_t operator/(const int256_t& other) const;
+
+    // =============================================================================
+    // Arithmetic Operators - Modulo (Declaration only)
+    // =============================================================================
+
+    /// Modulo operation with another int256_t
+    /// @param other Value to take modulo by
+    /// @return Remainder of this value divided by other
+    /// @throws std::domain_error if other is zero
+    int256_t operator%(const int256_t& other) const;
+
+    // =============================================================================
+    // Assignment Operators
+    // =============================================================================
+
+    /// Addition assignment operator
+    /// @param other Value to add to this
+    /// @return Reference to this after addition
+    constexpr int256_t& operator+=(const int256_t& other) {
+        *this = *this + other;
+        return *this;
+    }
+
+    /// Subtraction assignment operator
+    /// @param other Value to subtract from this
+    /// @return Reference to this after subtraction
+    constexpr int256_t& operator-=(const int256_t& other) {
+        *this = *this - other;
+        return *this;
+    }
+
+    /// Multiplication assignment operator
+    /// @param other Value to multiply this by
+    /// @return Reference to this after multiplication
+    constexpr int256_t& operator*=(const int256_t& other) {
+        *this = *this * other;
+        return *this;
+    }
+
+    /// Division assignment operator
+    /// @param other Value to divide this by
+    /// @return Reference to this after division
+    /// @throws std::domain_error if other is zero
+    int256_t& operator/=(const int256_t& other) {
+        *this = *this / other;
+        return *this;
+    }
+
+    /// Modulo assignment operator
+    /// @param other Value to take modulo by
+    /// @return Reference to this after modulo operation
+    /// @throws std::domain_error if other is zero
+    int256_t& operator%=(const int256_t& other) {
+        *this = *this % other;
+        return *this;
+    }
+
+    // =============================================================================
+    // Increment/Decrement Operators
+    // =============================================================================
+
+    /// Pre-increment operator
+    /// @return Reference to this after incrementing
+    int256_t& operator++() {
+        if (++low == 0) { // If low overflows to 0
+            ++high;       // Increment high
+        }
+        return *this;
+    }
+
+    /// Post-increment operator
+    /// @return Copy of this before incrementing
+    int256_t operator++(int) {
+        int256_t tmp = *this;
+        ++(*this);
+        return tmp;
+    }
+
+    // =============================================================================
+    // Bit Shift Operators
+    // =============================================================================
+
+    /// Right shift operator (arithmetic shift for signed values)
+    /// @param shift Number of bits to shift right
+    /// @return This value shifted right by shift bits
+    constexpr int256_t operator>>(int shift) const {
+        if (shift <= 0) return *this;
+
+        if (shift >= 256) {
+            return (high < 0) ? int256_t(-1, -1) : int256_t(0, 0);
+        }
+
+        if (shift >= 128) {
+            return int256_t((high < 0) ? -1 : 0, high >> (shift - 128));
+        }
+
+        return int256_t(high >> shift, static_cast<int128_t>((static_cast<uint128_t>(low) >> shift) |
+                                                             (static_cast<uint128_t>(high) << (128 - shift))));
+    }
+
+    /// Right shift assignment operator
+    /// @param shift Number of bits to shift right
+    /// @return Reference to this after shifting
+    constexpr int256_t& operator>>=(int shift) {
+        *this = *this >> shift;
+        return *this;
+    }
+
+    /// Left shift operator
+    /// @param shift Number of bits to shift left
+    /// @return This value shifted left by shift bits
+    constexpr int256_t operator<<(int shift) const {
+        if (shift <= 0) return *this;
+
+        if (shift >= 256) {
+            return int256_t(0, 0);
+        }
+
+        if (shift >= 128) {
+            return int256_t(low << (shift - 128), 0);
+        }
+
+        return int256_t(static_cast<int128_t>((static_cast<uint128_t>(high) << shift) |
+                                              (static_cast<uint128_t>(low) >> (128 - shift))),
+                        low << shift);
+    }
+
+    /// Left shift assignment operator
+    /// @param shift Number of bits to shift left
+    /// @return Reference to this after shifting
+    constexpr int256_t& operator<<=(int shift) { return *this = *this << shift; }
+
+    // =============================================================================
+    // Utility Methods
+    // =============================================================================
+
+    /// Convert to string representation
+    /// @return String representation of this value
+    std::string to_string() const;
+};
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/// Maximum value for int256_t: 2^255 - 1
+constexpr int256_t INT256_MAX{
+        static_cast<int128_t>((static_cast<uint128_t>(1) << 127) - 1), // high: 2^127 - 1
+        static_cast<uint128_t>(-1)                                     // low:  2^128 - 1
+};
+
+/// Minimum value for int256_t: -2^255
+/// Binary: 1000000...000 (1 followed by 255 zeros)
+/// Decimal: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+constexpr int256_t INT256_MIN{
+        static_cast<int128_t>(static_cast<uint128_t>(1) << 127), // high: -2^127
+        static_cast<uint128_t>(0)                                // low:  0
+};
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+/// Compute absolute value of int256_t
+/// @param value Input value
+/// @return Absolute value
+inline int256_t abs(const int256_t& value) {
+    return (value.high < 0) ? -value : value;
+}
+
+/// Divide int256_t by 32-bit unsigned integer with quotient and remainder
+/// @param value Dividend
+/// @param divisor 32-bit divisor
+/// @param quotient Pointer to store quotient result
+/// @param remainder Pointer to store remainder result
+void divmod_u32(const int256_t& value, uint32_t divisor, int256_t* quotient, uint32_t* remainder);
+
+/// Parse string to int256_t
+/// @param str String representation of integer
+/// @return Parsed int256_t value
+/// @throws std::invalid_argument if string is not a valid integer
+int256_t parse_int256(const std::string& str);
+
+} // namespace starrocks
+
+// =============================================================================
+// Standard Library Extensions
+// =============================================================================
+
+namespace std {
+
+/// Specialization of make_unsigned for int256_t
+template <>
+struct make_unsigned<starrocks::int256_t> {
+    using type = starrocks::int256_t;
+};
+
+/// Hash function specialization for int256_t
+template <>
+struct hash<starrocks::int256_t> {
+    std::size_t operator()(const starrocks::int256_t& v) const noexcept {
+        std::size_t h1 = std::hash<starrocks::int128_t>{}(v.high);
+        std::size_t h2 = std::hash<starrocks::uint128_t>{}(v.low);
+        return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+    }
+};
+
+/// Absolute value function specialization for int256_t
+/// @param value Input int256_t value
+/// @return Absolute value of the input
+inline starrocks::int256_t abs(const starrocks::int256_t& value) {
+    return starrocks::abs(value);
+}
+
+/// Stream output operator for int256_t
+/// @param os Output stream
+/// @param value int256_t value to output
+/// @return Reference to output stream
+inline std::ostream& operator<<(std::ostream& os, const starrocks::int256_t& value) {
+    return os << value.to_string();
+}
+
+} // namespace std
+
+/// Formatter specialization for int256_t (fmt library)
+template <>
+struct fmt::formatter<starrocks::int256_t> : formatter<std::string> {
+    template <typename FormatContext>
+    auto format(const starrocks::int256_t& value, FormatContext& ctx) {
+        return formatter<std::string>::format(value.to_string(), ctx);
+    }
+};
