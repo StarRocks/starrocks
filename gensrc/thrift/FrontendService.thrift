@@ -2115,27 +2115,6 @@ struct TGetApplicableRolesResponse {
     2: optional i64 next_table_id_offset;
 }
 
-<<<<<<< HEAD
-struct TUpdateTabletVersionRequest {
-    1: optional Types.TBackend backend;
-    2: optional i64 signature;
-    3: optional list<MasterService.TTabletVersionPair> tablet_versions;
-}
-
-struct TUpdateTabletVersionResult {
-=======
-struct TUpdateFailPointRequest {
-    1: optional string name;
-    2: optional bool is_enable;
-    3: optional i32 times;
-    4: optional double probability;
-}
-
-struct TUpdateFailPointResponse {
->>>>>>> 249ee8a7b9 ([BugFix] Revert PR #59009 (#59815))
-    1: optional Status.TStatus status;
-}
-
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
