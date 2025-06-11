@@ -24,7 +24,7 @@ namespace starrocks {
 // 每个内存段大小为 1KB，并且内存对齐
 class CounterMemoryPool {
 public:
-    static constexpr size_t BLOCK_SIZE = 1024; // 1KB
+    static constexpr size_t BLOCK_SIZE = 4096; // 1KB
     static constexpr size_t ALIGNMENT = 8;     // 8字节对齐
 
     CounterMemoryPool() = default;
