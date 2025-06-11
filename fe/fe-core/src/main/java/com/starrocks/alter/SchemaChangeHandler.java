@@ -2123,6 +2123,7 @@ public class SchemaChangeHandler extends AlterHandler {
             String persistentIndexType = "";
             boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
+            String compactionStrategy = "";
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
@@ -2165,6 +2166,10 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 }
                 metaType = TTabletMetaType.ENABLE_FILE_BUNDLING;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+                compactionStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
+                        TableProperty.DEFAULT_COMPACTION_STRATEGY);
+                metaType = TTabletMetaType.COMPACTION_STRATEGY;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -2174,7 +2179,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling);
+                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");

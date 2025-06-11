@@ -121,6 +121,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.TabletTaskExecutor;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
@@ -2610,6 +2611,31 @@ public class OlapTable extends Table {
         tableProperty.buildPersistentIndexType();
     }
 
+    public TCompactionStrategy getCompactionStrategy() {
+        if (tableProperty != null) {
+            return tableProperty.getCompactionStrategy();
+        }
+        return TCompactionStrategy.DEFAULT;
+    }
+
+    public void setCompactionStrategy(TCompactionStrategy compactionStrategy) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+
+        // only support DEFAULT and REAL_TIME for now
+        if (compactionStrategy == TCompactionStrategy.DEFAULT || compactionStrategy == TCompactionStrategy.REAL_TIME) {
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
+                    TableProperty.compactionStrategyToString(compactionStrategy));
+        } else {
+            // do nothing
+            LOG.warn("Unknown TCompactionStrategy");
+            return;
+        }
+
+        tableProperty.buildCompactionStrategy();
+    }
+
     public Multimap<String, String> getLocation() {
         if (tableProperty != null) {
             return tableProperty.getLocation();
@@ -3469,6 +3495,11 @@ public class OlapTable extends Table {
 
         if (isFileBundling() && isCloudNativeTable()) {
             properties.put(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, isFileBundling().toString());
+        }
+
+        if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, 
+                                TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
