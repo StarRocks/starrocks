@@ -521,6 +521,7 @@ set(EXEC_FILES
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
         ./util/byte_stream_split_test.cpp
+	./util/url_coding_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
