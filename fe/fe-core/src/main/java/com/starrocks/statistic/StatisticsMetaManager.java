@@ -35,6 +35,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -66,6 +67,7 @@ import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+import static com.starrocks.statistic.StatsConstants.TABLET_STATISTICS_TABLE_NAME;
 
 public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
@@ -413,6 +415,41 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(QUERY_HISTORY_TABLE_NAME);
     }
 
+    private boolean createTabletStatisticsTable(ConnectContext context) {
+        LOG.info("create tablet_statistics table start");
+        TableName tableName = new TableName(STATISTICS_DB_NAME, TABLET_STATISTICS_TABLE_NAME);
+        try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            String sql = String.format("CREATE TABLE %s\n" +
+                    "(\n" +
+                    "`dt` date NOT NULL COMMENT \"\",\n" +
+                    "`catalog_name` string NOT NULL COMMENT \"\",\n" +
+                    "`db_name` string NOT NULL COMMENT \"\",\n" +
+                    "`table_name` string NOT NULL COMMENT \"\",\n" +
+                    "`partition_name` string NOT NULL COMMENT \"\",\n" +
+                    "`tablet_id` bigint(20) NOT NULL COMMENT \"\",\n" +
+                    "`read_count` double sum NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE = OLAP \n" +
+                    "AGGREGATE KEY(`dt`,`catalog_name`,`db_name`,`table_name`,`partition_name`,`tablet_id`)\n" +
+                    "PARTITION BY date_trunc('day', `dt`)\n" +
+                    "DISTRIBUTED BY HASH(`tablet_id`) BUCKETS 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"%s\",\n" +
+                    "\"partition_live_number\" = \"%s\"\n" +
+                    ")\n", tableName.toSql(), defaultReplicationNum, GlobalVariable.tabletStatisticsKeepDays);
+            CreateTableStmt stmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql, context.getSessionVariable().getSqlMode()).get(0);
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create tablet_statistics table", e);
+            return false;
+        }
+        LOG.info("create tablet_statistics table done");
+        return checkTableExist(TABLET_STATISTICS_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -454,6 +491,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 return createSPMBaselinesTable(context);
             } else if (QUERY_HISTORY_TABLE_NAME.equals(tableName)) {
                 return createQueryHistoryTable(context);
+            } else if (TABLET_STATISTICS_TABLE_NAME.equals(tableName)) {
+                return createTabletStatisticsTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
@@ -561,11 +600,13 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
+        refreshStatisticsTable(TABLET_STATISTICS_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearExpiredAnalyzeStatus();
         GlobalStateMgr.getCurrentState().getQueryHistoryMgr().clearExpiredQueryHistory();
+        GlobalStateMgr.getCurrentState().getTabletStatisticsMgr().alterTtlTabletStatistics();
 
         RepoCreator.getInstance().run();
     }

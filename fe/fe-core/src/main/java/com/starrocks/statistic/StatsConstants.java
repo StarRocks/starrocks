@@ -101,6 +101,9 @@ public class StatsConstants {
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
     public static final String QUERY_HISTORY_TABLE_NAME = "query_history";
 
+    // tablet statistics
+    public static final String TABLET_STATISTICS_TABLE_NAME = "tablet_statistics";
+
     /**
      * Deprecated stats properties
      */

@@ -90,6 +90,10 @@ public final class GlobalVariable {
 
     public static final String SPM_CAPTURE_INCLUDE_TABLE_PATTERN = "plan_capture_include_pattern";
 
+    public static final String ENABLE_TABLET_STATISTICS = "enable_tablet_statistics";
+    public static final String TABLET_STATISTICS_KEEP_DAYS = "tablet_statistics_keep_days";
+    public static final String TABLET_STATISTICS_LOAD_INTERVAL_SECONDS = "tablet_statistics_load_interval_seconds";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
@@ -207,6 +211,19 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = SPM_CAPTURE_INCLUDE_TABLE_PATTERN, flag = VariableMgr.GLOBAL)
     public static String spmCaptureIncludeTablePattern = ".*";
+
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_STATISTICS, flag = VariableMgr.GLOBAL)
+    public static boolean enableTabletStatistics = false;
+
+    @VariableMgr.VarAttr(name = TABLET_STATISTICS_KEEP_DAYS, flag = VariableMgr.GLOBAL)
+    public static long tabletStatisticsKeepDays = 3; // 3 days
+
+    @VariableMgr.VarAttr(name = TABLET_STATISTICS_LOAD_INTERVAL_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long tabletStatisticsLoadIntervalSeconds = 60 * 5; // 5min
+
+    public static boolean isEnableTabletStatistics() {
+        return enableTabletStatistics;
+    }
 
     public static boolean isEnableQueryHistory() {
         return enableQueryHistory;

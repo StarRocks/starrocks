@@ -1,0 +1,44 @@
+-- name: test_tablet_statistics
+create database test_tablet_statistics_db;
+
+CREATE TABLE test_tablet_statistics_db.test_tablet_statistics_tab (
+  `a` varchar(65533),
+  `b` varchar(65533),
+  `dt` date
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+PARTITION BY (`dt`)
+DISTRIBUTED BY HASH(`a`) buckets 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into test_tablet_statistics_db.test_tablet_statistics_tab(a,b,dt) values('1','1','2025-06-01'),('2','2','2025-06-02'),('3','3','2025-06-03');
+
+set global enable_tablet_statistics=true;
+set global tablet_statistics_load_interval_seconds=0;
+
+select count(*) from test_tablet_statistics_db.test_tablet_statistics_tab;
+
+select sleep(2);
+
+select count(*) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+
+select cast(sum(read_count) as int) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+
+set global tablet_statistics_load_interval_seconds=3;
+
+select count(*) from test_tablet_statistics_db.test_tablet_statistics_tab;
+
+select sleep(5);
+
+select count(*) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+
+select cast(sum(read_count) as int) from _statistics_.tablet_statistics where db_name='test_tablet_statistics_db' and table_name='test_tablet_statistics_tab';
+
+set global enable_tablet_statistics=false;
+set global tablet_statistics_load_interval_seconds=300;
