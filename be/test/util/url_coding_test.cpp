@@ -44,6 +44,10 @@ TEST(UrlCodingTest, UrlDecodeEdgeCases) {
     auto res = url_decode("");
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value(), "");
+    // + should not be decoded to space
+    res = url_decode("a+b");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "a+b");
 }
 
 } // namespace starrocks
