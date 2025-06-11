@@ -2275,11 +2275,5 @@ service FrontendService {
     TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
 
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
-
-<<<<<<< HEAD
-    TUpdateTabletVersionResult updateTabletVersion(1: TUpdateTabletVersionRequest request)
-=======
-    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
->>>>>>> 249ee8a7b9 ([BugFix] Revert PR #59009 (#59815))
 }
 
