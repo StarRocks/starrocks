@@ -82,6 +82,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -231,8 +232,20 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
 
-    ctx->db = req->param(HTTP_DB_KEY);
-    ctx->table = req->param(HTTP_TABLE_KEY);
+    auto res = url_decode(req->param(HTTP_DB_KEY));
+    if (!res.ok()) {
+        ctx->status = res.status();
+        _send_reply(req, ctx->to_json());
+        return -1;
+    }
+    ctx->db = res.value();
+    res = url_decode(req->param(HTTP_TABLE_KEY));
+    if (!res.ok()) {
+        ctx->status = res.status();
+        _send_reply(req, ctx->to_json());
+        return -1;
+    }
+    ctx->table = res.value();
     ctx->label = req->header(HTTP_LABEL_KEY);
     if (ctx->label.empty()) {
         ctx->label = generate_uuid_string();

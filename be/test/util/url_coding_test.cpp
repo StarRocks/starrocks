@@ -15,30 +15,39 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#pragma once
+#include "util/url_coding.h"
 
-#include <boost/cstdint.hpp>
+#include <gtest/gtest.h>
+
 #include <string>
-#include <vector>
-
-#include "common/statusor.h"
 
 namespace starrocks {
-void base64_encode(const std::string& in, std::string* out);
 
-// Utility method to decode base64 encoded strings.  Also not extremely
-// performant.
-// Returns true unless the string could not be correctly decoded.
-bool base64_decode(const std::string& in, std::string* out);
+TEST(UrlCodingTest, UrlDecodeBasic) {
+    // Simple decode
+    auto res = url_decode("abc");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "abc");
+    // Encoded percent
+    res = url_decode("a%20b%21c");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "a b!c");
+    res = url_decode("testStreamLoad%E6%A1%8C");
+    EXPECT_TRUE(res.ok());
+    const char c1[32] = "testStreamLoad桌";
+    int ret = memcmp(c1, res.value().c_str(), 17);
+    EXPECT_EQ(ret, 0);
+}
 
-// refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
-std::string url_encode(const std::string& decoded);
-
-// Utility method to decode a string that was URL-encoded. Returns
-// true unless the string could not be correctly decoded.
-//Example:
-//    std::string decoded;
-//    StatusOr<std::string> ret = url_decode("Load%E6%A1%8C", &decoded); //decoded == "Load桌"
-StatusOr<std::string> url_decode(const std::string& in);
+TEST(UrlCodingTest, UrlDecodeEdgeCases) {
+    // Empty string
+    auto res = url_decode("");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "");
+    // + should not be decoded to space
+    res = url_decode("a+b");
+    EXPECT_TRUE(res.ok());
+    EXPECT_EQ(res.value(), "a+b");
+}
 
 } // namespace starrocks
