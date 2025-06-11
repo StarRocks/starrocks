@@ -951,6 +951,10 @@ under the License.
                         <groupId>org.jdom</groupId>
                         <artifactId>jdom2</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1177,6 +1181,10 @@ under the License.
                     <exclusion>
                         <groupId>org.codehaus.jackson</groupId>
                         <artifactId>jackson-mapper-asl</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
