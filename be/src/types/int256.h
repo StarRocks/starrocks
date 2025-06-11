@@ -148,37 +148,7 @@ public:
     operator bool() const { return high != 0 || low != 0; }
 
     /// High precision conversion using bit manipulation
-    operator double() const {
-        if (*this == 0) return 0.0;
-
-        bool negative = (high < 0);
-        int256_t abs_val = negative ? -*this : *this;
-
-        // Find the position of the most significant bit
-        int bit_count = 0;
-        int256_t temp = abs_val;
-        while (temp > 0) {
-            temp >>= 1;
-            bit_count++;
-        }
-
-        if (bit_count <= 53) {
-            // Can represent exactly in double
-            double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
-            if (abs_val.high != 0) {
-                result += static_cast<double>(static_cast<uint64_t>(abs_val.high)) * (1ULL << 32) * (1ULL << 32) *
-                          (1ULL << 32) * (1ULL << 32);
-            }
-            return negative ? -result : result;
-        } else {
-            // Need to round to fit in double precision
-            int shift = bit_count - 53;
-            int256_t rounded = (abs_val + (int256_t(1) << (shift - 1))) >> shift;
-            double mantissa = static_cast<double>(static_cast<uint64_t>(rounded.low));
-            double result = mantissa * pow(2.0, shift);
-            return negative ? -result : result;
-        }
-    }
+    operator double() const;
 
     // =============================================================================
     // Unary Operators
