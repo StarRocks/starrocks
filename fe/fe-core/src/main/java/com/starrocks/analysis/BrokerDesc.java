@@ -17,6 +17,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
@@ -43,7 +44,6 @@ public class BrokerDesc implements ParseNode, Writable {
     private String name;
     @SerializedName("p")
     private Map<String, String> properties;
-    private boolean hasBroker;
 
     private final NodePosition pos;
 
@@ -61,7 +61,6 @@ public class BrokerDesc implements ParseNode, Writable {
     }
     public BrokerDesc(String name, Map<String, String> properties, NodePosition pos) {
         this.pos = pos;
-        this.hasBroker = true;
         this.name = name;
         this.properties = properties;
         if (this.properties == null) {
@@ -71,7 +70,6 @@ public class BrokerDesc implements ParseNode, Writable {
 
     public BrokerDesc(Map<String, String> properties, NodePosition pos) {
         this.pos = pos;
-        this.hasBroker = false;
         this.name = "";
         this.properties = properties;
         if (this.properties == null) {
@@ -80,7 +78,7 @@ public class BrokerDesc implements ParseNode, Writable {
     }
 
     public boolean hasBroker() {
-        return hasBroker;
+        return !Strings.isNullOrEmpty(name);
     }
 
     public String getName() {
