@@ -16,6 +16,7 @@ package com.starrocks.mysql.security;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,6 +32,17 @@ import javax.naming.directory.SearchResult;
 
 public class LdapSecurity {
     private static final Logger LOG = LogManager.getLogger(LdapSecurity.class);
+    private static final String LDAPS_PROTOCOL = "ldaps";
+
+    static {
+        if (LDAPS_PROTOCOL.equals(Config.authentication_ldap_simple_server_protocol) &&
+                Config.authentication_ldaps_trust_store_path != null) {
+            System.setProperty("custom.ldap.truststore.type", "JKS");
+            System.setProperty("custom.ldap.truststore.loc", Config.authentication_ldaps_trust_store_path);
+            System.setProperty("custom.ldap.truststore.password", Config.authentication_ldaps_trust_store_password);
+            System.setProperty("custom.ldap.ssl.protocol", "TLS");
+        }
+    }
 
     //bind to ldap server to check password
     public static void checkPassword(String dn, String password, String ldapServerHost, int ldapServerPort)
@@ -39,13 +51,19 @@ public class LdapSecurity {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
-        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(ldapServerHost, ldapServerPort);
+        String url = Config.authentication_ldap_simple_server_protocol + "://"
+                + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
+                Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
         env.put(Context.SECURITY_CREDENTIALS, password);
         env.put(Context.SECURITY_PRINCIPAL, dn);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, url);
+        if (LDAPS_PROTOCOL.equals(Config.authentication_ldap_simple_server_protocol) &&
+                Config.authentication_ldaps_trust_store_path != null) {
+            env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
+        }
 
         DirContext ctx = null;
         try {
@@ -76,7 +94,9 @@ public class LdapSecurity {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
-        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(ldapServerHost, ldapServerPort);
+        String url = Config.authentication_ldap_simple_server_protocol + "://"
+                + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
+                Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();
         //dn contains '=', so we should use ' or " to wrap the value in config file
         String rootDN = ldapBindRootDN;
@@ -87,6 +107,10 @@ public class LdapSecurity {
         env.put(Context.SECURITY_PRINCIPAL, rootDN);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, url);
+        if (LDAPS_PROTOCOL.equals(Config.authentication_ldap_simple_server_protocol) &&
+                Config.authentication_ldaps_trust_store_path != null) {
+            env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
+        }
 
         DirContext ctx = null;
         try {
