@@ -19,7 +19,6 @@
 #include "cache/mem_space_monitor.h"
 #include "cache/object_cache/lrucache_module.h"
 #include "cache/object_cache/page_cache.h"
-#include "cache/peer_cache_wrapper.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
@@ -28,6 +27,7 @@
 
 #ifdef WITH_STARCACHE
 #include "cache/object_cache/starcache_module.h"
+#include "cache/peer_cache_wrapper.h"
 #include "cache/starcache_wrapper.h"
 #endif
 
