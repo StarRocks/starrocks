@@ -32,31 +32,31 @@ public class InvalidOlapTableStateException extends DdlException {
         String errorPrompt;
         switch (state) {
             case ROLLUP:
-                errorPrompt = String.format("A materialized view or rollup index is being created on the table \"%s\". " +
-                                "Please wait until the current operation completes.\n" +
+                errorPrompt = String.format("A materialized view or rollup index is being created on the table %s. " +
+                                "Please wait until the current operation completes. " +
                                 "To check the status of the operation, see %s or %s",
                         table,
                         FeConstants.DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW,
                         FeConstants.DOCUMENT_SHOW_ALTER);
                 break;
             case SCHEMA_CHANGE:
-                errorPrompt = String.format("A schema change operation is in progress on the table \"%s\". " +
-                                "Please wait until the current operation completes.\n" +
+                errorPrompt = String.format("A schema change operation is in progress on the table %s. " +
+                                "Please wait until the current operation completes. " +
                                 "To check the status of the operation, see %s",
                         table,
                         FeConstants.DOCUMENT_SHOW_ALTER);
                 break;
             case BACKUP:
-                errorPrompt = String.format("A backup operation is in progress on the table \"%s\". " +
-                                "Please wait until the current operation completes.\n" +
+                errorPrompt = String.format("A backup operation is in progress on the table %s. " +
+                                "Please wait until the current operation completes. " +
                                 "To check the status of the operation, see %s",
                         table,
                         FeConstants.DOCUMENT_SHOW_BACKUP);
                 break;
             case RESTORE:
             case RESTORE_WITH_LOAD:
-                errorPrompt = String.format("A snapshot restore operation is in progress on the table \"%s\". " +
-                                "Please wait until the current operation completes.\n" +
+                errorPrompt = String.format("A snapshot restore operation is in progress on the table %s. " +
+                                "Please wait until the current operation completes. " +
                                 "To check the status of the operation, see %s",
                         table,
                         FeConstants.DOCUMENT_SHOW_RESTORE);
@@ -67,15 +67,15 @@ public class InvalidOlapTableStateException extends DdlException {
                         "To check the status of the operation, see \n" +
                         FeConstants.DOCUMENT_SHOW_ALTER + " or\n" + FeConstants.DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW;
 
-                errorPrompt = String.format("The table \"%s\" is being altered or having a materialized view built on it. " +
-                                "Please wait until the current operation completes.\n" +
+                errorPrompt = String.format("The table %s is being altered or having a materialized view built on it. " +
+                                "Please wait until the current operation completes. " +
                                 "To check the status of the operation, see %s or %s",
                         table,
                         FeConstants.DOCUMENT_SHOW_ALTER,
                         FeConstants.DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW);
                 break;
             default:
-                errorPrompt = String.format("The table \"%s\" is currently in state \"%s\"", table, state.name());
+                errorPrompt = String.format("The table %s is currently in state %s", table, state.name());
                 break;
         }
 
