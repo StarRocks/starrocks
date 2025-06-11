@@ -62,7 +62,7 @@ public class PredicateSearchKey {
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, snapshotId);
+        return Objects.hash(databaseName, tableName, snapshotId, predicate);
     }
 
     @Override
