@@ -113,8 +113,11 @@ public class AnalyzeMgr implements Writable {
         try {
             for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
                 if (analyzeJob.getCatalogName().equals(job.getCatalogName()) &&
-                        analyzeJob.getColumns().equals(job.getColumns()) &&
+                        analyzeJob.getColumns().stream().sorted().collect(Collectors.toList())
+                        .equals(job.getColumns().stream().sorted().collect(Collectors.toList())) &&
                         analyzeJob.getTableName().equals(job.getTableName()) &&
+                        analyzeJob.getAnalyzeType().equals(job.getAnalyzeType()) &&
+                        analyzeJob.getScheduleType().equals(job.getScheduleType()) &&
                         analyzeJob.getProperties().equals(job.getProperties())) {
                     throw new AlreadyExistsException("AnalyzeJob Already Exists");
                 }
