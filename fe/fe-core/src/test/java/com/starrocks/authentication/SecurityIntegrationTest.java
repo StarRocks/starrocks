@@ -213,8 +213,8 @@ public class SecurityIntegrationTest {
         Assert.assertNotNull(ldapSecurityIntegration.getAuthenticationProvider());
         Assert.assertNotNull(SecurityIntegrationFactory.createSecurityIntegration("ldap", properties));
 
-        LDAPAuthProviderForNative ldapAuthProviderForNative =
-                (LDAPAuthProviderForNative) ldapSecurityIntegration.getAuthenticationProvider();
+        LDAPAuthProvider ldapAuthProviderForNative =
+                (LDAPAuthProvider) ldapSecurityIntegration.getAuthenticationProvider();
 
         ConnectContext context = new ConnectContext();
         context.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
