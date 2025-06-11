@@ -23,7 +23,6 @@ set(CACHE_FILES
   mem_space_monitor.cpp
   datacache.cpp
   datacache_utils.cpp
-  peer_cache_wrapper.cpp
   block_cache/block_cache.cpp
   block_cache/io_buffer.cpp
   block_cache/block_cache_hit_rate_counter.hpp
@@ -34,6 +33,7 @@ set(CACHE_FILES
 if (${WITH_STARCACHE} STREQUAL "ON")
     list(APPEND CACHE_FILES starcache_wrapper.cpp)
     list(APPEND CACHE_FILES object_cache/starcache_module.cpp)
+    list(APPEND CACHE_FILES peer_cache_wrapper.cpp)
 endif()
 
 add_library(Cache STATIC
