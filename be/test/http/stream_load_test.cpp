@@ -645,4 +645,33 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
     }
 }
 
+TEST_F(StreamLoadActionTest, url_db_key_decode_fail) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+
+    request._params.emplace(HTTP_DB_KEY, "%RR");
+    request.set_handler(&action);
+    ASSERT_EQ(-1, action.on_header(&request));
+}
+
+TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "%RR");
+    request.set_handler(&action);
+    ASSERT_EQ(-1, action.on_header(&request));
+}
+
 } // namespace starrocks
