@@ -130,7 +130,7 @@ TEST_F(HdfsFileSystemTest, directory_operations) {
     auto fs = new_fs_hdfs(FSOptions());
     const std::string dirpath = "file://" + _root_path + "/test_directory";
     const std::string nested_dirpath = "file://" + _root_path + "/test_directory/nested";
-    
+
     // Test directory doesn't exist initially
     auto st = fs->path_exists(dirpath);
     EXPECT_TRUE(st.is_not_found());
@@ -187,7 +187,7 @@ TEST_F(HdfsFileSystemTest, directory_operations) {
 TEST_F(HdfsFileSystemTest, create_dir_if_missing_new_directory) {
     auto fs = new_fs_hdfs(FSOptions());
     const std::string dirpath = "file://" + _root_path + "/new_test_directory";
-    
+
     // Test directory doesn't exist initially
     auto st = fs->path_exists(dirpath);
     EXPECT_TRUE(st.is_not_found());
@@ -213,7 +213,7 @@ TEST_F(HdfsFileSystemTest, create_dir_if_missing_new_directory) {
 TEST_F(HdfsFileSystemTest, create_dir_if_missing_on_file) {
     auto fs = new_fs_hdfs(FSOptions());
     const std::string filepath = "file://" + _root_path + "/test_file_not_dir";
-    
+
     // Create a file first
     auto wfile = fs->new_writable_file(filepath);
     EXPECT_TRUE(wfile.ok());
@@ -235,7 +235,7 @@ TEST_F(HdfsFileSystemTest, create_dir_if_missing_on_file) {
 TEST_F(HdfsFileSystemTest, is_directory_on_file) {
     auto fs = new_fs_hdfs(FSOptions());
     const std::string filepath = "file://" + _root_path + "/test_file_for_is_directory";
-    
+
     // Create a file
     auto wfile = fs->new_writable_file(filepath);
     EXPECT_TRUE(wfile.ok());
@@ -256,7 +256,7 @@ TEST_F(HdfsFileSystemTest, is_directory_on_file) {
 TEST_F(HdfsFileSystemTest, delete_empty_directory) {
     auto fs = new_fs_hdfs(FSOptions());
     const std::string dirpath = "file://" + _root_path + "/empty_directory";
-    
+
     // Create directory
     auto st = fs->create_dir(dirpath);
     EXPECT_TRUE(st.ok());
@@ -274,11 +274,11 @@ TEST_F(HdfsFileSystemTest, delete_directory_with_files) {
     auto fs = new_fs_hdfs(FSOptions());
     const std::string dirpath = "file://" + _root_path + "/directory_with_files";
     const std::string filepath = dirpath + "/test_file.txt";
-    
+
     // Create directory and file
     auto st = fs->create_dir(dirpath);
     EXPECT_TRUE(st.ok());
-    
+
     auto wfile = fs->new_writable_file(filepath);
     EXPECT_TRUE(wfile.ok());
     std::string data = "test data";
@@ -373,9 +373,9 @@ TEST_F(HdfsFileSystemTest, spilling_scenario_simulation) {
     const std::string base_spill_dir = "file://" + _root_path + "/spill_base";
     const std::string query_spill_dir = base_spill_dir + "/query_123";
     const std::string container_dir = query_spill_dir + "/container_456";
-    
+
     // Simulate spilling directory creation workflow
-    
+
     // 1. Create base spill directory (create_dir_if_missing in dir_manager.cpp)
     bool created = false;
     auto st = fs->create_dir_if_missing(base_spill_dir, &created);
@@ -416,7 +416,7 @@ TEST_F(HdfsFileSystemTest, spilling_scenario_simulation) {
     // 5. Create some spill files to simulate actual spilling
     const std::string spill_file1 = container_dir + "/spill_block_001.dat";
     const std::string spill_file2 = container_dir + "/spill_block_002.dat";
-    
+
     auto wfile1 = fs->new_writable_file(spill_file1);
     EXPECT_TRUE(wfile1.ok());
     std::string data1 = "spilled data block 1";
@@ -462,18 +462,18 @@ TEST_F(HdfsFileSystemTest, spilling_scenario_simulation) {
 TEST_F(HdfsFileSystemTest, verify_hdfs_create_directory_behavior) {
     auto fs = new_fs_hdfs(FSOptions());
     const std::string deep_nested = "file://" + _root_path + "/level1/level2/level3";
-    
+
     // Test if hdfsCreateDirectory (via create_dir) creates parent directories automatically
     auto st = fs->create_dir(deep_nested);
     if (st.ok()) {
         // hdfsCreateDirectory creates parents automatically
         LOG(INFO) << "hdfsCreateDirectory creates parent directories automatically";
-        
+
         // Verify all levels exist
         EXPECT_TRUE(fs->path_exists("file://" + _root_path + "/level1").ok());
         EXPECT_TRUE(fs->path_exists("file://" + _root_path + "/level1/level2").ok());
         EXPECT_TRUE(fs->path_exists(deep_nested).ok());
-        
+
         // Cleanup
         fs->delete_dir_recursive("file://" + _root_path + "/level1");
     } else {
