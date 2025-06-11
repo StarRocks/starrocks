@@ -1979,6 +1979,7 @@ struct TGetApplicableRolesResponse {
     2: optional i64 next_table_id_offset;
 }
 
+<<<<<<< HEAD
 struct TUpdateTabletVersionRequest {
     1: optional Types.TBackend backend;
     2: optional i64 signature;
@@ -1986,6 +1987,16 @@ struct TUpdateTabletVersionRequest {
 }
 
 struct TUpdateTabletVersionResult {
+=======
+struct TUpdateFailPointRequest {
+    1: optional string name;
+    2: optional bool is_enable;
+    3: optional i32 times;
+    4: optional double probability;
+}
+
+struct TUpdateFailPointResponse {
+>>>>>>> 249ee8a7b9 ([BugFix] Revert PR #59009 (#59815))
     1: optional Status.TStatus status;
 }
 
@@ -2116,6 +2127,14 @@ service FrontendService {
 
     TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
 
+<<<<<<< HEAD
     TUpdateTabletVersionResult updateTabletVersion(1: TUpdateTabletVersionRequest request)
+=======
+    TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
+
+    TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
+
+    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+>>>>>>> 249ee8a7b9 ([BugFix] Revert PR #59009 (#59815))
 }
 
