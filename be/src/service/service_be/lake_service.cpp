@@ -178,7 +178,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         rebuild_pindex_tablets.insert(id);
     }
     bool skip_write_tablet_metadata = request->has_enable_aggregate_publish() && request->enable_aggregate_publish();
-    std::unordered_set<int64> submitted_without_execution_tablets(request->tablet_ids().begin(), request->tablet_ids().end());
+    std::unordered_set<int64> submitted_without_execution_tablets(request->tablet_ids().begin(),
+                                                                  request->tablet_ids().end());
     for (auto tablet_id : request->tablet_ids()) {
         auto task = std::make_shared<AutoCleanRunnable>(
                 [&, tablet_id] {
@@ -291,8 +292,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         for (const auto& tablet_id : submitted_without_execution_tablets) {
             response->add_failed_tablets(tablet_id);
         }
-        auto st = Status::InternalError("publish version of tablets: " + JoinInts(submitted_without_execution_tablets, ",") +
-                                        " exit without execution, this may be caused by thread pool shutdown");
+        auto st = Status::InternalError(
+                "publish version of tablets: " + JoinInts(submitted_without_execution_tablets, ",") +
+                " exit without execution, this may be caused by thread pool shutdown");
         LOG(WARNING) << st.message();
         st.to_protobuf(response->mutable_status());
     }
@@ -504,8 +506,9 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
         for (const auto& tablet_id : submitted_without_execution_tablets) {
             response->add_failed_tablets(tablet_id);
         }
-        auto st = Status::InternalError("publish log version task of tablets: " + JoinInts(submitted_without_execution_tablets, ",") +
-                                        " exit without execution, this may be caused by thread pool shutdown");
+        auto st = Status::InternalError(
+                "publish log version task of tablets: " + JoinInts(submitted_without_execution_tablets, ",") +
+                " exit without execution, this may be caused by thread pool shutdown");
         LOG(WARNING) << st.message();
     }
 }
@@ -823,7 +826,8 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
     auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
-    std::unordered_set<int64> submitted_without_execution_tablets(request->tablet_ids().begin(), request->tablet_ids().end());
+    std::unordered_set<int64> submitted_without_execution_tablets(request->tablet_ids().begin(),
+                                                                  request->tablet_ids().end());
     for (auto tablet_id : request->tablet_ids()) {
         auto task = std::make_shared<AutoCleanRunnable>(
                 [&, tablet_id] {
@@ -866,8 +870,9 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
         for (const auto& tablet_id : submitted_without_execution_tablets) {
             response->add_failed_tablets(tablet_id);
         }
-        auto st = Status::InternalError("delete_data task of tablets: " + JoinInts(submitted_without_execution_tablets, ",") +
-                                        " exit without execution, this may be caused by thread pool shutdown");
+        auto st = Status::InternalError(
+                "delete_data task of tablets: " + JoinInts(submitted_without_execution_tablets, ",") +
+                " exit without execution, this may be caused by thread pool shutdown");
         LOG(WARNING) << st.message();
     }
 }
