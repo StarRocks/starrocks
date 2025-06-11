@@ -17,7 +17,6 @@
 #include <fmt/format.h>
 
 #include "cache/datacache.h"
-#include "cache/peer_cache_wrapper.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 

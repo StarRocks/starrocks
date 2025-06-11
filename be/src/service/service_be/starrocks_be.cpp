@@ -23,7 +23,6 @@
 #include "backend_service.h"
 #include "cache/block_cache/block_cache.h"
 #include "cache/datacache.h"
-#include "cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/process_exit.h"
@@ -48,6 +47,10 @@
 #include "util/mem_info.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/starcache_wrapper.h"
+#endif
 
 namespace brpc {
 
