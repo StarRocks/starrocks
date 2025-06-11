@@ -858,7 +858,8 @@ public class TabletChecker extends FrontendDaemon {
     private static LocalTabletHealthStats collectLocalTabletHealthStats(LocalTablet localTablet,
                                                                         SystemInfoService systemInfoService,
                                                                         long visibleVersion,
-                                                                        Multimap<String, String> requiredLocation) {
+                                                                        Multimap<String, String> requiredLocation,
+                                                                        boolean ensureReplicaHA) {
         LocalTabletHealthStats stats = new LocalTabletHealthStats();
         Set<Pair<String, String>> uniqueReplicaLocations = Sets.newHashSet();
         Set<String> hosts = Sets.newHashSet();
@@ -902,9 +903,9 @@ public class TabletChecker extends FrontendDaemon {
                 stats.incrLocationMatchCnt();
             } else {
                 Pair<String, String> backendLocKV = backend.getSingleLevelLocationKV();
-                if (backendLocKV != null) {
-                    if (!uniqueReplicaLocations.contains(backendLocKV) &&
-                            isLocationMatch(backendLocKV.first, backendLocKV.second, requiredLocation)) {
+                if (backendLocKV != null && isLocationMatch(backendLocKV.first, backendLocKV.second, requiredLocation)) {
+                    boolean shouldAdd = !ensureReplicaHA || !uniqueReplicaLocations.contains(backendLocKV);
+                    if (shouldAdd) {
                         stats.incrLocationMatchCnt();
                         uniqueReplicaLocations.add(backendLocKV);
                     }
@@ -1027,8 +1028,9 @@ public class TabletChecker extends FrontendDaemon {
             List<Long> aliveBeIdsInCluster,
             Multimap<String, String> requiredLocation) {
         List<Replica> replicas = localTablet.getImmutableReplicas();
+        boolean ensureReplicaHA = shouldEnsureReplicaHA(replicationNum, requiredLocation);
         LocalTabletHealthStats stats = collectLocalTabletHealthStats(localTablet, systemInfoService,
-                visibleVersion, requiredLocation);
+                visibleVersion, requiredLocation, ensureReplicaHA);
 
         // The priority of handling different unhealthy situations should be:
         // FORCE_REDUNDANT > REPLICA_MISSING > VERSION_INCOMPLETE >
@@ -1086,6 +1088,29 @@ public class TabletChecker extends FrontendDaemon {
         try (CloseableLock ignored = CloseableLock.lock(localTablet.getReadLock())) {
             return getColocateTabletHealthStatusUnlocked(localTablet, visibleVersion, replicationNum, backendsSet);
         }
+    }
+
+    /**
+     * Determines whether high availability (HA) should be ensured for replica placement,
+     * based on the number of replicas and the required location mapping.
+     *
+     * <p>High availability is considered to be required only when the number of
+     * specified locations matches the number of replicas. This typically implies that
+     * multiple racks are assigned during table creation, which helps prevent replica
+     * co-location on the same rack and improves fault tolerance.</p>
+     *
+     * <p>In contrast, if only a single rack is assigned (even if different tables use different racks),
+     * the requirement is typically for physical isolation rather than availability.</p>
+     *
+     * @param replicationNum the number of replicas configured for the table
+     * @param requiredLocation the mapping of location requirements (e.g., rack assignments)
+     * @return true if high availability should be enforced based on the location configuration; false otherwise
+     */
+    private static boolean shouldEnsureReplicaHA(int replicationNum, Multimap<String, String> requiredLocation) {
+        if (requiredLocation == null) {
+            return false;
+        }
+        return requiredLocation.size() == replicationNum;
     }
 
     /**
