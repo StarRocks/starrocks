@@ -19,7 +19,12 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+#include <tuple>
+
 #include "common/logging.h"
+#include "common/object_pool.h"
+#include "fmt/format.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 
 namespace starrocks {
@@ -531,6 +536,33 @@ TEST(TestRuntimeProfile, testUpdateWithOldAndNewProfile) {
     ASSERT_EQ(2, counter2->value());
     ASSERT_EQ(2, profile->get_version());
     ASSERT_EQ(2, child_profile->get_version());
+}
+
+TEST(TestRuntimeProfile, testRaceMergeProfiles) {
+    ObjectPool pool;
+    std::vector<RuntimeProfile*> profiles;
+    const size_t init_profile_size = 10;
+    for (size_t i = 0; i < init_profile_size; ++i) {
+        profiles.push_back(pool.add(new RuntimeProfile("test-name")));
+    }
+
+    const size_t loop_test_size = 10;
+
+    // race between merge_isomorphic_profiles and create_child
+    std::thread thr1([&profiles]() {
+        for (size_t i = 0; i < loop_test_size; ++i) {
+            ObjectPool pool;
+            std::ignore = RuntimeProfile::merge_isomorphic_profiles(&pool, profiles);
+        }
+    });
+    std::thread thr2([&profiles]() {
+        for (size_t i = 0; i < loop_test_size; ++i) {
+            profiles[0]->create_child(fmt::format("MERGE{}", i), true, true);
+        }
+    });
+
+    thr1.join();
+    thr2.join();
 }
 
 } // namespace starrocks
