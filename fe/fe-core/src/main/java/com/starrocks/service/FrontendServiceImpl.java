@@ -357,8 +357,6 @@ import com.starrocks.thrift.TUpdateFailPointRequest;
 import com.starrocks.thrift.TUpdateFailPointResponse;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
-import com.starrocks.thrift.TUpdateTabletVersionRequest;
-import com.starrocks.thrift.TUpdateTabletVersionResult;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.thrift.TWarehouseInfo;
@@ -3211,11 +3209,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TUpdateFailPointResponse response = new TUpdateFailPointResponse();
         response.setStatus(status);
         return response;
-    }
-
-    @Override
-    public TUpdateTabletVersionResult updateTabletVersion(TUpdateTabletVersionRequest request) {
-        return leaderImpl.updateTabletVersion(request);
     }
 
     @NotNull

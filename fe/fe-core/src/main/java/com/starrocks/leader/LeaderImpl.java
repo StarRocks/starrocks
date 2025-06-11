@@ -147,10 +147,7 @@ import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
-import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.thrift.TUpdateTabletVersionRequest;
-import com.starrocks.thrift.TUpdateTabletVersionResult;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -1442,95 +1439,4 @@ public class LeaderImpl {
             return response;
         }
     }
-
-    public TUpdateTabletVersionResult updateTabletVersion(TUpdateTabletVersionRequest request) {
-        TUpdateTabletVersionResult result = new TUpdateTabletVersionResult();
-        TStatus tStatus = new TStatus(TStatusCode.OK);
-        result.setStatus(tStatus);
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            LOG.warn("current node is not leader, update tablet version failed, signature: {}",
-                    request.getSignature());
-            tStatus.setStatus_code(TStatusCode.CANCELLED);
-            tStatus.setError_msgs(Lists.newArrayList("current fe is not leader"));
-            result.setStatus(tStatus);
-            return result;
-        }
-        
-        TBackend tBackend = request.getBackend();
-        String host = tBackend.getHost();
-        int bePort = tBackend.getBe_port();
-        long backendId;
-        ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(host, bePort);
-
-        if (cn == null) {
-            if (RunMode.isSharedDataMode()) {
-                cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeWithBePort(host, bePort);
-            }
-            if (cn == null) {
-                tStatus.setStatus_code(TStatusCode.CANCELLED);
-                tStatus.setError_msgs(Lists.newArrayList("backend not exist."));
-                LOG.warn("backend does not found. host: {}, be port: {}.", host, bePort);
-                result.setStatus(tStatus);
-                return result;
-            }
-        }
-
-        backendId = cn.getId();
-        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        List<TTabletVersionPair> tabletVersions = request.getTablet_versions();
-        List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
-        List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
-        if (replicas == null) {
-            LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
-            tStatus.setStatus_code(TStatusCode.CANCELLED);
-            tStatus.setError_msgs(Lists.newArrayList("no replicas on backend"));
-            result.setStatus(tStatus);
-            return result;
-        }
-
-        List<TabletMeta> tabletMetaList = tablets.getTabletMetaList(tabletIds);
-        Long dbId = null;
-        Long tableId = null;
-        if (tabletMetaList.isEmpty()) {
-            tStatus.setStatus_code(TStatusCode.CANCELLED);
-            tStatus.setError_msgs(Lists.newArrayList("no tabletMeta found"));
-            result.setStatus(tStatus);
-            return result;
-        }
-        for (TabletMeta tabletMeta : tabletMetaList) {
-            if (tabletMeta == null || tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
-                continue;
-            }
-            if (dbId == null) {
-                dbId = tabletMeta.getDbId();
-            }
-            if (tableId == null) {
-                tableId = tabletMeta.getTableId();
-            }
-            if (dbId != tabletMeta.getDbId() || tableId != tabletMeta.getTableId()) {
-                LOG.warn("Tablets in UpdateTabletVersionRequest from different databases or table");
-                tStatus.setStatus_code(TStatusCode.CANCELLED);
-                tStatus.setError_msgs(Lists.newArrayList("tablets in request from different db or table"));
-                result.setStatus(tStatus);
-                return result;
-            }
-        }
-
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
-        try {
-            for (int i = 0; i < tabletVersions.size(); i++) {
-                TTabletVersionPair tabletVersion = tabletVersions.get(i);
-                Replica replica = replicas.get(i);
-                if (replica == null) {
-                    continue;
-                }
-                replica.updateVersion(tabletVersion.version);
-            }
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
-        }
-        return result;
-    }
-
 }
