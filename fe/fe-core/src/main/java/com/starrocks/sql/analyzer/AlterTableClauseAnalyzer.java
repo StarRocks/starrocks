@@ -415,6 +415,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                                     " haven't been enabled");
                 }
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("default") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("real_time")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown compaction strategy: " + 
+                            properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

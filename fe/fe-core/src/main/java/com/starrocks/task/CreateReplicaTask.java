@@ -40,6 +40,7 @@ import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.thrift.TBinlogConfig;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TFlatJsonConfig;
@@ -89,6 +90,7 @@ public class CreateReplicaTask extends AgentTask {
     private final TTabletSchema tabletSchema;
     private long gtid = 0;
     private long timeoutMs = -1;
+    private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -112,6 +114,7 @@ public class CreateReplicaTask extends AgentTask {
         this.inRestoreMode = builder.isInRestoreMode();
         this.gtid = builder.getGtid();
         this.timeoutMs = builder.getTimeoutMs();
+        this.compactionStrategy = builder.getCompactionStrategy();
     }
 
     public static Builder newBuilder() {
@@ -195,6 +198,9 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setEnable_tablet_creation_optimization(enableTabletCreationOptimization);
         createTabletReq.setGtid(gtid);
         createTabletReq.setTimeout_ms(timeoutMs);
+        if (compactionStrategy != null) {
+            createTabletReq.setCompaction_strategy(compactionStrategy);
+        }
         return createTabletReq;
     }
 
@@ -226,6 +232,7 @@ public class CreateReplicaTask extends AgentTask {
         private TTabletSchema tabletSchema;
         private long gtid = 0;
         private long timeoutMs = -1;
+        private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
         private Builder() {
         }
@@ -452,6 +459,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setTimeoutMs(long timeoutMs) {
             this.timeoutMs = timeoutMs;
+            return this;
+        }
+
+        public TCompactionStrategy getCompactionStrategy() {
+            return compactionStrategy;
+        }
+
+        public Builder setCompactionStrategy(TCompactionStrategy compactionStrategy) {
+            this.compactionStrategy = compactionStrategy;
             return this;
         }
 

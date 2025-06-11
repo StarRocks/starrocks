@@ -75,10 +75,12 @@ public:
 };
 
 struct PKSizeTieredLevel {
-    PKSizeTieredLevel(const std::vector<RowsetCandidate>& rs, bool print_log) : rowsets(rs.begin(), rs.end()) {
+    PKSizeTieredLevel(const std::vector<RowsetCandidate>& rs, bool print_log, int64_t compact_level)
+            : rowsets(rs.begin(), rs.end()), compact_level(compact_level) {
         calc_compaction_score(rs, print_log);
     }
-    PKSizeTieredLevel(const PKSizeTieredLevel& level) : rowsets(level.rowsets), score(level.score) {}
+    PKSizeTieredLevel(const PKSizeTieredLevel& level)
+            : rowsets(level.rowsets), score(level.score), compact_level(level.compact_level) {}
 
     // caculate the score of this level.
     void calc_compaction_score(const std::vector<RowsetCandidate>& rs, bool print_log) {
@@ -106,10 +108,24 @@ struct PKSizeTieredLevel {
         }
     }
 
+    void add_candidate_rowsets(PKSizeTieredLevel& other) {
+        while (!other.rowsets.empty()) {
+            const auto& top_rowset = other.rowsets.top();
+            candidate_rowsets.push_back(top_rowset);
+            other.rowsets.pop();
+        }
+    }
+
+    void set_compact_leve(int64_t compact_level) { this->compact_level = compact_level; }
+
+    int64_t get_compact_level() { return compact_level; }
+
     bool operator<(const PKSizeTieredLevel& other) const { return score < other.score; }
 
     std::priority_queue<RowsetCandidate> rowsets;
+    std::vector<RowsetCandidate> candidate_rowsets;
     double score = 0.0;
+    int64_t compact_level = 0;
 };
 
 class PrimaryCompactionPolicy : public CompactionPolicy {

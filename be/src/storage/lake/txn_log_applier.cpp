@@ -88,6 +88,13 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         if (alter_meta.has_bundle_tablet_metadata()) {
             // do nothing
         }
+
+        if (alter_meta.has_compaction_strategy()) {
+            LOG(INFO) << fmt::format("alter compaction strategy from {} to {} for tablet id: {}",
+                                     CompactionStrategyPB_Name(metadata->compaction_strategy()),
+                                     CompactionStrategyPB_Name(alter_meta.compaction_strategy()), metadata->id());
+            metadata->set_compaction_strategy(alter_meta.compaction_strategy());
+        }
     }
     return Status::OK();
 }

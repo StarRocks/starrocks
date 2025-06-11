@@ -60,6 +60,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -95,6 +96,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public static final String CLOUD_NATIVE_INDEX_TYPE = "CLOUD_NATIVE";
     public static final String LOCAL_INDEX_TYPE = "LOCAL";
+
+    public static final String DEFAULT_COMPACTION_STRATEGY = "DEFAULT";
+    public static final String REAL_TIME_COMPACTION_STRATEGY = "REAL_TIME";
 
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
@@ -322,6 +326,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private Multimap<String, String> location;
 
     private boolean fileBundling = false;
+
+    private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
     public TableProperty() {
         this(Maps.newLinkedHashMap());
@@ -861,6 +867,29 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildCompactionStrategy() {
+        String defaultStrategy = properties.getOrDefault(
+                    PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, DEFAULT_COMPACTION_STRATEGY);
+        if (defaultStrategy.equalsIgnoreCase(DEFAULT_COMPACTION_STRATEGY)) {
+            compactionStrategy = TCompactionStrategy.DEFAULT;
+        } else if (defaultStrategy.equalsIgnoreCase(REAL_TIME_COMPACTION_STRATEGY)) {
+            compactionStrategy = TCompactionStrategy.REAL_TIME;
+        }
+        return this;
+    }
+
+    public static String compactionStrategyToString(TCompactionStrategy strategy) {
+        switch (strategy) {
+            case DEFAULT:
+                return DEFAULT_COMPACTION_STRATEGY;
+            case REAL_TIME:
+                return REAL_TIME_COMPACTION_STRATEGY;
+            default:
+                LOG.warn("unknown compactionStrategy");
+                return "UNKNOWN";
+        }
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -1033,6 +1062,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return storageType;
     }
 
+    public TCompactionStrategy getCompactionStrategy() {
+        return compactionStrategy;
+    }
+
     public Multimap<String, String> getLocation() {
         return location;
     }
@@ -1192,5 +1225,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildBaseCompactionForbiddenTimeRanges();
         buildFileBundling();
         buildMutableBucketNum();
+        buildCompactionStrategy();
     }
 }

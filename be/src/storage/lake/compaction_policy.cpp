@@ -80,6 +80,12 @@ private:
 
 StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
                                                       const std::shared_ptr<const TabletMetadataPB>& metadata) {
+    bool is_real_time = false;
+    if (metadata->has_compaction_strategy() && metadata->compaction_strategy() == CompactionStrategyPB::REAL_TIME) {
+        is_real_time = true;
+    }
+    uint32_t update_compaction_delvec_file_io_amp_ratio =
+            is_real_time ? 1 : config::update_compaction_delvec_file_io_amp_ratio;
     PrimaryCompactionPolicy policy(tablet_mgr, metadata, false /* force_base_compaction */);
     std::vector<bool> has_dels;
     ASSIGN_OR_RETURN(auto pick_rowset_indexes, policy.pick_rowset_indexes(metadata, true, &has_dels));
@@ -90,7 +96,7 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
         auto current_score = pick_rowset.overlapped() ? pick_rowset.segments_size() : 1;
         if (has_del) {
             // if delvec file exist, expand score by config.
-            current_score *= config::update_compaction_delvec_file_io_amp_ratio;
+            current_score *= update_compaction_delvec_file_io_amp_ratio;
         }
         segment_num_score += current_score;
     }

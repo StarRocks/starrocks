@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
@@ -376,6 +377,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                             "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
                 }
                 table.setPersistentIndexType(persistentIndexType);
+            }
+
+            if (table.isCloudNativeTable()) {
+                TCompactionStrategy compactionStrategy;
+                try {
+                    compactionStrategy = PropertyAnalyzer.analyzecompactionStrategy(properties);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                table.setCompactionStrategy(compactionStrategy);
             }
 
             try {
