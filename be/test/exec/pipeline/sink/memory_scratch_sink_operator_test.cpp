@@ -118,7 +118,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     EXPECT_EQ(std::string("Set cancelled by MemoryScratchSinkOperator"), result_st.message());
     EXPECT_TRUE(eos);
     EXPECT_EQ(nullptr, record_batch);
-    EXPECT_TRUE(driver->finalize(_runtime_state, DriverState::INTERNAL_ERROR).ok());
+    driver->finalize(_runtime_state, DriverState::INTERNAL_ERROR, 1, 1);
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
     _query_ctx->count_down_fragments();
