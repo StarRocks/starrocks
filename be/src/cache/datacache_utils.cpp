@@ -32,6 +32,16 @@ void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const
     t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
 }
 
+#ifdef WITH_STARCACHE
+void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const StarCacheMetrics& metrics) {
+    t_metrics.__set_status(DataCacheStatusUtils::to_thrift(static_cast<DataCacheStatus>(metrics.status)));
+    t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
+    t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
+    t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
+    t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
+}
+#endif
+
 Status DataCacheUtils::parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
                                                      size_t* mem_size) {
     ASSIGN_OR_RETURN(int64_t parsed_mem_size, ParseUtil::parse_mem_spec(conf_mem_size_str, mem_limit));
