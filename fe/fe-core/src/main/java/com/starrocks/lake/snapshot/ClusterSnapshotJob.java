@@ -78,6 +78,10 @@ public class ClusterSnapshotJob implements Writable {
         this.errMsg = errMsg;
     }
 
+    public void setCreatedTimeMs(long createdTimeMs) {
+        snapshot.setCreatedTimeMs(createdTimeMs);
+    }
+
     public String getSnapshotName() {
         return snapshot.getSnapshotName();
     }
@@ -124,6 +128,10 @@ public class ClusterSnapshotJob implements Writable {
         return state == ClusterSnapshotJobState.INITIALIZING;
     }
 
+    public boolean isUploading() {
+        return state == ClusterSnapshotJobState.UPLOADING;
+    }
+
     public boolean isError() {
         return state == ClusterSnapshotJobState.ERROR;
     }
@@ -146,6 +154,14 @@ public class ClusterSnapshotJob implements Writable {
 
     public void setDetailInfo(String detailInfo) {
         this.detailInfo = detailInfo;
+    }
+
+    public boolean needClusterSnapshotInfo() {
+        return snapshot.needClusterSnapshotInfo();
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        snapshot.setClusterSnapshotInfo(clusterSnapshotInfo);
     }
 
     public void logJob() {
