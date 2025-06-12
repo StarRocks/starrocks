@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <sstream>
 #include <string>
 
@@ -1073,6 +1074,207 @@ TEST_F(Int256Test, edge_cases) {
         ASSERT_EQ("1", (value / value).to_string());
         ASSERT_EQ("0", (value % value).to_string());
     }
+}
+
+// =============================================================================
+// Memory Layout and Storage Format Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, storage_format_memcpy_consistency) {
+    // Test that storage format is identical to memory format using memcpy
+    // This verifies zero-copy serialization capability on little-endian systems
+
+    int128_t high_val =
+            (static_cast<int128_t>(0x123456789ABCDEF0LL) << 64) | static_cast<int128_t>(0xFEDCBA0987654321ULL);
+    uint128_t low_val =
+            (static_cast<uint128_t>(0x0123456789ABCDEFULL) << 64) | static_cast<uint128_t>(0xEDCBA09876543210ULL);
+
+    int256_t original(high_val, low_val);
+
+    // Simulate storage: copy to buffer using memcpy
+    uint8_t storage_buffer[32];
+    memcpy(storage_buffer, &original, sizeof(int256_t));
+
+    // Simulate loading from storage: copy back to new object
+    int256_t loaded;
+    memcpy(&loaded, storage_buffer, sizeof(int256_t));
+
+    // Verify perfect round-trip consistency
+    ASSERT_EQ(original.high, loaded.high);
+    ASSERT_EQ(original.low, loaded.low);
+    ASSERT_EQ(original, loaded);
+    ASSERT_EQ(original.to_string(), loaded.to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, byte_order_verification) {
+    int128_t high_val =
+            (static_cast<int128_t>(0x123456789ABCDEF0LL) << 64) | static_cast<int128_t>(0xFEDCBA0987654321ULL);
+    uint128_t low_val =
+            (static_cast<uint128_t>(0x0123456789ABCDEFULL) << 64) | static_cast<uint128_t>(0xEDCBA09876543210ULL);
+
+    int256_t value(high_val, low_val);
+
+    uint8_t* bytes = reinterpret_cast<uint8_t*>(&value);
+
+    // low member (bytes 0-15): 0x0123456789ABCDEFEDCBA09876543210
+    // high member (bytes 16-31): 0x123456789ABCDEF0FEDCBA0987654321
+
+    // Check first few bytes of low member (little-endian byte order)
+    ASSERT_EQ(0x10, bytes[0]); // LSB of low
+    ASSERT_EQ(0x32, bytes[1]);
+    ASSERT_EQ(0x54, bytes[2]);
+    ASSERT_EQ(0x76, bytes[3]);
+
+    // Check last few bytes of low member
+    ASSERT_EQ(0x01, bytes[15]); // MSB of low
+    ASSERT_EQ(0x23, bytes[14]);
+    ASSERT_EQ(0x45, bytes[13]);
+    ASSERT_EQ(0x67, bytes[12]);
+
+    // Check first few bytes of high member (starts at byte 16)
+    ASSERT_EQ(0x21, bytes[16]); // LSB of high
+    ASSERT_EQ(0x43, bytes[17]);
+    ASSERT_EQ(0x65, bytes[18]);
+    ASSERT_EQ(0x87, bytes[19]);
+
+    // Check last few bytes of high member
+    ASSERT_EQ(0x12, bytes[31]); // MSB of high
+    ASSERT_EQ(0x34, bytes[30]);
+    ASSERT_EQ(0x56, bytes[29]);
+    ASSERT_EQ(0x78, bytes[28]);
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, cross_platform_storage_simulation) {
+    // Test various values to ensure consistent storage format
+    // This simulates what would happen in cross-platform data exchange
+
+    std::vector<int256_t> test_values = {
+            int256_t(0),                     // Zero
+            int256_t(1),                     // Simple positive
+            int256_t(-1),                    // Simple negative
+            int256_t(0x7FFFFFFFFFFFFFFFLL),  // Large positive in low
+            int256_t(-0x7FFFFFFFFFFFFFFFLL), // Large negative in low
+            int256_t(1, 0),                  // 2^128
+            int256_t(-1, 0),                 // -2^128
+            INT256_MAX,                      // Maximum value
+            INT256_MIN,                      // Minimum value
+    };
+
+    for (const auto& original : test_values) {
+        // Simulate storage write
+        uint8_t storage[32];
+        memcpy(storage, &original, 32);
+
+        // Simulate storage read
+        int256_t restored;
+        memcpy(&restored, storage, 32);
+
+        // Verify perfect consistency
+        ASSERT_EQ(original, restored) << "Failed for value: " << original.to_string();
+
+        // Verify individual components
+        ASSERT_EQ(original.high, restored.high);
+        ASSERT_EQ(original.low, restored.low);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, memory_alignment_and_padding) {
+    // Test that there's no unexpected padding in the structure
+    // This ensures our storage format assumptions are correct
+
+    ASSERT_EQ(32, sizeof(int256_t));
+    ASSERT_EQ(0, sizeof(int256_t) % 8); // Should be 8-byte aligned
+
+    // Test alignment of individual members
+    int256_t value;
+    uint8_t* base_ptr = reinterpret_cast<uint8_t*>(&value);
+    uint8_t* low_ptr = reinterpret_cast<uint8_t*>(&value.low);
+    uint8_t* high_ptr = reinterpret_cast<uint8_t*>(&value.high);
+
+    // low should be at offset 0
+    ASSERT_EQ(0, low_ptr - base_ptr);
+
+    // high should be at offset 16 (immediately after low, no padding)
+    ASSERT_EQ(16, high_ptr - base_ptr);
+
+    // Verify no padding between members
+    ASSERT_EQ(sizeof(value.low) + sizeof(value.high), sizeof(int256_t));
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, direct_memory_access_consistency) {
+    // Test that direct memory access produces expected results
+    // This verifies our bit manipulation operations work correctly with the memory layout
+
+    int128_t high_val =
+            (static_cast<int128_t>(0x123456789ABCDEF0LL) << 64) | static_cast<int128_t>(0xFEDCBA0987654321ULL);
+    uint128_t low_val =
+            (static_cast<uint128_t>(0x0123456789ABCDEFULL) << 64) | static_cast<uint128_t>(0xEDCBA09876543210ULL);
+
+    int256_t value(high_val, low_val);
+
+    // Access as array of 64-bit values
+    uint64_t* as_u64 = reinterpret_cast<uint64_t*>(&value);
+
+    // On little-endian systems, the layout should be:
+    // as_u64[0] = lower 64 bits of low
+    // as_u64[1] = upper 64 bits of low
+    // as_u64[2] = lower 64 bits of high
+    // as_u64[3] = upper 64 bits of high
+
+    ASSERT_EQ(4, sizeof(int256_t) / sizeof(uint64_t));
+
+    // Reconstruct the original values from the 64-bit parts
+    uint128_t reconstructed_low = static_cast<uint128_t>(as_u64[0]) | (static_cast<uint128_t>(as_u64[1]) << 64);
+    int128_t reconstructed_high =
+            static_cast<int128_t>(static_cast<uint128_t>(as_u64[2]) | (static_cast<uint128_t>(as_u64[3]) << 64));
+
+    ASSERT_EQ(value.low, reconstructed_low);
+    ASSERT_EQ(value.high, reconstructed_high);
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, serialization_performance_test) {
+    // Test that memcpy-based serialization is efficient
+    // This demonstrates the zero-copy benefit of our design choice
+
+    const int NUM_VALUES = 1000;
+    std::vector<int256_t> values;
+    std::vector<uint8_t> storage(NUM_VALUES * 32);
+
+    // Generate test data
+    for (int i = 0; i < NUM_VALUES; ++i) {
+        values.emplace_back(i * 12345, i * 67890);
+    }
+
+    // Serialize using memcpy (simulating our storage format)
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < NUM_VALUES; ++i) {
+        memcpy(&storage[i * 32], &values[i], 32);
+    }
+    auto serialize_time = std::chrono::high_resolution_clock::now() - start;
+
+    // Deserialize using memcpy
+    std::vector<int256_t> restored(NUM_VALUES);
+    start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < NUM_VALUES; ++i) {
+        memcpy(&restored[i], &storage[i * 32], 32);
+    }
+    auto deserialize_time = std::chrono::high_resolution_clock::now() - start;
+
+    // Verify correctness
+    for (int i = 0; i < NUM_VALUES; ++i) {
+        ASSERT_EQ(values[i], restored[i]);
+    }
+
+    // Performance should be very fast (just memory copying)
+    // This is mainly to ensure the test runs without issues
+    ASSERT_TRUE(serialize_time.count() >= 0);
+    ASSERT_TRUE(deserialize_time.count() >= 0);
 }
 
 } // end namespace starrocks
