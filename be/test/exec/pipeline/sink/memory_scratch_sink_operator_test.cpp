@@ -103,7 +103,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     auto pipeline = std::make_shared<Pipeline>(0, OpFactories(), exec_group.get());
     auto driver = std::make_shared<PipelineDriver>(ops, _query_ctx, _fragment_ctx, pipeline.get(), 0);
 
-    driver->prepare(_runtime_state);
+    EXPECT_TRUE(driver->prepare(_runtime_state).ok());
 
     // Now simulate GlobalDriverExecutor to cancel the driver due to source operator failure
     auto status = Status::NotFound("file not found");
@@ -118,7 +118,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     EXPECT_EQ(std::string("Set cancelled by MemoryScratchSinkOperator"), result_st.message());
     EXPECT_TRUE(eos);
     EXPECT_EQ(nullptr, record_batch);
-    driver->finalize(_runtime_state, DriverState::INTERNAL_ERROR);
+    EXPECT_TRUE(driver->finalize(_runtime_state, DriverState::INTERNAL_ERROR).ok());
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
     _query_ctx->count_down_fragments();
