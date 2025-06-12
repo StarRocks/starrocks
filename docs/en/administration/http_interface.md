@@ -17,7 +17,7 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 | GET                 | `/api/_get_ddl?db={}&tbl={}`                                    | View table DDL statement.                                                                                            |
 | GET                 | `/api/_migration?db={}&tbl={}`                                  | View table tablet information.                                                                                       |
 | GET                 | `/api/_check_storagetype`                                       |
-| POST                | `/api/{db}/{label}/_cancel`                                     |
+| POST                | `/api/{db}/{table}/_cancel?label={}`                            |
 | GET                 | `/api/{db}/get_load_state`                                      |
 | GET                 | `/api/health`                                                   |
 | GET                 | `/metrics?type={core/json}`                                     | View metrics of the current FE.                                                                                      |
