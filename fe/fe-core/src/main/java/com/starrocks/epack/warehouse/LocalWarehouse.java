@@ -382,7 +382,16 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
     @Override
     public void createCNGroup(CreateCnGroupStmt stmt) throws DdlException {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            ensureCnGroupNotExists(stmt.getCnGroupName());
+            String cnGroupName = stmt.getCnGroupName();
+            ensureWarehouseStateNotSuspended();
+            Cluster c = getClusterByNameNoExceptionNoLock(cnGroupName);
+            if (c != null) {
+                if (stmt.isSetIfNotExists()) {
+                    return;
+                } else {
+                    throw ErrorReportException.report(ErrorCode.ERR_CNGROUP_EXISTS, cnGroupName);
+                }
+            }
 
             StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
             ReplicationType replicationType = WarehouseProperty.toStarOSReplicationType(property.getReplicationType());
@@ -390,7 +399,7 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             long clusterId = GlobalStateMgr.getCurrentState().getNextId();
             long workerGroupId =
                     starOSAgent.createWorkerGroup("x0", property.getComputeReplica(), replicationType, warmupLevel);
-            Cluster newCluster = new Cluster(clusterId, stmt.getCnGroupName(), workerGroupId);
+            Cluster newCluster = new Cluster(clusterId, cnGroupName, workerGroupId);
             clusters.add(newCluster);
             if (cluster == null) {
                 cluster = clusters.get(0);

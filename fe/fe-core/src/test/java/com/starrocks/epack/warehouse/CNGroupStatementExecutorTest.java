@@ -60,7 +60,7 @@ public class CNGroupStatementExecutorTest extends LocalWarehouseTestBase {
 
             // No error with 'IF NOT EXISTS'
             String sql2 = "ALTER WAREHOUSE " + warehouseName + " ADD CNGROUP IF NOT EXISTS " + cnGroupName;
-            Assert.assertThrows(ErrorReportException.class, () -> starRocksAssert.ddl(sql2));
+            ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(sql2));
 
             ensureCnGroupDropped(warehouseName, cnGroupName);
             ensureWarehouseDropped(warehouseName);
