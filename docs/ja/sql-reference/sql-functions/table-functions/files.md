@@ -227,6 +227,8 @@ StarRocks がストレージシステムにアクセスするために使用す�
 
 StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS への IAM ユーザー認証、Azure Blob Storage への共有キー、SAS トークン、マネージドアイデンティティ、サービスプリンシパル認証をサポートしています。
 
+##### HDFS
+
 - HDFS にシンプル認証を使用してアクセスする:
 
   ```SQL
@@ -240,6 +242,8 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | hadoop.security.authentication | No           | 認証方法。有効な値: `simple` (デフォルト)。`simple` はシンプル認証を表し、認証が不要であることを意味します。 |
   | username                       | Yes          | HDFS クラスターの NameNode にアクセスするために使用するアカウントのユーザー名。 |
   | password                       | Yes          | HDFS クラスターの NameNode にアクセスするために使用するアカウントのパスワード。 |
+
+##### AWS S3
 
 - IAM ユーザー認証を使用して AWS S3 にアクセスする:
 
@@ -255,6 +259,8 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | aws.s3.secret_key | Yes          | Amazon S3 バケットにアクセスするために使用できるシークレットアクセスキー。 |
   | aws.s3.region     | Yes          | AWS S3 バケットが存在するリージョン。例: `us-west-2`。 |
 
+##### GCS
+
 - IAM ユーザー認証を使用して GCS にアクセスする:
 
   ```SQL
@@ -268,6 +274,8 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | fs.s3a.access.key | Yes          | GCS バケットにアクセスするために使用できるアクセスキー ID。 |
   | fs.s3a.secret.key | Yes          | GCS バケットにアクセスするために使用できるシークレットアクセスキー。|
   | fs.s3a.endpoint   | Yes          | GCS バケットにアクセスするために使用できるエンドポイント。例: `storage.googleapis.com`。エンドポイントアドレスに `https` を指定しないでください。 |
+
+##### Azure
 
 - 共有キーを使用して Azure Blob Storage にアクセスする:
 
@@ -958,7 +966,7 @@ SELECT * FROM sales_records;
 Avro ファイルをロードします：
 
 ```SQL
-mysql> INSERT INTO avro_tbl
+INSERT INTO avro_tbl
   SELECT * FROM FILES(
     "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
     "format" = "avro"
@@ -968,7 +976,7 @@ mysql> INSERT INTO avro_tbl
 Avro ファイルのデータをクエリーします：
 
 ```SQL
-mysql> SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
 *************************** 1. row ***************************
 record_field: {"id":1,"name":"avro"}
   enum_field: HEARTS
@@ -982,7 +990,7 @@ record_field: {"id":1,"name":"avro"}
 Avro ファイルのスキーマを表示します：
 
 ```SQL
-mysql> DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
 +------------------------+------------------+------+
 | Field                  | Type             | Null |
 +------------------------+------------------+------+

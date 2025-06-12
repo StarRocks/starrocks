@@ -228,6 +228,8 @@ StarRocks 访问存储系统的认证配置。
 
 StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 认证访问 AWS S3 以及 Google Cloud Storage，以及通过 Shared Key、SAS Token、Managed Identity 以及 Service Principal 访问 Azure Blob Storage。
 
+##### HDFS
+
 - 如果您使用简单认证接入访问 HDFS 集群：
 
   ```SQL
@@ -241,6 +243,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | hadoop.security.authentication | 否       | 用于指定待访问 HDFS 集群的认证方式。有效值：`simple`（默认值）。`simple` 表示简单认证，即无认证。 |
   | username                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
   | password                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
+
+##### AWS S3
 
 - 如果您使用 IAM User 认证访问 AWS S3：
 
@@ -256,6 +260,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | aws.s3.secret_key | 是       | 用于指定访问 AWS S3 存储空间的 Secret Key。              |
   | aws.s3.region     | 是       | 用于指定需访问的 AWS S3 存储空间的地区，如 `us-west-2`。 |
 
+##### GCS
+
 - 如果您使用 IAM User 认证访问 GCS：
 
   ```SQL
@@ -269,6 +275,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | fs.s3a.access.key | 是       | 用于指定访问 GCS 存储空间的 Access Key。              |
   | fs.s3a.secret.key | 是       | 用于指定访问 GCS 存储空间的 Secret Key。              |
   | fs.s3a.endpoint   | 是       | 用于指定需访问的 GCS 存储空间的 Endpoint，如 `storage.googleapis.com`。请勿在 Endpoint 地址中指定 `https`。 |
+
+##### Azure
 
 - 如果您使用 Shared Key 访问 Azure Blob Storage：
 
@@ -960,7 +968,7 @@ SELECT * FROM sales_records;
 导入 Avro 文件数据：
 
 ```SQL
-mysql> INSERT INTO avro_tbl
+INSERT INTO avro_tbl
   SELECT * FROM FILES(
     "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
     "format" = "avro"
@@ -970,7 +978,7 @@ mysql> INSERT INTO avro_tbl
 查询 Avro 文件数据：
 
 ```SQL
-mysql> SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
 *************************** 1. row ***************************
 record_field: {"id":1,"name":"avro"}
   enum_field: HEARTS
@@ -984,7 +992,7 @@ record_field: {"id":1,"name":"avro"}
 查看 Avro 文件的 Schema 信息：
 
 ```SQL
-mysql> DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
 +------------------------+------------------+------+
 | Field                  | Type             | Null |
 +------------------------+------------------+------+

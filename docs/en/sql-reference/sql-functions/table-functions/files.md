@@ -229,6 +229,8 @@ The authentication information used by StarRocks to access your storage system.
 
 StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key, SAS Token, Managed Identity, and Service Principal.
 
+##### HDFS
+
 - Use the simple authentication to access HDFS:
 
   ```SQL
@@ -242,6 +244,8 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | hadoop.security.authentication | No           | The authentication method. Valid value: `simple` (Default). `simple` represents simple authentication, meaning no authentication. |
   | username                       | Yes          | The username of the account that you want to use to access the NameNode of the HDFS cluster. |
   | password                       | Yes          | The password of the account that you want to use to access the NameNode of the HDFS cluster. |
+
+##### AWS S3
 
 - Use the IAM user-based authentication to access AWS S3:
 
@@ -257,6 +261,8 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | aws.s3.secret_key | Yes          | The Secret Access Key that you can use to access the Amazon S3 bucket. |
   | aws.s3.region     | Yes          | The region in which your AWS S3 bucket resides. Example: `us-west-2`. |
 
+##### GCS
+
 - Use the IAM user-based authentication to access GCS:
 
   ```SQL
@@ -270,6 +276,8 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | fs.s3a.access.key | Yes          | The Access Key ID that you can use to access the GCS bucket. |
   | fs.s3a.secret.key | Yes          | The Secret Access Key that you can use to access the GCS bucket.|
   | fs.s3a.endpoint   | Yes          | The endpoint that you can use to access the GCS bucket. Example: `storage.googleapis.com`. Do not specify `https` in the endpoint address. |
+
+##### Azure
 
 - Use Shared Key to access Azure Blob Storage:
 
@@ -961,7 +969,7 @@ SELECT * FROM sales_records;
 Load an Avro file:
 
 ```SQL
-mysql> INSERT INTO avro_tbl
+INSERT INTO avro_tbl
   SELECT * FROM FILES(
     "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
     "format" = "avro"
@@ -971,7 +979,7 @@ mysql> INSERT INTO avro_tbl
 Query the data from an Avro file:
 
 ```SQL
-mysql> SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
 *************************** 1. row ***************************
 record_field: {"id":1,"name":"avro"}
   enum_field: HEARTS
@@ -985,7 +993,7 @@ record_field: {"id":1,"name":"avro"}
 View the schema of an Avro file:
 
 ```SQL
-mysql> DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
 +------------------------+------------------+------+
 | Field                  | Type             | Null |
 +------------------------+------------------+------+
