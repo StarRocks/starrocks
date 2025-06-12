@@ -16,11 +16,14 @@
 
 #include "agent/master_info.h"
 #include "cache/datacache.h"
-#include "cache/starcache_wrapper.h"
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/string_value.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/starcache_wrapper.h"
+#endif
 
 namespace starrocks {
 
