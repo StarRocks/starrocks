@@ -1,4 +1,3 @@
-// Licensed to the Apache Software Foundation (ASF) under one
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,23 +29,27 @@ typedef unsigned __int128 uint128_t;
 *
 * This file implements a 256-bit signed integer type using two 128-bit components.
 *
+* ## Architecture Support
+*
+* This implementation currently supports little-endian systems only
+*
 * ## Memory Layout
 *
-* Structure member layout in memory depends on CPU endianness:
-* - On little-endian systems: low member declared first, high member declared second
-* - On big-endian systems: high member declared first, low member declared second
+* Structure member layout follows little-endian conventions:
+* - low member: declared first, contains lower 128 bits
+* - high member: declared second, contains upper 128 bits
 *
 * For a 256-bit value 0x123456789ABCDEF0FEDCBA0987654321_0123456789ABCDEFEDCBA09876543210:
 * - low (lower 128 bits):  0x0123456789ABCDEFEDCBA09876543210
 * - high (upper 128 bits): 0x123456789ABCDEF0FEDCBA0987654321
 *
-* Little-endian CPU memory layout:
+* Little-endian memory layout:
 * Address   | Content
 * ----------|-----------
-* 0x00-0x0F | low member
-* 0x10-0x1F | high member
+* 0x00-0x0F | low member (16 bytes)
+* 0x10-0x1F | high member (16 bytes)
 *
-* ### Examples:
+* ### Memory Layout Example:
 * ```
 * Memory grows from LEFT to RIGHT →
 *
@@ -61,14 +64,31 @@ typedef unsigned __int128 uint128_t;
 *
 * ```
 *
-* **Address Space Breakdown**:
-* - 0x1000 - 0x100F: First 128-bit member (16 bytes) - low part
-* - 0x1010 - 0x101F: Second 128-bit member (16 bytes)- high part
-* - Total: 32 bytes (256 bits) for complete int256_t
+* ## Storage Format Consistency
 *
-* **Address Calculation**:
-* - 0x1010 - 0x1000 = 0x10 = 16 bytes = 128 bits ✓
-* - 0x1020 - 0x1000 = 0x20 = 32 bytes = 256 bits ✓
+* **The storage layer format is identical to the in-memory format**.
+*
+* ### Storage Example:
+*
+* **Memory representation:**
+* ```
+* Memory Address: 0x1000-0x101F (32 bytes total)
+* [low: 0x0123456789ABCDEFEDCBA09876543210][high: 0x123456789ABCDEF0FEDCBA0987654321]
+* Bytes: 10 32 54 76 98 BA DC ED EF CD AB 89 67 45 23 01 21 43 65 87 09 BA DC FE F0 DE BC 9A 78 56 34 12
+* ```
+*
+* **Storage format (identical to memory):**
+* ```
+* File Offset: 0x0000-0x001F (32 bytes total)
+* [low: 0x0123456789ABCDEFEDCBA09876543210][high: 0x123456789ABCDEF0FEDCBA0987654321]
+* Bytes: 10 32 54 76 98 BA DC ED EF CD AB 89 67 45 23 01 21 43 65 87 09 BA DC FE F0 DE BC 9A 78 56 34 12
+* ```
+*
+* **Key Points:**
+* - Byte 0x00-0x0F in storage = low member in memory
+* - Byte 0x10-0x1F in storage = high member in memory
+* - No endianness conversion needed during I/O operations
+* - Direct memcpy() between memory and storage is safe
 *
 * ## Value Representation
 *
@@ -100,13 +120,9 @@ public:
     // =============================================================================
     // Member Variables
     // =============================================================================
-#if __BYTE_ORDER == __LITTLE_ENDIAN
     uint128_t low; // Lower 128 bits
     int128_t high; // Higher 128 bits
-#else
-    int128_t high;
-    uint128_t low;
-#endif
+
     // =============================================================================
     // Constructors
     // =============================================================================
