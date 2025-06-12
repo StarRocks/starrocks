@@ -151,13 +151,12 @@ const StarCacheMetrics StarCacheWrapper::starcache_metrics(int level) const {
 
 const DataCacheMetrics StarCacheWrapper::cache_metrics() const {
     auto starcache_metrics = _cache->metrics(0);
-    DataCacheMetrics metrics = {
-            .status = static_cast<DataCacheStatus>(starcache_metrics.status),
-            .mem_quota_bytes = starcache_metrics.mem_quota_bytes,
-            .mem_used_bytes = starcache_metrics.mem_used_bytes,
-            .disk_quota_bytes = starcache_metrics.disk_quota_bytes,
-            .disk_used_bytes = starcache_metrics.disk_used_bytes,
-            .meta_used_bytes = starcache_metrics.meta_used_bytes};
+    DataCacheMetrics metrics = {.status = static_cast<DataCacheStatus>(starcache_metrics.status),
+                                .mem_quota_bytes = starcache_metrics.mem_quota_bytes,
+                                .mem_used_bytes = starcache_metrics.mem_used_bytes,
+                                .disk_quota_bytes = starcache_metrics.disk_quota_bytes,
+                                .disk_used_bytes = starcache_metrics.disk_used_bytes,
+                                .meta_used_bytes = starcache_metrics.meta_used_bytes};
     return metrics;
 }
 
