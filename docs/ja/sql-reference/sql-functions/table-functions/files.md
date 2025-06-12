@@ -1007,3 +1007,23 @@ DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avr
 | duration               | varbinary(12)    | YES  |
 +------------------------+------------------+------+
 ```
+
+#### Example 9: Managed Identity と Service Principal を使用して Azure Blob Storage にアクセスする
+
+```SQL
+-- Managed Identity
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_use_managed_identity" = "true",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-aaaaaaaaaaaa"
+);
+-- Service Principal
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
+    "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
+    "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
+```
