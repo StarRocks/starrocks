@@ -90,7 +90,8 @@ public class TabletStatisticsMgr {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             for (long scanTabletId : infosMap.keySet()) {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(scanTabletId);
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().
+                        getDbIncludeRecycleBin(tabletMeta.getDbId());
                 OlapTable olapTable = (OlapTable) db.getTable(tabletMeta.getTableId());
                 PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(
                         tabletMeta.getPhysicalPartitionId());
