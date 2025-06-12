@@ -35,7 +35,6 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     pipeline::QueryContext* _query_ctx;
     pipeline::FragmentContext* _fragment_ctx;
     ExecEnv* _exec_env = ExecEnv::GetInstance();
-    RuntimeState _runtime_state(_exec_env);
 
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
@@ -51,25 +50,25 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
+    _fragment_ctx->set_is_stream_pipeline(true);
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
-    _fragment_ctx->set_is_stream_pipeline(true);
-
-    _runtime_state.set_query_ctx(_query_ctx);
-    _runtime_state.set_fragment_ctx(_fragment_ctx);
+    RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
+    _runtime_state->set_query_ctx(_query_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx);
 
     TExportSink t_sink;
     std::vector<TExpr> t_output_expr;
     ExportSinkOperatorFactory factory(1, t_sink, t_output_expr, 1, _fragment_ctx);
-    EXPECT_TRUE(factory.prepare(&_runtime_state).ok());
+    EXPECT_TRUE(factory.prepare(_runtime_state).ok());
 
     auto export_op = factory.create(1, 1);
-    EXPECT_TRUE(export_op->prepare(&_runtime_state).ok());
+    EXPECT_TRUE(export_op->prepare(_runtime_state).ok());
 
     // push a chunk, fail to create the file writer, so the context will be in cancel state
     ChunkPtr chunk = std::make_shared<Chunk>();
-    EXPECT_TRUE(export_op->push_chunk(&_runtime_state, chunk).ok());
+    EXPECT_TRUE(export_op->push_chunk(_runtime_state, chunk).ok());
 
     int timeout_us = 5 * 1000 * 1000; // 5s
 
@@ -77,11 +76,14 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _fragment_ctx->is_canceled(); }));
 
     // now cancel the operator
-    export_op->set_finishing(&_runtime_state);
-    export_op->set_cancelled(&_runtime_state);
+    export_op->set_finishing(_runtime_state);
+    export_op->set_cancelled(_runtime_state);
 
     Awaitility await2;
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
+
+    _query_ctx->fragment_mgr()->unregister(fragment_id);
+    _query_ctx->count_down_fragments();
 }
 
 } // namespace starrocks::pipeline
