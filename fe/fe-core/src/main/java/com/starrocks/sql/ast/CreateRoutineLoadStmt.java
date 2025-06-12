@@ -833,7 +833,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
         for (String broker : brokers) {
             if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
-                throw new AnalysisException("kafka_broker_list: " + broker + " does not match pattern " + ENDPOINT_REGEX);
+                throw new AnalysisException(
+                    String.format("%s: %s does not match pattern %s",
+                        KAFKA_BROKER_LIST_PROPERTY, broker, ENDPOINT_REGEX));
             }
         }
     }

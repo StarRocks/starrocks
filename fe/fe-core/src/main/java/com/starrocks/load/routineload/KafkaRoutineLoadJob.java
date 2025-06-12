@@ -831,13 +831,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     throw new DdlException("The specified partition is not in the consumed partitions ", e);
                 }
             }
-
-            // validate broker list if provided
-            try {
-                CreateRoutineLoadStmt.validateKafkaBrokerList(dataSourceProperties.getKafkaBrokerList());
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage(), e);
-            }
         }
         super.modifyJob(routineLoadDesc, jobProperties, dataSourceProperties, originStatement, isReplay);
     }

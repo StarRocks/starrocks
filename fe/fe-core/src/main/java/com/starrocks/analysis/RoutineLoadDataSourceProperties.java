@@ -197,6 +197,12 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
 
         if (properties.containsKey(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY)) {
             kafkaBrokerList = properties.get(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY);
+            // validate broker list if provided
+            try {
+                CreateRoutineLoadStmt.validateKafkaBrokerList(kafkaBrokerList);
+            } catch (AnalysisException e) {
+                throw new AnalysisException(e.getMessage(), e);
+            }
         }
     }
 
