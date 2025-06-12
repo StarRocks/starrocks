@@ -296,7 +296,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 "publish version of tablets: " + JoinInts(submitted_without_execution_tablets, ",") +
                 " exit without execution, this may be caused by thread pool shutdown");
         LOG(WARNING) << st.message();
-        st.to_protobuf(response->mutable_status());
+        // only update status if the response status is OK
+        if (response->status().status_code() == 0) {
+            st.to_protobuf(response->mutable_status());
+        }
     }
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
@@ -800,7 +803,10 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         auto st = Status::InternalError(
                 "drop_table task exit without execution this may be caused by thread pool shutdown");
         LOG(WARNING) << st.message();
-        st.to_protobuf(response->mutable_status());
+        // only update status if the response status is OK
+        if (response->status().status_code() == 0) {
+            st.to_protobuf(response->mutable_status());
+        }
     }
 }
 
