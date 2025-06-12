@@ -81,7 +81,7 @@ public class TabletStatisticsMgr {
         for (ScanNode sn : scanNodes) {
             OlapScanNode osn = (OlapScanNode) sn;
             for (long scanTabletId : osn.getScanTabletIds()) {
-                // during loading batch, to avoid produce many rows statistics data, here aggragate it.
+                // during loading interval, to avoid produce many rows statistics data, here aggragate it.
                 infosMap.put(scanTabletId, infosMap.getOrDefault(scanTabletId, 0.0d) + 1);
             }
         }
