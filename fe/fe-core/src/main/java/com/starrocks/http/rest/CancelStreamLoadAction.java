@@ -45,15 +45,15 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
-public class CancelStreamLoad extends RestBaseAction {
-    public CancelStreamLoad(ActionController controller) {
+public class CancelStreamLoadAction extends RestBaseAction {
+    public CancelStreamLoadAction(ActionController controller) {
         super(controller);
     }
 
     public static void registerAction(ActionController controller)
             throws IllegalArgException {
-        CancelStreamLoad action = new CancelStreamLoad(controller);
-        controller.registerHandler(HttpMethod.POST, "/api/{" + DB_KEY + "}/{" + LABEL_KEY + "}/_cancel", action);
+        CancelStreamLoadAction action = new CancelStreamLoadAction(controller);
+        controller.registerHandler(HttpMethod.POST, "/api/{" + DB_KEY + "}/{" + TABLE_KEY + "}/_cancel", action);
     }
 
     @Override
