@@ -24,6 +24,7 @@ Currently, the FILES() function supports the following data sources and file for
   - Parquet
   - ORC
   - CSV
+  - Avro (Supported from v3.4.4 onwards and for loading only)
 
 From v3.2 onwards, FILES() further supports complex data types including ARRAY, JSON, MAP, and STRUCT in addition to basic data types.
 
@@ -116,7 +117,7 @@ Wildcards can also be used to specify intermediate paths.
 
 #### data_format
 
-The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
+The format of the data file. Valid values: `parquet`, `orc`, `csv`, and `avro` (Supported from v3.4.4 onwards and for loading only).
 
 You must set detailed options for specific data file formats.
 
@@ -226,7 +227,7 @@ From v3.4.0 onwards, FILES() supports inferring the STRUCT type data from Parque
 
 The authentication information used by StarRocks to access your storage system.
 
-StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key.
+StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key, SAS Token, Managed Identity, and Service Principal.
 
 - Use the simple authentication to access HDFS:
 
@@ -273,14 +274,58 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
 - Use Shared Key to access Azure Blob Storage:
 
   ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
   "azure.blob.shared_key" = "<shared_key>"
   ```
 
   | **Key**                    | **Required** | **Description**                                              |
   | -------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.storage_account | Yes          | The name of the Azure Blob Storage account.                  |
   | azure.blob.shared_key      | Yes          | The Shared Key that you can use to access the Azure Blob Storage account. |
+
+- Use SAS Token to access Azure Blob Storage:
+
+  ```SQL
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
+  ```
+
+  | **Key**                    | **Required** | **Description**                                              |
+  | -------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.sas_token       | Yes          | The SAS token that you can use to access the Azure Blob Storage account. |
+
+- Use Managed Identity to access Azure Blob Storage (Supported from v3.4.4 onwards):
+
+  :::note
+  - Only User-assigned Managed Identities with Client ID credentials are supported.
+  - The FE dynamic configuration `azure_use_native_sdk` (Default: `true`) controls whether to allow the system to use authentication with Managed Identity and Service Principals.
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_use_managed_identity" = "true",
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_use_managed_identity | Yes          | Whether to use Managed Identity to access the Azure Blob Storage account. Set it to `true`.                  |
+  | azure.blob.oauth2_client_id            | Yes          | The Client ID of the Managed Identity that you can use to access the Azure Blob Storage account.                |
+
+- Use Service Principal to access Azure Blob Storage (Supported from v3.4.4 onwards):
+
+  :::note
+  - Only Client Secret credentials are supported.
+  - The FE dynamic configuration `azure_use_native_sdk` (Default: `true`) controls whether to allow the system to use authentication with Managed Identity and Service Principals.
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>",
+  "azure.blob.oauth2_client_secret" = "<oauth2_client_secret>",
+  "azure.blob.oauth2_tenant_id" = "<oauth2_tenant_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_client_id            | Yes          | The Client ID of the Service Principal that you can use to access the Azure Blob Storage account.                    |
+  | azure.blob.oauth2_client_secret        | Yes          | The Client Secret of the Service Principal that you can use to access the Azure Blob Storage account.          |
+  | azure.blob.oauth2_tenant_id            | Yes          | The Tenant ID of the Service Principal that you can use to access the Azure Blob Storage account.                |
 
 #### columns_from_path
 
@@ -909,4 +954,51 @@ INSERT INTO FILES(
     'format' = 'parquet'
 )
 SELECT * FROM sales_records;
+```
+
+#### Example 8: Avro files
+
+Load an Avro file:
+
+```SQL
+mysql> INSERT INTO avro_tbl
+  SELECT * FROM FILES(
+    "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
+    "format" = "avro"
+);
+```
+
+Query the data from an Avro file:
+
+```SQL
+mysql> SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+*************************** 1. row ***************************
+record_field: {"id":1,"name":"avro"}
+  enum_field: HEARTS
+ array_field: ["one","two","three"]
+   map_field: {"a":1,"b":2}
+ union_field: 100
+ fixed_field: 0x61626162616261626162616261626162
+1 row in set (0.05 sec)
+```
+
+View the schema of an Avro file:
+
+```SQL
+mysql> DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
++------------------------+------------------+------+
+| Field                  | Type             | Null |
++------------------------+------------------+------+
+| decimal_bytes          | decimal(10,2)    | YES  |
+| decimal_fixed          | decimal(10,2)    | YES  |
+| uuid_string            | varchar(1048576) | YES  |
+| date                   | date             | YES  |
+| time_millis            | int              | YES  |
+| time_micros            | bigint           | YES  |
+| timestamp_millis       | datetime         | YES  |
+| timestamp_micros       | datetime         | YES  |
+| local_timestamp_millis | bigint           | YES  |
+| local_timestamp_micros | bigint           | YES  |
+| duration               | varbinary(12)    | YES  |
++------------------------+------------------+------+
 ```

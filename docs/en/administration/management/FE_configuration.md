@@ -3116,6 +3116,42 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.1
 
+##### azure_adls2_oauth2_use_managed_identity
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_adls2_oauth2_tenant_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_adls2_oauth2_client_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_use_native_sdk
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
+- Introduced in: v3.4.4
+
 <!--
 ##### starmgr_grpc_timeout_seconds
 
