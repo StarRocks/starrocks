@@ -47,12 +47,6 @@ public class ShortCircuitPlannerHybrid {
                 return false;
             }
 
-            for (Column column : table.getFullSchema()) {
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getColumnId())) {
-                    return false;
-                }
-            }
-
             List<String> keyColumns = ((OlapTable) table).getKeyColumns().stream().map(Column::getName).collect(
                     Collectors.toList());
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
