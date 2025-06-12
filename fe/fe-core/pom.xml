@@ -43,6 +43,7 @@ under the License.
         <jacoco.version>0.8.8</jacoco.version>
         <paimon.version>1-ali-16.2</paimon.version>
         <dlf.sdk.version>1-ali-16.2</dlf.sdk.version>
+        <bennett.iceberg.version>2.8.0</bennett.iceberg.version>
         <python>python</python>
     </properties>
 
@@ -696,6 +697,12 @@ under the License.
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-jindo</artifactId>
             <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>bennett-iceberg-plugin</artifactId>
+            <version>${bennett.iceberg.version}</version>
         </dependency>
 
         <dependency>

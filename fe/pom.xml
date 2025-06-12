@@ -51,7 +51,7 @@ under the License.
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>1.0.2</hudi.version>
-        <hive-apache.version>emr-3.1.2-13</hive-apache.version>
+        <hive-apache.version>emr-3.1.2-22</hive-apache.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <odps.version>0.53.0-public</odps.version>
@@ -68,7 +68,7 @@ under the License.
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
-        <iceberg.version>1.9.0</iceberg.version>
+        <iceberg.version>1.9.1</iceberg.version>
         <staros.version>3.5.0-SNAPSHOT</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->

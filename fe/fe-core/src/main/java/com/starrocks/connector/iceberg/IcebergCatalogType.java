@@ -23,7 +23,7 @@ public enum IcebergCatalogType {
     REST_CATALOG,
     HADOOP_CATALOG,
     JDBC_CATALOG,
-
+    DLF_REST_CATALOG,
     UNKNOWN;
     // TODO: add more iceberg catalog type
 
