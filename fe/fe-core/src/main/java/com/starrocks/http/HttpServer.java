@@ -59,7 +59,7 @@ import com.starrocks.http.meta.MetaService.PutAction;
 import com.starrocks.http.meta.MetaService.RoleAction;
 import com.starrocks.http.meta.MetaService.VersionAction;
 import com.starrocks.http.rest.BootstrapFinishAction;
-import com.starrocks.http.rest.CancelStreamLoad;
+import com.starrocks.http.rest.CancelStreamLoadAction;
 import com.starrocks.http.rest.CheckDecommissionAction;
 import com.starrocks.http.rest.ConnectionAction;
 import com.starrocks.http.rest.ExecuteSqlAction;
@@ -161,7 +161,7 @@ public class HttpServer {
         GetDdlStmtAction.registerAction(controller);
         MigrationAction.registerAction(controller);
         StorageTypeCheckAction.registerAction(controller);
-        CancelStreamLoad.registerAction(controller);
+        CancelStreamLoadAction.registerAction(controller);
         GetStreamLoadState.registerAction(controller);
 
         // add web action
