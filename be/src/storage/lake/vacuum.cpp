@@ -322,7 +322,7 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
                                     AsyncFileDeleter* deleter, AsyncBundleFileDeleter* bundle_file_deleter,
                                     int64_t* garbage_data_size, const TabletRetainInfo& retain_info) {
     for (const auto& rowset : metadata.compaction_inputs()) {
-        if (retain_info.filter_by_rowset_id(rowset.id())) {
+        if (retain_info.contains_rowset(rowset.id())) {
             continue;
         }
         for (const auto& segment : rowset.segments()) {
@@ -338,7 +338,7 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
         *garbage_data_size += rowset.data_size();
     }
     for (const auto& file : metadata.orphan_files()) {
-        if (retain_info.filter_by_file_name(file.name())) {
+        if (retain_info.contains_file(file.name())) {
             continue;
         }
         RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
@@ -481,7 +481,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     DCHECK_LE(version, final_retain_version);
     if (vacuum_version_range == nullptr) {
         for (auto v = version + 1; v < final_retain_version; v++) {
-            if (retain_info.filter_by_version(v)) {
+            if (retain_info.contains_version(v)) {
                 continue;
             }
             RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
