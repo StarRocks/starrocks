@@ -122,6 +122,12 @@ const config = {
         },
         items: [
           {
+              type: "docSidebar",
+              sidebarId: "docs",
+              position: "left",
+              label: "Documentation",
+          },
+          {
             label: "Privacy policy",
             position: "right",
             to: "https://celerdata.com/celerdata-privacy-policy",
