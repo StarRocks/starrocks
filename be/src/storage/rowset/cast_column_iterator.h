@@ -50,6 +50,9 @@ public:
         return Status::OK();
     }
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
 private:
     void do_cast(Column* target);
 
