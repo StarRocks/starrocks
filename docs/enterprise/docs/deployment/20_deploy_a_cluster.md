@@ -139,6 +139,11 @@ grep -r password manager/center/log/web/*
 
 ## Install a new cluster
 
+:::tip Cluster architecture
+Before you deploy a new cluster read about the [architecture differences](../introduction/Architecture.md) between shared-nothing and shared-data clusters.
+:::
+
+
 1. Install **FE** In the **Configure FE Instance** dialog box, configure the following parameters:
    1. **FE** **Followers**: We recommend that you configure 1 or 3 follower FEs. 
    2. **FE** **Observers:** You can leave observer FEs unspecified. You can also add observer FEs when the query pressure increases.   

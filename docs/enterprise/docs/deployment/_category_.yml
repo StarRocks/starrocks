@@ -1,7 +1,7 @@
 position: 10 # float position is supported
-label: 'Get Started'
+label: 'Deploy'
 collapsible: true
 collapsed: false
 link:
   type: doc
-  id: get_started
+  id: overview

@@ -1,7 +1,6 @@
-position: 15 # float position is supported
-label: 'StarRocks Introduction'
+position: 5 # float position is supported
+label: 'Introduction'
 collapsible: true
 collapsed: true
 link:
-  type: doc
-  id: introduction
+  type: generated-index

@@ -255,9 +255,7 @@ const config = {
 	    // the default is for SANDBOX
         indexName: process.env.ALGOLIA_INDEX || 'docs-sandbox-celerdata-enterprise',
   
-        // Set this to true ONLY if multiple languages or multiple versions of docs
-        // are published. On a single language single version set to `false`
-        contextualSearch: false,
+        contextualSearch: true,
   
         // Optional: Algolia search parameters
         searchParameters: {},

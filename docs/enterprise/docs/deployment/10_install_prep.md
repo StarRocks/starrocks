@@ -15,7 +15,7 @@ These are the general steps to install CelerData Enterprise and deploy a StarRoc
   - Nodes Setup
 - Deploy CelerData Server
   - FE deployment
-  - BE deployment
+  - BE or CN deployment
   - Brokers
   - Center Service
   - Apply your license
@@ -32,7 +32,7 @@ In addition to the CelerData Manager server, you will need to prepare hardware f
 - CelerData Server does not have strict requirements on hardware. It can run on machines of both low and high configurations. The recommended configuration for a test environment is 8 logical cores and 32 GB memory or higher, and the recommended configuration for a production environment is 16 cores or higher.
 
   :::note
-  If you are using x86-64 CPUs on the BE servers, the CPUs must support the AVX2 instruction set for high performance. You can run the following command to check whether your x86-64 CPU supports AVX2 instruction sets.
+  If you are using x86-64 CPUs on the BE/CN servers, the CPUs must support the AVX2 instruction set for high performance. You can run the following command to check whether your x86-64 CPU supports AVX2 instruction sets.
 
   ```bash
   cat /proc/cpuinfo | grep avx2
@@ -41,11 +41,15 @@ In addition to the CelerData Manager server, you will need to prepare hardware f
 
 - Configure external network ports for external services to access CelerData Manager. If you need to access CelerData Manager from a data center or a machine in the cloud, the recommended port number range is **8000** to **9000**.
 
+  :::tip
+  All of the default ports and how they are used are described under [networking](#networking)
+  :::
+
 ### Application account
 
 The CelerData Manager and CelerData Server database processes should be owned by a non-root user.
 
-Create a non-root user on each of the servers (CelerData Manager, FE, and BE servers):
+Create a non-root user on each of the servers (CelerData Manager, FE, and BE/CN servers):
 
 :::note
 Use the same username on each server, in the examples the username is `celerdata`.
@@ -66,7 +70,7 @@ Run these commands on the Manager server to:
 
 - Switch to the non-root user (`celerdata` in the example)
 - Generate an RSA key pair for the non-root user (`celerdata` in the example)
-- Copy the public key to each of the FE and BE servers
+- Copy the public key to each of the FE and BE/CN servers
 
 :::note
 Do not use a passphrase, just hit Enter
@@ -77,7 +81,7 @@ su - celerdata
 ssh-keygen -t rsa
 ```
 
-`ssh-keygen` generated a private and public key pair. By default the key pair is placed in the user's `.ssh/` directory. The public key (`id_rsa.pub`) contains the public half of the key pair, and should be placed in a file on each of the servers hosting FEs and BEs to allow the manager to install and configure StarRocks on those servers.
+`ssh-keygen` generated a private and public key pair. By default the key pair is placed in the user's `.ssh/` directory. The public key (`id_rsa.pub`) contains the public half of the key pair, and should be placed in a file on each of the servers hosting FEs and BEs/CNs to allow the manager to install and configure StarRocks on those servers.
 
 The `open-ssh` package includes a utility to copy your public key to the other servers. Run `man ssh-copy-id` for details on this command.
 
@@ -106,9 +110,9 @@ The `ssh-copy-id` and the manual command shown above both perform these steps:
 
 ### Verify password-free SSH
 
-`ssh` from the Manager server to each of the FE/BE servers to verify password-free SSH:
+`ssh` from the Manager server to each of the FE/BE/CN servers to verify password-free SSH:
 
-Run from the Manager server (susbstituting each FE/BE servername or IP address for `<hostname>`):
+Run from the Manager server (susbstituting each FE/BE/CN servername or IP address for `<hostname>`):
 
 ```bash
 su - celerdata
@@ -145,18 +149,18 @@ The default ports used by CelerData Manager and CelerData Server are:
 |-----------|--------------|-------------------------|-------------|
 | be_port | 9060 | FE `-->` BE/CN | Port of thrift server on BE/CN, receiving requests from FE |
 | webserver_port | 8040 | BE/CN `<-->` BE/CN | Port of http server on BE/CN |
-| heartbeat_service_port | 9050 | FE `-->` BE | Heartbeat server level port (thrift) on BE, receive heartbeat from FE |
-| brpc_port | 8060 | FE `<-->` BE | BRPC port on BE for communication between BEs | BE `<-->` BE |
+| heartbeat_service_port | 9050 | FE `-->` BE/CN | Heartbeat server level port (thrift) on BE/CN, receive heartbeat from FE |
+| brpc_port | 8060 | FE `<-->` BE/CN | BRPC port on BE/CN for communication between BEs | BE/CN `<-->` BE/CN |
 | starlet_port | 9070 | FE `-->` BE | Port for BE/CN heartbeat service in storage and calculation separation mode | (In the integrated storage and computing mode, BE also needs to open this port.) |
 
 ### FE instances
 | <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | http_port | 8030 | FE `<-->` FE | Port of http server on FE | User `<-->` FE |
-| rpc_port | 9020 | BE `-->` FE | Thrift server port on FE | FE `<-->` FE |
+| rpc_port | 9020 | BE/CN `-->` FE | Thrift server port on FE | FE `<-->` FE |
 | query_port | 9030 | User `<-->` FE | Port of mysql server on FE |
 | edit_log_port | 9010 | FE `<-->` FE | Port for communication between bdbje on FE |
-| cloud_native_meta_port | 6090 | FE `<-->` BE | Cloud Native metadata service listening port in storage and calculation separation mode | FE `<-->` FE |
+| cloud_native_meta_port | 6090 | FE `<-->` BE/CN | Cloud Native metadata service listening port in storage and calculation separation mode | FE `<-->` FE |
 
 ### Broker instances
 | <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
@@ -179,7 +183,7 @@ The default ports used by CelerData Manager and CelerData Server are:
 |-----------|--------------|-------------------------|-------------|
 | center_rpc_port | 19322 | Web `-->` Center | Communication ports for Web and Center Services |
 
-During the deployment of the Supervisor and the Agent processes on the FE and BE servers, and the deployment of the FEs and BEs you will see timeout messages if any ports are blocked by your firewall. After opening the ports retry the step that displayed the timeout.
+During the deployment of the Supervisor and the Agent processes on the FE and BE/CN servers, and the deployment of the FEs and BEs/CNs you will see timeout messages if any ports are blocked by your firewall. After opening the ports retry the step that displayed the timeout.
 
 ### Install python-setuptools for all nodes
 
@@ -221,7 +225,7 @@ mysql_secure_installation
 
 Contact support for the CelerData Enterprise install file and copy the file to the server where you will install CelerData Manager.
 
-Install the Manager software on the Manager server only. Use the non-root user that will also run StarRocks on each of the FEs and BEs.
+Install the Manager software on the Manager server only. Use the non-root user that will also run StarRocks on each of the FEs and BEs/CNs.
 
 ```bash
 tar -zxvf <distribution filename>.tar.gz
@@ -317,7 +321,7 @@ import mySQLConfig from '../_assets/manager/MySQL.png';
 
 ### Nodes Setup
 
-At this point, you are not deploying FEs or BEs: you are provisioning management software on each node that will host FEs and BEs. There are two processes that will be deployed on each server:
+At this point, you are not deploying FEs or BEs/CNs: you are provisioning management software on each node that will host FEs and BEs/CNs. There are two processes that will be deployed on each server:
 
 - **Supervisor** (`supervisord`) is used to manage the start and stop of processes.
 - **Agent** (`agent_service`) is responsible for collecting statistical information of the machine.
@@ -326,50 +330,10 @@ import NodesSetup from '../_assets/manager/NodesSetup.png';
 
 <img src={NodesSetup} alt="Nodes Config" style={{width: 500}} />;
 
-### FE deployment
+### Install or Migrate
 
-You can identify which nodes to deploy FEs on, the dropdown is populated with the node list where you just installed the **Supervisor** and **Agent** services. Make sure you choose directories on disks large enough, and consider placing the logs on a disk separate from data.
+The next steps are to deploy the database cluster FEs and BEs or CNs. 
 
-After clicking Next it takes a while, you can check progress by looking at the disk activity on the servers.
+If you are deploying a Classic (shared-nothing) cluster follow the [shared-nothing](./30_shared_nothing.md) deployment steps.
 
-import FE_Setup from '../_assets/manager/FE_Setup.png';
-
-<img src={FE_Setup} alt="FE Config" style={{width: 500}} />;
-
-### BE deployment
-
-Manager will choose all of the nodes for BEs. If you would like to prevent a BE from being deployed on one or more of the servers hosting FEs, then remove those nodes by clicking on the red `-` to the right of the BE instance.
-
-Make sure to set the Install Path to a disk with space, and edit it for each of the BEs being deployed. In the screenshot, the Install Path is set to `/data/sr`
-
-import BE_Setup from '../_assets/manager/BE_Setup.png';
-
-<img src={BE_Setup} alt="BE Config" style={{width: 700}} />;
-
-### Brokers
-
-Brokers may be needed in some cases when using HDFS or Cloud storage.
-
-### Center Service
-
-This is the service that collects logs and metrics for the diagnostics, and manages alerts.
-
-You have to set these:
-
-- Metrics storage path
-- Metrics retention days
-
-Regarding SMTP: If you are not using email for alerts you can skip the SMTP related settings.
-
-### Complete
-
-Save your password and token to log in to the Manager UI.
-
-Password for `root` is: abcdef-c1c1234-44567-a94c-242468101214
-
-Token for Emergency Mode is: 123456-2468-5123-9f45-05cac6394318
-
-## License
-
-When the deployment completes you will be presented with licensing information. Copy the license request string and the number of required CPUs and contact CelerData support.
-
+If you are deploying an Elastic (shared-data) cluster follow the [shared-data](./30_shared_data.md) deployment steps.

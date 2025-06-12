@@ -4,6 +4,7 @@ cp -r enterprise-temp/docs/enterprise/docusaurus/* docusaurus
 cp -r enterprise-temp/docs/en/* docusaurus/docs/
 rm -rf docusaurus/docs/deployment
 rm docusaurus/docs/introduction/what_is_starrocks.md
+rm docusaurus/docs/introduction/introduction.mdx
 cp -r enterprise-temp/docs/enterprise/docs/* docusaurus/docs/
 cp enterprise-temp/docs/en/deployment/plan_cluster.md docusaurus/docs/deployment/15_plan_cluster.md
 rm -rf docusaurus/docs/quick_start
@@ -14,6 +15,7 @@ rm -rf docusaurus/docs/release_notes
 rm -rf docusaurus/docs/ecosystem_release
 rm docusaurus/docs/data_source/icebergtutorial.mdx
 rm docusaurus/docs/introduction/StarRocks_intro.md
+cp -r enterprise-temp/docs/enterprise/docs/introduction/* docusaurus/docs/introduction/
 rm docusaurus/docs/administration/stargo.md
 rm -rf docusaurus/docs/integrations/other_integrations
 rm docusaurus/docs/integrations/streaming.mdx
