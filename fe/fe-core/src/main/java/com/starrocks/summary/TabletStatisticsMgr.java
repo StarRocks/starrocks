@@ -81,7 +81,7 @@ public class TabletStatisticsMgr {
         for (ScanNode sn : scanNodes) {
             OlapScanNode osn = (OlapScanNode) sn;
             for (long scanTabletId : osn.getScanTabletIds()) {
-                // during batch loading, to avoid produce many rows statistics data, here aggragate it.
+                // during loading batch, to avoid produce many rows statistics data, here aggragate it.
                 infosMap.put(scanTabletId, infosMap.getOrDefault(scanTabletId, 0.0d) + 1);
             }
         }
@@ -96,7 +96,8 @@ public class TabletStatisticsMgr {
                         tabletMeta.getPhysicalPartitionId());
                 infosList.add(new TabletStatistics(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         db.getOriginName(), olapTable.getName(),
-                        physicalPartition.getName().split("_")[0], // getName() return name_id, split to get name
+                        // getName() return partitionName_partitionId, remove _partitionId
+                        physicalPartition.getName().replace("_" + tabletMeta.getPhysicalPartitionId(), ""),
                         scanTabletId, infosMap.get(scanTabletId)));
             }
             loadTabletStatistics(Lists.newArrayList(infosList));
