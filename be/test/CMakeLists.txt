@@ -404,7 +404,7 @@ set(EXEC_FILES
         ./runtime/fragment_mgr_test.cpp
         ./runtime/http_result_writer_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
-        ./runtime/int256_test.cpp
+        types/int256_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/local_tablets_channel_test.cpp
         ./runtime/lake_tablets_channel_test.cpp

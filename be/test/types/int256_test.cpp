@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include <limits>
 #include <sstream>
 #include <string>
 

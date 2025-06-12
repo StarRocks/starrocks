@@ -1,19 +1,17 @@
 // Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-//   http://www.apache.org/licenses/LICENSE-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -30,30 +28,25 @@ typedef unsigned __int128 uint128_t;
 
 /**
 *
-* This file implements a 256-bit signed integer type int256_t for high-precision integer arithmetic.
+* This file implements a 256-bit signed integer type using two 128-bit components.
 *
-* ## Storage Format
+* ## Memory Layout
 *
-* int256_t uses two 128-bit integers to represent 256-bit data:
-* - high: Upper 128 bits (int128_t, signed)
-* - low:  Lower 128 bits (uint128_t, unsigned)
-*
-* **Structure Member Layout**:
-* The order of members in memory is determined by the conditional compilation:
+* Structure member layout in memory depends on CPU endianness:
 * - On little-endian systems: low member declared first, high member declared second
 * - On big-endian systems: high member declared first, low member declared second
 *
-* ## Storage Example (Little Endian)
-*
-* Consider a 256-bit hexadecimal value:
-* 0x123456789ABCDEF0FEDCBA0987654321_0123456789ABCDEFEDCBA09876543210
-*
-* This breaks down as:
-* - high (upper 128 bits): 0x123456789ABCDEF0FEDCBA0987654321
+* For a 256-bit value 0x123456789ABCDEF0FEDCBA0987654321_0123456789ABCDEFEDCBA09876543210:
 * - low (lower 128 bits):  0x0123456789ABCDEFEDCBA09876543210
+* - high (upper 128 bits): 0x123456789ABCDEF0FEDCBA0987654321
 *
-* ## Memory Layout (Little Endian)
+* Little-endian CPU memory layout:
+* Address   | Content
+* ----------|-----------
+* 0x00-0x0F | low member
+* 0x10-0x1F | high member
 *
+* ### Examples:
 * ```
 * Memory grows from LEFT to RIGHT →
 *
@@ -70,7 +63,7 @@ typedef unsigned __int128 uint128_t;
 *
 * **Address Space Breakdown**:
 * - 0x1000 - 0x100F: First 128-bit member (16 bytes) - low part
-* - 0x1010 - 0x101F: Second 128-bit member (16 bytes) - high part
+* - 0x1010 - 0x101F: Second 128-bit member (16 bytes)- high part
 * - Total: 32 bytes (256 bits) for complete int256_t
 *
 * **Address Calculation**:
