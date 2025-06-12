@@ -23,11 +23,14 @@
 
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
 #include "cache/local_cache.h"
-#include "cache/starcache_wrapper.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/starcache_wrapper.h"
+#endif
 
 namespace starrocks {
 
