@@ -193,27 +193,27 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     // Fill cache data
     {
         insert_to_cache(block_cache.get(), 19);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
         ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
     }
 
     {
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
     {
         config::enable_datacache_disk_auto_adjust = true;
         sleep(3);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
     {
         config::datacache_disk_idle_seconds_for_expansion = 1;
         sleep(3);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         // other: 500M - 300M - 19M = 181M
         // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
         ASSERT_EQ(metrics.disk_quota_bytes, 160 * MB);
@@ -243,27 +243,27 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     // Fill cache data
     {
         insert_to_cache(block_cache.get(), 19);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
         ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
     }
 
     {
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
     {
         config::enable_datacache_disk_auto_adjust = true;
         sleep(3);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
     {
         config::datacache_disk_idle_seconds_for_expansion = 1;
         sleep(3);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         // other: 500M - 300M - 19M = 181M
         // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
         // max: 500 * 0.25 = 125M, 125M/10 * 10 = 120M
@@ -293,13 +293,13 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     // Fill cache data
     {
         insert_to_cache(block_cache.get(), 50);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
         ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
     }
 
     {
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 50 * MB);
     }
 
@@ -307,7 +307,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
         config::enable_datacache_disk_auto_adjust = true;
         size_t new_quota = 0;
         for (int i = 0; i < 6; ++i) {
-            auto metrics = local_cache->cache_metrics(0);
+            auto metrics = local_cache->cache_metrics();
             if (metrics.disk_quota_bytes > 0 && metrics.disk_quota_bytes != 50 * MB) {
                 config::enable_datacache_disk_auto_adjust = false;
                 new_quota = metrics.disk_quota_bytes;
@@ -342,13 +342,13 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     // Fill cache data
     {
         insert_to_cache(block_cache.get(), 50);
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
         ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
     }
 
     {
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 50 * MB);
     }
 
@@ -356,7 +356,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
         config::enable_datacache_disk_auto_adjust = true;
         size_t new_quota = 0;
         for (int i = 0; i < 6; ++i) {
-            auto metrics = local_cache->cache_metrics(0);
+            auto metrics = local_cache->cache_metrics();
             if (metrics.disk_quota_bytes > 0 && metrics.disk_quota_bytes != 50 * MB) {
                 config::enable_datacache_disk_auto_adjust = false;
                 new_quota = metrics.disk_quota_bytes;
