@@ -77,6 +77,13 @@ Status SchemaFeTabletSchedulesScanner::start(RuntimeState* state) {
     return SchemaScanner::start(state);
 }
 
+Status SchemaFeTabletSchedulesScanner::TEST_start(RuntimeState* state, const std::vector<TTabletSchedule>& infos) {
+    _cur_idx = 0;
+    _infos = infos;
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    return SchemaScanner::start(state);
+}
+
 Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     auto end = _cur_idx + 1;

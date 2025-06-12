@@ -54,6 +54,20 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
 
     const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
+
+    // For compatibility of xxx_time column type changed from double to datetime in fe_tablet_schedules table.
+    // todo: Remove in the next version
+    if (schema_table->schema_table_type() == TSchemaTableType::SCH_FE_TABLET_SCHEDULES) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if ((boost::iequals(col_name, "CREATE_TIME") || boost::iequals(col_name, "SCHEDULE_TIME") ||
+                 boost::iequals(col_name, "FINISH_TIME")) &&
+                slot_desc->type().type == TYPE_DOUBLE) {
+                slot_desc->type().type = TYPE_DATETIME;
+            }
+        }
+    }
+
     int slot_num = dest_slot_descs.size();
     if (src_slot_descs.empty()) {
         slot_num = 0;
