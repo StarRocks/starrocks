@@ -197,8 +197,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
-        List<Long> snapshotRetainVersions = Lists.newArrayList();
-
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
         ComputeNode pickNode = null;
@@ -240,7 +238,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
-            vacuumRequest.retainVersions = snapshotRetainVersions;
+            vacuumRequest.retainVersions = Lists.newArrayList();
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;

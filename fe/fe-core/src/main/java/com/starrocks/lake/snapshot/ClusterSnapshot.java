@@ -104,8 +104,12 @@ public class ClusterSnapshot {
         return id;
     }
 
+    public boolean isAutomated() {
+        return type == ClusterSnapshotType.AUTOMATED;
+    }
+
     public boolean needClusterSnapshotInfo() {
-        return type == ClusterSnapshotType.MANUAL;
+        return false;
     }
 
     public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {

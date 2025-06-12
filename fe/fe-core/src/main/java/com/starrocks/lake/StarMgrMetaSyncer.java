@@ -195,10 +195,19 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             long shardGroupId = entry.getKey();
             ShardGroupInfo shardInfo = entry.getValue();
 
-            long dbId = Long.parseLong(shardInfo.getLabels().get("dbId"));
-            long tableId = Long.parseLong(shardInfo.getLabels().get("tableId"));
-            long partitionId =  Long.parseLong(shardInfo.getLabels().get("partitionId"));
-            long indexId = Long.parseLong(shardInfo.getLabels().get("indexId"));
+            long dbId = 0;
+            long tableId = 0;
+            long partitionId = 0;
+            long indexId = 0;
+            try {
+                dbId = Long.parseLong(shardInfo.getLabels().get("dbId"));
+                tableId = Long.parseLong(shardInfo.getLabels().get("tableId"));
+                partitionId =  Long.parseLong(shardInfo.getLabels().get("partitionId"));
+                indexId = Long.parseLong(shardInfo.getLabels().get("indexId"));
+            } catch (Exception e) {
+                LOG.debug("shardGroup:{} labels is not valid, ignore it for now. {}", shardGroupId, e.getMessage());
+                continue;
+            }
 
             if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId)) {
                 LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
@@ -399,13 +408,14 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         starmgrShardIdsSet.remove(tablet.getId());
                     }
 
-                    if (!GlobalStateMgr.getCurrentState()
+                    if (GlobalStateMgr.getCurrentState()
                                       .getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
                                             db.getId(), table.getId(), physicalPartition.getParentId(),
                                                 physicalPartition.getId(), materializedIndex.getId())) {
-                        // collect shard in starmgr but not in fe
-                        redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
+                        continue;
                     }
+                    // collect shard in starmgr but not in fe
+                    redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
                 }
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);

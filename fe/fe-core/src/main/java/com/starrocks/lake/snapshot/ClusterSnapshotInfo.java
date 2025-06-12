@@ -36,14 +36,7 @@ public class ClusterSnapshotInfo {
 
     public ClusterSnapshotInfo() {
         this.dbInfos = new HashMap<>();
-        this.buildClusterSnapshotInfo();
-    }
 
-    public boolean isEmpty() {
-        return this.dbInfos.isEmpty();
-    }
-
-    public void buildClusterSnapshotInfo() {
         if (!isCheckpointThread()) {
             return;
         }
@@ -56,6 +49,10 @@ public class ClusterSnapshotInfo {
             }
             dbInfos.put(dbId, new DatabaseSnapshotInfo(db));
         }
+    }
+
+    public boolean isEmpty() {
+        return this.dbInfos.isEmpty();
     }
 
     public long getVersion(long dbId, long tableId, long partId, long physicalPartId) {
@@ -141,10 +138,7 @@ public class ClusterSnapshotInfo {
         public DatabaseSnapshotInfo(Database db) {
             this.dbId = db.getId();
             this.tableInfos = new HashMap<>();
-            this.buildTableInfos(db);
-        }
 
-        private void buildTableInfos(Database db) {
             for (Table table : db.getTables()) {
                 if (table.isCloudNativeTableOrMaterializedView()) {
                     tableInfos.put(table.getId(), new TableSnapshotInfo((OlapTable) table));
@@ -162,10 +156,7 @@ public class ClusterSnapshotInfo {
         public TableSnapshotInfo(OlapTable table) {
             this.tableId = table.getId();
             this.partInfos = new HashMap<>();
-            this.buildPartitionInfos(table);
-        }
 
-        private void buildPartitionInfos(OlapTable table) {
             for (Partition partition : table.getPartitions()) {
                 partInfos.put(partition.getId(), new PartitionSnapshotInfo(partition));
             }
@@ -181,10 +172,7 @@ public class ClusterSnapshotInfo {
         public PartitionSnapshotInfo(Partition partition) {
             this.partitionId = partition.getId();
             this.physicalPartInfos = new HashMap<>();
-            this.buildPhysicalPartInfos(partition);
-        }
 
-        private void buildPhysicalPartInfos(Partition partition) {
             for (PhysicalPartition physicalPart : partition.getSubPartitions()) {
                 physicalPartInfos.put(physicalPart.getId(), new PhysicalPartitionSnapshotInfo(physicalPart));
             }
@@ -203,10 +191,7 @@ public class ClusterSnapshotInfo {
             this.physicalPartitionId = physicalPart.getId();
             this.version = physicalPart.getVisibleVersion();
             this.indexInfos = new HashMap<>();
-            this.buildIndexInfos(physicalPart);
-        }
 
-        private void buildIndexInfos(PhysicalPartition physicalPart) {
             List<MaterializedIndex> indexes = physicalPart.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex index : indexes) {
                 indexInfos.put(index.getId(), new MaterializedIndexSnapshotInfo(index));
