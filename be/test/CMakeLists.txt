@@ -404,7 +404,6 @@ set(EXEC_FILES
         ./runtime/fragment_mgr_test.cpp
         ./runtime/http_result_writer_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
-        types/int256_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/local_tablets_channel_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
@@ -441,6 +440,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./types/int256_test.cpp
         ./types/type_checker_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
