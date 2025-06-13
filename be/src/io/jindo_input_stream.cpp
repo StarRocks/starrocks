@@ -40,9 +40,15 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     int64_t bytes_to_read = count;
     int64_t bytes_read = 0;
     int64_t bytes = 0;
+
     while (bytes_to_read > 0) {
         JdoHandleCtx_t jdo_read_ctx = jdo_createHandleCtx2(*(_jindo_client->jdo_store), _open_handle);
-        bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, bytes_to_read, _offset, nullptr);
+
+        // The parameter representing size in pread interface of jindo uses `int`,
+        // so only 2G data can be read at most at a time, so we split it here
+        auto pread_block = std::min((int64_t)std::numeric_limits<int>::max(), bytes_to_read);
+
+        bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, pread_block, _offset, nullptr);
         Status read_status = check_jindo_status(jdo_read_ctx);
         jdo_freeHandleCtx(jdo_read_ctx);
         if (UNLIKELY(!read_status.ok())) {
