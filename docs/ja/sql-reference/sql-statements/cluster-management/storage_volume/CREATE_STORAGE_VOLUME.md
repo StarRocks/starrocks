@@ -58,6 +58,9 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.endpoint                 | Azure Data Lake Storage Gen2 アカウントのエンドポイントです。例：`https://test.dfs.core.windows.net`。 |
 | azure.adls2.shared_key               | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有キーです。 |
 | azure.adls2.sas_token                | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名 (SAS) です。 |
+| azure.adls2.oauth2_use_managed_identity | Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。デフォルト: `false`。|
+| azure.adls2.oauth2_tenant_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。 |
+| azure.adls2.oauth2_client_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。 |
 | hadoop.security.authentication      | 認証方法です。有効な値は `simple`（デフォルト）と `kerberos` です。`simple` はシンプル認証、つまりユーザー名を示します。`kerberos` は Kerberos 認証を示します。 |
 | username                            | HDFS クラスターの NameNode にアクセスするためのユーザー名です。                      |
 | hadoop.security.kerberos.ticket.cache.path | kinit で生成されたチケットキャッシュを保存するパスです。                   |
@@ -189,7 +192,7 @@ Azure Blob Storage アカウントを作成する際には、階層型名前空�
 
 Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3.4.1 以降でサポートされています。
 
-- Shared Key を使用して Azure Blob Storage にアクセスする場合、次のプロパティを設定します：
+- Shared Key を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
 
   ```SQL
   "enabled" = "{ true | false }",
@@ -197,12 +200,22 @@ Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
-- 共有アクセス署名 (SAS) を使用して Azure Blob Storage にアクセスする場合、次のプロパティを設定します：
+- 共有アクセス署名 (SAS) を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
 
   ```SQL
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
   "azure.adls2.sas_token" = "<sas_token>"
+  ```
+
+- Managed Identity を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
 :::note

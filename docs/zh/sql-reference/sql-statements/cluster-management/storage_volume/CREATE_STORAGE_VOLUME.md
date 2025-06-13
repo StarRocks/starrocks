@@ -59,6 +59,9 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.endpoint   | Azure Data Lake Storage Gen2 的链接地址，如 `https://test.dfs.core.windows.net`。 |
 | azure.adls2.shared_key | 访问 Azure Data Lake Storage Gen2 的共享密钥（Shared Key）。           |
 | azure.adls2.sas_token  | 访问 Azure Data Lake Storage Gen2 的共享访问签名（SAS）。              |
+| azure.adls2.oauth2_use_managed_identity | 是否使用 Managed Identity 用于授权 Azure Data Lake Storage Gen2 请求。默认值：`false`。 |
+| azure.adls2.oauth2_tenant_id        | 用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Tenant ID。 |
+| azure.adls2.oauth2_client_id        | 用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。 |
 | hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即 Username。`kerberos` 表示 Kerberos 认证。 |
 | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                      |
 | hadoop.security.kerberos.ticket.cache.path            | 用于指定 kinit 生成的 Ticket Cache 文件的路径。                   |
@@ -304,6 +307,16 @@ StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储�
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
   "azure.adls2.sas_token" = "<sas_token>"
+  ```
+
+- 如果您使用 Managed Identity 认证，请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
 :::note
