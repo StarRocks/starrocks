@@ -1895,6 +1895,25 @@ class StarrocksSQLApiLib(object):
                 break
             count += 1
         tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
+    
+    def retry_execute_sql(self, sql:str, ori:bool, max_retry_times:int=3, pending_time_ms:int=100):
+        """
+        execute sql with retry
+        :param sql: sql to execute
+        :param max_retry_times: max retry times
+        :param pending_time_ms: pending time in ms before retry
+        :return: result of the sql execution
+        """
+        retry_times = 0
+        while retry_times < max_retry_times:
+            res = self.execute_sql(sql, ori)
+            if res["status"]:
+                return res
+            else:
+                log.warning(f"SQL execution failed, retrying {retry_times + 1}/{max_retry_times}...")
+                time.sleep(pending_time_ms / 1000)
+                retry_times += 1
+        return res
 
     def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """
@@ -1905,7 +1924,7 @@ class StarrocksSQLApiLib(object):
         def is_all_finished1():
             sql = "SHOW MATERIALIZED VIEWS WHERE database_name='{}' AND NAME='{}'".format(current_db, mv_name)
             print(sql)
-            result = self.execute_sql(sql, True)
+            result = self.retry_execute_sql(sql, True)
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
@@ -1923,7 +1942,7 @@ class StarrocksSQLApiLib(object):
                     and a.`database`='{current_db}'
             """
             self_print(sql)
-            result = self.execute_sql(sql, True)
+            result = self.retry_execute_sql(sql, True)
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
@@ -1939,7 +1958,7 @@ class StarrocksSQLApiLib(object):
                 where b.table_name='{mv_name}' 
                     and a.`database`='{current_db}'"""
             print(show_sql)
-            res = self.execute_sql(show_sql, True)
+            res = self.retry_execute_sql(show_sql, True)
             if not res["status"]:
                 tools.assert_true(False, "show mv state error")
             success_cnt = get_success_count(res["result"])
@@ -1988,7 +2007,7 @@ class StarrocksSQLApiLib(object):
         cnt = 1
         refresh_count = 0
         while cnt < 60:
-            res = self.execute_sql(show_sql, True)
+            res = self.retry_execute_sql(show_sql, True)
             print(res)
             refresh_count = res["result"][0][0]
             if refresh_count >= expect_count:
@@ -2039,7 +2058,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
@@ -2053,7 +2072,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
             return False
@@ -2069,7 +2088,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
             return ""
@@ -2122,7 +2141,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
