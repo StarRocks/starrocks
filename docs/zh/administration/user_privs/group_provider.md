@@ -50,6 +50,9 @@ ldap_info ::=
     "ldap_bind_base_dn" = "",
     ["ldap_conn_timeout" = "",]
     ["ldap_conn_read_timeout" = ""]
+    ["ldap_ssl_conn_allow_insecure" = ""]
+    ["ldap_ssl_conn_trust_store_path" = ""]
+    ["ldap_ssl_conn_trust_store_pwd" = ""]
 
 ldap_search_group_arg ::= 
     { "ldap_group_dn" = "" 
@@ -113,6 +116,18 @@ PROPERTIES (
 ##### `ldap_conn_read_timeout`
 
 可选。连接到您的 LDAP 服务的读取操作的超时时间。
+
+##### `ldap_ssl_conn_allow_insecure`
+
+可选。是否允许使用非加密方式连接到 LDAP 服务器。默认值：`true`。将此值设置为 `false` 表示访问ldap需要使用ssl加密。
+
+##### `ldap_ssl_conn_trust_store_path`
+
+可选。存储 LDAP 服务器的 SSL CA 证书的本地路径。支持 pem 和 jks 格式。如果证书是由受信机构颁发的，这里可以不用配置。
+
+##### `ldap_ssl_conn_trust_store_pwd`
+
+可选。访问本地存储的 LDAP 服务器的 SSL CA 证书所用的密码。pem 格式的证书不需要密码，只有 jsk 格式的才需要。
 
 #### `ldap_search_group_arg`
 
@@ -234,7 +249,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 ```SQL
 ALTER SECURITY INTEGRATION LDAP SET
-PROPERTIES(
+(
         "group_provider"="ldap_group_provider",
         "authenticated_group_list"="testgroup"
 );
