@@ -15,23 +15,59 @@
 #pragma once
 
 #include "common/status.h"
+#include "gen_cpp/DataCache_types.h"
+
+#ifdef WITH_STARCACHE
+#include "starcache/star_cache.h"
+#endif
 
 namespace starrocks {
 
-enum class DummyCacheStatus { NORMAL, UPDATING, ABNORMAL, LOADING };
+enum class DataCacheStatus { NORMAL, UPDATING, ABNORMAL, LOADING };
 
-struct DummyCacheMetrics {
-    struct DirSpace {
-        std::string path;
-        size_t quota_bytes;
-    };
-    DummyCacheStatus status;
-    int64_t mem_quota_bytes;
+struct DataCacheStatusUtils {
+    static std::string to_string(DataCacheStatus status) {
+        switch (status) {
+        case DataCacheStatus::NORMAL:
+            return "NORMAL";
+        case DataCacheStatus::UPDATING:
+            return "UPDATING";
+        case DataCacheStatus::ABNORMAL:
+            return "ABNORMAL";
+        case DataCacheStatus::LOADING:
+            return "LOADING";
+        default:
+            return "UNKNOWN";
+        }
+    }
+
+    static TDataCacheStatus::type to_thrift(DataCacheStatus status) {
+        switch (status) {
+        case DataCacheStatus::NORMAL:
+            return TDataCacheStatus::NORMAL;
+        case DataCacheStatus::UPDATING:
+            return TDataCacheStatus::UPDATING;
+        case DataCacheStatus::LOADING:
+            return TDataCacheStatus::LOADING;
+        default:
+            return TDataCacheStatus::ABNORMAL;
+        }
+    }
+};
+
+struct DataCacheMetrics {
+    DataCacheStatus status;
+
+    size_t mem_quota_bytes;
     size_t mem_used_bytes;
     size_t disk_quota_bytes;
     size_t disk_used_bytes;
-    std::vector<DirSpace> disk_dir_spaces;
     size_t meta_used_bytes = 0;
 };
+
+#ifdef WITH_STARCACHE
+using StarCacheMetrics = starcache::CacheMetrics;
+using StarCacheStatus = starcache::CacheStatus;
+#endif
 
 } // namespace starrocks

@@ -17,6 +17,7 @@
 #include <filesystem>
 
 #include "cache/disk_space_monitor.h"
+#include "cache/dummy_types.h"
 #include "cache/status.h"
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -144,16 +145,18 @@ Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces)
     return st;
 }
 
-const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) const {
-    auto metrics = _cache->metrics(level);
-    // Now the EEXIST is treated as a failed status in starcache, which will cause the write_fail_count too large
-    // in many cases because we write cache with `overwrite=false` now. It makes users confused.
-    // As real writing failure rarely occur currently, so we temporarily adjust it here.
-    // Once the starcache library is update, the following lines will be removed.
-    if (metrics.detail_l2) {
-        metrics.detail_l2->write_success_count += metrics.detail_l2->write_fail_count;
-        metrics.detail_l2->write_fail_count = 0;
-    }
+const StarCacheMetrics StarCacheWrapper::starcache_metrics(int level) const {
+    return _cache->metrics(level);
+}
+
+const DataCacheMetrics StarCacheWrapper::cache_metrics() const {
+    auto starcache_metrics = _cache->metrics(0);
+    DataCacheMetrics metrics = {.status = static_cast<DataCacheStatus>(starcache_metrics.status),
+                                .mem_quota_bytes = starcache_metrics.mem_quota_bytes,
+                                .mem_used_bytes = starcache_metrics.mem_used_bytes,
+                                .disk_quota_bytes = starcache_metrics.disk_quota_bytes,
+                                .disk_used_bytes = starcache_metrics.disk_used_bytes,
+                                .meta_used_bytes = starcache_metrics.meta_used_bytes};
     return metrics;
 }
 
@@ -175,14 +178,14 @@ Status StarCacheWrapper::shutdown() {
 }
 
 void StarCacheWrapper::_refresh_quota() {
-    auto metrics = cache_metrics(0);
+    auto metrics = starcache_metrics(0);
     _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
     _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
 }
 
 void StarCacheWrapper::disk_spaces(std::vector<DirSpace>* spaces) const {
     spaces->clear();
-    auto metrics = cache_metrics(0);
+    auto metrics = starcache_metrics(0);
     for (auto& dir : metrics.disk_dir_spaces) {
         spaces->push_back({.path = dir.path, .size = dir.quota_bytes});
     }

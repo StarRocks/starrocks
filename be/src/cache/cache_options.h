@@ -22,10 +22,6 @@
 #include "cache/dummy_types.h"
 #include "common/status.h"
 
-#ifdef WITH_STARCACHE
-#include "starcache/star_cache.h"
-#endif
-
 namespace starrocks {
 
 // Options to control how to create DataCache instance
@@ -75,7 +71,7 @@ struct WriteCacheOptions {
     bool overwrite = false;
     bool async = false;
     // When allow_zero_copy=true, it means the caller can ensure the target buffer not be released before
-    // the write finish. So the cache library can use the buffer directly without copying it to another buffer.
+    // to write finish. So the cache library can use the buffer directly without copying it to another buffer.
     bool allow_zero_copy = false;
     std::function<void(int, const std::string&)> callback = nullptr;
 
@@ -107,17 +103,5 @@ struct ReadCacheOptions {
         int64_t read_disk_bytes = 0;
     } stats;
 };
-
-// We use the `starcache::ObjectHandle` directly because implementing a new one seems unnecessary.
-// Importing the starcache headers here is not graceful, but the `cachelib` doesn't support
-// object cache and we'll deprecate it for some performance reasons. Now there is no need to
-// pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
-#ifdef WITH_STARCACHE
-using DataCacheMetrics = starcache::CacheMetrics;
-using DataCacheStatus = starcache::CacheStatus;
-#else
-using DataCacheMetrics = DummyCacheMetrics;
-using DataCacheStatus = DummyCacheStatus;
-#endif
 
 } // namespace starrocks
