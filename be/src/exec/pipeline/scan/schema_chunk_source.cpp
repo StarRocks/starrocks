@@ -56,7 +56,7 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
 
     // For compatibility of xxx_time column type changed from double to datetime in fe_tablet_schedules table.
-    // todo: Remove in the next version
+    // TODO(wyb): introduced in v4.0, can be removed in the v4.1
     if (schema_table->schema_table_type() == TSchemaTableType::SCH_FE_TABLET_SCHEDULES) {
         for (auto* slot_desc : dest_slot_descs) {
             const auto& col_name = slot_desc->col_name();
