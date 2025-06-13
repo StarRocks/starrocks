@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -65,31 +66,16 @@ public class ClusterSnapshotInfoTest {
 
         new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(long dbId) {
-                if (dbId == dbTest.getId()) {
-                    return dbTest;
-                } else {
-                    return null;
-                }
+            public List<Database> getAllDbs() {
+                return Lists.newArrayList(dbTest);
             }
         };
 
         ClusterSnapshotInfo clusterSnapshotInfo = null;
-        final LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         {
             clusterSnapshotInfo = new ClusterSnapshotInfo();
             Assert.assertTrue(clusterSnapshotInfo.isEmpty());
-            new MockUp<GlobalStateMgr>() {
-                @Mock
-                public static boolean isCheckpointThread() {
-                    return true;
-                }
-                @Mock
-                public LocalMetastore getLocalMetastore() {
-                    return localMetastore;
-                }
-            };
-            clusterSnapshotInfo = new ClusterSnapshotInfo();
+            clusterSnapshotInfo.rebuildInfo(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
             Assert.assertTrue(!clusterSnapshotInfo.isEmpty());
         }
         for (Table tbl : dbTest.getTables()) {

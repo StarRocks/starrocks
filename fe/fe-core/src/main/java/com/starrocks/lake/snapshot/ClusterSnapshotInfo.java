@@ -21,33 +21,25 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
-
 public class ClusterSnapshotInfo {
-    // layer struct begin from db
+    // tree struct begin from db
     @SerializedName(value = "dbInfos")
     private Map<Long, DatabaseSnapshotInfo> dbInfos;
 
     public ClusterSnapshotInfo() {
         this.dbInfos = new HashMap<>();
+    }
 
-        if (!isCheckpointThread()) {
-            return;
-        }
-
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
-        for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
-                continue;
-            }
-            dbInfos.put(dbId, new DatabaseSnapshotInfo(db));
+    public void rebuildInfo(List<Database> dbs) {
+        // always clear infos before rebuild
+        dbInfos.clear();
+        for (Database db : dbs) {
+            dbInfos.put(db.getId(), new DatabaseSnapshotInfo(db));
         }
     }
 
