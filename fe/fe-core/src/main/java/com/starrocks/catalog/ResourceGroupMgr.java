@@ -457,7 +457,6 @@ public class ResourceGroupMgr implements Writable {
                 if (!stmt.isIfExists()) {
                     throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
                 }
-                LOG.info("RESOURCE_GROUP(" + name + ") does not exist");
                 return;
             }
             dropResourceGroupUnlocked(name);
