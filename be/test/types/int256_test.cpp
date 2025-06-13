@@ -145,6 +145,254 @@ TEST_F(Int256Test, constructor_from_double) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_unsigned_int) {
+    {
+        unsigned int val = 42U;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("42", value.to_string());
+    }
+
+    {
+        unsigned int val = 0U;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(0, value.low);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        unsigned int val = 0xFFFFFFFFU; // 2^32 - 1
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("4294967295", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_unsigned_long) {
+    {
+        unsigned long val = 1234567890UL;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("1234567890", value.to_string());
+    }
+
+    {
+        unsigned long val = 0UL;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(0, value.low);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        unsigned long val = 0xFFFFFFFFFFFFFFFFUL;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_unsigned_long_long) {
+    {
+        unsigned long long val = 9876543210ULL;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("9876543210", value.to_string());
+    }
+
+    {
+        unsigned long long val = 0ULL;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(0, value.low);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        unsigned long long val = 0xFFFFFFFFFFFFFFFFULL;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("18446744073709551615", value.to_string()); // 2^64 - 1
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_size_t) {
+    {
+        size_t val = 999999;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("999999", value.to_string());
+    }
+
+    {
+        size_t val = 0;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(0, value.low);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        size_t val = static_cast<size_t>(-1);
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_TRUE(value > int256_t(0));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_uint32_t) {
+    {
+        uint32_t val = 42;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("42", value.to_string());
+    }
+
+    {
+        uint32_t val = 0;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(0, value.low);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        uint32_t val = 0xFFFFFFFF; // 2^32 - 1
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("4294967295", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_uint64_t) {
+    {
+        uint64_t val = 1234567890123456789ULL;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("1234567890123456789", value.to_string());
+    }
+
+    {
+        uint64_t val = 0;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(0, value.low);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        uint64_t val = 0xFFFFFFFFFFFFFFFF; // 2^64 - 1
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(static_cast<uint128_t>(val), value.low);
+        ASSERT_EQ("18446744073709551615", value.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, constructor_from_uint128_t) {
+    {
+        uint128_t val = static_cast<uint128_t>(42);
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(val, value.low);
+        ASSERT_EQ("42", value.to_string());
+    }
+
+    {
+        uint128_t val = 0;
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(0, value.low);
+        ASSERT_EQ("0", value.to_string());
+    }
+
+    {
+        uint128_t val = static_cast<uint128_t>(-1);
+        int256_t value(val);
+        ASSERT_EQ(0, value.high);
+        ASSERT_EQ(val, value.low);
+        ASSERT_TRUE(value > int256_t(0));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, unsigned_constructor_consistency) {
+    {
+        unsigned int uint_val = 12345U;
+        unsigned long ulong_val = 12345UL;
+        unsigned long long ulonglong_val = 12345ULL;
+        uint32_t uint32_val = 12345;
+        uint64_t uint64_val = 12345;
+        size_t size_val = 12345;
+
+        int256_t from_uint(uint_val);
+        int256_t from_ulong(ulong_val);
+        int256_t from_ulonglong(ulonglong_val);
+        int256_t from_uint32(uint32_val);
+        int256_t from_uint64(uint64_val);
+        int256_t from_size(size_val);
+
+        ASSERT_EQ(from_uint, from_ulong);
+        ASSERT_EQ(from_uint, from_ulonglong);
+        ASSERT_EQ(from_uint, from_uint32);
+        ASSERT_EQ(from_uint, from_uint64);
+        ASSERT_EQ(from_uint, from_size);
+
+        ASSERT_EQ("12345", from_uint.to_string());
+        ASSERT_EQ("12345", from_ulong.to_string());
+        ASSERT_EQ("12345", from_ulonglong.to_string());
+        ASSERT_EQ("12345", from_uint32.to_string());
+        ASSERT_EQ("12345", from_uint64.to_string());
+        ASSERT_EQ("12345", from_size.to_string());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256Test, unsigned_vs_signed_constructor) {
+    {
+        int signed_val = 42;
+        unsigned int unsigned_val = 42U;
+
+        int256_t from_signed(signed_val);
+        int256_t from_unsigned(unsigned_val);
+
+        ASSERT_EQ(from_signed, from_unsigned);
+        ASSERT_EQ(from_signed.to_string(), from_unsigned.to_string());
+        ASSERT_EQ("42", from_signed.to_string());
+        ASSERT_EQ("42", from_unsigned.to_string());
+    }
+
+    {
+        long long signed_val = 1234567890LL;
+        unsigned long long unsigned_val = 1234567890ULL;
+
+        int256_t from_signed(signed_val);
+        int256_t from_unsigned(unsigned_val);
+
+        ASSERT_EQ(from_signed, from_unsigned);
+        ASSERT_EQ("1234567890", from_signed.to_string());
+        ASSERT_EQ("1234567890", from_unsigned.to_string());
+    }
+}
+
 // =============================================================================
 // Type Conversion Tests
 // =============================================================================
