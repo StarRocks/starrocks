@@ -639,6 +639,8 @@ TEST_F(LakeTabletManagerTest, put_aggregate_tablet_metadata) {
         item1.CopyFrom(schema_pb1);
         auto& item2 = (*metadata2.mutable_historical_schemas())[12];
         item2.CopyFrom(schema_pb3);
+        (*metadata2.mutable_rowset_to_schema())[3] = 10;
+        (*metadata2.mutable_rowset_to_schema())[4] = 12;
     }
 
     metadatas.emplace(1, metadata1);
@@ -658,7 +660,7 @@ TEST_F(LakeTabletManagerTest, put_aggregate_tablet_metadata) {
         ASSERT_TRUE(res.ok());
         TabletMetadataPtr metadata = std::move(res).value();
         ASSERT_EQ(metadata->schema().id(), 11);
-        ASSERT_EQ(metadata->historical_schemas_size(), 2);
+        ASSERT_EQ(metadata->historical_schemas_size(), 3);
     }
 
     starrocks::TabletMetadata metadata4;
