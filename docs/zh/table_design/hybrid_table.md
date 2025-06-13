@@ -21,11 +21,7 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 
 - 存储方式：按列存储数据。
 
-<<<<<<< HEAD
    ![img](../_assets/table_design/columnar_table.png)
-=======
-  ![img](../_assets/table_design/columnar_table.png)
->>>>>>> 9f9e8d175a ([Doc] Fix Image Directory in Hybrid Table (#59792))
 
 - 适用场景：复杂数据分析。 <ul><li>针对海量数据进行复杂查询分析，比如聚合分析、多表关联查询。 </li><li>表的字段比较多（比如大宽表），但查询的字段不多。</li></ul>
 
