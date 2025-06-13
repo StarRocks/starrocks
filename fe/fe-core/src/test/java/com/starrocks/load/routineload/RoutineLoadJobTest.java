@@ -320,7 +320,7 @@ public class RoutineLoadJobTest {
             Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
             Assert.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"true\""));
 
-            
+
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
             Assert.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
             //The displayed value is the actual value - 1
@@ -348,7 +348,7 @@ public class RoutineLoadJobTest {
             // The lag [xxx] of partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]
             Assert.assertTrue(showInfo.get(16).contains(
                     "partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]"));
-        
+
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
             Assert.assertEquals("RUNNING", loadJobInfo.getState());
             Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
@@ -636,6 +636,50 @@ public class RoutineLoadJobTest {
         Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
         Assert.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
+    }
+
+    @Test
+    public void testKafkaRoutineLoadJobValidBrokerList() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.1:9092", "topic");
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        String validStmt = "alter routine load for db.job1 " +
+                "FROM KAFKA (\"kafka_broker_list\" = \"192.168.1.2:9092,192.168.1.3:9092\")";
+        routineLoadJob.setOrigStmt(new OriginStatement(validStmt, 0));
+
+        try {
+            AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(validStmt, connectContext);
+            routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                    stmt.getDataSourceProperties(), new OriginStatement(validStmt, 0), true);
+
+            // Verify broker list was updated successfully
+            Assert.assertEquals("192.168.1.2:9092,192.168.1.3:9092", routineLoadJob.getBrokerList());
+        } catch (Exception e) {
+            Assert.fail("Valid broker list should not throw exception");
+        }
+    }
+
+    @Test
+    public void testKafkaRoutineLoadJobInvalidBrokerList() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.1:9092", "topic");
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        String invalidStmt = "alter routine load for db.job1 " +
+                "FROM KAFKA (\"kafka_broker_list\" = \"invalid_broker_format\")";
+        routineLoadJob.setOrigStmt(new OriginStatement(invalidStmt, 0));
+
+        try {
+            AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(invalidStmt, connectContext);
+            routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                    stmt.getDataSourceProperties(), new OriginStatement(invalidStmt, 0), false);
+            Assert.fail("Invalid broker list should throw DdlException");
+        } catch (Exception e) {
+            // This should trigger the catch block on line 841-842
+            Assert.assertTrue("Should contain validation error message",
+                    e.getMessage().contains("does not match pattern"));
+        }
     }
 
     @Test
