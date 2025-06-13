@@ -20,6 +20,8 @@
 #include <string>
 #include <type_traits>
 
+#include "common/compiler_util.h"
+
 namespace starrocks {
 
 typedef __int128 int128_t;
@@ -141,6 +143,13 @@ public:
     constexpr int256_t(long value) : low(static_cast<uint128_t>(value)), high(value < 0 ? -1 : 0) {}
     constexpr int256_t(long long value) : low(static_cast<uint128_t>(value)), high(value < 0 ? -1 : 0) {}
     constexpr int256_t(__int128 value) : low(static_cast<uint128_t>(value)), high(value < 0 ? -1 : 0) {}
+
+    /// Constructor from unsigned integer types
+    /// @param value Integer value to convert
+    constexpr int256_t(unsigned int value) : low(static_cast<uint128_t>(value)), high(0) {}
+    constexpr int256_t(unsigned long value) : low(static_cast<uint128_t>(value)), high(0) {}
+    constexpr int256_t(unsigned long long value) : low(static_cast<uint128_t>(value)), high(0) {}
+    constexpr int256_t(uint128_t value) : low(value), high(0) {}
 
     /// Constructor from floating point types
     /// @param value Floating point value to convert (truncated to integer)
@@ -302,37 +311,11 @@ public:
     /// Multiplication with another int256_t
     /// @param other Value to multiply by
     /// @return Product of this value and other
-    /// TODO(stephen): optimize this operator in the next patch
     constexpr int256_t operator*(const int256_t& other) const {
-        if (other == 0 || *this == 0) {
-            return int256_t(0);
+        if (LIKELY(!std::is_constant_evaluated())) {
+            return multiply_runtime(other);
         }
-        if (other == 1) {
-            return *this;
-        }
-        if (*this == 1) {
-            return other;
-        }
-
-        bool result_negative = (high < 0) ^ (other.high < 0);
-        int256_t abs_a = (high < 0) ? -*this : *this;
-        int256_t abs_b = (other.high < 0) ? -other : other;
-
-        int256_t result(0);
-        int256_t multiplicand = abs_a;
-        int256_t multiplier = abs_b;
-
-        while (multiplier > 0) {
-            if (multiplier.low & 1) {
-                result += multiplicand;
-            }
-
-            multiplicand = multiplicand << 1;
-
-            multiplier = multiplier >> 1;
-        }
-
-        return result_negative ? -result : result;
+        return multiply_constexpr(other);
     }
 
     /// Multiplication with int
@@ -488,6 +471,89 @@ public:
     /// Convert to string representation
     /// @return String representation of this value
     std::string to_string() const;
+
+private:
+    // =============================================================================
+    // Private Helper Methods for Multiplication
+    // =============================================================================
+
+    constexpr int256_t multiply_core_256bit(const int256_t& lhs, const int256_t& rhs, bool is_negative) const {
+        uint64_t lhs_parts[4], rhs_parts[4];
+
+        lhs_parts[0] = static_cast<uint64_t>(lhs.low);
+        lhs_parts[1] = static_cast<uint64_t>(lhs.low >> 64);
+        lhs_parts[2] = static_cast<uint64_t>(lhs.high);
+        lhs_parts[3] = static_cast<uint64_t>(lhs.high >> 64);
+
+        rhs_parts[0] = static_cast<uint64_t>(rhs.low);
+        rhs_parts[1] = static_cast<uint64_t>(rhs.low >> 64);
+        rhs_parts[2] = static_cast<uint64_t>(rhs.high);
+        rhs_parts[3] = static_cast<uint64_t>(rhs.high >> 64);
+
+        uint64_t result[4] = {0, 0, 0, 0};
+
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                int pos = i + j;
+
+                if (pos >= 4) {
+                    break;
+                }
+
+                uint128_t product = static_cast<uint128_t>(lhs_parts[i]) * static_cast<uint128_t>(rhs_parts[j]);
+
+                uint128_t sum = static_cast<uint128_t>(result[pos]) + product;
+                result[pos] = static_cast<uint64_t>(sum);
+
+                uint64_t carry = static_cast<uint64_t>(sum >> 64);
+                int carry_pos = pos + 1;
+
+                while (carry > 0 && carry_pos < 4) {
+                    uint128_t carry_sum = static_cast<uint128_t>(result[carry_pos]) + carry;
+                    result[carry_pos] = static_cast<uint64_t>(carry_sum);
+                    carry = static_cast<uint64_t>(carry_sum >> 64);
+                    carry_pos++;
+                }
+            }
+        }
+
+        int256_t final_result;
+        final_result.low = static_cast<uint128_t>(result[0]) | (static_cast<uint128_t>(result[1]) << 64);
+        final_result.high =
+                static_cast<int128_t>(static_cast<uint128_t>(result[2]) | (static_cast<uint128_t>(result[3]) << 64));
+
+        return is_negative ? -final_result : final_result;
+    }
+
+    /// @param other Value to multiply by
+    /// @return Product using full 256-bit multiplication
+    constexpr int256_t multiply_constexpr(const int256_t& other) const {
+        if ((*this == int256_t(0)) || (other == int256_t(0))) {
+            return int256_t(0);
+        }
+        if (other == int256_t(1)) {
+            return *this;
+        }
+        if (*this == int256_t(1)) {
+            return other;
+        }
+
+        const bool is_negative = (high < 0) != (other.high < 0);
+        const int256_t lhs = (high < 0) ? -*this : *this;
+        const int256_t rhs = (other.high < 0) ? -other : other;
+
+        return multiply_core_256bit(lhs, rhs, is_negative);
+    }
+
+    int256_t multiply_runtime(const int256_t& other) const;
+
+    static int256_t multiply_64x64(uint64_t a, uint64_t b, bool is_negative);
+
+    static int256_t multiply_128x128(uint128_t a, uint128_t b, bool is_negative);
+
+    static int256_t multiply_64x256(uint64_t small, const int256_t& large, bool is_negative);
+
+    static int256_t multiply_128x256(uint128_t small, const int256_t& large, bool is_negative);
 };
 
 // =============================================================================
