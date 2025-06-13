@@ -36,6 +36,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Snapshot;
+import com.starrocks.common.FeConstants;
 import com.starrocks.monitor.jvm.GcNames;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.server.GlobalStateMgr;
@@ -228,10 +229,10 @@ public class JsonMetricVisitor extends MetricVisitor {
                 String.valueOf(systemInfoService.getAliveComputeNodeNumber()),
                 Arrays.asList(new MetricLabel(TYPE, CN_NODE_NUM), new MetricLabel(STATUS, "alive")));
 
-        // only master FE has this metrics, to help the Grafana knows who is the leader
+        // only the leader FE has this metric, to help the Grafana knows who is the leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             buildMetric(NODE_INFO, NOUNIT, String.valueOf(1),
-                    Collections.singletonList(new MetricLabel(TYPE, "is_master")));
+                    Collections.singletonList(new MetricLabel(TYPE, FeConstants.METRIC_LABEL_IS_LEADER)));
         }
     }
 
