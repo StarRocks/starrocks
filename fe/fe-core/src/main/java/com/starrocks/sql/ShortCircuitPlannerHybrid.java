@@ -25,7 +25,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.IDictManager;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -45,12 +44,6 @@ public class ShortCircuitPlannerHybrid {
             Table table = scanOp.getTable();
             if (!(table instanceof OlapTable) || !(KeysType.PRIMARY_KEYS.equals(((OlapTable) table).getKeysType()))) {
                 return false;
-            }
-
-            for (Column column : table.getFullSchema()) {
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getColumnId())) {
-                    return false;
-                }
             }
 
             List<String> keyColumns = ((OlapTable) table).getKeyColumns().stream().map(Column::getName).collect(
