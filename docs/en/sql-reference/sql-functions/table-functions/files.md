@@ -24,6 +24,7 @@ Currently, the FILES() function supports the following data sources and file for
   - Parquet
   - ORC
   - CSV
+  - Avro (Supported from v3.4.4 onwards and for loading only)
 
 From v3.2 onwards, FILES() further supports complex data types including ARRAY, JSON, MAP, and STRUCT in addition to basic data types.
 
@@ -116,7 +117,7 @@ Wildcards can also be used to specify intermediate paths.
 
 #### data_format
 
-The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
+The format of the data file. Valid values: `parquet`, `orc`, `csv`, and `avro` (Supported from v3.4.4 onwards and for loading only).
 
 You must set detailed options for specific data file formats.
 
@@ -226,7 +227,9 @@ From v3.4.0 onwards, FILES() supports inferring the STRUCT type data from Parque
 
 The authentication information used by StarRocks to access your storage system.
 
-StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key.
+StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key, SAS Token, Managed Identity, and Service Principal.
+
+##### HDFS
 
 - Use the simple authentication to access HDFS:
 
@@ -242,6 +245,8 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | username                       | Yes          | The username of the account that you want to use to access the NameNode of the HDFS cluster. |
   | password                       | Yes          | The password of the account that you want to use to access the NameNode of the HDFS cluster. |
 
+##### AWS S3
+
 - Use the IAM user-based authentication to access AWS S3:
 
   ```SQL
@@ -255,6 +260,8 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | aws.s3.access_key | Yes          | The Access Key ID that you can use to access the Amazon S3 bucket. |
   | aws.s3.secret_key | Yes          | The Secret Access Key that you can use to access the Amazon S3 bucket. |
   | aws.s3.region     | Yes          | The region in which your AWS S3 bucket resides. Example: `us-west-2`. |
+
+##### GCS
 
 - Use the IAM user-based authentication to access GCS:
 
@@ -270,17 +277,63 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | fs.s3a.secret.key | Yes          | The Secret Access Key that you can use to access the GCS bucket.|
   | fs.s3a.endpoint   | Yes          | The endpoint that you can use to access the GCS bucket. Example: `storage.googleapis.com`. Do not specify `https` in the endpoint address. |
 
+##### Azure
+
 - Use Shared Key to access Azure Blob Storage:
 
   ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
   "azure.blob.shared_key" = "<shared_key>"
   ```
 
   | **Key**                    | **Required** | **Description**                                              |
   | -------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.storage_account | Yes          | The name of the Azure Blob Storage account.                  |
   | azure.blob.shared_key      | Yes          | The Shared Key that you can use to access the Azure Blob Storage account. |
+
+- Use SAS Token to access Azure Blob Storage:
+
+  ```SQL
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
+  ```
+
+  | **Key**                    | **Required** | **Description**                                              |
+  | -------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.sas_token       | Yes          | The SAS token that you can use to access the Azure Blob Storage account. |
+
+- Use Managed Identity to access Azure Blob Storage (Supported from v3.4.4 onwards):
+
+  :::note
+  - Only User-assigned Managed Identities with Client ID credentials are supported.
+  - The FE dynamic configuration `azure_use_native_sdk` (Default: `true`) controls whether to allow the system to use authentication with Managed Identity and Service Principals.
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_use_managed_identity" = "true",
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_use_managed_identity | Yes          | Whether to use Managed Identity to access the Azure Blob Storage account. Set it to `true`.                  |
+  | azure.blob.oauth2_client_id            | Yes          | The Client ID of the Managed Identity that you can use to access the Azure Blob Storage account.                |
+
+- Use Service Principal to access Azure Blob Storage (Supported from v3.4.4 onwards):
+
+  :::note
+  - Only Client Secret credentials are supported.
+  - The FE dynamic configuration `azure_use_native_sdk` (Default: `true`) controls whether to allow the system to use authentication with Managed Identity and Service Principals.
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>",
+  "azure.blob.oauth2_client_secret" = "<oauth2_client_secret>",
+  "azure.blob.oauth2_tenant_id" = "<oauth2_tenant_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_client_id            | Yes          | The Client ID of the Service Principal that you can use to access the Azure Blob Storage account.                    |
+  | azure.blob.oauth2_client_secret        | Yes          | The Client Secret of the Service Principal that you can use to access the Azure Blob Storage account.          |
+  | azure.blob.oauth2_tenant_id            | Yes          | The Tenant ID of the Service Principal that you can use to access the Azure Blob Storage account.                |
 
 #### columns_from_path
 
@@ -909,4 +962,71 @@ INSERT INTO FILES(
     'format' = 'parquet'
 )
 SELECT * FROM sales_records;
+```
+
+#### Example 8: Avro files
+
+Load an Avro file:
+
+```SQL
+INSERT INTO avro_tbl
+  SELECT * FROM FILES(
+    "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
+    "format" = "avro"
+);
+```
+
+Query the data from an Avro file:
+
+```SQL
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+*************************** 1. row ***************************
+record_field: {"id":1,"name":"avro"}
+  enum_field: HEARTS
+ array_field: ["one","two","three"]
+   map_field: {"a":1,"b":2}
+ union_field: 100
+ fixed_field: 0x61626162616261626162616261626162
+1 row in set (0.05 sec)
+```
+
+View the schema of an Avro file:
+
+```SQL
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
++------------------------+------------------+------+
+| Field                  | Type             | Null |
++------------------------+------------------+------+
+| decimal_bytes          | decimal(10,2)    | YES  |
+| decimal_fixed          | decimal(10,2)    | YES  |
+| uuid_string            | varchar(1048576) | YES  |
+| date                   | date             | YES  |
+| time_millis            | int              | YES  |
+| time_micros            | bigint           | YES  |
+| timestamp_millis       | datetime         | YES  |
+| timestamp_micros       | datetime         | YES  |
+| local_timestamp_millis | bigint           | YES  |
+| local_timestamp_micros | bigint           | YES  |
+| duration               | varbinary(12)    | YES  |
++------------------------+------------------+------+
+```
+
+#### Example 9: Access Azure Blob Storage using Managed Identity and Service Principal
+
+```SQL
+-- Managed Identity
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_use_managed_identity" = "true",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-aaaaaaaaaaaa"
+);
+-- Service Principal
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
+    "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
+    "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
 ```

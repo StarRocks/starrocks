@@ -56,6 +56,9 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.endpoint                | The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`. |
 | azure.adls2.shared_key              | The Shared Key used to authorize requests for your Azure Data Lake Storage Gen2e. |
 | azure.adls2.sas_token               | The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2. |
+| azure.adls2.oauth2_use_managed_identity | Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2. Default: `false`. |
+| azure.adls2.oauth2_tenant_id        | The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
+| azure.adls2.oauth2_client_id        | The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
 | hadoop.security.authentication      | The authentication method. Valid values: `simple`(Default) and `kerberos`. `simple` indicates simple authentication, that is, username. `kerberos` indicates Kerberos authentication. |
 | username                            | Username used to access the NameNode in the HDFS cluster.                      |
 | hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache.                   |
@@ -205,6 +208,16 @@ Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
   "azure.adls2.sas_token" = "<sas_token>"
+  ```
+
+- If you use Managed Identity to access Azure Data Lake Storage Gen2, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
 :::note
