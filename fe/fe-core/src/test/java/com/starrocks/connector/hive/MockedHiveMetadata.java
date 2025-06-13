@@ -1705,7 +1705,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         HiveMetaClient metaClient = new HiveMetaClient(new HiveConf());
         HiveMetastore metastore = new HiveMetastore(metaClient, MOCKED_HIVE_CATALOG_NAME, MetastoreType.HMS);
         CachingHiveMetastore cachingHiveMetastore =
-                createCatalogLevelInstance(metastore, Executors.newSingleThreadExecutor(), 0, 0, 0, false);
+                createCatalogLevelInstance(metastore, Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
+                    0, 0, 0, false);
         HiveMetastoreOperations hmsOps =
                 new HiveMetastoreOperations(cachingHiveMetastore, false, new Configuration(), MetastoreType.HMS,
                                             "hive_catalog");

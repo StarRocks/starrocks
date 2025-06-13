@@ -40,6 +40,7 @@ import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,6 +49,7 @@ import java.util.Map;
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.NUM_FILES;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
+import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 
 public class HiveMetastoreTest {
@@ -349,7 +351,9 @@ public class HiveMetastoreTest {
             } else {
                 msTable1.setPartitionKeys(new ArrayList<>());
             }
-
+            if (tblName.equals("external_table")) {
+                msTable1.setTableType("EXTERNAL_TABLE");
+            }
             return msTable1;
         }
 
@@ -487,7 +491,8 @@ public class HiveMetastoreTest {
 
             Partition partition = new Partition();
             partition.setSd(sd);
-            partition.setParameters(ImmutableMap.of(TOTAL_SIZE, "100", ROW_COUNT, "50"));
+            partition.setParameters(ImmutableMap.of(TOTAL_SIZE, "100",
+                                                    ROW_COUNT, "50", TASK, String.valueOf(Instant.now().getEpochSecond())));
             partition.setValues(partitionValues);
             return partition;
         }
