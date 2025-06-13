@@ -26,7 +26,11 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.DlfUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.CatalogConnectorMetadata;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
@@ -183,6 +187,14 @@ public class PaimonTable extends Table {
 
         FileIO paimonFileIO = paimonNativeTable.fileIO();
         if (paimonFileIO instanceof DlfPaimonFileIO) {
+            try {
+                CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+                PaimonMetadata paimonMetadata = (PaimonMetadata) ((CatalogConnectorMetadata) connector.getMetadata())
+                        .metadataOfDb(databaseName);
+                paimonMetadata.refreshDlfDataToken(databaseName, tableName);
+            } catch (Exception e) {
+                LOG.error("Failed to refresh DLF data token of table {}.{}", databaseName, tableName, e);
+            }
             CatalogClient client = DlfUtil.getFieldValue(paimonFileIO, "client");
             DlfAuthContext dlfAuthContext = DlfUtil.getFieldValue(paimonFileIO, "dlfAuthContext");
             Map<String, String> options = ((DlfPaimonFileIO) paimonFileIO).dlsFileSystemOptions(false);

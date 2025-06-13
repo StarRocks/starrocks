@@ -3386,7 +3386,7 @@ public class Config extends ConfigBase {
     public static boolean emr_internal_redirect = false;
 
     @ConfField(mutable = true)
-    public static long dlf_data_token_refresh_check_interval_second = 1800;
+    public static long dlf_data_token_refresh_check_interval_second = 3600;
 
     /**
      * The core size of the thread pool for deploy serialization.

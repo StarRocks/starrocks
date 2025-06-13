@@ -15,12 +15,16 @@
 package com.starrocks.planner;
 
 import com.aliyun.datalake.common.impl.Base64Util;
+import com.aliyun.datalake.paimon.fs.DlfPaimonFileIO;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.util.DlfUtil;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.Connector;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
@@ -32,7 +36,6 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPaimonTableSink;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BooleanType;
@@ -57,6 +60,10 @@ public class PaimonTableSink extends DataSink {
     private static final Logger LOG = LogManager.getLogger(PaimonTableSink.class);
     protected final TupleDescriptor desc;
     private final long targetTableId;
+    private final String catalogName;
+    private final String databaseName;
+    private final String tableName;
+    private final Table paimonNativeTable;
     //private final String fileFormat;
     private final String location;
     //private final String compressionType;
@@ -67,12 +74,15 @@ public class PaimonTableSink extends DataSink {
     private CloudConfiguration cloudConfiguration;
 
     public PaimonTableSink(PaimonTable paimonTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
-        Table nativeTable = paimonTable.getNativeTable();
-        this.location = nativeTable.name();
+        this.paimonNativeTable = paimonTable.getNativeTable();
+        this.catalogName = paimonTable.getCatalogName();
+        this.databaseName = paimonTable.getDbName();
+        this.tableName = paimonTable.getTableName();
+        this.location = paimonTable.getNativeTable().name();
         this.targetTableId = paimonTable.getId();
         this.desc = desc;
-        this.columnNames = ((FileStoreTable) paimonTable.getNativeTable()).rowType().getFieldNames();
-        setColumnTypes(nativeTable.rowType().getFieldTypes());
+        this.columnNames = paimonTable.getNativeTable().rowType().getFieldNames();
+        setColumnTypes(paimonTable.getNativeTable().rowType().getFieldTypes());
         this.isStaticPartitionSink = isStaticPartitionSink;
         this.tableIdentifier = paimonTable.getUUID();
         String catalogName = paimonTable.getCatalogName();
@@ -101,21 +111,28 @@ public class PaimonTableSink extends DataSink {
         tPaimonTableSink.setTarget_table_id(targetTableId);
         tPaimonTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-        try {
-            String dataTokenPath = DlfUtil.getDataTokenPath(location);
-            if (!Strings.isNullOrEmpty(dataTokenPath)) {
-                dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
-                File dataTokenFile = new File(dataTokenPath);
+        if (this.paimonNativeTable.fileIO() instanceof DlfPaimonFileIO) {
+            try {
+                CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+                PaimonMetadata paimonMetadata = (PaimonMetadata) ((CatalogConnectorMetadata) connector.getMetadata())
+                        .metadataOfDb(databaseName);
+                paimonMetadata.refreshDlfDataToken(databaseName, tableName);
 
-                if (dataTokenFile.exists()) {
-                    cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(
-                            DlfUtil.setDataToken(dataTokenFile));
-                } else {
-                    LOG.warn("Cannot find data token file " + dataTokenPath);
+                String dataTokenPath = DlfUtil.getDataTokenPath(location);
+                if (!Strings.isNullOrEmpty(dataTokenPath)) {
+                    dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
+                    File dataTokenFile = new File(dataTokenPath);
+
+                    if (dataTokenFile.exists()) {
+                        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(
+                                DlfUtil.setDataToken(dataTokenFile));
+                    } else {
+                        LOG.warn("Cannot find data token file " + dataTokenPath);
+                    }
                 }
+            } catch (Exception e) {
+                LOG.warn("Fail to get data token: " + e.getMessage());
             }
-        } catch (Exception e) {
-            LOG.warn("Fail to get data token: " + e.getMessage());
         }
         cloudConfiguration.toThrift(tCloudConfiguration);
         tPaimonTableSink.setCloud_configuration(tCloudConfiguration);

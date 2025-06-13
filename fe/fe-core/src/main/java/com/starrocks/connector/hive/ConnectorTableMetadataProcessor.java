@@ -181,6 +181,12 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                 LOG.error("Failed to get paimon catalog by name: {}.", catalogName);
                 continue;
             }
+
+            // ignore DLF 2.0
+            if (!paimonCatalog.options().isEmpty() && paimonCatalog.options().get("metastore").equalsIgnoreCase("dlf-paimon")) {
+                return;
+            }
+
             LOG.info("Start to refresh paimon catalog {}", catalogName);
             for (String dbName : paimonCatalog.listDatabases()) {
                 try {

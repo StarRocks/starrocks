@@ -101,7 +101,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         return null;
     }
 
-    private ConnectorMetadata metadataOfDb(String dBName) {
+    public ConnectorMetadata metadataOfDb(String dBName) {
         if (isInfoSchemaDb(dBName)) {
             return informationSchema;
         }
