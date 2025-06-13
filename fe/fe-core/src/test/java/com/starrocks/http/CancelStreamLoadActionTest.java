@@ -14,7 +14,7 @@
 package com.starrocks.http;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.common.StarRocksException;
+import com.starrocks.common.UserException;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -40,7 +40,7 @@ public class CancelStreamLoadActionTest extends StarRocksHttpTestCase {
     private GlobalTransactionMgr globalTransactionMgr;
 
     @Test
-    public void testNormal() throws IOException, StarRocksException {
+    public void testNormal() throws IOException, UserException {
         // POST /api/{db}/{table}/_cancel?label={label} is working
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         String label = UUID.randomUUID().toString();
@@ -63,14 +63,14 @@ public class CancelStreamLoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testLabelNotExist() throws IOException, StarRocksException {
+    public void testLabelNotExist() throws IOException, UserException {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         String label = UUID.randomUUID().toString();
         new Expectations() {
             {
                 globalTransactionMgr.abortTransaction(anyLong, anyString, anyString);
                 times = 1;
-                result = new StarRocksException("label not exist");
+                result = new UserException("label not exist");
             }
         };
         Request request = new Request.Builder()
