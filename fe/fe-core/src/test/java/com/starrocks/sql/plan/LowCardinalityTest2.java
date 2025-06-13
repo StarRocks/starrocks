@@ -2180,4 +2180,28 @@ public class LowCardinalityTest2 extends PlanTestBase {
             FeConstants.unitTestView = true;
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testExistRequiredDistribution() throws Exception {
+        String sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY) from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        ExecPlan execPlan = getExecPlan(sql);
+        Assert.assertTrue("joinNode is in the same fragment with a table contains global dict, " +
+                "we cannot change its distribution", execPlan.getOptExpression(3).isExistRequiredDistribution());
+        Assert.assertTrue("table contains global dict, we cannot change its distribution",
+                execPlan.getOptExpression(0).isExistRequiredDistribution());
+
+        Assert.assertFalse("table doesn't contain global dict, we can change its distribution",
+                execPlan.getOptExpression(1).isExistRequiredDistribution());
+    }
+
+    @Test
+    public void testShortCircuitQuery() throws Exception {
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        String sql = "select * from low_card_t2 where d_date='20160404' and c_mr = '12'";
+        final String plan = getFragmentPlan(sql);
+        assertContains(plan, "Short Circuit Scan: true");
+    }
+>>>>>>> c2c07d8b4b ([BugFix] Fix short circuit not work when table has global dict columns (#59844))
 }
