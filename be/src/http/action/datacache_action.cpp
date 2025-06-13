@@ -28,31 +28,16 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 
+#ifdef WITH_STARCACHE
+#include "cache/starcache_wrapper.h"
+#endif
+
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_STAT = "stat";
 const static std::string ACTION_APP_STAT = "app_stat";
-
-std::string cache_status_str(const DataCacheStatus& status) {
-    std::string str_status;
-    switch (status) {
-    case DataCacheStatus::NORMAL:
-        str_status = "NORMAL";
-        break;
-    case DataCacheStatus::UPDATING:
-        str_status = "UPDATING";
-        break;
-    case DataCacheStatus::ABNORMAL:
-        str_status = "ABNORMAL";
-        break;
-    case DataCacheStatus::LOADING:
-        str_status = "LOADING";
-        break;
-    }
-    return str_status;
-}
 
 bool DataCacheAction::_check_request(HttpRequest* req) {
     if (req->method() != HttpMethod::GET) {
@@ -97,8 +82,9 @@ void DataCacheAction::_handle_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
 #ifdef WITH_STARCACHE
         auto& allocator = root.GetAllocator();
-        auto&& metrics = _local_cache->cache_metrics(2);
-        std::string status = cache_status_str(metrics.status);
+        auto* starcache = reinterpret_cast<StarCacheWrapper*>(_local_cache);
+        auto&& metrics = starcache->starcache_metrics(2);
+        std::string status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         rapidjson::Value status_value;
         status_value.SetString(status.c_str(), status.length(), allocator);

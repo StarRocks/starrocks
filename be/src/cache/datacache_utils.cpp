@@ -21,30 +21,26 @@
 
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
-#include "util/disk_info.h"
 #include "util/parse_util.h"
 
 namespace starrocks {
 void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics) {
-    switch (metrics.status) {
-    case DataCacheStatus::NORMAL:
-        t_metrics.__set_status(TDataCacheStatus::NORMAL);
-        break;
-    case DataCacheStatus::UPDATING:
-        t_metrics.__set_status(TDataCacheStatus::UPDATING);
-        break;
-    case DataCacheStatus::LOADING:
-        t_metrics.__set_status(TDataCacheStatus::LOADING);
-        break;
-    default:
-        t_metrics.__set_status(TDataCacheStatus::ABNORMAL);
-    }
-
+    t_metrics.__set_status(DataCacheStatusUtils::to_thrift(metrics.status));
     t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
     t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
     t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
     t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
 }
+
+#ifdef WITH_STARCACHE
+void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const StarCacheMetrics& metrics) {
+    t_metrics.__set_status(DataCacheStatusUtils::to_thrift(static_cast<DataCacheStatus>(metrics.status)));
+    t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
+    t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
+    t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
+    t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
+}
+#endif
 
 Status DataCacheUtils::parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
                                                      size_t* mem_size) {

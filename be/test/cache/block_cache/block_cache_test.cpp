@@ -227,7 +227,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     auto local_cache = cache->local_cache();
 
     {
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.mem_quota_bytes, options.mem_space_size);
         ASSERT_EQ(metrics.disk_quota_bytes, quota);
     }
@@ -235,7 +235,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     {
         size_t new_mem_quota = 2 * 1024 * 1024;
         ASSERT_TRUE(local_cache->update_mem_quota(new_mem_quota, false).ok());
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.mem_quota_bytes, new_mem_quota);
     }
 
@@ -244,7 +244,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
         std::vector<DirSpace> dir_spaces;
         dir_spaces.push_back({.path = cache_dir, .size = new_disk_quota});
         ASSERT_TRUE(local_cache->update_disk_spaces(dir_spaces).ok());
-        auto metrics = local_cache->cache_metrics(0);
+        auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, new_disk_quota);
     }
 

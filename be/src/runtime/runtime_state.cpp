@@ -517,7 +517,7 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
         const LocalCache* cache = DataCache::GetInstance()->local_cache();
         if (cache != nullptr && cache->is_initialized()) {
             TDataCacheMetrics t_metrics{};
-            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics(0));
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
             metrics.__set_metrics(t_metrics);
             load_params->__set_load_datacache_metrics(metrics);
         }
