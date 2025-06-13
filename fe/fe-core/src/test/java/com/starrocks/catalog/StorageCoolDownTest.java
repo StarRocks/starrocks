@@ -142,7 +142,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_datetime_with_1_day_ttl_less_than");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -191,7 +191,7 @@ public class StorageCoolDownTest {
                 "\"dynamic_partition.prefix\" = \"p\",\n" +
                 "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_ttl\" = \"1 days\",\n" +
@@ -200,7 +200,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_date_upper_lower_ttl");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -250,7 +250,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_date_with_1_day_ttl_start_end");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -303,7 +303,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_date_with_1_day_ttl_less_than");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -356,7 +356,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_with_max_partition");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();

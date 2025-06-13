@@ -21,18 +21,19 @@
 namespace starrocks {
 
 StorageAggregateType get_aggregation_type_by_string(const std::string& str) {
-    std::string upper_str = str;
-    std::transform(str.begin(), str.end(), upper_str.begin(), ::tolower);
+    std::string lower_str = str;
+    std::transform(str.begin(), str.end(), lower_str.begin(), ::tolower);
 
-    if (upper_str == "none") return STORAGE_AGGREGATE_NONE;
-    if (upper_str == "sum") return STORAGE_AGGREGATE_SUM;
-    if (upper_str == "min") return STORAGE_AGGREGATE_MIN;
-    if (upper_str == "max") return STORAGE_AGGREGATE_MAX;
-    if (upper_str == "replace") return STORAGE_AGGREGATE_REPLACE;
-    if (upper_str == "replace_if_not_null") return STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL;
-    if (upper_str == "hll_union") return STORAGE_AGGREGATE_HLL_UNION;
-    if (upper_str == "bitmap_union") return STORAGE_AGGREGATE_BITMAP_UNION;
-    if (upper_str == "percentile_union") return STORAGE_AGGREGATE_PERCENTILE_UNION;
+    if (lower_str == "none") return STORAGE_AGGREGATE_NONE;
+    if (lower_str == "sum") return STORAGE_AGGREGATE_SUM;
+    if (lower_str == "min") return STORAGE_AGGREGATE_MIN;
+    if (lower_str == "max") return STORAGE_AGGREGATE_MAX;
+    if (lower_str == "replace") return STORAGE_AGGREGATE_REPLACE;
+    if (lower_str == "replace_if_not_null") return STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL;
+    if (lower_str == "hll_union") return STORAGE_AGGREGATE_HLL_UNION;
+    if (lower_str == "bitmap_union") return STORAGE_AGGREGATE_BITMAP_UNION;
+    if (lower_str == "percentile_union") return STORAGE_AGGREGATE_PERCENTILE_UNION;
+    if (lower_str == "agg_state_union") return STORAGE_AGGREGATE_AGG_STATE_UNION;
     LOG(WARNING) << "invalid aggregation type string. [aggregation='" << str << "']";
     return STORAGE_AGGREGATE_UNKNOWN;
 }
@@ -59,6 +60,8 @@ std::string get_string_by_aggregation_type(StorageAggregateType type) {
         return "percentile_union";
     case STORAGE_AGGREGATE_UNKNOWN:
         return "unknown";
+    case STORAGE_AGGREGATE_AGG_STATE_UNION:
+        return "agg_state_union";
     }
     return "";
 }

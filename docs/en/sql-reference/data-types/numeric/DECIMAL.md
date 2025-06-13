@@ -1,14 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # DECIMAL
 
-## Description
-
-DECIMAL(P[,S])
-
-High-precision fixed-point value. `P` stands for the total number of significant numbers (precision). `S` stands for the maximum number of decimal points (scale).
+DECIMAL(P[,S]) is a high-precision fixed-point value. `P` stands for the total number of significant numbers (precision). `S` stands for the maximum number of decimal points (scale).
 
 If `P` is omitted, the default is 10. If `S` is omitted, the default is 0.
 
@@ -30,10 +26,6 @@ Fast Decimal is controlled by the FE dynamic parameter `enable_decimal_v3`, whic
 
 From v3.1 onwards, StarRocks supports Fast Decimal entries in [ARRAY](../semi_structured/Array.md), [MAP](../semi_structured/Map.md), and [STRUCT](../semi_structured/STRUCT.md).
   
-## Limits
-
-StarRocks does not support querying DECIMAL data in ORC and Parquet files from Hive.
-
 ## Examples
 
 Define DECIMAL columns when creating a table.

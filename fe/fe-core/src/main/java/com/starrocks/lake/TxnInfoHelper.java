@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.transaction.TransactionState;
 
@@ -23,7 +24,16 @@ public class TxnInfoHelper {
         infoPB.txnId = state.getTransactionId();
         infoPB.combinedTxnLog = state.isUseCombinedTxnLog();
         infoPB.commitTime = state.getCommitTime() / 1000; // milliseconds to seconds
-        infoPB.txnType = state.getTxnTypePB();
+        infoPB.txnType = state.getTransactionType().toProto();
+        // check whether needs to force publish
+        if (state.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
+                state.getTxnCommitAttachment() != null) {
+            CompactionTxnCommitAttachment attachment = (CompactionTxnCommitAttachment) state.getTxnCommitAttachment();
+            infoPB.forcePublish = attachment.getForceCommit();
+        } else {
+            infoPB.forcePublish = false;
+        }
+        infoPB.setGtid(state.getGlobalTransactionId());
         return infoPB;
     }
 }

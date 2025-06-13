@@ -24,7 +24,6 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
-import com.starrocks.sql.common.MetaUtils;
 
 public class RefreshTableStatementAnalyzer {
     public static void analyze(RefreshTableStmt statement, ConnectContext context) {
@@ -45,7 +44,7 @@ public class RefreshTableStatementAnalyzer {
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
             TableName tableName = statement.getTableName();
-            MetaUtils.normalizationTableName(context, tableName);
+            tableName.normalization(context);
             String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
             String tblName = tableName.getTbl();
@@ -53,10 +52,10 @@ public class RefreshTableStatementAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
-            if (metadataMgr.getDb(catalogName, dbName) == null) {
+            if (metadataMgr.getDb(context, catalogName, dbName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName);
             }
-            if (metadataMgr.getTable(catalogName, dbName, tblName) == null) {
+            if (metadataMgr.getTable(context, catalogName, dbName, tblName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
             }
 

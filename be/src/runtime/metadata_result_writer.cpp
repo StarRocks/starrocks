@@ -27,9 +27,8 @@ namespace starrocks {
 MetadataResultWriter::MetadataResultWriter(BufferControlBlock* sinker,
                                            const std::vector<ExprContext*>& output_expr_ctxs,
                                            RuntimeProfile* parent_profile, TResultSinkType::type sink_type)
-        : _sinker(sinker),
+        : BufferControlResultWriter(sinker, parent_profile),
           _output_expr_ctxs(output_expr_ctxs),
-          _parent_profile(parent_profile),
           _sink_type(sink_type) {}
 
 MetadataResultWriter::~MetadataResultWriter() = default;
@@ -42,14 +41,8 @@ Status MetadataResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void MetadataResultWriter::_init_profile() {
-    _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
-    _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
-    _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
-}
-
 Status MetadataResultWriter::append_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
+    SCOPED_TIMER(_append_chunk_timer);
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
         return process_status.status();
@@ -69,7 +62,7 @@ Status MetadataResultWriter::append_chunk(Chunk* chunk) {
 }
 
 StatusOr<TFetchDataResultPtrs> MetadataResultWriter::process_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
+    SCOPED_TIMER(_append_chunk_timer);
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok()) {
@@ -79,26 +72,6 @@ StatusOr<TFetchDataResultPtrs> MetadataResultWriter::process_chunk(Chunk* chunk)
         results.push_back(std::move(process_status.value()));
     }
     return results;
-}
-
-StatusOr<bool> MetadataResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
-    size_t num_rows = 0;
-    for (const auto& result : results) {
-        num_rows += result->result_batch.rows.size();
-    }
-
-    auto status = _sinker->try_add_batch(results);
-
-    if (status.ok()) {
-        if (status.value()) {
-            _written_rows += num_rows;
-            results.clear();
-        }
-    } else {
-        results.clear();
-        LOG(WARNING) << "Append metadata result to sink failed.";
-    }
-    return status;
 }
 
 StatusOr<TFetchDataResultPtr> MetadataResultWriter::_process_chunk(Chunk* chunk) {
@@ -148,23 +121,23 @@ StatusOr<TFetchDataResultPtr> MetadataResultWriter::_process_chunk(Chunk* chunk)
 // 13 -> "key_metadata"
 Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, const Chunk* chunk,
                                                     TFetchDataResult* result) const {
-    SCOPED_TIMER(_serialize_timer);
+    SCOPED_TIMER(_convert_tuple_timer);
 
-    auto content = down_cast<Int32Column*>(ColumnHelper::get_data_column(columns[0].get()));
-    auto file_path = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[1].get()));
-    auto file_format = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[2].get()));
-    auto spec_id = down_cast<Int32Column*>(ColumnHelper::get_data_column(columns[3].get()));
-    auto partition_data = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
-    auto record_count = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
-    auto file_size_in_bytes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
-    auto split_offsets = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[7].get()));
+    const auto* content = down_cast<const Int32Column*>(ColumnHelper::get_data_column(columns[0].get()));
+    const auto* file_path = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[1].get()));
+    const auto* file_format = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[2].get()));
+    const auto* spec_id = down_cast<const Int32Column*>(ColumnHelper::get_data_column(columns[3].get()));
+    const auto* partition_data = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
+    const auto* record_count = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
+    const auto* file_size_in_bytes = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
+    const auto* split_offsets = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[7].get()));
 
-    auto sort_id = down_cast<Int32Column*>(ColumnHelper::get_data_column(columns[8].get()));
-    auto equality_ids = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[9].get()));
-    auto file_sequence_number = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[10].get()));
-    auto data_sequence_number = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[11].get()));
-    auto iceberg_metrics = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[12].get()));
-    auto key_metadata = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[13].get()));
+    const auto* sort_id = down_cast<const Int32Column*>(ColumnHelper::get_data_column(columns[8].get()));
+    const auto* equality_ids = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[9].get()));
+    const auto* file_sequence_number = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[10].get()));
+    const auto* data_sequence_number = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[11].get()));
+    const auto* iceberg_metrics = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[12].get()));
+    const auto* key_metadata = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[13].get()));
 
     std::vector<TMetadataEntry> meta_entries;
     int num_rows = chunk->num_rows();
@@ -228,10 +201,4 @@ Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, cons
 
     return Status::OK();
 }
-
-Status MetadataResultWriter::close() {
-    COUNTER_SET(_sent_rows_counter, _written_rows);
-    return Status::OK();
-}
-
 } // namespace starrocks

@@ -19,7 +19,6 @@
 #include "agent/publish_version.h"
 #include "butil/file_util.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
@@ -265,6 +264,21 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
                          ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     std::unordered_set<DataDir*> affected_dirs;
     std::vector<TFinishTaskRequest> finish_task_requests;
+    {
+        auto& finish_task_request = finish_task_requests.emplace_back();
+        TPublishVersionRequest publish_version_req;
+        publish_version_req.transaction_id = 3333;
+        TPartitionVersionInfo pvinfo;
+        pvinfo.partition_id = 10;
+        pvinfo.version = 10;
+        publish_version_req.partition_version_infos.push_back(pvinfo);
+        publish_version_req.enable_sync_publish = true;
+        std::vector<TabletInfo> tablet_infos;
+        StorageEngine::instance()->tablet_manager()->get_tablets_by_partition(10, tablet_infos);
+        ASSERT_TRUE(tablet_infos.size() > 0);
+        run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+        ASSERT_EQ(1, finish_task_request.error_tablet_ids.size());
+    }
     auto& finish_task_request = finish_task_requests.emplace_back();
     // create req
     TPublishVersionRequest publish_version_req;

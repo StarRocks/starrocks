@@ -50,7 +50,40 @@ TEST_F(AddStructColumnTest, test_bad_json) {
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.get_value();
 
-    EXPECT_STATUS(Status::DataQualityError(""), add_struct_column(column.get(), type_desc, "root_key", &val));
+    EXPECT_OK(add_struct_column(column.get(), type_desc, "root_key", &val));
+
+    EXPECT_EQ("{key1:'foo',key2:'bar',key3:NULL}", column->debug_string());
+}
+
+TEST_F(AddStructColumnTest, test_bad_json2) {
+    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
+            {"key1", "key2", "key3"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_json_type(),
+                                       TypeDescriptor::create_varchar_type(10)});
+    auto column = ColumnHelper::create_column(type_desc, false);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key1": "foo", "key2": {a:1,b:2}, "key3": "bar"}   )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.get_value();
+
+    EXPECT_OK(add_struct_column(column.get(), type_desc, "root_key", &val));
+
+    EXPECT_EQ("{key1:'foo',key2:NULL,key3:NULL}", column->debug_string());
+}
+
+TEST_F(AddStructColumnTest, test_field_not_found) {
+    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
+            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    auto column = ColumnHelper::create_column(type_desc, false);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key1": "foo", "key3": "baz" }  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.get_value();
+
+    EXPECT_OK(add_struct_column(column.get(), type_desc, "root_key", &val));
+
+    EXPECT_EQ("{key1:'foo',key2:NULL}", column->debug_string());
 }
 
 } // namespace starrocks

@@ -24,7 +24,7 @@ import java.util.Map;
 // clause which is used to add partition
 public class AddPartitionClause extends AlterTableClause {
 
-    private final PartitionDesc partitionDesc;
+    private PartitionDesc partitionDesc;
     private final DistributionDesc distributionDesc;
     private final Map<String, String> properties;
     // true if this is to add a temporary partition
@@ -35,6 +35,10 @@ public class AddPartitionClause extends AlterTableClause {
 
     public PartitionDesc getPartitionDesc() {
         return partitionDesc;
+    }
+
+    public void setPartitionDesc(PartitionDesc desc) {
+        this.partitionDesc = desc;
     }
 
     public DistributionDesc getDistributionDesc() {
@@ -61,7 +65,6 @@ public class AddPartitionClause extends AlterTableClause {
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.isTempPartition = isTempPartition;
-        this.needTableStable = false;
     }
 
     public List<PartitionDesc> getResolvedPartitionDescList() {
@@ -72,7 +75,6 @@ public class AddPartitionClause extends AlterTableClause {
         this.resolvedPartitionDescList = resolvedPartitionDescList;
     }
 
-    @Override
     public Map<String, String> getProperties() {
         return this.properties;
     }

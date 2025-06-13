@@ -47,13 +47,14 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TreeNode;
-import com.starrocks.common.UserException;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStats;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TExplainLevel;
@@ -118,9 +119,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // sum of tupleIds' avgSerializedSizes; set in computeStats()
     protected float avgRowSize;
 
-    protected int numInstances;
-
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
+
+    protected Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
     // For vector query engine
     // case 1: If agg node hash outer join child
@@ -140,6 +141,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected Set<Integer> localRfWaitingSet = Sets.newHashSet();
     protected ExprSubstitutionMap outputSmap;
 
+    // set if you want to collect execution statistics for this plan node
+    protected boolean needCollectExecStats = false;
+
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;
         this.limit = -1;
@@ -147,7 +151,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList(tupleIds);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
-        this.numInstances = 1;
     }
 
     protected PlanNode(PlanNodeId id, String planNodeName) {
@@ -156,7 +159,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList();
         this.cardinality = -1;
         this.planNodeName = planNodeName;
-        this.numInstances = 1;
     }
 
     /**
@@ -170,7 +172,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.conjuncts = Expr.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
-        this.numInstances = 1;
     }
 
     public List<RuntimeFilterDescription> getProbeRuntimeFilters() {
@@ -485,6 +486,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             outputBuilder.append(prefix).append("* ").append(key.getName());
             outputBuilder.append("-->").append(value).append("\n");
         });
+
+        if (!multiColumnCombinedStats.isEmpty()) {
+            outputBuilder.append(prefix).append("multi-column statistics: \n");
+            multiColumnCombinedStats.forEach((columns, stats) -> {
+                String columnNames = columns.stream()
+                        .map(ColumnRefOperator::getName)
+                        .collect(Collectors.joining(", "));
+
+                outputBuilder.append(prefix).append("* [").append(columnNames).append("]-->").append(stats).append("\n");
+            });
+        }
+
         return outputBuilder.toString();
     }
 
@@ -547,7 +560,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
         for (PlanNode child : children) {
             child.finalizeStats(analyzer);
         }
@@ -577,13 +590,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         avgRowSize = (float) statistics.getColumnStatistics().values().stream().
                 mapToDouble(columnStatistic -> columnStatistic.getAverageRowSize()).sum();
         columnStatistics = statistics.getColumnStatistics();
+        multiColumnCombinedStats = statistics.getMultiColumnCombinedStats();
     }
 
     public ExprSubstitutionMap getOutputSmap() {
         return outputSmap;
     }
 
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
     }
 
     /**
@@ -623,7 +637,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      *
      * @throws AnalysisException
      */
-    protected void createDefaultSmap(Analyzer analyzer) throws UserException {
+    protected void createDefaultSmap(Analyzer analyzer) throws StarRocksException {
         ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
         outputSmap =
                 ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);
@@ -691,14 +705,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected String getVerboseExplain(List<? extends Expr> exprs) {
         return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
-    }
-
-    public int getNumInstances() {
-        return numInstances;
-    }
-
-    public void setNumInstances(int numInstances) {
-        this.numInstances = numInstances;
     }
 
     public void appendTrace(StringBuilder sb) {
@@ -870,12 +876,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                     if (!slot.getId().equals(slotRef.getSlotId())) {
                         continue;
                     }
-                    if (!slotRef.isNullable() || rfDesc.isNullLast()) {
-                        return true;
-                    }
-                    if (slotRef.isNullable() && canEliminateNull(slot)) {
-                        return true;
-                    }
+                    return true;
                 }
             }
             return false;
@@ -1017,5 +1018,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // disable optimize depends on physical order
     // eg: sortedStreamingAGG/ PerBucketCompute
     public void disablePhysicalPropertyOptimize() {
+    }
+
+    public void forceCollectExecStats() {
+        this.needCollectExecStats = true;
+    }
+
+    public boolean needCollectExecStats() {
+        return needCollectExecStats;
     }
 }

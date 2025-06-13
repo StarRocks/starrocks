@@ -17,6 +17,7 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.io.Writable;
 import com.starrocks.journal.JournalEntity;
 import org.junit.Assert;
 import org.junit.Test;
@@ -33,7 +34,7 @@ public class CreateInsertOverwriteJobLogTest {
     @Test
     public void testBasic() throws IOException {
         List<Long> targetPartitionIds = Lists.newArrayList(10L, 20L);
-        CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(100L, 101L, 102L, targetPartitionIds);
+        CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(100L, 101L, 102L, targetPartitionIds, false);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         jobInfo.write(dataOutputStream);
@@ -46,22 +47,22 @@ public class CreateInsertOverwriteJobLogTest {
         Assert.assertEquals(102L, newJobInfo.getTableId());
         Assert.assertEquals(targetPartitionIds, newJobInfo.getTargetPartitionIds());
 
-
-        JournalEntity journalEntity = new JournalEntity();
-        journalEntity.setOpCode(OperationType.OP_CREATE_INSERT_OVERWRITE);
-        journalEntity.setData(jobInfo);
+        JournalEntity journalEntity = new JournalEntity(OperationType.OP_CREATE_INSERT_OVERWRITE, jobInfo);
         ByteArrayOutputStream outputStream2 = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream2 = new DataOutputStream(outputStream2);
-        journalEntity.write(dataOutputStream2);
+        dataOutputStream2.writeShort(journalEntity.opCode());
+        journalEntity.data().write(dataOutputStream2);
 
         ByteArrayInputStream inputStream2 = new ByteArrayInputStream(outputStream2.toByteArray());
         DataInputStream dataInputStream2 = new DataInputStream(inputStream2);
-        JournalEntity journalEntity2 = new JournalEntity();
-        journalEntity2.readFields(dataInputStream2);
 
-        Assert.assertEquals(OperationType.OP_CREATE_INSERT_OVERWRITE, journalEntity2.getOpCode());
-        Assert.assertTrue(journalEntity2.getData() instanceof CreateInsertOverwriteJobLog);
-        CreateInsertOverwriteJobLog newJobInfo2 = (CreateInsertOverwriteJobLog) journalEntity2.getData();
+        short opCode = dataInputStream2.readShort();
+        Writable writable = EditLogDeserializer.deserialize(opCode, dataInputStream2);
+        JournalEntity journalEntity2 = new JournalEntity(opCode, writable);
+
+        Assert.assertEquals(OperationType.OP_CREATE_INSERT_OVERWRITE, journalEntity2.opCode());
+        Assert.assertTrue(journalEntity2.data() instanceof CreateInsertOverwriteJobLog);
+        CreateInsertOverwriteJobLog newJobInfo2 = (CreateInsertOverwriteJobLog) journalEntity2.data();
         Assert.assertEquals(100L, newJobInfo2.getJobId());
         Assert.assertEquals(101L, newJobInfo2.getDbId());
         Assert.assertEquals(102L, newJobInfo2.getTableId());

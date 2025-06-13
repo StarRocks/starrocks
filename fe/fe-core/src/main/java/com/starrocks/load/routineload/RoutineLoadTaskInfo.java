@@ -37,7 +37,7 @@ package com.starrocks.load.routineload;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.streamload.StreamLoadTask;
@@ -52,6 +52,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -105,7 +106,7 @@ public abstract class RoutineLoadTaskInfo {
 
     protected StreamLoadTask streamLoadTask = null;
 
-    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public RoutineLoadTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs,
                                long timeToExecuteMs, long taskTimeoutMs) {
@@ -198,12 +199,16 @@ public abstract class RoutineLoadTaskInfo {
         }
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public long getWarehouseId() {
-        return warehouseId;
+        return computeResource.getWarehouseId();
     }
 
     public boolean isRunningTimeout() {
@@ -220,9 +225,9 @@ public abstract class RoutineLoadTaskInfo {
         return false;
     }
 
-    abstract TRoutineLoadTask createRoutineLoadTask() throws UserException;
+    abstract TRoutineLoadTask createRoutineLoadTask() throws StarRocksException;
 
-    abstract boolean readyToExecute() throws UserException;
+    abstract boolean readyToExecute() throws StarRocksException;
 
     public abstract boolean isProgressKeepUp(RoutineLoadProgress progress);
 
@@ -239,24 +244,25 @@ public abstract class RoutineLoadTaskInfo {
                 job.getDbId(), Lists.newArrayList(job.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
-                timeoutMs / 1000, warehouseId);
+                timeoutMs / 1000, computeResource);
     }
 
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterCommitted(txnState, txnOperated);
         }
     }
 
-    public void afterVisible(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterVisible(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterVisible(txnState, txnOperated);
         }
     }
 
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws UserException {
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws
+            StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReason);
@@ -295,7 +301,7 @@ public abstract class RoutineLoadTaskInfo {
 
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             // add warehouse in task info
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(getWarehouseId());
             if (warehouse == null) {
                 row.add("NULL");
             } else {

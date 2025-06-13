@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -181,7 +181,7 @@ public class PruneShuffleColumnRule implements TreeRewriteRule {
             optExpression.getInputs().get(1).getOp().accept(this, optExpression.getInputs().get(1), rc);
 
             if (lc.distributionList.isEmpty() || rc.distributionList.isEmpty() ||
-                    ((PhysicalJoinOperator) optExpression.getOp()).getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+                    ((PhysicalJoinOperator) optExpression.getOp()).getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
                 return optExpression;
             }
 

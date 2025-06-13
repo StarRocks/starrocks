@@ -15,12 +15,16 @@
 
 package com.starrocks.common;
 
-public class NoAliveBackendException extends UserException {
+public class NoAliveBackendException extends StarRocksException {
     public NoAliveBackendException(String msg, Throwable cause) {
         super(msg, cause);
     }
 
     public NoAliveBackendException(String msg) {
         super(msg);
+    }
+
+    public NoAliveBackendException() {
+        super(ErrorCode.ERR_QUERY_CANCELLED_BY_CRASH);
     }
 }

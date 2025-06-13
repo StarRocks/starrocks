@@ -13,9 +13,18 @@
 // limitations under the License.
 package com.starrocks.sql.common;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,6 +36,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class MetaUtilTest {
 
@@ -63,8 +73,8 @@ public class MetaUtilTest {
 
     @Test
     public void testIsPartitionExist() {
-        Database database = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = database.getTable("t0");
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
         List<Partition> partitionList = new ArrayList<>(table.getPartitions());
         Assert.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 -1, -1, -1));
@@ -74,5 +84,67 @@ public class MetaUtilTest {
                 database.getId(), table.getId(), -1));
         Assert.assertTrue(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 database.getId(), table.getId(), partitionList.get(0).getId()));
+    }
+
+    @Test
+    public void testIsPhysicalPartitionExist() {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
+        List<PhysicalPartition> partitionList = new ArrayList<>(table.getPhysicalPartitions());
+        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                -1, -1, -1));
+        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                database.getId(), -1, -1));
+        Assert.assertFalse(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                database.getId(), table.getId(), -1));
+        Assert.assertTrue(MetaUtils.isPhysicalPartitionExist(GlobalStateMgr.getCurrentState(),
+                database.getId(), table.getId(), partitionList.get(0).getId()));
+    }
+
+    @Test
+    public void testGetColumnsByColumnIds() {
+        Column columnA = new Column("a", Type.INT);
+        Column columnB = new Column("b", Type.STRING);
+        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
+        Map<ColumnId, Column> schema = MetaUtils.buildIdToColumn(Lists.newArrayList(columnA, columnB, columnC));
+
+        Assert.assertEquals(columnA,
+                MetaUtils.getColumnsByColumnIds(schema, Lists.newArrayList(ColumnId.create("a"))).get(0));
+        Assert.assertEquals(columnB,
+                MetaUtils.getColumnsByColumnIds(schema, Lists.newArrayList(ColumnId.create("b"))).get(0));
+        Assert.assertEquals(columnC,
+                MetaUtils.getColumnsByColumnIds(schema, Lists.newArrayList(ColumnId.create("c"))).get(0));
+    }
+
+    @Test
+    public void testGetColumnNamesByColumnIds() {
+        Column columnA = new Column("a", Type.INT);
+        Column columnB = new Column("b", Type.STRING);
+        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
+        Map<ColumnId, Column> schema = MetaUtils.buildIdToColumn(Lists.newArrayList(columnA, columnB, columnC));
+
+        Assert.assertEquals("a",
+                MetaUtils.getColumnNamesByColumnIds(schema, Lists.newArrayList(ColumnId.create("a"))).get(0));
+        Assert.assertEquals("b",
+                MetaUtils.getColumnNamesByColumnIds(schema, Lists.newArrayList(ColumnId.create("b"))).get(0));
+        Assert.assertEquals("c",
+                MetaUtils.getColumnNamesByColumnIds(schema, Lists.newArrayList(ColumnId.create("c"))).get(0));
+    }
+
+    @Test
+    public void testGetColumnIdsByColumnNames() {
+        Column columnA = new Column("a", Type.INT);
+        Column columnB = new Column("b", Type.STRING);
+        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
+
+        OlapTable olapTable = new OlapTable(1111L, "t1", Lists.newArrayList(columnA, columnB, columnC),
+                KeysType.AGG_KEYS, null, null);
+
+        Assert.assertEquals(ColumnId.create("a"),
+                MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("a")).get(0));
+        Assert.assertEquals(ColumnId.create("b"),
+                MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("b")).get(0));
+        Assert.assertEquals(ColumnId.create("c"),
+                MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("c")).get(0));
     }
 }

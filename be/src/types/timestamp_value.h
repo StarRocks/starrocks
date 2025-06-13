@@ -120,6 +120,8 @@ public:
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;
+    int64_t to_unixtime() const;
+    int64_t to_unixtime(const cctz::time_zone& ctz) const;
 
     bool from_unixtime(int64_t second, const std::string& timezone);
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);
@@ -140,7 +142,7 @@ public:
     // direct return microsecond will over int64
     int64_t diff_microsecond(TimestampValue other) const;
 
-    std::string to_string() const;
+    std::string to_string(bool igonre_microsecond = false) const;
 
     // Returns the formatted string length or -1 on error.
     int to_string(char* s, size_t n) const;

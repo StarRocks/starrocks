@@ -110,6 +110,6 @@ public class FrontendsProcNodeTest {
 
     @Test
     public void testIPTitle() {
-        Assert.assertTrue(FrontendsProcNode.TITLE_NAMES.get(1).equals("IP"));
+        Assert.assertTrue(FrontendsProcNode.TITLE_NAMES.get(2).equals("IP"));
     }
 }

@@ -15,7 +15,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
@@ -60,46 +60,46 @@ public class GlobalFunctionMgrTest {
     }
 
     @Test
-    public void testUserAddFunction() throws UserException {
+    public void testUserAddFunction() throws StarRocksException {
         // User adds addIntInt UDF
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
         final Type[] argTypes = {Type.INT, Type.INT};
         Function f = new Function(name, argTypes, Type.INT, false);
-        globalFunctionMgr.userAddFunction(f, false);
+        globalFunctionMgr.userAddFunction(f, false, false);
         // User adds addDoubleDouble UDF
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setAsGlobalFunction();
         final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
         Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
-        globalFunctionMgr.userAddFunction(f2, false);
+        globalFunctionMgr.userAddFunction(f2, false, false);
     }
 
     @Test
-    public void testUserAddFunctionGivenFunctionAlreadyExists() throws UserException {
+    public void testUserAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
         final Type[] argTypes = {Type.INT, Type.INT};
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
-        globalFunctionMgr.userAddFunction(f, false);
+        globalFunctionMgr.userAddFunction(f, false, false);
 
         // Attempt to add the same UDF again, expecting an exception
-        Assert.assertThrows(UserException.class, () -> globalFunctionMgr.userAddFunction(f, false));
+        Assert.assertThrows(StarRocksException.class, () -> globalFunctionMgr.userAddFunction(f, false, false));
     }
 
     @Test
-    public void testUserAddFunctionGivenUdfAlreadyExistsAndAllowExisting() throws UserException {
+    public void testUserAddFunctionGivenUdfAlreadyExistsAndAllowExisting() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
         final Type[] argTypes = {Type.INT, Type.INT};
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
-        globalFunctionMgr.userAddFunction(f, true);
+        globalFunctionMgr.userAddFunction(f, true, false);
         // Attempt to add the same UDF again
-        globalFunctionMgr.userAddFunction(f, true);
+        globalFunctionMgr.userAddFunction(f, true, false);
 
         List<Function> functions = globalFunctionMgr.getFunctions();
         Assert.assertEquals(functions.size(), 1);

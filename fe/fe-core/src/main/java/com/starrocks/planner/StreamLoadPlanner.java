@@ -52,7 +52,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -75,6 +75,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -106,14 +107,14 @@ public class StreamLoadPlanner {
     // just for using session variable
     private ConnectContext connectContext;
 
-    private long warehouseId;
+    private ComputeResource computeResource;
 
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
         this.connectContext = new ConnectContext();
-        this.warehouseId = streamLoadInfo.getWarehouseId();
+        this.computeResource = streamLoadInfo.getComputeResource();
     }
 
     private void resetAnalyzer() {
@@ -131,11 +132,15 @@ public class StreamLoadPlanner {
     }
 
     public long getWarehouseId() {
-        return warehouseId;
+        return computeResource.getWarehouseId();
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
-    public TExecPlanFragmentParams plan(TUniqueId loadId) throws UserException {
+    public TExecPlanFragmentParams plan(TUniqueId loadId) throws StarRocksException {
         boolean isPrimaryKey = destTable.getKeysType() == KeysType.PRIMARY_KEYS;
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink
@@ -174,8 +179,8 @@ public class StreamLoadPlanner {
 
             if (col.getType().isVarchar() && Config.enable_dict_optimize_stream_load &&
                     IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                            col.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                            col.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getColumnId());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
@@ -193,7 +198,7 @@ public class StreamLoadPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
-        scanNode.setWarehouseId(streamLoadInfo.getWarehouseId());
+        scanNode.setComputeResource(computeResource);
 
         descTable.computeMemLayout();
 
@@ -209,7 +214,7 @@ public class StreamLoadPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
-                enableAutomaticPartition, streamLoadInfo.getWarehouseId());
+                enableAutomaticPartition, computeResource);
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }
@@ -280,9 +285,19 @@ public class StreamLoadPlanner {
         queryOptions.setMem_limit(streamLoadInfo.getExecMemLimit());
         queryOptions.setLoad_mem_limit(streamLoadInfo.getLoadMemLimit());
 
-        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
+        boolean enableLoadProfile = false;
+        enableLoadProfile |= destTable.enableLoadProfile();
+        enableLoadProfile |= connectContext.getSessionVariable().isEnableLoadProfile();
+        if (Config.load_profile_collect_interval_second > 0
+                && System.currentTimeMillis() - destTable.getLastCollectProfileTime()
+                        < Config.load_profile_collect_interval_second * 1000) {
+            enableLoadProfile = false;
+        }
+
+        if (enableLoadProfile) {
             queryOptions.setEnable_profile(true);
-            queryOptions.setLoad_profile_collect_second(Config.stream_load_profile_collect_second);
+            queryOptions.setLoad_profile_collect_second(Config.stream_load_profile_collect_threshold_second);
+            destTable.updateLastCollectProfileTime();
         }
 
         params.setQuery_options(queryOptions);
@@ -298,9 +313,9 @@ public class StreamLoadPlanner {
         TNetworkAddress coordAddress = new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
         params.setCoord(coordAddress);
 
-        LOG.info("load job id: {}, txn id: {}, parallel: {}, compress: {}, replicated: {}, quorum: {}",
-                DebugUtil.printId(loadId), streamLoadInfo.getTxnId(), queryOptions.getLoad_dop(),
-                queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(), writeQuorum);
+        LOG.debug("load job id: {}, txn id: {}, parallel: {}, compress: {}, replicated: {}, quorum: {}",
+                 DebugUtil.printId(loadId), streamLoadInfo.getTxnId(), queryOptions.getLoad_dop(),
+                 queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(), writeQuorum);
         this.execPlanFragmentParams = params;
         return params;
     }

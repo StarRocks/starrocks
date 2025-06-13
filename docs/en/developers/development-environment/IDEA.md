@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Setup StarRocks FE development environment on IDEA
@@ -113,7 +113,7 @@ mvn install -DskipTests
 
 2. Add Coding style setting
     To standardize the coding style, you should import the `fe/starrocks_intellij_style.xml` code style file in IDEA.
-![image-20220701193938856](../../assets/IDEA-2.png)
+![image-20220701193938856](../../_assets/IDEA-2.png)
 
 ## Run StarRocks FE in MacOS
 
@@ -141,7 +141,7 @@ mkdir meta
 
 3. Set the environment variable, as shown in the following figure:
 
-![image-20220701193938856](../../assets/IDEA-1.png)
+![image-20220701193938856](../../_assets/IDEA-1.png)
 
 ```bash
 export PID_DIR=/Users/smith/Code/starrocks/fe/bin

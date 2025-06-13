@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # base64_to_bitmap
@@ -48,7 +48,7 @@ Create a database named `bitmapdb` and a table named `bitmap`. Use Stream Load t
     );
     ```
 
-2. Use [Stream Load](../../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) to import JSON data into `bitmap_table`.
+2. Use [Stream Load](../../sql-statements/loading_unloading/STREAM_LOAD.md) to import JSON data into `bitmap_table`.
 
     Suppose there is a JSON file named **simpledata**. This file has the following content and `userid` is a Base64-encoded string.
 

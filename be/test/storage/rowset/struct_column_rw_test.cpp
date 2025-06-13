@@ -101,7 +101,7 @@ protected:
             // init integer sub column
             ColumnMetaPB* f1_meta = writer_opts.meta->add_children_columns();
             f1_meta->set_column_id(0);
-            f1_meta->set_unique_id(0);
+            f1_meta->set_unique_id(1);
             f1_meta->set_type(f1_tablet_column.type());
             f1_meta->set_length(f1_tablet_column.length());
             f1_meta->set_encoding(DEFAULT_ENCODING);
@@ -110,7 +110,7 @@ protected:
 
             ColumnMetaPB* f2_meta = writer_opts.meta->add_children_columns();
             f2_meta->set_column_id(0);
-            f2_meta->set_unique_id(0);
+            f2_meta->set_unique_id(2);
             f2_meta->set_type(f2_tablet_column.type());
             f2_meta->set_length(f2_tablet_column.length());
             f2_meta->set_encoding(DEFAULT_ENCODING);
@@ -176,6 +176,13 @@ protected:
             TabletColumn f3_tablet_column = create_int_value(3, STORAGE_AGGREGATE_NONE, true, "2");
             ASSERT_TRUE(f3_tablet_column.has_default_value());
             new_struct_column.add_sub_column(f3_tablet_column);
+            {
+                auto f1_meta = meta2.mutable_children_columns(0);
+                f1_meta->set_unique_id(0);
+                auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
+                ASSERT_FALSE(res.ok());
+                f1_meta->set_unique_id(1);
+            }
             auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
             ASSERT_TRUE(res.ok());
             auto struct_reader = std::move(res).value();
@@ -271,7 +278,7 @@ protected:
                 Columns dst_columns;
                 dst_columns.emplace_back(std::move(dst_f1_column));
 
-                ColumnPtr dst_column = StructColumn::create(dst_columns, std::vector<std::string>{"f1"});
+                auto dst_column = StructColumn::create(std::move(dst_columns), std::vector<std::string>{"f1"});
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -313,6 +320,33 @@ protected:
 
                 ASSERT_EQ("{f2:'Column2'}", dst_column->debug_item(0));
             }
+        }
+
+        {
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f2", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            auto dst_f1_column = Int32Column::create();
+            auto dst_f2_column = BinaryColumn::create();
+            Columns dst_columns;
+            dst_columns.emplace_back(std::move(dst_f1_column));
+            dst_columns.emplace_back(std::move(dst_f2_column));
+            ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+            SparseRange<> range;
+            range.add(Range<>(0, src_column->size()));
+            auto status_or = iter->get_io_range_vec(range, dst_column.get());
+            ASSERT_TRUE(status_or.ok());
+            ASSERT_EQ((*status_or).size(), 1);
         }
     }
 

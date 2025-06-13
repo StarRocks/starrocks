@@ -46,7 +46,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -262,11 +261,7 @@ public class PluginInfo implements Writable {
         return Objects.hash(name);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
 
     public static PluginInfo read(DataInput in) throws IOException {
         String s = Text.readString(in);

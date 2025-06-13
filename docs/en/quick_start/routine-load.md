@@ -1,15 +1,14 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 2
 toc_max_heading_level: 2
-description: Redpanda with shared-data storage
-keywords: ['Kafka', 'Redpanda', 'shared-data', 'MinIO']
+description: Kafka routine load with shared-data storage
 ---
 
-# Loading with Redpanda to StarRocks using shared-data storage
+# Kafka routine load StarRocks using shared-data storage
 
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
 
 ## About Routine Load
 
@@ -46,7 +45,7 @@ There is a lot of information in this document, and it is presented with step-by
 
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL-compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL-compatible clients will work, and this guide covers the configuration of DBeaver and MySQL Workbench.
 
 ### curl
 
@@ -146,7 +145,7 @@ In order to use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO
 
 Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
-![View the MinIO access key](../assets/quick-start/MinIO-view-key.png)
+![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
 ---
 

@@ -19,24 +19,17 @@ import com.esotericsoftware.kryo.io.Output;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
-import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
-import com.starrocks.jni.connector.ConnectorScanner;
-import com.starrocks.utils.loader.ThreadContextClassLoader;
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import org.apache.iceberg.ContentFile;
-import org.apache.iceberg.FileContent;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
-import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -48,8 +41,7 @@ import java.util.stream.Collectors;
 import static org.apache.iceberg.util.ByteBuffers.toByteArray;
 import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 
-public class IcebergMetadataScanner extends ConnectorScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanner.class);
+public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
 
     protected static final List<String> SCAN_COLUMNS =
             ImmutableList.of(
@@ -93,18 +85,9 @@ public class IcebergMetadataScanner extends ConnectorScanner {
                     "equality_ids");
     protected static final List<String> DELETE_SCAN_WITH_STATS_COLUMNS =
             ImmutableList.<String>builder().addAll(DELETE_SCAN_COLUMNS).addAll(STATS_COLUMNS).build();
-    private static final int DATA_FILE = 0;
-    private static final int DELETE_FILE = 1;
     private final String manifestBean;
     private final String predicateInfo;
-    private final String serializedTable;
-    private final String[] requiredFields;
-    private final String[] metadataColumnTypes;
-    private ColumnType[] requiredTypes;
-    private final int fetchSize;
-    private final ClassLoader classLoader;
-    private Table table;
-    private boolean loadColumnStats;
+    private final boolean loadColumnStats;
     private Expression predicate;
     private ManifestFile manifestFile;
     private Kryo kryo;
@@ -113,77 +96,52 @@ public class IcebergMetadataScanner extends ConnectorScanner {
     private CloseableIterator<? extends ContentFile<?>> reader;
 
     public IcebergMetadataScanner(int fetchSize, Map<String, String> params) {
-        this.fetchSize = fetchSize;
-        this.requiredFields = params.get("required_fields").split(",");
-        this.metadataColumnTypes = params.get("metadata_column_types").split(",");
+        super(fetchSize, params);
         this.predicateInfo = params.get("serialized_predicate");
-        this.serializedTable = params.get("serialized_table");
         this.manifestBean = params.get("split_info");
         this.loadColumnStats = Boolean.parseBoolean(params.get("load_column_stats"));
-        this.classLoader = this.getClass().getClassLoader();
     }
 
     @Override
-    public void open() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            this.predicate = predicateInfo.isEmpty() ? Expressions.alwaysTrue() : deserializeFromBase64(predicateInfo);
-            this.manifestFile = deserializeFromBase64(manifestBean);
-            this.table = deserializeFromBase64(serializedTable);
-            parseRequiredTypes();
-            initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
-            initReader();
-            initSerializer();
-        } catch (Exception e) {
-            close();
-            String msg = "Failed to open the iceberg metadata reader.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
-        }
+    public void doOpen() {
+        this.predicate = predicateInfo.isEmpty() ? Expressions.alwaysTrue() : deserializeFromBase64(predicateInfo);
+        this.manifestFile = deserializeFromBase64(manifestBean);
+        initSerializer();
     }
 
     @Override
-    public void close() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            if (reader != null) {
-                reader.close();
+    public int doGetNext() {
+        int numRows = 0;
+        for (; numRows < getTableSize(); numRows++) {
+            if (!reader.hasNext()) {
+                break;
             }
-            if (output != null) {
-                output.close();
-            }
-        } catch (IOException e) {
-            LOG.error("Failed to close the iceberg metadata reader.", e);
-            throw new IOException("Failed to close the iceberg metadata reader.", e);
-        }
-    }
-
-    @Override
-    public int getNext() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            int numRows = 0;
-            for (; numRows < getTableSize(); numRows++) {
-                if (!reader.hasNext()) {
-                    break;
-                }
-                ContentFile<?> file = reader.next();
-                for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = get(requiredFields[i], file);
-                    if (fieldData == null) {
-                        appendData(i, null);
-                    } else {
-                        ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData);
-                        appendData(i, fieldValue);
-                    }
+            ContentFile<?> file = reader.next();
+            for (int i = 0; i < requiredFields.length; i++) {
+                Object fieldData = get(requiredFields[i], file);
+                if (fieldData == null) {
+                    appendData(i, null);
+                } else {
+                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData);
+                    appendData(i, fieldValue);
                 }
             }
-            return numRows;
-        } catch (Exception e) {
-            close();
-            LOG.error("Failed to get the next off-heap table chunk of iceberg metadata.", e);
-            throw new IOException("Failed to get the next off-heap table chunk of iceberg metadata.", e);
+        }
+        return numRows;
+    }
+
+    @Override
+    public void doClose() throws IOException {
+        if (reader != null) {
+            reader.close();
+        }
+        if (output != null) {
+            output.close();
         }
     }
 
-    private void initReader() {
+    @Override
+    protected void initReader() {
         Map<Integer, PartitionSpec> specs = table.specs();
         List<String> scanColumns;
         if (manifestFile.content() == ManifestContent.DATA) {
@@ -216,7 +174,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
     private Object get(String columnName, ContentFile<?> file) {
         switch (columnName) {
             case "content":
-                return file.content() == FileContent.DATA ? DATA_FILE : DELETE_FILE;
+                return file.content().id();
             case "file_path":
                 return file.path().toString();
             case "file_format":
@@ -300,12 +258,5 @@ public class IcebergMetadataScanner extends ConnectorScanner {
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         entry -> toByteArray(entry.getValue())));
-    }
-
-    private void parseRequiredTypes() {
-        requiredTypes = new ColumnType[requiredFields.length];
-        for (int i = 0; i < requiredFields.length; i++) {
-            requiredTypes[i] = new ColumnType(requiredFields[i], metadataColumnTypes[i]);
-        }
     }
 }

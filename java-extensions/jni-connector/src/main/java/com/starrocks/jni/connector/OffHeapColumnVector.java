@@ -333,6 +333,12 @@ public class OffHeapColumnVector {
         return elementsAppended++;
     }
 
+    public int appendTime(int v) {
+        reserve(elementsAppended + 1);
+        putDouble(elementsAppended, (double) v / 1000);
+        return elementsAppended++;
+    }
+
     private void putDouble(int rowId, double value) {
         Platform.putDouble(null, data + rowId * 8L, value);
     }
@@ -529,6 +535,9 @@ public class OffHeapColumnVector {
             case DOUBLE:
                 appendDouble(o.getDouble());
                 break;
+            case TIME:
+                appendTime(o.getInt());
+                break;
             case BINARY:
                 appendBinary(o.getBytes());
                 break;
@@ -626,11 +635,13 @@ public class OffHeapColumnVector {
                 sb.append("<binary>");
                 break;
             case STRING:
-            case DATE:
+                sb.append(getUTF8String(i));
+                break;
             case DATETIME:
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
-                sb.append(getUTF8String(i));
+                // using long
+                sb.append(getLong(i));
                 break;
             case DECIMALV2:
             case DECIMAL32:
@@ -716,7 +727,14 @@ public class OffHeapColumnVector {
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
                 if (type.isStruct()) {
-                    if (numNulls != c.numNulls || elementsAppended != c.elementsAppended) {
+                    // For example
+                    // struct<a: null>
+                    // struct<a: null>
+                    // struct<a: null>
+                    // numNulls for struct level = 0
+                    // c.numNulls for a level = 3
+                    // numNulls must always <= c.numNulls
+                    if (numNulls <= c.numNulls && elementsAppended != c.elementsAppended) {
                         throw new RuntimeException(
                                 "struct type check failed, root numNulls=" + numNulls + ", elementsAppended=" +
                                 elementsAppended + "; however, child " + c.type.name + " numNulls=" + c.numNulls +

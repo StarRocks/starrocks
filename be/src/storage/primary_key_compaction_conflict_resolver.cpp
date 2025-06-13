@@ -27,7 +27,7 @@ namespace starrocks {
 Status PrimaryKeyCompactionConflictResolver::execute() {
     Schema pkey_schema = generate_pkey_schema();
 
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
 
     // init rows mapper iter
@@ -41,8 +41,11 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
+                    RETURN_IF_ERROR(breakpoint_check());
                     // only hold pkey, so can use larger chunk size
-                    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
+                    ChunkUniquePtr chunk_shared_ptr;
+                    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
+                                                ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
                     auto chunk = chunk_shared_ptr.get();
                     auto col = pk_column->clone();
                     vector<uint32_t> tmp_deletes;
@@ -94,7 +97,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                                 }
                                 // 6. replace pk index
                                 TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                                              col.get()));
                                 RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, current_rowid,
                                                                       replace_indexes, *col));
                                 current_rowid += chunk->num_rows();

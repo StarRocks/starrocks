@@ -122,8 +122,6 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         return inputs.get(0).getDomainProperty();
     }
 
-
-
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTableFunction(this, context);

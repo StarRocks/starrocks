@@ -45,7 +45,7 @@ public:
         thrift_from_json_string(base, data);
     }
 
-    void init_fs_options(FSOptions* options, bool v2 = false) {
+    void init_fs_options(FSOptions* options) {
         TCloudConfiguration* cloud_configuration = _pool.add(new TCloudConfiguration());
         options->cloud_configuration = cloud_configuration;
         std::map<std::string, std::string> kvs = {
@@ -53,18 +53,7 @@ public:
                 {"yyy", "yyy0"},
                 {"zzz", "zzz0"},
         };
-        if (v2) {
-            cloud_configuration->__set_cloud_properties_v2(kvs);
-        } else {
-            std::vector<TCloudProperty> props;
-            for (const auto& kv : kvs) {
-                TCloudProperty prop;
-                prop.key = kv.first;
-                prop.value = kv.second;
-                props.push_back(prop);
-            }
-            cloud_configuration->__set_cloud_properties(props);
-        }
+        cloud_configuration->__set_cloud_properties(kvs);
     }
 
     void init_hdfs_scanner_context(HdfsScannerContext* ctx, TupleDescriptor* tuple_desc) {
@@ -292,7 +281,7 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
 
     {
         FSOptions fs_options;
-        init_fs_options(&fs_options, true);
+        init_fs_options(&fs_options);
         options.fs_options = &fs_options;
 
         auto scanner = create_hive_jni_scanner(options);

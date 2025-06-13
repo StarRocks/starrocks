@@ -305,7 +305,7 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
         ), ImmutableMap.of("200", 15L, "220", 14L, "320", 12L)));
     }
 
-    private void addHistogramStatistis(String fileName, Type type, int scala) {
+    public void addHistogramStatistis(String fileName, Type type, int scala) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/tpch-histogram-cost/histogram-stats/" + fileName + ".json");
 
@@ -377,7 +377,7 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
             ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(getColumnStatistic(table, col)).
                     setHistogram(histogram).build();
             long rowCount = tableRowCount.getOrDefault(table.getName(), -1);
-            connectorTableColumnStats.add(new ConnectorTableColumnStats(columnStatistic, rowCount));
+            connectorTableColumnStats.add(new ConnectorTableColumnStats(columnStatistic, rowCount, "2024-01-01 00:00:00"));
         }
         return connectorTableColumnStats;
     }

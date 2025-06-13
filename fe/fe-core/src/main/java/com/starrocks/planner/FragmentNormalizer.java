@@ -35,11 +35,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
@@ -49,7 +50,6 @@ import com.starrocks.thrift.TNormalPlanNode;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.protocol.TSimpleJSONProtocol;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -61,10 +61,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static com.starrocks.rpc.ConfigurableSerDesFactory.Protocol.SIMPLE_JSON;
 
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
 // is normalized, FragmentNormalizer draws out required information as follows from the fragment.
@@ -203,7 +206,7 @@ public class FragmentNormalizer {
     }
 
     public Integer remapSlotId(Integer slotId) {
-        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getMaxId()).asInt();
+        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getNextId()).asInt();
     }
 
     public List<Integer> remapSlotIds(List<SlotId> slotIds) {
@@ -232,7 +235,7 @@ public class FragmentNormalizer {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
         try {
-            TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
@@ -330,6 +333,10 @@ public class FragmentNormalizer {
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
             cacheParam.setKeys_type(keysType.toThrift());
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
+            if (RunMode.isSharedDataMode()) {
+                cacheParam.setIs_lake(true);
+            }
+
             fragment.setCacheParam(cacheParam);
             return true;
         } catch (TException | NoSuchAlgorithmException e) {
@@ -511,8 +518,8 @@ public class FragmentNormalizer {
     }
 
     List<Expr> getPartitionRangePredicates(List<Expr> conjuncts,
-                                           List<Map.Entry<Long, Range<PartitionKey>>> rangeMap,
-                                           RangePartitionInfo partitionInfo,
+                                           List<Pair<Long, Range<PartitionKey>>> rangeMap,
+                                           List<Column> partitionColumns,
                                            SlotId partitionSlotId) {
 
         List<Expr> exprs = conjuncts.stream().flatMap(e -> flatAndPredicate(e).stream()).collect(Collectors.toList());
@@ -540,20 +547,20 @@ public class FragmentNormalizer {
         //  create a simpleRangeMap without predicates' decomposition to turn on the cache. date_trunc function
         //  is frequently-used, we should decompose predicates contains date_trunc in the future.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         }
 
         if (boundSimpleRegionExprs.isEmpty()) {
-            for (Map.Entry<Long, Range<PartitionKey>> range : rangeMap) {
-                selectedRangeMap.put(range.getKey(), range.getValue().toString());
+            for (Pair<Long, Range<PartitionKey>> range : rangeMap) {
+                selectedRangeMap.put(range.first, range.second.toString());
             }
             return conjuncts;
         }
 
-        Column partitionColumn = partitionInfo.getPartitionColumns().get(0);
+        Column partitionColumn = partitionColumns.get(0);
         List<Range<PartitionKey>> partitionRanges = rangeMap.stream()
-                .map(Map.Entry::getValue).collect(Collectors.toList());
+                .map(r -> r.second).collect(Collectors.toList());
 
         // compute the intersection region of partition range and region predicates
         for (Expr expr : boundSimpleRegionExprs) {
@@ -572,17 +579,22 @@ public class FragmentNormalizer {
             if (range.isEmpty()) {
                 continue;
             }
-            range = toClosedOpenRange(range);
-            Map.Entry<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
+            Optional<Range> optRange = Optional.empty();
+            try {
+                optRange = Optional.ofNullable(toClosedOpenRange(range));
+            } catch (Throwable ignored) {
+            }
+
+            Pair<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
             // when the range is to total cover this partition, we also cache it
-            if (!range.isEmpty()) {
-                selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
+            if (optRange.isPresent() && !optRange.get().isEmpty()) {
+                selectedRangeMap.put(partitionKeyRange.first, optRange.get().toString());
             }
         }
         // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
         // we get a empty selectedRangeMap. it is defensive-style programming.
         if (selectedRangeMap.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         } else {
             List<Expr> remainConjuncts = Lists.newArrayList();
@@ -596,7 +608,7 @@ public class FragmentNormalizer {
     // just create a simple selectedRangeMap which is used to construct cache key in BE.
     public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
         selectedRangeMap = Maps.newHashMap();
-        selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
+        selectedPartitionIds.forEach(id -> selectedRangeMap.put(id, "[]"));
     }
 
     public Set<SlotId> getSlotsUseAggColumns() {
@@ -719,7 +731,7 @@ public class FragmentNormalizer {
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();
         for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
-             currNode = currNode.getChild(0)) {
+                currNode = currNode.getChild(0)) {
             leftNodesTopDown.add(currNode);
         }
 
@@ -773,15 +785,17 @@ public class FragmentNormalizer {
         // Not cacheable unless alien GRF(s) take effects on this PlanFragment.
         // The alien GRF(s) mean the GRF(S) that not created by PlanNodes of the subtree rooted at
         // the PlanFragment.planRoot.
+
         Set<Integer> grfBuilders =
                 fragment.getProbeRuntimeFilters().values().stream().filter(RuntimeFilterDescription::isHasRemoteTargets)
                         .map(RuntimeFilterDescription::getBuildPlanNodeId).collect(Collectors.toSet());
         if (!grfBuilders.isEmpty()) {
             List<PlanFragment> rightSiblings = Lists.newArrayList();
             collectRightSiblingFragments(root, rightSiblings, Sets.newHashSet());
-            Set<Integer> acceptableGrfBuilders = rightSiblings.stream().flatMap(
-                    frag -> frag.getBuildRuntimeFilters().values().stream().map(
-                            RuntimeFilterDescription::getBuildPlanNodeId)).collect(Collectors.toSet());
+            Set<Integer> acceptableGrfBuilders = rightSiblings.stream()
+                    .flatMap(frag -> frag.getBuildRuntimeFilters().values().stream())
+                    .map(RuntimeFilterDescription::getBuildPlanNodeId)
+                    .collect(Collectors.toSet());
             boolean hasAlienGrf = !Sets.difference(grfBuilders, acceptableGrfBuilders).isEmpty();
             if (hasAlienGrf) {
                 return false;

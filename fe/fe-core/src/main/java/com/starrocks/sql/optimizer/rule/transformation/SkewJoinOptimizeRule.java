@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -51,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -97,9 +99,15 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     }
 
     @Override
+    public List<Rule> successorRules() {
+        // skew join generate new join and on predicate, need to push down join on expression to child project again
+        return Lists.newArrayList(new PushDownJoinOnExpressionToChildProject());
+    }
+
+    @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         // respect the join hint
-        if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+        if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
             return true;
         }
 
@@ -226,7 +234,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             }
         }
         // when use hint, we should check the skew column, and throw exception if not found
-        if (rightSkewColumn == null && oldJoinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+        if (rightSkewColumn == null && oldJoinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
             throw new StarRocksConnectorException("Can't find skew column");
         } else if (rightSkewColumn == null) {
             return Lists.newArrayList();
@@ -268,7 +276,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         LogicalJoinOperator.Builder joinBuilder = LogicalJoinOperator.builder();
         LogicalJoinOperator newJoinOperator = joinBuilder.withOperator(oldJoinOperator)
                 .setOnPredicate(andPredicateOperator)
-                .setJoinHint(JoinOperator.HINT_SKEW)
+                .setJoinHint(HintNode.HINT_JOIN_SKEW)
                 .build();
 
         OptExpression joinExpression = OptExpression.create(newJoinOperator, newLeftChild, newRightChild);
@@ -310,8 +318,10 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         when.add(roundFnOperator);
         when.add(inPredicateOperator);
         when.add(roundFnOperator);
-        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(roundFnOperator.getType(), null,
+        ScalarOperator caseWhenOperator = new CaseWhenOperator(roundFnOperator.getType(), null,
                 ConstantOperator.createBigint(0), when);
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        caseWhenOperator = rewriter.rewrite(caseWhenOperator, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
 
         Map<ColumnRefOperator, ScalarOperator> projectMaps = columnRefSet.getStream()
                 .map(columnRefId -> context.getColumnRefFactory().getColumnRef(columnRefId))
@@ -427,7 +437,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         LogicalJoinOperator.Builder joinBuilder = new LogicalJoinOperator.Builder();
         joinBuilder.setJoinType(JoinOperator.LEFT_OUTER_JOIN)
                 .setOnPredicate(onPredicate)
-                .setJoinHint(JoinOperator.HINT_BROADCAST);
+                .setJoinHint(HintNode.HINT_JOIN_BROADCAST);
         LogicalJoinOperator joinOperator = joinBuilder.build();
         OptExpression joinOptExpression = OptExpression.create(joinOperator, input, skewValueSaltOpt);
         Map<ColumnRefOperator, ScalarOperator> joinProjectMap = input.getOutputColumns().getStream().

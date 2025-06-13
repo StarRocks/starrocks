@@ -54,6 +54,9 @@ public:
     // [thread-safe]
     void unload();
 
+    // Whether index is normally loaded
+    bool is_loaded();
+
     // insert new primary keys into this index. caller need to make sure key doesn't exists
     // in index
     // [not thread-safe]
@@ -153,6 +156,8 @@ public:
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    Status get_load_status() { return _status; }
+
     // only for ut
     void set_status(bool loaded, Status st) {
         _loaded = loaded;
@@ -161,6 +166,9 @@ public:
 
 protected:
     void _set_schema(const Schema& pk_schema);
+    // Return the pointer of specific position of slice array.
+    const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                                        std::vector<Slice>* key_slices) const;
 
 private:
     Status _do_load(Tablet* tablet);
@@ -170,9 +178,6 @@ private:
 
     Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
                                     uint32_t idx_end, std::vector<uint64_t>* values) const;
-
-    const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                                        std::vector<Slice>* key_slices) const;
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
 
@@ -199,7 +204,7 @@ protected:
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
-    std::unique_ptr<PersistentIndex> _persistent_index;
+    std::shared_ptr<PersistentIndex> _persistent_index;
 
 private:
     size_t _key_size = 0;

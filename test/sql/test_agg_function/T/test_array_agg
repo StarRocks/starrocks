@@ -11,7 +11,7 @@ DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -327,3 +327,100 @@ select array_agg(separator NULL);
 
 select array_agg_distinct(name order by 1 asc), array_agg(distinct name order by 1 desc), array_agg(name order by 1 desc) from ss order by 1;
 select array_agg_distinct(name order by 1), cardinality(array_agg_distinct(arr order by score)) from ss group by id order by 1;
+
+-- name: test_array_agg_all_type
+drop table if exists test_array_agg;
+create table test_array_agg (
+    id INT,
+    col_boolean BOOLEAN,
+    col_tinyint TINYINT,
+    col_smallint SMALLINT,
+    col_int INT,
+    col_bigint BIGINT,
+    col_largeint LARGEINT,
+    col_float FLOAT,
+    col_double DOUBLE,
+    col_varchar VARCHAR(100),
+    col_char CHAR(10),
+    col_datetime DATETIME,
+    col_date DATE,
+    col_array ARRAY<INT>,
+    col_map MAP<STRING, INT>,
+    col_struct STRUCT<f1 INT, f2 STRING>
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into test_array_agg values
+(1, true, 10, 100, 1000, 10000, 100000, 1.1, 2.2, 'hello', 'char_test', '2024-01-01 12:00:00', '2024-01-01', [1,2,3], map{"key1": 1, "key2": 2}, row(1, "test1")),
+(2, false, 20, 200, 2000, 20000, 200000, 3.3, 4.4, 'world', 'char_test2', '2024-02-02 13:00:00', '2024-02-02', [4,5,6], map{"key3": 3, "key4": 4}, row(2, "test2")),
+(3, null, 30, 300, 3000, 30000, 300000, 5.5, 6.6, null, null, null, null, null, null, null),
+(4, true, 10, 100, 1000, 10000, 100000, 1.1, 2.2, 'hello', 'char_test', '2024-01-01 12:00:00', '2024-01-01', [1,2,3], map{"key1": 1, "key2": 2}, row(1, "test1")),
+(5, false, 20, 200, 2000, 20000, 200000, 3.3, 4.4, 'world', 'char_test2', '2024-02-02 13:00:00', '2024-02-02', [4,5,6], map{"key3": 3, "key4": 4}, row(2, "test2")),
+(1, true, 10, 100, 1000, 10000, 100000, 1.1, 2.2, 'hello', 'char_test', '2024-01-01 12:00:00', '2024-01-01', [1,2,3], map{"key1": 1, "key2": 2}, row(1, "test1")),
+(2, false, 20, 200, 2000, 20000, 200000, 3.3, 4.4, 'world', 'char_test2', '2024-02-02 13:00:00', '2024-02-02', [4,5,6], map{"key3": 3, "key4": 4}, row(2, "test2"));
+
+set enable_per_bucket_optimize=false;
+
+SELECT ARRAY_AGG(col_boolean ORDER BY id ASC NULLS LAST) FROM test_array_agg;
+SELECT ARRAY_AGG(col_tinyint ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_smallint ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_int ORDER BY id DESC NULLS FIRST) FROM test_array_agg;
+SELECT ARRAY_AGG(col_bigint ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_largeint ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_float ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_double ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_varchar ORDER BY id ASC NULLS FIRST) FROM test_array_agg;
+SELECT ARRAY_AGG(col_char ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_datetime ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_date ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_array ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_map ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(col_struct ORDER BY id ASC) FROM test_array_agg;
+
+SELECT id, ARRAY_AGG(col_boolean ORDER BY id ASC NULLS LAST) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_tinyint ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_smallint ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_int ORDER BY id DESC NULLS FIRST) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_bigint ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_largeint ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_float ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_double ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_varchar ORDER BY id ASC NULLS FIRST) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_char ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_datetime ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_date ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_array ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_map ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(col_struct ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+
+SELECT ARRAY_AGG(DISTINCT col_boolean ORDER BY id ASC NULLS LAST) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_tinyint ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_smallint ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_int ORDER BY id DESC NULLS FIRST) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_bigint ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_largeint ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_float ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_double ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_varchar ORDER BY id ASC NULLS FIRST) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_char ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_datetime ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_date ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_array ORDER BY id ASC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_map ORDER BY id DESC) FROM test_array_agg;
+SELECT ARRAY_AGG(DISTINCT col_struct ORDER BY id ASC) FROM test_array_agg;
+
+SELECT id, ARRAY_AGG(DISTINCT col_boolean ORDER BY id ASC NULLS LAST) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_tinyint ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_smallint ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_int ORDER BY id DESC NULLS FIRST) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_bigint ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_largeint ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_float ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_double ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_varchar ORDER BY id ASC NULLS FIRST) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_char ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_datetime ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_date ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_array ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_map ORDER BY id DESC) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_AGG(DISTINCT col_struct ORDER BY id ASC) FROM test_array_agg GROUP BY id ORDER BY id;

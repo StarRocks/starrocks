@@ -32,6 +32,7 @@ struct TCloudProperty {
 
 struct TCloudConfiguration {
     1: optional TCloudType cloud_type;
-    2: optional list<TCloudProperty> cloud_properties; // Deprecated
-    3: optional map<string, string> cloud_properties_v2;
+    2: optional list<TCloudProperty> deprecated_cloud_properties; // Deprecated
+    3: optional map<string, string> cloud_properties;
+    4: optional bool azure_use_native_sdk;
 }

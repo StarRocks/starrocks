@@ -19,18 +19,39 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TResultBatch;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class TaskRunStatus implements Writable {
+    private static final Logger LOG = LogManager.getLogger(TaskRun.class);
+
+    // Sort task run status by create time in descending order
+    public static final Comparator<TaskRunStatus> COMPARATOR_BY_CREATE_TIME_DESC =
+            Comparator.comparingLong(TaskRunStatus::getCreateTime).reversed();
 
     // A refresh may contain a batch of task runs, startTaskRunId is to mark the unique id of the batch task run status.
     // You can use the startTaskRunId to find the batch of task runs.
@@ -64,7 +85,11 @@ public class TaskRunStatus implements Writable {
     private String postRun;
 
     @SerializedName("user")
+    @Deprecated
     private String user;
+
+    @SerializedName("userIdentity")
+    private UserIdentity userIdentity;
 
     @SerializedName("expireTime")
     private long expireTime;
@@ -117,6 +142,11 @@ public class TaskRunStatus implements Writable {
     }
 
     public String getStartTaskRunId() {
+        // NOTE: startTaskRunId may not be set since it's initialized in TaskRun#executeTaskRun
+        // But properties must contain START_TASK_RUN_ID first.
+        if (properties != null && properties.containsKey(TaskRun.START_TASK_RUN_ID)) {
+            return properties.get(TaskRun.START_TASK_RUN_ID);
+        }
         return startTaskRunId;
     }
 
@@ -203,6 +233,14 @@ public class TaskRunStatus implements Writable {
 
     public void setUser(String user) {
         this.user = user;
+    }
+
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
+    }
+
+    public void setUserIdentity(UserIdentity userIdentity) {
+        this.userIdentity = userIdentity;
     }
 
     public String getPostRun() {
@@ -299,6 +337,10 @@ public class TaskRunStatus implements Writable {
 
     public void setProcessStartTime(long processStartTime) {
         this.processStartTime = processStartTime;
+        // update process start time in mvTaskRunExtraMessage to display in the web page
+        if (mvTaskRunExtraMessage != null) {
+            mvTaskRunExtraMessage.setProcessStartTime(processStartTime);
+        }
     }
 
     public Map<String, String> getProperties() {
@@ -318,8 +360,7 @@ public class TaskRunStatus implements Writable {
 
     public Constants.TaskRunState getLastRefreshState() {
         if (isRefreshFinished()) {
-            Preconditions.checkArgument(Constants.isFinishState(state),
-                    String.format("state %s must be finish state", state));
+            Preconditions.checkArgument(state.isFinishState(), String.format("state %s must be finish state", state));
             return state;
         } else {
             // {@code processStartTime == 0} means taskRun have not been scheduled, its state should be pending.
@@ -332,30 +373,68 @@ public class TaskRunStatus implements Writable {
         if (state.equals(Constants.TaskRunState.FAILED)) {
             return true;
         }
-        if (!state.equals(Constants.TaskRunState.SUCCESS)) {
+        if (!state.isFinishState()) {
             return false;
         }
-        if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
-                !Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart())) {
+        return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
+    }
+
+    public long calculateRefreshProcessDuration() {
+        if (finishTime > processStartTime) {
+            // NOTE:
+            // It's mostly because of tech debt, before this pr, the processStartTime can be persisted as 0 .
+            // In this case to avoid return a weird duration we choose the createTime as startTime
+            if (processStartTime > 0) {
+                return finishTime - processStartTime;
+            } else {
+                return finishTime - createTime;
+            }
+        } else {
+            return 0L;
+        }
+    }
+
+    public boolean matchByTaskName(String dbName, Set<String> taskNames) {
+        if (dbName != null && !dbName.equals(getDbName())) {
+            return false;
+        }
+        if (CollectionUtils.isNotEmpty(taskNames) && !taskNames.contains(getTaskName())) {
             return false;
         }
         return true;
     }
 
-    public long calculateRefreshProcessDuration() {
-        if (finishTime > processStartTime) {
-            return finishTime - processStartTime;
-        } else {
-            return 0L;
+    public boolean match(TGetTasksParams params) {
+        if (params == null) {
+            return true;
         }
+        String dbName = params.db;
+        if (dbName != null && !dbName.equals(getDbName())) {
+            return false;
+        }
+        String taskName = params.task_name;
+        if (taskName != null && !taskName.equalsIgnoreCase(getTaskName())) {
+            return false;
+        }
+        String queryId = params.query_id;
+        if (queryId != null && !queryId.equalsIgnoreCase(getQueryId())) {
+            return false;
+        }
+        String state = params.state;
+        if (state != null && !state.equalsIgnoreCase(getState().name())) {
+            return false;
+        }
+        return true;
     }
 
-    public long calculateRefreshDuration() {
-        if (finishTime > createTime) {
-            return finishTime - createTime;
-        } else {
-            return 0L;
-        }
+    public String getDefinition() {
+        return definition;
+    }
+
+    public void setDefinition(String definition) {
+        this.definition = definition;
     }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
@@ -363,11 +442,7 @@ public class TaskRunStatus implements Writable {
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public String toString() {
@@ -391,5 +466,53 @@ public class TaskRunStatus implements Writable {
                 ", mergeRedundant=" + mergeRedundant +
                 ", extraMessage=" + getExtraMessage() +
                 '}';
+    }
+
+    public String toJSON() {
+        return GsonUtils.GSON.toJson(this);
+    }
+
+    public static TaskRunStatus fromJson(String json) {
+        return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
+    }
+
+    /**
+     * Only used for deserialization of ResultBatch
+     */
+    public static class TaskRunStatusJSONRecord {
+        /**
+         * Only one item in the array, like:
+         * { data: [ {TaskRunStatus} ] }
+         */
+        @SerializedName("data")
+        public List<TaskRunStatus> data;
+
+        public static TaskRunStatusJSONRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, TaskRunStatusJSONRecord.class);
+        }
+    }
+
+    public static List<TaskRunStatus> fromResultBatch(List<TResultBatch> batches) {
+        List<TaskRunStatus> res = new ArrayList<>();
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                String jsonString = "";
+                try {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    jsonString = copied.toString(Charset.defaultCharset());
+                    res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+                } catch (Exception e) {
+                    // If the task run history is corrupted, we can use `ignore_task_run_history_replay_error` config to ignore
+                    // it and continue to process the next one.
+                    if (!Config.ignore_task_run_history_replay_error) {
+                        LOG.warn("Failed to deserialize TaskRunStatus from json， please delete it from " +
+                                "_statistics_.task_run_history table: {}", jsonString, e);
+                        throw new RuntimeException("Failed to deserialize TaskRunStatus from json， please delete it from " +
+                                "_statistics_.task_run_history table: " + jsonString, e);
+                    }
+                }
+            }
+        }
+        return res;
     }
 }

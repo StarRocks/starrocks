@@ -27,6 +27,7 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SetOperationNode;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
@@ -85,7 +86,12 @@ public class ExecutionFragment {
     private Boolean cachedIsReplicated = null;
     private Boolean cachedIsLocalBucketShuffleJoin = null;
 
+    private Boolean cachedIsColocateSet = null;
+
     private boolean isRightOrFullBucketShuffle = false;
+    // used for phased schedule
+    private boolean isScheduled = false;
+    private boolean needReportFragmentFinish = false;
 
     public ExecutionFragment(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex) {
         this.executionDAG = executionDAG;
@@ -306,6 +312,23 @@ public class ExecutionFragment {
         return cachedIsLocalBucketShuffleJoin;
     }
 
+    private boolean isColocateSet(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+        if (root instanceof SetOperationNode) {
+            return root.isColocate();
+        }
+        return root.getChildren().stream().anyMatch(this::isColocateSet);
+    }
+
+    public boolean isColocateSet() {
+        if (cachedIsColocateSet == null) {
+            cachedIsColocateSet = isColocateSet(planFragment.getPlanRoot());
+        }
+        return cachedIsColocateSet;
+    }
+
     public boolean isRightOrFullBucketShuffle() {
         isLocalBucketShuffleJoin(); // isRightOrFullBucketShuffle is calculated when calculating isBucketShuffleJoin.
         return isRightOrFullBucketShuffle;
@@ -425,19 +448,34 @@ public class ExecutionFragment {
             return false;
         }
 
+        boolean hasBucketShuffle = false;
         if (root instanceof JoinNode) {
             JoinNode joinNode = (JoinNode) root;
             if (joinNode.isLocalHashBucket()) {
-                isRightOrFullBucketShuffle = joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
-                return true;
+                hasBucketShuffle = true;
+                isRightOrFullBucketShuffle |= joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
             }
         }
 
-        boolean childHasBucketShuffle = false;
         for (PlanNode child : root.getChildren()) {
-            childHasBucketShuffle |= isLocalBucketShuffleJoin(child);
+            hasBucketShuffle |= isLocalBucketShuffleJoin(child);
         }
 
-        return childHasBucketShuffle;
+        return hasBucketShuffle;
+    }
+
+    public boolean isScheduled() {
+        return isScheduled;
+    }
+
+    public void setIsScheduled(boolean isScheduled) {
+        this.isScheduled = isScheduled;
+    }
+
+    public boolean isNeedReportFragmentFinish() {
+        return needReportFragmentFinish;
+    }
+    public void setNeedReportFragmentFinish(boolean needReportFragmentFinish) {
+        this.needReportFragmentFinish = needReportFragmentFinish;
     }
 }

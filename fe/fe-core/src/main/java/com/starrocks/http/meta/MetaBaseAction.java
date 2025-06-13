@@ -34,6 +34,7 @@
 
 package com.starrocks.http.meta;
 
+import com.google.common.base.Strings;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -53,11 +54,8 @@ public class MetaBaseAction extends WebBaseAction {
     public static final String TOKEN = "token";
     public static final String RUN_MODE = "run_mode";
 
-    protected File imageDir;
-
-    public MetaBaseAction(ActionController controller, File imageDir) {
+    public MetaBaseAction(ActionController controller) {
         super(controller);
-        this.imageDir = imageDir;
     }
 
     @Override
@@ -88,7 +86,7 @@ public class MetaBaseAction extends WebBaseAction {
         return true;
     }
 
-    protected void writeFileResponse(BaseRequest request, BaseResponse response, File file) {
+    protected void writeFileResponse(BaseRequest request, BaseResponse response, File file, String checksum) {
         if (file == null || !file.exists()) {
             response.appendContent("File does not exist.");
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
@@ -98,6 +96,9 @@ public class MetaBaseAction extends WebBaseAction {
         // add custom header
         response.updateHeader(CONTENT_DISPOSITION, "attachment; filename=" + file.getName());
         response.updateHeader(MetaHelper.X_IMAGE_SIZE, String.valueOf(file.length()));
+        if (!Strings.isNullOrEmpty(checksum)) {
+            response.updateHeader(MetaHelper.X_IMAGE_CHECKSUM, checksum);
+        }
 
         writeObjectResponse(request, response, HttpResponseStatus.OK, file, file.getName(), true);
         return;

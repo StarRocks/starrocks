@@ -16,14 +16,20 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
+import com.starrocks.sql.common.PCell;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.shrinkToSize;
 
 /**
  * Store the update information of MV used for mv rewrite(mv refresh can use it later).
  */
 public class MvUpdateInfo {
+    private final MaterializedView mv;
     // The type of mv refresh later
     private final MvToRefreshType mvToRefreshType;
     // The partition names of mv to refresh
@@ -37,6 +43,9 @@ public class MvUpdateInfo {
     // The consistency mode of query rewrite
     private final TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode;
 
+    // If the base table is a mv, needs to record the mapping of mv partition name to partition range
+    private final Map<String, PCell> mvPartitionNameToCellMap = Maps.newHashMap();
+
     /**
      * Marks the type of mv refresh later.
      */
@@ -47,14 +56,34 @@ public class MvUpdateInfo {
         UNKNOWN // unknown type
     }
 
-    public MvUpdateInfo(MvToRefreshType mvToRefreshType) {
+    public MvUpdateInfo(MaterializedView mv, MvToRefreshType mvToRefreshType) {
+        this.mv = mv;
         this.mvToRefreshType = mvToRefreshType;
         this.queryRewriteConsistencyMode = TableProperty.QueryRewriteConsistencyMode.CHECKED;
     }
 
-    public MvUpdateInfo(MvToRefreshType mvToRefreshType, TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode) {
+    public MvUpdateInfo(MaterializedView mv, MvToRefreshType mvToRefreshType,
+                        TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode) {
+        this.mv = mv;
         this.mvToRefreshType = mvToRefreshType;
         this.queryRewriteConsistencyMode = queryRewriteConsistencyMode;
+    }
+
+    public static MvUpdateInfo unknown(MaterializedView mv) {
+        return new MvUpdateInfo(mv, MvToRefreshType.UNKNOWN);
+    }
+
+    public static MvUpdateInfo noRefresh(MaterializedView mv) {
+        return new MvUpdateInfo(mv, MvToRefreshType.NO_REFRESH);
+    }
+
+    public static MvUpdateInfo fullRefresh(MaterializedView mv) {
+        return new MvUpdateInfo(mv, MvToRefreshType.FULL);
+    }
+
+    public static MvUpdateInfo partialRefresh(MaterializedView mv,
+                                              TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode) {
+        return new MvUpdateInfo(mv, MvToRefreshType.PARTIAL, queryRewriteConsistencyMode);
     }
 
     public MvToRefreshType getMvToRefreshType() {
@@ -63,6 +92,14 @@ public class MvUpdateInfo {
 
     public boolean isValidRewrite() {
         return mvToRefreshType == MvToRefreshType.PARTIAL || mvToRefreshType == MvToRefreshType.NO_REFRESH;
+    }
+
+    public void addMvToRefreshPartitionNames(String partitionName) {
+        mvToRefreshPartitionNames.add(partitionName);
+    }
+
+    public void addMvToRefreshPartitionNames(Set<String> partitionNames) {
+        mvToRefreshPartitionNames.addAll(partitionNames);
     }
 
     public Set<String> getMvToRefreshPartitionNames() {
@@ -85,27 +122,48 @@ public class MvUpdateInfo {
         return queryRewriteConsistencyMode;
     }
 
-    @Override
-    public String toString() {
-        return "MvUpdateInfo{" +
-                "refreshType=" + mvToRefreshType +
-                ", mvToRefreshPartitionNames=" + mvToRefreshPartitionNames +
-                ", basePartToMvPartNames=" + basePartToMvPartNames +
-                ", mvPartToBasePartNames=" + mvPartToBasePartNames +
-                '}';
+    public void addMVPartitionNameToCellMap(Map<String, PCell> m) {
+        mvPartitionNameToCellMap.putAll(m);
     }
 
-    /**
-     * @return the detail string of the mv update info
-     */
-    public String toDetailString() {
-        return "MvUpdateInfo{" +
-                "refreshType=" + mvToRefreshType +
-                ", mvToRefreshPartitionNames=" + mvToRefreshPartitionNames +
-                ", baseTableUpdateInfos=" + baseTableUpdateInfos +
-                ", basePartToMvPartNames=" + basePartToMvPartNames +
-                ", mvPartToBasePartNames=" + mvPartToBasePartNames +
-                '}';
+    public Map<String, PCell> getMvPartitionNameToCellMap() {
+        return mvPartitionNameToCellMap;
+    }
+
+    public MaterializedView getMv() {
+        return this.mv;
+    }
+
+    @Override
+    public String toString() {
+        int maxLength = Config.max_mv_task_run_meta_message_values_length;
+        StringBuilder sb = new StringBuilder();
+        sb.append("refreshType=").append(mvToRefreshType);
+        if (!CollectionUtils.sizeIsEmpty(mvToRefreshPartitionNames)) {
+            sb.append(", mvToRefreshPartitionNames=").append(shrinkToSize(mvToRefreshPartitionNames, maxLength));
+        }
+        if (!CollectionUtils.sizeIsEmpty(basePartToMvPartNames)) {
+            sb.append(", basePartToMvPartNames=");
+            for (Map.Entry<Table, Map<String, Set<String>>> entry : basePartToMvPartNames.entrySet()) {
+                sb.append("[").append(entry.getKey().getName()).append(":");
+                for (Map.Entry<String, Set<String>> entry1 : shrinkToSize(entry.getValue(), maxLength).entrySet()) {
+                    sb.append(" ").append(entry1.getKey()).append(":").append(shrinkToSize(entry1.getValue(), maxLength));
+                }
+                sb.append("]");
+            }
+        }
+        if (!CollectionUtils.sizeIsEmpty(mvPartToBasePartNames)) {
+            sb.append(", mvPartToBasePartNames=");
+            for (Map.Entry<String, Map<Table, Set<String>>> entry : mvPartToBasePartNames.entrySet()) {
+                sb.append("[").append(entry.getKey()).append(":");
+                for (Map.Entry<Table, Set<String>> entry1 : shrinkToSize(entry.getValue(), maxLength).entrySet()) {
+                    sb.append(" ").append(entry1.getKey().getName()).append(":")
+                            .append(shrinkToSize(entry1.getValue(), maxLength));
+                }
+                sb.append("]");
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -120,18 +178,10 @@ public class MvUpdateInfo {
         if (mvToRefreshType == MvToRefreshType.FULL) {
             return null;
         }
-        if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
-            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = baseTableUpdateInfos.get(refBaseTable);
-            if (mvBaseTableUpdateInfo == null) {
-                return null;
-            }
-            return mvBaseTableUpdateInfo.getToRefreshPartitionNames();
-        }
-
-        if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
+        if (CollectionUtils.sizeIsEmpty(mvPartToBasePartNames)) {
             return null;
         }
-        // MV's partition names to refresh is not only affected by the ref base table, but also other base tables.
+        // MV's partition names to refresh are not only affected by the ref base table, but also other base tables.
         // Deduce the partition names to refresh of the ref base table from the partition names to refresh of the mv.
         Set<String> refBaseTableToRefreshPartitionNames = Sets.newHashSet();
         for (String mvPartName : mvToRefreshPartitionNames) {
@@ -141,8 +191,10 @@ public class MvUpdateInfo {
                 continue;
             }
             Set<String> partNames = baseTableToPartNames.get(refBaseTable);
+            // Continue since mvPartName to refresh is not triggerred by the base table since multi base tables has been
+            // supported.
             if (partNames == null) {
-                return null;
+                continue;
             }
             refBaseTableToRefreshPartitionNames.addAll(partNames);
         }

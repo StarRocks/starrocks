@@ -23,6 +23,7 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
@@ -68,12 +69,12 @@ public class ReplicationJobTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_NOTHING);
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
 
-        db = GlobalStateMgr.getCurrentState().getDb("test");
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
@@ -81,7 +82,8 @@ public class ReplicationJobTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        table = (OlapTable) db.getTable("single_partition_duplicate_key");
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "single_partition_duplicate_key");
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();
@@ -97,8 +99,12 @@ public class ReplicationJobTest {
 
     @Before
     public void setUp() throws Exception {
-        partition.updateVersionForRestore(10);
-        srcPartition.updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
@@ -158,7 +164,11 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
-        Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        // data version == visible version in shared-nothing mode
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
     }
 
     @Test
@@ -315,13 +325,14 @@ public class ReplicationJobTest {
         Partition partition = table.getPartitions().iterator().next();
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
-        partitionInfo.src_version = srcPartition.getVisibleVersion();
+        partitionInfo.src_version = srcPartition.getDefaultPhysicalPartition().getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getDefaultPhysicalPartition().getVersionEpoch();
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
         TIndexReplicationInfo indexInfo = new TIndexReplicationInfo();
-        MaterializedIndex index = partition.getBaseIndex();
-        MaterializedIndex srcIndex = srcPartition.getBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getBaseIndex();
         indexInfo.index_id = index.getId();
         indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);

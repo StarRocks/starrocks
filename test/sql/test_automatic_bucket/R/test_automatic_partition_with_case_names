@@ -1,0 +1,104 @@
+-- name: test_automatic_partition_with_case_names
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  col1 varchar(100),
+  col2 varchar(100),
+  col3 bigint
+) ENGINE=OLAP
+PRIMARY KEY (col1)
+PARTITION BY (col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 5
+ORDER BY (col2);
+-- result:
+-- !result
+insert into t1 values ('a.com', 'val1', 100), ('A.com', 'val1', 200), ('A.Com', 'val1', 300);
+-- result:
+-- !result
+insert into t1 values ('a.com', 'val1', 100), ('A.com', 'val1', 200), ('A.Com', 'val1', 300);
+-- result:
+-- !result
+insert into t1 values ('a.cOm', 'val1', 100), ('A.coM', 'val1', 200), ('A.COm', 'val1', 300);
+-- result:
+-- !result
+insert into t1 values ('a.cOM', 'val1', 100), ('A.COM', 'val1', 200), ('a.COM', 'val1', 300);
+-- result:
+-- !result
+insert into t1 values ('a.com', 'val1', 100), ('A.com', 'val1', 200), ('A.Com', 'val1', 300);
+-- result:
+-- !result
+insert into t1 values ('a.cOm', 'val1', 100), ('A.coM', 'val1', 200), ('A.COm', 'val1', 300);
+-- result:
+-- !result
+insert into t1 values ('b.cOm', 'val1', 100), ('A.coM', 'val1', 200), ('A.COm', 'val1', 300);
+-- result:
+-- !result
+SELECT count(1) FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't1' ;
+-- result:
+11
+-- !result
+select * from t1 order by col1, col2, col3;
+-- result:
+A.COM	val1	200
+A.COm	val1	300
+A.Com	val1	300
+A.coM	val1	200
+A.com	val1	200
+a.COM	val1	300
+a.cOM	val1	100
+a.cOm	val1	100
+a.com	val1	100
+b.cOm	val1	100
+-- !result
+select * from t1 where col1 = 'a.com' order by col1, col2, col3;
+-- result:
+a.com	val1	100
+-- !result
+select * from t1 where col1 = 'A.com' order by col1, col2, col3;
+-- result:
+A.com	val1	200
+-- !result
+select * from t1 where col1 in ('A.com', 'a.com') order by col1, col2, col3;
+-- result:
+A.com	val1	200
+a.com	val1	100
+-- !result
+CREATE MATERIALIZED VIEW `test_async_mv`
+PARTITION BY (col1)
+DISTRIBUTED BY HASH(col1)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+  "query_rewrite_consistency" = "LOOSE"
+)
+AS SELECT col1, sum(col3) from t1 group by col1;
+-- result:
+-- !result
+refresh materialized view test_async_mv with sync mode;
+select * from test_async_mv order by col1;
+-- result:
+A.COM	200
+A.COm	300
+A.Com	300
+A.coM	200
+A.com	200
+a.COM	300
+a.cOM	100
+a.cOm	100
+a.com	100
+b.cOm	100
+-- !result
+select * from test_async_mv where col1 = 'a.com' order by col1;
+-- result:
+a.com	100
+-- !result
+select * from test_async_mv where col1 = 'A.com' order by col1;
+-- result:
+A.com	200
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result

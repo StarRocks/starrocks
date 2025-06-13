@@ -17,6 +17,7 @@ package com.starrocks.common.proc;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -50,6 +51,8 @@ public class ComputeNodeProcDirTest {
     @Mocked
     private RunMode runMode;
 
+    private final VariableMgr variableMgr = new VariableMgr();
+
     @Before
     public void setUp() {
         b1 = new ComputeNode(1000, "host1", 10000);
@@ -80,6 +83,10 @@ public class ComputeNodeProcDirTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 

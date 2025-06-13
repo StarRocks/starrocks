@@ -660,9 +660,6 @@ public class SimpleExpressionAnalyzer {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters");
             }
-            if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
-                throw new SemanticException("grouping functions only support column.");
-            }
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;
@@ -745,7 +742,7 @@ public class SimpleExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(Subquery node, Scope context) {
+        public Void visitSubqueryExpr(Subquery node, Scope context) {
             SimpleQueryAnalyzer queryAnalyzer = new SimpleQueryAnalyzer();
             queryAnalyzer.analyze(node.getQueryStatement());
             // Do not know the subquery type, use string as default

@@ -36,11 +36,13 @@ package com.starrocks.analysis;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
 import org.apache.logging.log4j.LogManager;
@@ -164,6 +166,8 @@ public class SlotDescriptor {
                         scalarType.getPrimitiveType(),
                         scalarType.getScalarPrecision(),
                         scalarType.getScalarScale());
+            } else if (this.originType.isVarchar() && FeConstants.setLengthForVarchar) {
+                this.type = ScalarType.createVarcharType(scalarType.getLength());
             } else {
                 this.type = ScalarType.createType(this.originType.getPrimitiveType());
             }
@@ -267,6 +271,15 @@ public class SlotDescriptor {
                 LOG.debug("column id:{}, column unique id:{}",
                         column.getColumnId(), column.getUniqueId());
                 tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
+        }
+        // set column unique id or physical name
+        if (column != null) {
+            if (column.getUniqueId() != Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
+            if (!Strings.isNullOrEmpty(column.getPhysicalName())) {
+                tSlotDescriptor.setCol_physical_name(column.getPhysicalName());
             }
         }
         tSlotDescriptor.setColumnPos(-1);

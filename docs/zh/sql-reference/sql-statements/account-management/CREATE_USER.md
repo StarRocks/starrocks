@@ -1,28 +1,31 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # CREATE USER
 
-import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
 ## 功能
 
-创建 StarRocks 用户。
+创建 StarRocks 用户。自 v3.3.3 起，StarRocks 支持创建用户时指定用户属性。
 
 <UserManagementPriv />
 
 ## 语法
 
 ```SQL
-CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
+CREATE USER [IF NOT EXISTS] <user_identity> 
+[auth_option] 
+[DEFAULT ROLE <role_name>[, <role_name>, ...]]
+[PROPERTIES ("key"="value", ...)]
 ```
 
 ## 参数说明
 
 - `user_identity`：用户标识。由登录IP（userhost）和用户名（username）组成，写作：`username@'userhost'` 。其中，`userhost` 的部分可以使用 `%` 来进行模糊匹配。如果不指定 `userhost`，默认为 `%`，即表示创建一个可以从任意 host 使用 `username` 链接到 StarRocks 的用户。
 
-  有关用户名 (username) 的命名要求，参见[系统限制](../../../reference/System_limit.md)。
+  有关用户名 (username) 的命名要求，参见[系统限制](../../System_limit.md)。
 
 - `auth_option`：用户的认证方式。目前，StarRocks 支持原生密码、mysql_native_password 和 LDAP 三种认证方式，其中，原生密码与 mysql_native_password 认证方式的内在逻辑相同，仅在具体设置语法上有轻微差别。同一个 user identity 只能使用一种认证方式。
 
@@ -46,6 +49,26 @@ CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name
     > 注：在所有认证方式中，StarRocks均会加密存储用户的密码。
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定了此参数，则会自动将此角色赋予给用户，并且在用户登录后默认激活。如果不指定，则该用户默认没有任何权限。指定的角色必须已经存在。
+
+- `PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`），Catalog，数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
+
+  ```SQL
+  -- 设置用户最大连接数。
+  PROPERTIES ("max_user_connections" = "<Integer>")
+  -- 设置 Catalog。
+  PROPERTIES ("catalog" = "<catalog_name>")
+  -- 设置数据库。
+  PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
+  -- 设置 Session 变量。
+  PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  ```
+
+  :::tip
+  - `PROPERTIES` 作用于用户本身而非用户标识。
+  - 全局变量和只读变量无法为单个用户设置。
+  - 变量按照以下顺序生效：SET_VAR > Session > 用户属性 > Global。
+  - 您可以通过 [SHOW PROPERTY](./SHOW_PROPERTY.md) 查看特定用户的属性。
+  :::
 
 ## 示例
 
@@ -87,6 +110,30 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'ui
 
 ```SQL
 CREATE USER 'jack'@'192.168.%' DEFAULT ROLE db_admin, user_admin;
+```
+
+示例七：创建用户，设置最大用户连接数为 `600`。
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ("max_user_connections" = "600");
+```
+
+示例八：创建用户，设置用户的 Catalog 为 `hive_catalog`。
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'hive_catalog');
+```
+
+示例九：创建用户，设置用户的数据库为 Default Catalog 中的 `test_db`。
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
+```
+
+示例十：创建用户，设置用户的 Session 变量 `query_timeout` 为 `600`。
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```
 
 ## 相关文档

@@ -39,7 +39,7 @@ E: (1064, 'Getting analyzing error. Detail message: All generated columns must b
 -- !result
 CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Generated Column can not be KEY.')
+E: (1064, 'Getting analyzing error. Detail message: Generated Column mc can not be KEY.')
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
@@ -507,8 +507,8 @@ SHOW CREATE TABLE t;
 -- result:
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
-  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -538,8 +538,8 @@ t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
   `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
-  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -756,7 +756,7 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_for_add_optimization;
 -- result:
 -- !result
--- name: test_schema_change_for_constant_expression
+-- name: test_schema_change_for_constant_expression @slow
 CREATE DATABASE test_schema_change_for_constant_expression;
 -- result:
 -- !result
@@ -992,7 +992,7 @@ t0	CREATE TABLE `t0` (
   `v2` bigint(20) NOT NULL COMMENT "",
   `v3` bigint(20) NOT NULL COMMENT "",
   `testcol5` bigint(20) NULL COMMENT "",
-  `testcol6` bigint(20) NULL AS v1 * 10 COMMENT ""
+  `testcol6` bigint(20) NULL AS `v1` * 10 COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
@@ -1062,5 +1062,119 @@ SELECT * FROM t;
 4	4	18
 -- !result
 DROP DATABASE test_compaction_after_adding_generated_column;
+-- result:
+-- !result
+-- name: test_information_schema_generated_column
+CREATE TABLE `t_information_schema_generated_column_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+CREATE TABLE `t_information_schema_generated_column_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+-- result:
+k	None
+v	k + 10
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
+-- result:
+k	None
+v	k + 10
+-- !result
+DROP TABLE t_information_schema_generated_column_1;
+-- result:
+-- !result
+DROP TABLE t_information_schema_generated_column_2;
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
+-- result:
+-- !result
+-- name: test_fix_adding_and_col_partial_update_conflict
+CREATE TABLE t_fix_adding_and_col_partial_update_conflict ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+insert into t_fix_adding_and_col_partial_update_conflict values (1,2,3),(2,3,4),(3,4,5);
+-- result:
+-- !result
+SET partial_update_mode = "column";
+-- result:
+-- !result
+UPDATE t_fix_adding_and_col_partial_update_conflict SET v2 = 400 where id = 2;
+-- result:
+-- !result
+delete from t_fix_adding_and_col_partial_update_conflict where id % 2 = 1;
+-- result:
+-- !result
+alter table t_fix_adding_and_col_partial_update_conflict add column newcol bigint as v2 * 100;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t_fix_adding_and_col_partial_update_conflict;
+-- result:
+2	3	400	40000
+-- !result
+drop table t_fix_adding_and_col_partial_update_conflict;
+-- result:
+-- !result
+-- name: test_create_like_error
+CREATE TABLE `t1_create_like_error` (
+                `k1` date,
+                `k5` boolean,
+                `k6` tinyint,
+                `k7` smallint,
+                `col_array` array<smallint> as [k5,k6,k7]
+                )
+                PRIMARY KEY(`k1`)
+                COMMENT "OLAP"
+                DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+                PROPERTIES (
+                "replication_num" = "1",
+                "storage_format" = "v2"
+                );
+-- result:
+-- !result
+create table t2_create_like_error like t1_create_like_error;
+-- result:
+-- !result
+INSERT INTO t2_create_like_error values(now(), 1, 2, 3);
+-- result:
+-- !result
+SELECT k5, k6, k7, col_array from t2_create_like_error;
+-- result:
+1	2	3	[1,2,3]
+-- !result
+DROP TABLE t1_create_like_error;
+-- result:
+-- !result
+DROP TABLE t2_create_like_error;
 -- result:
 -- !result

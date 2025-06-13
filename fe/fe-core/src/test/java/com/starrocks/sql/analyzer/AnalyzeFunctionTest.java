@@ -301,4 +301,17 @@ public class AnalyzeFunctionTest {
         analyzeFail("select typeof(cast(1 as tinyint),  cast(1 as int))");
         analyzeFail("select typeof()");
     }
+
+    @Test
+    public void testFieldFunction() throws Exception {
+        analyzeSuccess("select field(1, 2, 2)");
+        analyzeSuccess("select field(1, 2.0, 2.1)");
+        analyzeSuccess("select field(1, 'a', 2.1)");
+        analyzeSuccess("select field(1, 'a', 2.1, NULL)");
+        analyzeSuccess("select field(NULL, 'a', 2.1, NULL)");
+        analyzeFail("select field((1,2), (1,2))");
+        analyzeFail("select field((1,2), 'a')");
+        analyzeFail("select field(1)");
+        analyzeFail("select field((1,2))");
+    }
 }

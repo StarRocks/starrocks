@@ -98,13 +98,12 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
 
-        boolean isRollup = shuttleContext.isRollup();
         if (aggFuncName.equalsIgnoreCase(PERCENTILE_APPROX)) {
             ScalarOperator eqArg = aggFunc.getChild(0);
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         }
         return null;
     }
@@ -146,9 +145,9 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     @Override
-    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
-                                               CallOperator aggFunc,
-                                               ColumnRefOperator replace) {
+    public ScalarOperator rewriteAggregateFuncWithoutRollup(EquivalentShuttleContext shuttleContext,
+                                                            CallOperator aggFunc,
+                                                            ColumnRefOperator replace) {
         ScalarOperator arg1 = aggFunc.getChild(1);
         return makePercentileApproxRaw(replace, arg1);
     }

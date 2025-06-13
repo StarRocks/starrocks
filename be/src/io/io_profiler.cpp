@@ -14,11 +14,16 @@
 
 #include "io_profiler.h"
 
+#include <cstdint>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_set>
 
 #include "fmt/format.h"
+#include "util/stack_util.h"
+#include "util/starrocks_metrics.h"
+#include "util/system_metrics.h"
 
 namespace starrocks {
 
@@ -88,6 +93,7 @@ struct IOStatEntry {
         return fmt::format("{:>10} {:>10} {:>16} {:>8} {:>16} {:>8} {:>16} {:>8}", "Tablet", "TAG", "read_bytes", "ops",
                            "write_bytes", "ops", "total_bytes", "ops");
     }
+    uint32_t get_tag() const { return id >> 48UL; }
 
     std::string to_string() const {
         uint32_t tag = id >> 48UL;
@@ -98,13 +104,8 @@ struct IOStatEntry {
     }
 };
 
-class IOStatEntryHash {
-public:
-    size_t operator()(const IOStatEntry& entry) const { return std::hash<uint64_t>()(entry.id); }
-};
-
 static std::mutex _io_stats_mutex;
-static std::unordered_set<IOStatEntry, IOStatEntryHash> _io_stats;
+static std::unordered_map<uint64_t, std::unique_ptr<IOStatEntry>> _io_stats;
 
 bool IOProfiler::is_empty() {
     return _io_stats.empty();
@@ -124,18 +125,20 @@ void IOProfiler::reset() {
 }
 
 thread_local IOStatEntry* current_io_stat = nullptr;
+thread_local uint32_t current_io_tag = IOProfiler::TAG_NONE;
 
 void IOProfiler::set_context(uint32_t tag, uint64_t tablet_id) {
-    if (tablet_id == 0) {
+    set_tag(tag);
+    if (tablet_id == 0 || _context_io_mode == IOMode::IOMODE_NONE) {
         return;
     }
     uint64_t key = ((uint64_t)tag << 48UL) | tablet_id;
     std::lock_guard<std::mutex> l(_io_stats_mutex);
-    auto it = _io_stats.find(IOStatEntry{key});
+    auto it = _io_stats.find(key);
     if (it == _io_stats.end()) {
-        it = _io_stats.emplace(key).first;
+        it = _io_stats.emplace(key, std::make_unique<IOStatEntry>(key)).first;
     }
-    current_io_stat = const_cast<IOStatEntry*>(&(*it));
+    current_io_stat = it->second.get();
 }
 
 IOStatEntry* IOProfiler::get_context() {
@@ -152,7 +155,13 @@ IOProfiler::IOStat IOProfiler::get_context_io() {
 }
 
 void IOProfiler::set_context(IOStatEntry* entry) {
+    uint32_t tag = entry == nullptr ? TAG::TAG_NONE : entry->get_tag();
+    set_tag(tag);
     current_io_stat = entry;
+}
+
+void IOProfiler::set_tag(uint32_t tag) {
+    current_io_tag = tag;
 }
 
 void IOProfiler::clear_context() {
@@ -197,12 +206,25 @@ void IOProfiler::_add_tls_read(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.read_ops += 1;
     tls_io_stat.read_bytes += bytes;
     tls_io_stat.read_time_ns += latency_ns;
+    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    if (UNLIKELY(metrics == nullptr)) {
+        // some r/w operations may be performed before metrics are initialized, in which case updating metrics is ignored.
+        return;
+    }
+    metrics->read_ops.increment(1);
+    metrics->read_bytes.increment(bytes);
 }
 
 void IOProfiler::_add_tls_write(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.write_ops += 1;
     tls_io_stat.write_bytes += bytes;
     tls_io_stat.write_time_ns += latency_ns;
+    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    if (UNLIKELY(metrics == nullptr)) {
+        return;
+    }
+    metrics->write_ops.increment(1);
+    metrics->write_bytes.increment(bytes);
 }
 
 void IOProfiler::_add_tls_sync(int64_t latency_ns) {
@@ -230,6 +252,8 @@ const char* IOProfiler::tag_to_string(uint32_t tag) {
         return "MIGRATE";
     case TAG_SIZE:
         return "SIZE";
+    case TAG_SPILL:
+        return "SPILL";
     default:
         return "UNKNOWN";
     }
@@ -244,9 +268,9 @@ StatusOr<std::vector<std::string>> IOProfiler::get_topn_stats(size_t n,
     }
     stats.reserve(_io_stats.size());
     for (auto& it : _io_stats) {
-        auto v = func(it);
+        auto v = func(*it.second);
         if (v > 0) {
-            stats.emplace_back(v, &it);
+            stats.emplace_back(v, it.second.get());
         }
     }
     std::sort(stats.begin(), stats.end(), [](const auto& a, const auto& b) { return a.first > b.first; });

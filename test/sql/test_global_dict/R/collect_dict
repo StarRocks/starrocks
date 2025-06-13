@@ -1,0 +1,48 @@
+-- name: test_collect_dict
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `string300` (
+  `v1` varchar(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into string300 SELECT generate_series FROM TABLE(generate_series(1,  300));
+-- result:
+-- !result
+set always_collect_low_card_dict = true;
+-- result:
+-- !result
+select distinct v1 from string300 order by 1 limit 10;
+-- result:
+1
+10
+100
+101
+102
+103
+104
+105
+106
+107
+-- !result
+function: try_collect_dict_N_times('v1', 'string300', 20)
+-- result:
+None
+-- !result
+function: assert_never_collect_dicts('v1', 'string300', 'db_${uuid0}')
+-- result:
+None
+-- !result

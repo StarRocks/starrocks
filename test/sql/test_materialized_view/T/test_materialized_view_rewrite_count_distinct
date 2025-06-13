@@ -1,0 +1,58 @@
+-- name: test_materialized_view_rewrite_count_distinct
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+insert into user_tags values('2023-04-13', 1, 'a', 1);
+insert into user_tags values('2023-04-13', 1, 'b', 2);
+insert into user_tags values('2023-04-13', 1, 'c', 3);
+insert into user_tags values('2023-04-13', 1, 'd', 4);
+insert into user_tags values('2023-04-13', 1, 'e', 5);
+insert into user_tags values('2023-04-13', 2, 'e', 5);
+insert into user_tags values('2023-04-13', 3, 'e', 6);
+
+
+set count_distinct_implementation='ndv';
+select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
+select count(distinct tag_id), count(distinct user_name) from user_tags;
+
+set count_distinct_implementation='multi_count_distinct';
+select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
+select count(distinct tag_id), count(distinct user_name) from user_tags;
+
+set count_distinct_implementation='default';
+
+create materialized view test_mv1 
+distributed by hash(user_id) 
+as select user_id, bitmap_union(to_bitmap(tag_id)), bitmap_union(to_bitmap(user_name)) from user_tags group by user_id;
+
+refresh materialized view test_mv1 with sync mode;
+
+set enable_count_distinct_rewrite_by_hll_bitmap=true;
+function: print_hit_materialized_views("select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;")
+function: print_hit_materialized_views("select count(distinct tag_id), count(distinct user_name) from user_tags;")
+select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
+select count(distinct tag_id), count(distinct user_name) from user_tags;
+
+set enable_count_distinct_rewrite_by_hll_bitmap=false;
+function: print_hit_materialized_views("select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;")
+function: print_hit_materialized_views("select count(distinct tag_id), count(distinct user_name) from user_tags;")
+select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
+select count(distinct tag_id), count(distinct user_name) from user_tags;
+
+drop materialized view test_mv1;
+
+create materialized view test_mv1 
+distributed by hash(user_id) 
+as select user_id, time, hll_union(hll_hash(tag_id)) as agg1, hll_union(hll_hash(user_name)) as agg2  from user_tags group by user_id, time;
+
+refresh materialized view test_mv1 with sync mode;
+
+set enable_count_distinct_rewrite_by_hll_bitmap=true;
+function: print_hit_materialized_views("select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;")
+function: print_hit_materialized_views("select count(distinct tag_id), count(distinct user_name) from user_tags;")
+select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
+select count(distinct tag_id), count(distinct user_name) from user_tags;
+
+set enable_count_distinct_rewrite_by_hll_bitmap=false;
+function: print_hit_materialized_views("select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;")
+function: print_hit_materialized_views("select count(distinct tag_id), count(distinct user_name) from user_tags;")
+select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
+select count(distinct tag_id), count(distinct user_name) from user_tags;

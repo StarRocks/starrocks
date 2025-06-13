@@ -119,7 +119,7 @@ public class HiveTableTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getTable(anyString, anyString, anyString);
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = oTable;
             }
         };
@@ -134,8 +134,8 @@ public class HiveTableTest {
         Assert.assertTrue(table instanceof HiveTable);
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("hive_tbl", hiveTable.getName());
-        Assert.assertEquals("hive_db", hiveTable.getDbName());
-        Assert.assertEquals("hive_table", hiveTable.getTableName());
+        Assert.assertEquals("hive_db", hiveTable.getCatalogDBName());
+        Assert.assertEquals("hive_table", hiveTable.getCatalogTableName());
         Assert.assertEquals(hdfsPath, hiveTable.getTableLocation());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(new Column("col1", Type.INT, true), hiveTable.getPartitionColumns().get(0));
@@ -195,7 +195,7 @@ public class HiveTableTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getTable(anyString, anyString, anyString);
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = oTable;
             }
         };
@@ -272,7 +272,7 @@ public class HiveTableTest {
                     result = metadataMgr;
                     minTimes = 0;
 
-                    metadataMgr.getTable(anyString, anyString, anyString);
+                    metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                     result = oTable;
                 }
             };

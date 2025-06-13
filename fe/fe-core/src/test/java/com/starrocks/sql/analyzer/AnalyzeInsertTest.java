@@ -101,7 +101,7 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsertOverwriteWhenSchemaChange() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getDb("test").getTable("t0");
+                .getLocalMetastore().getDb("test").getTable("t0");
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         analyzeFail("insert overwrite t0 select * from t0;",
                 "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
@@ -114,11 +114,15 @@ public class AnalyzeInsertTest {
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new MockUp<MetaUtils>() {
+
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDatabase(String catalogName, String tableName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
+        };
+
+        new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return null;
@@ -135,6 +139,10 @@ public class AnalyzeInsertTest {
         };
         new Expectations(metadata) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -145,7 +153,15 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
                 icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
                 result = ImmutableList.of(new Column("c1", Type.INT));
                 minTimes = 0;
             }
@@ -157,12 +173,14 @@ public class AnalyzeInsertTest {
     public void testPartitionedIcebergTable(@Mocked IcebergTable icebergTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
 
-        new MockUp<MetaUtils>() {
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDatabase(String catalogName, String databaseName) {
+            public Database getDb(String catalogName, String dbName) {
                 return new Database();
             }
+        };
 
+        new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return icebergTable;
@@ -171,6 +189,10 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -201,6 +223,10 @@ public class AnalyzeInsertTest {
                 result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
                 minTimes = 0;
 
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
+                minTimes = 0;
+
                 icebergTable.getColumn(anyString);
                 result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.INT));
                 minTimes = 0;
@@ -221,6 +247,11 @@ public class AnalyzeInsertTest {
                         new Column("p2", Type.INT));
                 minTimes = 0;
 
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.DATETIME),
+                        new Column("p2", Type.INT));
+                minTimes = 0;
+
                 icebergTable.getColumn(anyString);
                 result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.DATETIME));
                 minTimes = 0;
@@ -231,21 +262,23 @@ public class AnalyzeInsertTest {
 
                 icebergTable.getType();
                 result = Table.TableType.ICEBERG;
-                minTimes = 1;
+                minTimes = 0;
             }
         };
 
-        analyzeFail("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"",
-                "Unsupported partition column type [DATETIME] for ICEBERG table sink.");
+        analyzeSuccess("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"");
     }
 
     @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
-        new MockUp<MetaUtils>() {
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDatabase(String catalogName, String databaseName) {
-                return null;
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database();
             }
+        };
+
+        new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext conntext, Database database, TableName tableName) {
                 return hiveTable;

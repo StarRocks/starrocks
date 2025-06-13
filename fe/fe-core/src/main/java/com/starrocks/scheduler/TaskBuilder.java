@@ -41,6 +41,8 @@ import com.starrocks.warehouse.Warehouse;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.scheduler.TaskRun.MV_ID;
+
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
 public class TaskBuilder {
@@ -92,6 +94,7 @@ public class TaskBuilder {
         task.setProperties(taskProperties);
 
         task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
         task.setSchedule(submitTaskStmt.getSchedule());
         task.setType(submitTaskStmt.getSchedule() != null ? Constants.TaskType.PERIODICAL : Constants.TaskType.MANUAL);
         if (submitTaskStmt.getSchedule() == null) {
@@ -116,13 +119,17 @@ public class TaskBuilder {
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
-        ConnectContext ctx = ConnectContext.get();
-        if (ctx == null) {
+        final ConnectContext ctx = ConnectContext.get();
+        return getAnalyzeMVStmt(ctx, tableName);
+    }
+
+    public static String getAnalyzeMVStmt(ConnectContext ctx, String tableName) {
+        if (FeConstants.runningUnitTest || ctx == null) {
             return "";
         }
-        String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        final String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        final String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         String stmt;
-        String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         if ("sample".equalsIgnoreCase(analyze)) {
             stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
         } else if ("full".equalsIgnoreCase(analyze)) {
@@ -130,16 +137,17 @@ public class TaskBuilder {
         } else {
             stmt = "";
         }
-        if (FeConstants.runningUnitTest) {
-            stmt = "";
-        }
         return stmt;
     }
 
-    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
+    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName,
+                                                 long warehouseId) {
         OptimizeTask task = new OptimizeTask(name);
         task.setSource(Constants.TaskSource.INSERT);
         task.setDbName(dbName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(warehouseId);
+        properties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
         task.setProperties(properties);
         task.setDefinition(sql);
         task.setExpireTime(0L);
@@ -153,9 +161,9 @@ public class TaskBuilder {
         task.setDbName(dbName);
 
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
-                String.valueOf(materializedView.getId()));
-        taskProperties.putAll(materializedView.getProperties());
+        taskProperties.put(MV_ID, String.valueOf(materializedView.getId()));
+        // Don't put mv table properties into task properties since mv refresh doesn't need them, and the properties
+        // will cause task run's meta-data too large.
         // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
         // it only keeps session started properties
         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
@@ -168,23 +176,27 @@ public class TaskBuilder {
         task.setExpireTime(0L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+            task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
         }
         handleSpecialTaskProperties(task);
         return task;
     }
 
     public static Task rebuildMvTask(MaterializedView materializedView, String dbName,
-                                     Map<String, String> previousTaskProperties) {
+                                     Map<String, String> previousTaskProperties, Task previousTask) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
         String mvId = String.valueOf(materializedView.getId());
-        previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID, mvId);
+        previousTaskProperties.put(MV_ID, mvId);
         task.setProperties(previousTaskProperties);
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
-        task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        if (previousTask != null) {
+            task.setCreateUser(previousTask.getCreateUser());
+            task.setUserIdentity(previousTask.getUserIdentity());
+        }
         handleSpecialTaskProperties(task);
         return task;
     }
@@ -257,7 +269,7 @@ public class TaskBuilder {
         } else {
             Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
                      Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
-            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties);
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties, currentTask);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
             taskManager.alterTask(currentTask, changedTask, false);
             task = currentTask;

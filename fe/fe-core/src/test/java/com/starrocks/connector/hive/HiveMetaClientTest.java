@@ -43,6 +43,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
+
 public class HiveMetaClientTest {
     @Test
     public void testClientPool(@Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
@@ -103,7 +105,7 @@ public class HiveMetaClientTest {
         try {
             client.getAllDatabaseNames();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Unable to instantiate"));
+            Assert.assertTrue(e.getMessage().contains("Invalid port 90303"));
         }
     }
 
@@ -127,8 +129,10 @@ public class HiveMetaClientTest {
         };
 
         HiveConf hiveConf = new HiveConf();
+        hiveConf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, "48");
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
+        Assert.assertEquals(48, client.getMaxClientPoolSize());
         try {
             client.getTable("db", "tbl");
         } catch (Exception e) {
@@ -279,8 +283,9 @@ public class HiveMetaClientTest {
         Assert.assertThrows(StarRocksConnectorException.class,
                 () -> client.getPartitionsByNames(dbName, tblName, Arrays.asList("retry")));
 
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), Arrays.asList()));
         client.getTableColumnStats(dbName, tblName, new ArrayList<>());
-        client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), new ArrayList<>());
         client.getNextNotification(0, 0, null);
 
     }

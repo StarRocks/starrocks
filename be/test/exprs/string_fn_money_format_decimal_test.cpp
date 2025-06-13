@@ -17,7 +17,6 @@
 #include <random>
 
 #include "butil/time.h"
-#include "exprs/anyval_util.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 
@@ -30,8 +29,7 @@ template <LogicalType Type>
 void test_money_format_decimal(TestArray const& test_cases, int precision, int scale) {
     using ColumnType = RunTimeColumnType<Type>;
     using CppType = RunTimeCppType<Type>;
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::create_decimalv3_type(Type, precision, scale))};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::create_decimalv3_type(Type, precision, scale)};
     std::unique_ptr<FunctionContext> ctx(
             FunctionContext::create_test_context(std::move(arg_types), FunctionContext::TypeDesc{}));
     Columns columns;
@@ -45,7 +43,7 @@ void test_money_format_decimal(TestArray const& test_cases, int precision, int s
         money_column->append(value);
     }
 
-    columns.emplace_back(money_column);
+    columns.emplace_back(std::move(money_column));
     ColumnPtr result = StringFunctions::money_format_decimal<Type>(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 

@@ -110,6 +110,31 @@ public:
     static Status get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
                                       TGetPartitionsMetaResponse* var_result);
 
+    static Status get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
+                                         TColumnStatsUsageRes* var_result);
+
+    static Status get_analyze_status(const SchemaScannerState& state, const TAnalyzeStatusReq& var_params,
+                                     TAnalyzeStatusRes* var_result);
+
+    static Status get_cluster_snapshots_info(const SchemaScannerState& state, const TClusterSnapshotsRequest& req,
+                                             TClusterSnapshotsResponse* res);
+
+    static Status get_cluster_snapshot_jobs_info(const SchemaScannerState& state,
+                                                 const TClusterSnapshotJobsRequest& req,
+                                                 TClusterSnapshotJobsResponse* res);
+
+    static Status get_applicable_roles(const SchemaScannerState& state, const TGetApplicableRolesRequest& request,
+                                       TGetApplicableRolesResponse* response);
+
+    static Status get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
+                               TGetKeywordsResponse* response);
+
+    static Status get_warehouse_metrics(const SchemaScannerState& state, const TGetWarehouseMetricsRequest& request,
+                                        TGetWarehouseMetricsRespone* response);
+
+    static Status get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
+                                        TGetWarehouseQueriesResponse* response);
+
 private:
     static Status _call_rpc(const SchemaScannerState& state,
                             std::function<void(ClientConnection<FrontendServiceClient>&)> callback);

@@ -370,7 +370,7 @@ public abstract class JoinOrder {
 
         UKFKConstraints.JoinProperty joinProperty = null;
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        if (sessionVariable.isEnableUKFKOpt()) {
+        if (sessionVariable.isEnableUKFKJoinReorder()) {
             UKFKConstraintsCollector.collectColumnConstraints(leftExprInfo.expr);
             UKFKConstraintsCollector.collectColumnConstraints(rightExprInfo.expr);
             UKFKConstraints constraint = UKFKConstraintsCollector.buildJoinColumnConstraint(newJoin,
@@ -485,7 +485,7 @@ public abstract class JoinOrder {
         exprInfo.expr.deriveLogicalPropertyItself();
     }
 
-    private List<ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
+    protected List<ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
         List<ScalarOperator> onPredicates = Lists.newArrayList();
         BitSet joinBitSet = new BitSet();
         joinBitSet.or(left);

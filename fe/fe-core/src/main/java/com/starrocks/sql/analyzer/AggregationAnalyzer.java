@@ -38,6 +38,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
@@ -128,6 +129,9 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitExpression(Expr node, Void context) {
+            if (node instanceof Parameter) {
+                return true;
+            }
             throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }
@@ -264,8 +268,7 @@ public class AggregationAnalyzer {
                         node.getPos());
             }
 
-            if (node.getChildren().stream().anyMatch(argument ->
-                    !analyzeState.getColumnReferences().containsKey(argument) || !isGroupingKey(argument))) {
+            if (node.getChildren().stream().anyMatch(argument -> !analyzeState.getGroupBy().contains(argument))) {
                 throw new SemanticException(PARSER_ERROR_MSG.argsCanOnlyFromGroupBy(), node.getPos());
             }
 
@@ -311,7 +314,7 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitSubquery(Subquery node, Void context) {
+        public Boolean visitSubqueryExpr(Subquery node, Void context) {
             QueryStatement queryStatement = node.getQueryStatement();
             for (Map.Entry<Expr, FieldId> entry : queryStatement.getQueryRelation().getColumnReferences().entrySet()) {
                 Expr expr = entry.getKey();

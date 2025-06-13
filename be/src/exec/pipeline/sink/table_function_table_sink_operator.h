@@ -100,14 +100,13 @@ private:
 
 class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {
 public:
-    TableFunctionTableSinkOperatorFactory(const int32_t id, const string& path, const string& file_format,
+    TableFunctionTableSinkOperatorFactory(const int32_t id, string path, string file_format,
                                           const TCompressionType::type& compression_type,
-                                          const std::vector<ExprContext*>& output_exprs,
-                                          const std::vector<ExprContext*>& partition_exprs,
-                                          const std::vector<std::string>& column_names,
-                                          const std::vector<std::string>& partition_column_names,
-                                          bool write_single_file, const TCloudConfiguration& cloud_conf,
-                                          FragmentContext* fragment_ctx);
+                                          std::vector<ExprContext*> output_exprs,
+                                          std::vector<ExprContext*> partition_exprs,
+                                          std::vector<std::string> column_names,
+                                          std::vector<std::string> partition_column_names, bool write_single_file,
+                                          const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx);
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
 

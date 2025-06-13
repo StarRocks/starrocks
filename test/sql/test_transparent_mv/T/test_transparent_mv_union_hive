@@ -158,3 +158,4 @@ SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db
 DROP MATERIALIZED VIEW test_mv1;
 drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 force;
 drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 force;
+drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;

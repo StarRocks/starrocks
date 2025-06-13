@@ -16,7 +16,9 @@
 package com.starrocks.connector.hive.glue.util;
 
 import com.google.common.collect.Maps;
+import com.starrocks.connector.hive.glue.metastore.AWSGlueMetastore;
 import com.starrocks.connector.hive.glue.metastore.GlueMetastoreClientDelegate;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -83,11 +85,12 @@ public final class MetastoreClientUtils {
      *
      * @param table
      */
-    public static void validateGlueTable(software.amazon.awssdk.services.glue.model.Table table) {
+    public static void validateGlueTable(software.amazon.awssdk.services.glue.model.Table table, AWSGlueMetastore metastore)
+            throws InvalidObjectException {
         checkNotNull(table, "table cannot be null");
 
         for (HiveTableValidator validator : HiveTableValidator.values()) {
-            validator.validate(table);
+            validator.validate(table, metastore);
         }
     }
 
@@ -122,8 +125,13 @@ public final class MetastoreClientUtils {
     }
 
     public static String getCatalogId(Configuration conf) {
-        if (StringUtils.isNotEmpty(conf.get(GlueMetastoreClientDelegate.CATALOG_ID_CONF))) {
-            return conf.get(GlueMetastoreClientDelegate.CATALOG_ID_CONF);
+        String catalogId = conf.get(GlueMetastoreClientDelegate.CATALOG_ID_CONF);
+        if (StringUtils.isNotEmpty(catalogId)) {
+            return catalogId;
+        }
+        catalogId = conf.get(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID);
+        if (StringUtils.isNotEmpty(catalogId)) {
+            return catalogId;
         }
         // This case defaults to using the caller's account Id as Catalog Id.
         return null;

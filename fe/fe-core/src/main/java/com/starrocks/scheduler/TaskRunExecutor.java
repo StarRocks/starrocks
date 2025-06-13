@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,6 +36,7 @@ public class TaskRunExecutor {
      */
     public boolean executeTaskRun(TaskRun taskRun) {
         if (taskRun == null) {
+            LOG.warn("TaskRun is null, avoid execute it again");
             return false;
         }
         TaskRunStatus status = taskRun.getStatus();
@@ -49,10 +51,11 @@ public class TaskRunExecutor {
             return false;
         }
 
+        // Synchronously update the status, to make sure they can be persisted
+        status.setState(Constants.TaskRunState.RUNNING);
+        status.setProcessStartTime(System.currentTimeMillis());
+
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
-            status.setState(Constants.TaskRunState.RUNNING);
-            // set process start time
-            status.setProcessStartTime(System.currentTimeMillis());
             try {
                 boolean isSuccess = taskRun.executeTaskRun();
                 if (isSuccess) {
@@ -69,6 +72,7 @@ public class TaskRunExecutor {
                 // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();
                 status.setFinishTime(System.currentTimeMillis());
+                WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId());
             }
             return status.getState();
         }, taskRunPool);

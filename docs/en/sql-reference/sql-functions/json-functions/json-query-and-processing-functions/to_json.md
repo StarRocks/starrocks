@@ -1,12 +1,16 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # to_json
 
-
-
 Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 If you want to cast values of other data types, see [cast](./cast.md).
 
@@ -62,5 +66,5 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 
 - [Map data type](../../../data-types/semi_structured/Map.md)
 - [Struct data type](../../../data-types/semi_structured/STRUCT.md)
-- [Map functions](../../function-list.md#map-functions)
-- [Struct functions](../../function-list.md#struct-functions)
+- [Map functions](../../README.md#map-functions)
+- [Struct functions](../../README.md#struct-functions)

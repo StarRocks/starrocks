@@ -15,7 +15,6 @@
 #include "table_function_operator.h"
 
 namespace starrocks::pipeline {
-
 void TableFunctionOperator::close(RuntimeState* state) {
     if (_table_function != nullptr && _table_function_state != nullptr) {
         (void)_table_function->close(state, _table_function_state);
@@ -25,7 +24,8 @@ void TableFunctionOperator::close(RuntimeState* state) {
 }
 
 bool TableFunctionOperator::has_output() const {
-    if (!_table_function_result.first.empty() && _next_output_row < _table_function_result.first[0]->size()) {
+    if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
+        _next_output_row < _table_function_result.second->get_data().back()) {
         return true;
     }
     if (_input_chunk != nullptr && _table_function_state != nullptr &&
@@ -95,8 +95,13 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
+    if (_tnode.table_function_node.__isset.fn_result_required) {
+        _fn_result_required = _tnode.table_function_node.fn_result_required;
+    } else {
+        _fn_result_required = true;
+    }
     RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
-
+    _table_function_state->set_is_required(_fn_result_required);
     _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionExecTime");
     _table_function_exec_counter = ADD_COUNTER(_unique_metrics, "TableFunctionExecCount", TUnit::UNIT);
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
@@ -106,7 +111,7 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
 StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_input_chunk != nullptr);
     size_t max_chunk_size = state->chunk_size();
-    std::vector<ColumnPtr> output_columns;
+    Columns output_columns;
 
     if (_table_function_result.second == nullptr) {
         RETURN_IF_ERROR(_process_table_function(state));
@@ -121,7 +126,8 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     }
 
     while (output_columns[0]->size() < max_chunk_size) {
-        if (!_table_function_result.first.empty() && _next_output_row < _table_function_result.first[0]->size()) {
+        if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
+            _next_output_row < _table_function_result.second->get_data().back()) {
             _copy_result(output_columns, max_chunk_size);
         } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
             RETURN_IF_ERROR(_process_table_function(state));
@@ -153,14 +159,17 @@ Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     return Status::OK();
 }
 
-ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& columns) {
+ChunkPtr TableFunctionOperator::_build_chunk(const Columns& columns) {
     ChunkPtr chunk = std::make_shared<Chunk>();
 
     for (size_t i = 0; i < _outer_slots.size(); ++i) {
         chunk->append_column(columns[i], _outer_slots[i]);
     }
-    for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-        chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
+
+    if (_fn_result_required) {
+        for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+            chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
+        }
     }
 
     return chunk;
@@ -191,20 +200,21 @@ Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector
     return Status::OK();
 }
 
-void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_output_size) {
-    DCHECK_LE(_next_output_row, _table_function_result.first[0]->size());
+void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_size) {
+    DCHECK(_table_function_result.second->size() > 1 &&
+           _next_output_row < _table_function_result.second->get_data().back());
     DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
     uint32_t curr_output_size = columns[0]->size();
     const auto& fn_result_cols = _table_function_result.first;
     const auto& offsets_col = _table_function_result.second;
-    while (curr_output_size < max_output_size && _next_output_row < fn_result_cols[0]->size()) {
+    while (curr_output_size < max_output_size && _next_output_row < offsets_col->get_data().back()) {
         uint32_t start = _next_output_row;
         uint32_t end = offsets_col->get_data()[_next_output_row_offset + 1];
         DCHECK_GE(start, offsets_col->get_data()[_next_output_row_offset]);
         DCHECK_LE(start, end);
         uint32_t copy_rows = std::min(end - start, max_output_size - curr_output_size);
         VLOG(2) << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
-                << " copy_rows=" << copy_rows << " input_size=" << fn_result_cols[0]->size()
+                << " copy_rows=" << copy_rows << " input_size=" << offsets_col->get_data().back()
                 << " _next_output_row_offset=" << _next_output_row_offset
                 << " _input_index_of_first_result=" << _input_index_of_first_result;
 
@@ -222,8 +232,10 @@ void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, 
             }
 
             // Build table function result
-            for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-                columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+            if (_fn_result_required) {
+                for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+                    columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+                }
             }
         }
 
@@ -235,5 +247,4 @@ void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, 
         }
     }
 }
-
 } // namespace starrocks::pipeline

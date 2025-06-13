@@ -18,7 +18,7 @@
 
 namespace starrocks::pipeline {
 
-Status HashPartitionContext::prepare(RuntimeState* state) {
+Status HashPartitionContext::prepare(RuntimeState* state, RuntimeProfile* profile) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
@@ -37,8 +37,11 @@ Status HashPartitionContext::prepare(RuntimeState* state) {
         _has_nullable_key = _has_nullable_key || _partition_types[i].is_nullable;
     }
 
-    _chunks_partitioner = std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
-    return _chunks_partitioner->prepare(state);
+    _acc.set_max_size(state->chunk_size());
+    _mem_pool = std::make_unique<MemPool>();
+    _chunks_partitioner =
+            std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types, _mem_pool.get());
+    return _chunks_partitioner->prepare(state, profile);
 }
 
 Status HashPartitionContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
@@ -46,6 +49,7 @@ Status HashPartitionContext::push_one_chunk_to_partitioner(RuntimeState* state, 
 }
 
 void HashPartitionContext::sink_complete() {
+    _mem_pool.reset();
     _is_sink_complete = true;
 }
 
@@ -82,7 +86,7 @@ HashPartitionContext* HashPartitionContextFactory::create(int32_t driver_sequenc
         return it->second.get();
     }
 
-    auto ctx = std::make_shared<HashPartitionContext>(_t_partition_exprs);
+    auto ctx = std::make_shared<HashPartitionContext>(_has_nullable_key, _t_partition_exprs);
     auto* ctx_raw_ptr = ctx.get();
     _ctxs.emplace(driver_sequence, std::move(ctx));
     return ctx_raw_ptr;

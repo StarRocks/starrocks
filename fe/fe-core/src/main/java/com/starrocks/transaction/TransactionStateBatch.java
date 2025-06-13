@@ -15,7 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
@@ -26,7 +26,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -99,12 +98,14 @@ public class TransactionStateBatch implements Writable {
     // a proxy method
     public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
         for (TransactionState transactionState : transactionStates) {
-            // after status changed
-            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getCallbackFactory().getCallback(transactionState.getCallbackId());
-            if (callback != null) {
-                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
-                    callback.afterVisible(transactionState, txnOperated);
+            for (Long callbackId : transactionState.getCallbackId()) {
+                // after status changed
+                TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getCallbackFactory().getCallback(callbackId);
+                if (callback != null) {
+                    if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
+                        callback.afterVisible(transactionState, txnOperated);
+                    }
                 }
             }
         }
@@ -136,9 +137,9 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.size();
     }
 
-    public TransactionState index(int index) throws UserException {
+    public TransactionState index(int index) throws StarRocksException {
         if (index < 0 || index >= transactionStates.size()) {
-            throw new UserException("index out of bound");
+            throw new StarRocksException("index out of bound");
         }
         return transactionStates.get(index);
     }
@@ -159,10 +160,12 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    public void replaySetTransactionStatus() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.replaySetTransactionStatus();
+        }
     }
+
 
     public static TransactionStateBatch read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);

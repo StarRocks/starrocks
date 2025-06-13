@@ -59,6 +59,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
 #include "util/uid_util.h"
@@ -119,7 +120,7 @@ public:
     // of close operation, client should call close_wait() to finish channel's close.
     // We split one close operation into two phases in order to make multiple channels
     // can run parallel.
-    void close(RuntimeState* state);
+    void close(RuntimeState* state) {}
 
     // Get close wait's response, to finish channel close operation.
     void close_wait(RuntimeState* state);
@@ -178,7 +179,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    PInternalService_Stub* _brpc_stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -338,10 +339,6 @@ Status DataStreamSender::Channel::close_internal() {
 
     // Don't wait for the last packet to finish, left it to close_wait.
     return Status::OK();
-}
-
-void DataStreamSender::Channel::close(RuntimeState* state) {
-    state->log_error(close_internal().message());
 }
 
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {

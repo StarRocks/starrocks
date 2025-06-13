@@ -80,7 +80,7 @@ public class SqlWithIdUtils {
             long dbId = Long.parseLong(dbStr.substring(0, dbStr.indexOf(COMMON_SUFFIX)));
             Database db = dbMap.get(dbId);
             if (db == null) {
-                db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                 if (db == null) {
                     throw new SemanticException("Can not find db id: %s", dbId);
                 }
@@ -90,7 +90,7 @@ public class SqlWithIdUtils {
             long tableId = Long.parseLong(tableStr.substring(7, tableStr.indexOf(COMMON_SUFFIX)));
             Table table = tableMap.get(tableId);
             if (table == null) {
-                table = db.getTable(tableId);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 if (table == null) {
                     throw new SemanticException("Can not find table id: %s in db: %s", tableId, db.getOriginName());
                 }

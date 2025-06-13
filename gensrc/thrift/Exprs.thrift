@@ -192,6 +192,7 @@ struct TDictionaryGetExpr {
   1: optional i64 dict_id
   2: optional i64 txn_id
   3: optional i32 key_size
+  4: optional bool null_if_not_exist
 }
 
 // This is essentially a union over the subclasses of Expr.

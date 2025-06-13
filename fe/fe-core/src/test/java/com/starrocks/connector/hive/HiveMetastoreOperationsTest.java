@@ -72,7 +72,8 @@ public class HiveMetastoreOperationsTest {
         metastore = new HiveMetastore(client, "hive_catalog", null);
         executor = Executors.newFixedThreadPool(5);
         cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
     }
 
@@ -112,8 +113,8 @@ public class HiveMetastoreOperationsTest {
     public void testGetTable() {
         com.starrocks.catalog.Table table = hmsOps.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
-        Assert.assertEquals("db1", hiveTable.getDbName());
-        Assert.assertEquals("tbl1", hiveTable.getTableName());
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
@@ -136,7 +137,7 @@ public class HiveMetastoreOperationsTest {
     public void testGetPartition() {
         Partition partition = hmsOps.getPartition(
                 "db1", "tbl1", Lists.newArrayList("par1"));
-        Assert.assertEquals(ORC, partition.getInputFormat());
+        Assert.assertEquals(ORC, partition.getFileFormat());
         Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
 
         partition = hmsOps.getPartition("db1", "tbl1", Lists.newArrayList());
@@ -155,12 +156,12 @@ public class HiveMetastoreOperationsTest {
                 hmsOps.getPartitionByPartitionKeys(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
 
         Partition partition1 = partitions.get("col1=1");
-        Assert.assertEquals(ORC, partition1.getInputFormat());
+        Assert.assertEquals(ORC, partition1.getFileFormat());
         Assert.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", partition1.getFullPath());
 
         Partition partition2 = partitions.get("col1=2");
-        Assert.assertEquals(ORC, partition2.getInputFormat());
+        Assert.assertEquals(ORC, partition2.getFileFormat());
         Assert.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=2", partition2.getFullPath());
     }
@@ -221,7 +222,8 @@ public class HiveMetastoreOperationsTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
         ExecutorService executor = Executors.newFixedThreadPool(5);
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
@@ -250,7 +252,8 @@ public class HiveMetastoreOperationsTest {
         metastore = new HiveMetastore(new MockedTestMetaClient1(), "hive_catalog", MetastoreType.HMS);
         executor = Executors.newFixedThreadPool(5);
         cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hmsOps.dropDb("db1", false);
@@ -269,7 +272,8 @@ public class HiveMetastoreOperationsTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         ExecutorService executor = Executors.newFixedThreadPool(5);
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
@@ -294,7 +298,8 @@ public class HiveMetastoreOperationsTest {
         HiveMetaClient client2 = new MockedTestMetaClient2();
         HiveMetastore metastore2 = new HiveMetastore(client2, "hive_catalog", MetastoreType.HMS);
         CachingHiveMetastore cachingHiveMetastore2 = new CachingHiveMetastore(
-                metastore2, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore2, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         HiveMetastoreOperations hmsOps2 = new HiveMetastoreOperations(cachingHiveMetastore2, true,
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
@@ -364,7 +369,10 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs()
+                .stream()
+                .map(columnDef -> columnDef.toColumn(null))
+                .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
@@ -412,7 +420,7 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
@@ -450,7 +458,7 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
@@ -487,7 +495,7 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
@@ -524,7 +532,10 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs()
+                .stream()
+                .map(columnDef -> columnDef.toColumn(null))
+                .collect(Collectors.toList());
         stmt.setColumns(columns);
 
         CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(

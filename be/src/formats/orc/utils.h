@@ -37,53 +37,6 @@ public:
     const RuntimeFilterProbeCollector* rf_collector;
 };
 
-class DiskRange {
-public:
-    DiskRange(int64_t off, int64_t len) : offset(off), length(len) {
-        DCHECK(off >= 0);
-        DCHECK(len > 0);
-    }
-
-    /**
-    * Returns the minimal DiskRange that encloses both this DiskRange
-    * and otherDiskRange. If there was a gap between the ranges the
-    * new range will cover that gap.
-    */
-    DiskRange span(const DiskRange& otherDiskRange) const {
-        const int64_t start = std::min(offset, otherDiskRange.offset);
-        const int64_t end = std::max(get_end(), otherDiskRange.get_end());
-        return DiskRange(start, end - start);
-    }
-
-    int64_t get_end() const { return offset + length; }
-
-    int64_t offset;
-    int64_t length;
-};
-
-class DiskRangeHelper {
-public:
-    static void mergeAdjacentDiskRanges(std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
-                                        const std::vector<DiskRange>& disk_ranges, const int64_t max_merge_distance,
-                                        const int64_t max_merged_size) {
-        if (disk_ranges.empty()) {
-            return;
-        }
-        DiskRange last = disk_ranges[0];
-        for (size_t i = 1; i < disk_ranges.size(); i++) {
-            DiskRange current = disk_ranges[i];
-            DiskRange merged = last.span(current);
-            if (merged.length <= max_merged_size && last.get_end() + max_merge_distance >= current.offset) {
-                last = merged;
-            } else {
-                io_ranges.emplace_back(last.offset, last.length, true);
-                last = current;
-            }
-        }
-        io_ranges.emplace_back(last.offset, last.length, true);
-    }
-};
-
 // Hive ORC char type will pad trailing spaces.
 // https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
 static inline size_t remove_trailing_spaces(const char* s, size_t size) {

@@ -354,7 +354,7 @@ public class GlueMetastoreClientDelegate {
 
         try {
             Table table = glueMetastore.getTable(dbName, tableName);
-            MetastoreClientUtils.validateGlueTable(table);
+            MetastoreClientUtils.validateGlueTable(table, glueMetastore);
             return CatalogToHiveConverter.convertTable(table, dbName);
         } catch (SdkException e) {
             throw CatalogToHiveConverter.wrapInHiveException(e);
@@ -496,7 +496,9 @@ public class GlueMetastoreClientDelegate {
             try {
                 wh.deleteDir(tblPath, true, ifPurge, getDatabase(dbName));
             } catch (Exception e) {
-                LOGGER.error("Unable to remove table directory " + tblPath, e);
+                String msg = "Unable to remove table directory " + tblPath;
+                LOGGER.error(msg, e);
+                throw new MetaException(msg + e);
             }
         }
     }

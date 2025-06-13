@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import com.starrocks.jni.connector.ScannerHelper;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TestScannerHelper {
 
@@ -22,22 +22,22 @@ public class TestScannerHelper {
     public void testSplitAndOmitEmptyStrings() {
         {
             String[] values = ScannerHelper.splitAndOmitEmptyStrings("hello,world", ",");
-            Assert.assertEquals(values.length, 2);
-            Assert.assertEquals(values[0], "hello");
-            Assert.assertEquals(values[1], "world");
+            Assertions.assertEquals(values.length, 2);
+            Assertions.assertEquals(values[0], "hello");
+            Assertions.assertEquals(values[1], "world");
         }
         {
             String[] values = ScannerHelper.splitAndOmitEmptyStrings(",", ",");
-            Assert.assertEquals(values.length, 0);
+            Assertions.assertEquals(values.length, 0);
         }
         {
             String[] values = ScannerHelper.splitAndOmitEmptyStrings("", ",");
-            Assert.assertEquals(values.length, 0);
+            Assertions.assertEquals(values.length, 0);
         }
         {
             String[] values = ScannerHelper.splitAndOmitEmptyStrings(",hello", ",");
-            Assert.assertEquals(values.length, 1);
-            Assert.assertEquals(values[0], "hello");
+            Assertions.assertEquals(values.length, 1);
+            Assertions.assertEquals(values[0], "hello");
         }
     }
 }

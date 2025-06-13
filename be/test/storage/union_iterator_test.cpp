@@ -20,9 +20,9 @@
 #include <vector>
 
 #include "column/chunk.h"
-#include "column/column_pool.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -30,7 +30,7 @@ namespace starrocks {
 class UnionIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
-    void TearDown() override { TEST_clear_all_columns_this_thread(); }
+    void TearDown() override {}
 
     // return chunk with single column of type int32_t.
     class IntIterator final : public ChunkIterator {
@@ -88,7 +88,7 @@ TEST_F(UnionIteratorTest, union_two) {
     auto iter = new_union_iterator({sub1, sub2});
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
-        auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
+        auto c = FixedLengthColumn<int32_t>::dynamic_pointer_cast(chunk->get_column_by_index(0));
         return c->get_data()[row];
     };
 
@@ -138,7 +138,7 @@ TEST_F(UnionIteratorTest, union_one) {
     ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
-        auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
+        auto c = FixedLengthColumn<int32_t>::dynamic_pointer_cast(chunk->get_column_by_index(0));
         return c->get_data()[row];
     };
 

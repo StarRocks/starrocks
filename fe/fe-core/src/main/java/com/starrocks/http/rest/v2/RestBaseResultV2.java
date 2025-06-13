@@ -26,6 +26,19 @@ import java.util.Objects;
 
 public class RestBaseResultV2<T> extends RestBaseResult {
 
+    private static final Gson GSON = new GsonBuilder()
+            .setExclusionStrategies(new ExclusionStrategy() {
+                @Override
+                public boolean shouldSkipField(FieldAttributes f) {
+                    return f.getAnnotation(Legacy.class) != null;
+                }
+
+                @Override
+                public boolean shouldSkipClass(Class<?> clazz) {
+                    return false;
+                }
+            }).create();
+
     @SerializedName("result")
     private T result;
 
@@ -58,19 +71,7 @@ public class RestBaseResultV2<T> extends RestBaseResult {
 
     @Override
     public String toJson() {
-        Gson gson = new GsonBuilder()
-                .setExclusionStrategies(new ExclusionStrategy() {
-                    @Override
-                    public boolean shouldSkipField(FieldAttributes f) {
-                        return f.getAnnotation(Legacy.class) != null;
-                    }
-
-                    @Override
-                    public boolean shouldSkipClass(Class<?> clazz) {
-                        return false;
-                    }
-                }).create();
-        return gson.toJson(this);
+        return GSON.toJson(this);
     }
 
     public T getResult() {

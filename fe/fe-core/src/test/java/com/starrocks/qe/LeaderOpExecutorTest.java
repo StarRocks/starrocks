@@ -15,15 +15,15 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -34,13 +34,12 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockGenericPool;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 public class LeaderOpExecutorTest {
     private static ConnectContext connectContext;
@@ -116,7 +115,7 @@ public class LeaderOpExecutorTest {
     }
 
     private static void mockFrontendService(MockFrontendServiceClient client) {
-        ClientPool.frontendPool = new MockGenericPool<FrontendService.Client>("leader-op-mocked-pool") {
+        ThriftConnectionPool.frontendPool = new MockGenericPool<FrontendService.Client>("leader-op-mocked-pool") {
             @Override
             public FrontendService.Client borrowObject(TNetworkAddress address, int timeoutMs) {
                 return client;
@@ -141,35 +140,44 @@ public class LeaderOpExecutorTest {
     }
 
     @Test
-    public void testCreateTMasterOpRequest(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager warehouseManager) {
-        new Expectations() {
-            {
-                globalStateMgr.getServingState();
-                minTimes = 0;
+    public void testCreateTMasterOpRequest() {
+        String catalog = "myCatalog";
+        String database = "database";
 
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
-                minTimes = 1;
-
-                warehouseManager.getWarehouse(10001L);
-                result = new DefaultWarehouse(10001L, "wh1");
-                minTimes = 1;
-
-                warehouseManager.getWarehouse("wh1");
-                result = new DefaultWarehouse(10001L, "wh1");
-                minTimes = 1;
-            }
-        };
         ConnectContext connectContext = new ConnectContext();
-        connectContext.setGlobalStateMgr(globalStateMgr);
-        connectContext.setCurrentWarehouseId(10001L);
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getServingState());
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setCurrentRoleIds(UserIdentity.ROOT);
         connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setThreadLocalInfo();
+        connectContext.setCurrentCatalog(catalog);
+        connectContext.setDatabase(database);
 
         LeaderOpExecutor executor = new LeaderOpExecutor(new OriginStatement(""),
                 connectContext, RedirectStatus.FORWARD_NO_SYNC);
         TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
-        Assert.assertEquals(10001L, request.getWarehouse_id());
+        Assert.assertEquals(catalog, request.getCatalog());
+        Assert.assertEquals(database, request.getDb());
+    }
+
+    @Test
+    public void testTxnForward() throws Exception {
+        String sql = "begin";
+        StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+        TMasterOpResult tMasterOpResult = new TMasterOpResult();
+        tMasterOpResult.setTxn_id(1);
+
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftConnectionPoolMockedStatic.when(()
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    .thenReturn(tMasterOpResult);
+            LeaderOpExecutor executor =
+                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC);
+            executor.execute();
+
+            Assert.assertEquals(1, connectContext.getTxnId());
+        }
     }
 }

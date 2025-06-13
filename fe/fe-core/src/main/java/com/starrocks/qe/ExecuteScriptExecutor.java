@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.rpc.BackendServiceClient;
@@ -50,7 +50,7 @@ public class ExecuteScriptExecutor {
         return new ShowResultSet(meta, rowset);
     }
 
-    public static ShowResultSet execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+    public static ShowResultSet execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws StarRocksException {
         if (stmt.isFrontendScript()) {
             return executeFrontendScript(stmt, ctx);
         } else {
@@ -59,9 +59,9 @@ public class ExecuteScriptExecutor {
     }
 
     private static ShowResultSet executeFrontendScript(ExecuteScriptStmt stmt, ConnectContext ctx)
-            throws UserException {
+            throws StarRocksException {
         if (!Config.enable_execute_script_on_frontend) {
-            throw new UserException("execute script on frontend is disabled");
+            throw new StarRocksException("execute script on frontend is disabled");
         }
         try {
             StringBuilder sb = new StringBuilder();
@@ -69,19 +69,21 @@ public class ExecuteScriptExecutor {
             binding.setVariable("LOG", LOG);
             binding.setVariable("out", sb);
             binding.setVariable("globalState", GlobalStateMgr.getCurrentState());
+            binding.setVariable("metastore", GlobalStateMgr.getCurrentState().getLocalMetastore());
             GroovyShell shell = new GroovyShell(binding);
             shell.evaluate(stmt.getScript());
             ctx.getState().setOk();
             return makeResultSet(sb.toString());
         } catch (Exception e) {
-            throw new UserException("execute script failed: " + e.getMessage());
+            throw new StarRocksException("execute script failed: " + e.getMessage());
         }
     }
 
-    private static ShowResultSet executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+    private static ShowResultSet executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws
+            StarRocksException {
         ComputeNode be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(stmt.getBeId());
         if (be == null) {
-            throw new UserException("node not found: " + stmt.getBeId());
+            throw new StarRocksException("node not found: " + stmt.getBeId());
         }
         TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
         ExecuteCommandRequestPB request = new ExecuteCommandRequestPB();
@@ -94,7 +96,7 @@ public class ExecuteScriptExecutor {
                 LOG.warn("execute script error BE: {} script:{} result: {}", stmt.getBeId(),
                         StringUtils.abbreviate(stmt.getScript(), 1000),
                         result.status.errorMsgs);
-                throw new UserException(result.status.toString());
+                throw new StarRocksException(result.status.toString());
             } else {
                 LOG.info("execute script ok BE: {} script:{} result: {}", stmt.getBeId(),
                         StringUtils.abbreviate(stmt.getScript(), 1000), StringUtils.abbreviate(result.result, 1000));
@@ -104,9 +106,9 @@ public class ExecuteScriptExecutor {
         } catch (InterruptedException ie) {
             LOG.warn("got interrupted exception when sending proxy request to " + address);
             Thread.currentThread().interrupt();
-            throw new UserException("got interrupted exception when sending proxy request to " + address);
+            throw new StarRocksException("got interrupted exception when sending proxy request to " + address);
         } catch (Exception e) {
-            throw new UserException("executeCommand RPC failed BE:" + address + " err " + e.getMessage());
+            throw new StarRocksException("executeCommand RPC failed BE:" + address + " err " + e.getMessage());
         }
     }
 }

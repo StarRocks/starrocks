@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Keywords
@@ -97,6 +97,7 @@ Following are StarRocks reserved keywords arranged in alphabetical order. You mu
 
 - ELSE
 - EXCEPT
+- EXCLUDE
 - EXISTS
 - EXPLAIN
 

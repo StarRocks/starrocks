@@ -96,9 +96,13 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_NAME);
             }
         };
 
@@ -168,7 +172,7 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = warehouseId;
 
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(anyLong);
                 minTimes = 0;
                 result = Lists.newArrayList(10003L, 10004L, 10005L);
             }

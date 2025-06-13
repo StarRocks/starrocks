@@ -1,15 +1,19 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # MaxCompute catalog
+
+<Beta />
 
 StarRocks supports Alibaba Cloud MaxCompute (previously known as ODPS) catalogs from v3.3 onwards.
 
 A MaxCompute catalog is a kind of external catalog that enables you to query data from MaxCompute without ingestion.
 
-With MaxCompute catalogs, you also can directly transform and load the data from MaxCompute by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md).
+With MaxCompute catalogs, you also can directly transform and load the data from MaxCompute by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 ## Usage notes
 
@@ -58,14 +62,14 @@ A set of parameters about how StarRocks accesses the metadata of the MaxCompute 
 
 The following table describes the parameter you need to configure in `CatalogParams`.
 
-| Parameter            | Required  | Description                                                                     |
-|----------------------|-----------|---------------------------------------------------------------------------------|
-| odps.endpoint        | Yes       | The connection address (namely, endpoint) for the MaxCompute service. You need to configure the endpoint according to the region selected when creating the MaxCompute project as well as the network connection mode. For details about the endpoints used in different regions and network connection modes, see [Endpoint](https://www.alibabacloud.com/help/en/maxcompute/user-guide/endpoints). Note that currently only two network connection modes of Alibaba Cloud are supported to provide the best experience: VPC and classic network. |
-| odps.project         | Yes       | The name of the MaxCompute project you want to access. If you have created a standard mode workspace, pay attention to the differences between the project names for the production environment and the development environment (_dev) when configuring this parameter. You can log in to the [MaxCompute Console](https://account.alibabacloud.com/login/login.htm?spm=5176.12901015-2.0.0.593a525cwmiD7c), and obtain the MaxCompute project name on the **Workspace** > **Project Management** page.                     |
-| odps.access.id       | Yes       | The AccessKey ID of the Alibaba Cloud account or RAM user. You can enter the [AccessKey Management](https://ram.console.aliyun.com/manage/ak) page to obtain the AccessKey ID. |
-| odps.access.key      | Yes       | The AccessKey Secret matching the AccessKey ID. You can enter the [AccessKey Management](https://ram.console.aliyun.com/manage/ak) page to obtain the AccessKey Secret. |
-| odps.tunnel.endpoint | No        | The public network access link for the Tunnel service. If you have not configured the Tunnel endpoint, Tunnel will automatically route to the Tunnel endpoint matching the network where the MaxCompute service is located. If you have configured the Tunnel endpoint, it will be used as configured and not automatically routed. |
-| odps.tunnel.quota    | Yes       | The name of the resource group used for data transfer. StarRocks needs to use [MaxCompute's dedicated resource groups](https://help.aliyun.com/zh/maxcompute/user-guide/purchase-and-use-exclusive-resource-groups-for-dts) to pull data. |
+| Parameter            | Required  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|----------------------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| odps.endpoint        | Yes       | The connection address (namely, endpoint) for the MaxCompute service. You need to configure the endpoint according to the region selected when creating the MaxCompute project as well as the network connection mode. For details about the endpoints used in different regions and network connection modes, see [Endpoint](https://www.alibabacloud.com/help/en/maxcompute/user-guide/endpoints). Note that currently only two network connection modes of Alibaba Cloud are supported to provide the best experience: VPC and classic network.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| odps.project         | Yes       | The name of the MaxCompute project you want to access. If you have created a standard mode workspace, pay attention to the differences between the project names for the production environment and the development environment (_dev) when configuring this parameter. You can log in to the [MaxCompute Console](https://account.alibabacloud.com/login/login.htm?spm=5176.12901015-2.0.0.593a525cwmiD7c), and obtain the MaxCompute project name on the **Workspace** > **Project Management** page.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| odps.access.id       | Yes       | The AccessKey ID of the Alibaba Cloud account or RAM user. You can enter the [AccessKey Management](https://ram.console.aliyun.com/manage/ak) page to obtain the AccessKey ID.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| odps.access.key      | Yes       | The AccessKey Secret matching the AccessKey ID. You can enter the [AccessKey Management](https://ram.console.aliyun.com/manage/ak) page to obtain the AccessKey Secret.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| odps.tunnel.endpoint | No        | The public network access link for the Tunnel service. If you have not configured the Tunnel endpoint, Tunnel will automatically route to the Tunnel endpoint matching the network where the MaxCompute service is located. If you have configured the Tunnel endpoint, it will be used as configured and not automatically routed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| odps.tunnel.quota    | Yes       | The name of the quota that is used to access MaxCompute. MaxCompute provides two types of resources for data transmission: exclusive resource group for MaxCompute Tunnel (subscription) and storage API (pay-as-you-go). You can perform the following operations to obtain the quota name based on the resource type.<p/> **Exclusive resource group for MaxCompute Tunnel**: Log on to the [MaxCompute console](https://maxcompute.console.aliyun.com/). In the top navigation bar, select a region. In the left-side navigation pane, choose Workspace > Quotas to view the available quotas. For more information, see [Manage quotas for computing resources in the MaxCompute console](https://help.aliyun.com/zh/maxcompute/user-guide/manage-quotas-in-the-maxcompute-console).<p/> **Storage API**: Log on to the [MaxCompute console](https://maxcompute.console.aliyun.com/). In the left-side navigation pane, choose Tenants > Tenant Property. On the Tenants page, turn on Storage API Switch. For more information, see [Use storage API (pay-as-you-go)](https://help.aliyun.com/zh/maxcompute/user-guide/overview-1). The default name of the storage API is **"pay-as-you-go"**. |
 
 #### ScanParams
 
@@ -113,14 +117,14 @@ PROPERTIES (
 
 ## View MaxCompute catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md)
 to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a MaxCompute catalog named `odps_catalog`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a MaxCompute catalog named `odps_catalog`:
 
 ```SQL
 SHOW CREATE CATALOG odps_catalog;
@@ -128,7 +132,7 @@ SHOW CREATE CATALOG odps_catalog;
 
 ## Drop a MaxCompute catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a MaxCompute catalog named `odps_catalog`:
 
@@ -154,31 +158,31 @@ You can use one of the following syntaxes to view the schema of a MaxCompute tab
 
 ## Query a MaxCompute table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your MaxCompute cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your MaxCompute cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to switch to the destination catalog in the current session:
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+   Then, use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify the active database in the current session:
 
    ```SQL
    USE <db_name>;
    ```
 
-   Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
+   Or, you can use [USE](../../sql-reference/sql-statements/Database/USE.md) to directly specify the active database in the destination catalog:
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
@@ -228,7 +232,7 @@ The TIMESTAMP type will lose precision due to type conversion in StarRocks.
 
 In the current version, MaxCompute catalogs cannot automatically collect CBO statistics for MaxCompute tables, and consequently the optimizer may not be able to generate the optimal query plans. As such, manually scanning the CBO statistics for MaxCompute tables and importing them into StarRocks can effectively expedite queries.
 
-Suppose that there is a MaxCompute table named `mc_table` in your MaxCompute cluster. You can create a manual collection task for collecting CBO statistics by using [ANALYZE TABLE](../../sql-reference/sql-statements/data-definition/ANALYZE_TABLE.md):
+Suppose that there is a MaxCompute table named `mc_table` in your MaxCompute cluster. You can create a manual collection task for collecting CBO statistics by using [ANALYZE TABLE](../../sql-reference/sql-statements/cbo_stats/ANALYZE_TABLE.md):
 
 ```SQL
 ANALYZE TABLE mc_table;
@@ -236,7 +240,7 @@ ANALYZE TABLE mc_table;
 
 ## Manually update metadata cache
 
-By default, StarRocks caches the metadata of MaxCompute to improve query performance. Therefore, after making schema changes or other updates to a MaxCompute table, you can use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update the metadata of the table, thereby ensuring that StarRocks can obtain the most recent metadata promptly:
+By default, StarRocks caches the metadata of MaxCompute to improve query performance. Therefore, after making schema changes or other updates to a MaxCompute table, you can use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) to manually update the metadata of the table, thereby ensuring that StarRocks can obtain the most recent metadata promptly:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]

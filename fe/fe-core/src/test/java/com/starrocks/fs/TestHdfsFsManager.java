@@ -18,7 +18,7 @@
 package com.starrocks.fs;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.thrift.THdfsProperties;
@@ -54,7 +54,7 @@ public class TestHdfsFsManager extends TestCase {
             HdfsFs fs = fileSystemManager.getFileSystem(testHdfsHost + "/data/abc/logs", properties, null);
             assertNotNull(fs);
             fs.getDFSFileSystem().close();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.fail(e.getMessage());
         }
     }
@@ -69,7 +69,7 @@ public class TestHdfsFsManager extends TestCase {
             HdfsFs fs = fileSystemManager.getFileSystem("s3a://testbucket/data/abc/logs", properties, null);
             assertNotNull(fs);
             fs.getDFSFileSystem().close();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.fail(e.getMessage());
         }
     }
@@ -86,7 +86,7 @@ public class TestHdfsFsManager extends TestCase {
             assertNotNull(fs);
             Assert.assertEquals(property.region, "ap-southeast-1");
             fs.getDFSFileSystem().close();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.fail(e.getMessage());
         }
     }
@@ -103,13 +103,13 @@ public class TestHdfsFsManager extends TestCase {
             assertNotNull(fs);
             Assert.assertEquals(property.region, "ap-southeast-1");
             fs.getDFSFileSystem().close();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.fail(e.getMessage());
         }
     }
 
     @Test
-    public void testList() throws UserException, IOException {
+    public void testList() throws StarRocksException, IOException {
         HdfsFsManager hdfsFsManager = Mockito.spy(fileSystemManager);
         FileSystem fs = Mockito.mock(FileSystem.class);
         HdfsFs hdfs = Mockito.mock(HdfsFs.class);
@@ -122,9 +122,9 @@ public class TestHdfsFsManager extends TestCase {
         Mockito.when(fs.globStatus(new Path("s3a://dir/"))).thenReturn(files);
 
         // listFileMeta
-        Assert.assertThrows(UserException.class,
+        Assert.assertThrows(StarRocksException.class,
                 () -> hdfsFsManager.listFileMeta("not_found", Maps.newHashMap()));
-        Assert.assertThrows(UserException.class,
+        Assert.assertThrows(StarRocksException.class,
                 () -> hdfsFsManager.listFileMeta("error", Maps.newHashMap()));
         Assert.assertFalse(hdfsFsManager.listFileMeta("s3a://dir/", Maps.newHashMap()).isEmpty());
 

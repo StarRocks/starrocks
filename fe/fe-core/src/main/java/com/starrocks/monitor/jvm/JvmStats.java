@@ -131,6 +131,15 @@ public class JvmStats {
                 garbageCollectors, bufferPoolsList, classes);
     }
 
+    public static float getJvmHeapUsedPercent() {
+        MemoryUsage memUsage = MEMORY_MX_BEAN.getHeapMemoryUsage();
+        if (memUsage.getCommitted() <= 0) {
+            return 0.0f;
+        } else {
+            return memUsage.getUsed() / (float) memUsage.getCommitted();
+        }
+    }
+
     private final long timestamp;
     private final long uptime;
     private final Mem mem;
@@ -176,56 +185,6 @@ public class JvmStats {
 
     public Classes getClasses() {
         return classes;
-    }
-
-    static final class Fields {
-        static final String JVM = "jvm";
-        static final String TIMESTAMP = "timestamp";
-        static final String UPTIME = "uptime";
-        static final String UPTIME_IN_MILLIS = "uptime_in_millis";
-
-        static final String MEM = "mem";
-        static final String HEAP_USED = "heap_used";
-        static final String HEAP_USED_IN_BYTES = "heap_used_in_bytes";
-        static final String HEAP_USED_PERCENT = "heap_used_percent";
-        static final String HEAP_MAX = "heap_max";
-        static final String HEAP_MAX_IN_BYTES = "heap_max_in_bytes";
-        static final String HEAP_COMMITTED = "heap_committed";
-        static final String HEAP_COMMITTED_IN_BYTES = "heap_committed_in_bytes";
-
-        static final String NON_HEAP_USED = "non_heap_used";
-        static final String NON_HEAP_USED_IN_BYTES = "non_heap_used_in_bytes";
-        static final String NON_HEAP_COMMITTED = "non_heap_committed";
-        static final String NON_HEAP_COMMITTED_IN_BYTES = "non_heap_committed_in_bytes";
-
-        static final String POOLS = "pools";
-        static final String USED = "used";
-        static final String USED_IN_BYTES = "used_in_bytes";
-        static final String MAX = "max";
-        static final String MAX_IN_BYTES = "max_in_bytes";
-        static final String PEAK_USED = "peak_used";
-        static final String PEAK_USED_IN_BYTES = "peak_used_in_bytes";
-        static final String PEAK_MAX = "peak_max";
-        static final String PEAK_MAX_IN_BYTES = "peak_max_in_bytes";
-
-        static final String THREADS = "threads";
-        static final String COUNT = "count";
-        static final String PEAK_COUNT = "peak_count";
-
-        static final String GC = "gc";
-        static final String COLLECTORS = "collectors";
-        static final String COLLECTION_COUNT = "collection_count";
-        static final String COLLECTION_TIME = "collection_time";
-        static final String COLLECTION_TIME_IN_MILLIS = "collection_time_in_millis";
-
-        static final String BUFFER_POOLS = "buffer_pools";
-        static final String TOTAL_CAPACITY = "total_capacity";
-        static final String TOTAL_CAPACITY_IN_BYTES = "total_capacity_in_bytes";
-
-        static final String CLASSES = "classes";
-        static final String CURRENT_LOADED_COUNT = "current_loaded_count";
-        static final String TOTAL_LOADED_COUNT = "total_loaded_count";
-        static final String TOTAL_UNLOADED_COUNT = "total_unloaded_count";
     }
 
     public static class GarbageCollectors implements Iterable<GarbageCollector> {

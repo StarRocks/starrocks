@@ -56,8 +56,8 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/olap_file.pb.cc
     ${GEN_CPP_DIR}/data.pb.cc
     ${GEN_CPP_DIR}/descriptors.pb.cc
+    ${GEN_CPP_DIR}/encryption.pb.cc
     ${GEN_CPP_DIR}/internal_service.pb.cc
-    ${GEN_CPP_DIR}/doris_internal_service.pb.cc
     ${GEN_CPP_DIR}/types.pb.cc
     ${GEN_CPP_DIR}/snapshot.pb.cc
     ${GEN_CPP_DIR}/status.pb.cc
@@ -76,6 +76,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
     ${GEN_CPP_DIR}/ShortCircuit_types.cpp
     ${GEN_CPP_DIR}/DataCache_types.cpp
+    ${GEN_CPP_DIR}/Row_types.cpp
 )
 
 # keep everything in one library, the object files reference

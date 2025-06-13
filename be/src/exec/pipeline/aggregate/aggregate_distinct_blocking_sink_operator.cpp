@@ -22,7 +22,9 @@ namespace starrocks::pipeline {
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-    return _aggregator->open(state);
+    RETURN_IF_ERROR(_aggregator->open(state));
+    _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
 }
 
 void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
@@ -35,6 +37,7 @@ void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
     ONCE_DETECT(_set_finishing_once);
+    auto notify = _aggregator->defer_notify_source();
     auto defer = DeferOp([this]() {
         COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
         _aggregator->sink_complete();

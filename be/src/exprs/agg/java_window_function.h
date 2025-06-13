@@ -49,8 +49,6 @@ public:
         }
 
         std::vector<jobject> args;
-        std::vector<DirectByteBuffer> buffers;
-        ConvertDirectBufferVistor vistor(buffers);
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         DeferOp defer = DeferOp([&]() {
@@ -61,7 +59,8 @@ public:
                 }
             }
         });
-        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_args, num_rows, &args);
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_args, num_rows, &args);
+        SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
         ctx->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end, frame_start,

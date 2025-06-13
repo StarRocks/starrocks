@@ -18,9 +18,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
@@ -29,7 +32,6 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class KafkaTaskInfoTest {
 
@@ -47,7 +49,7 @@ public class KafkaTaskInfoTest {
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
                                                        List<Integer> partitions,
-                                                       long warehouseId) throws UserException {
+                                                       ComputeResource computeResource) throws StarRocksException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
@@ -57,7 +59,7 @@ public class KafkaTaskInfoTest {
 
         Map<Integer, Long> offset1 = Maps.newHashMap();
         offset1.put(0, 99L);
-        KafkaTaskInfo kafkaTaskInfo1 = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo1 = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
@@ -67,14 +69,28 @@ public class KafkaTaskInfoTest {
         Assert.assertTrue(kafkaTaskInfo1.readyToExecute());
 
         Map<Integer, Long> offset2 = Maps.newHashMap();
-        offset1.put(0, 100L);
-        KafkaTaskInfo kafkaTaskInfo2 = new KafkaTaskInfo(UUID.randomUUID(),
+        offset2.put(0, 100L);
+        KafkaTaskInfo kafkaTaskInfo2 = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset2,
                 Config.routine_load_task_timeout_second * 1000);
         Assert.assertFalse(kafkaTaskInfo2.readyToExecute());
+
+        // consume offset > latest offset
+        Map<Integer, Long> offset3 = Maps.newHashMap();
+        offset3.put(0, 101L);
+        KafkaTaskInfo kafkaTaskInfo3 = new KafkaTaskInfo(UUIDUtil.genUUID(),
+                kafkaRoutineLoadJob,
+                System.currentTimeMillis(),
+                System.currentTimeMillis(),
+                offset3,
+                Config.routine_load_task_timeout_second * 1000);
+        ExceptionChecker.expectThrowsWithMsg(RoutineLoadPauseException.class,
+                "Consume offset: 101 is greater than the latest offset: 100 in kafka partition: 0. " +
+                        "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job",
+                () -> kafkaTaskInfo3.readyToExecute());
     }
 
     @Test
@@ -91,7 +107,7 @@ public class KafkaTaskInfoTest {
 
         Map<Integer, Long> offset1 = Maps.newHashMap();
         offset1.put(0, 100L);
-        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
@@ -115,7 +131,7 @@ public class KafkaTaskInfoTest {
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
                                                        List<Integer> partitions,
-                                                       long warehouseId) throws UserException {
+                                                       ComputeResource computeResource) throws StarRocksException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
@@ -125,7 +141,7 @@ public class KafkaTaskInfoTest {
 
         Map<Integer, Long> offset = Maps.newHashMap();
         offset.put(0, 99L);
-        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),

@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -40,6 +41,7 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
 import java.util.List;
 import java.util.Map;
@@ -87,7 +89,9 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
         if (tableFunctionAsTargetTable) {
             return true;
         }
-        return false;
+
+        QueryStatement queryStatement = statement.getQueryStatement();
+        return queryStatement != null && visitQueryStatement(queryStatement, context);
     }
 
     @Override
@@ -108,30 +112,28 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
         return !Strings.isNullOrEmpty(engineName) && !statement.isOlapEngine();
     }
 
-    @Override
-    public Boolean visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, Void context) {
-        Map<String, String> properties = statement.getProperties();
-
+    private boolean hasSecretInProperties(Map<String, String> properties) {
         if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)) {
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)) {
             return true;
         }
         return false;
     }
 
     @Override
+    public Boolean visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, Void context) {
+        Map<String, String> properties = statement.getProperties();
+        return hasSecretInProperties(properties);
+    }
+
+    @Override
     public Boolean visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, Void context) {
         Map<String, String> properties = statement.getProperties();
-
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)) {
-            return true;
-        }
-        return false;
+        return hasSecretInProperties(properties);
     }
 
     @Override
@@ -172,6 +174,11 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     }
 
     @Override
+    public Boolean visitCreatePipeStatement(CreatePipeStmt statement, Void context) {
+        return visitInsertStatement(statement.getInsertStmt(), context);
+    }
+
+    @Override
     public Boolean visitRelation(Relation relation, Void context) {
         return false;
     }
@@ -183,7 +190,8 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
 
     @Override
     public Boolean visitFileTableFunction(FileTableFunctionRelation relation, Void context) {
-        return true;
+        Map<String, String> properties = relation.getProperties();
+        return hasSecretInProperties(properties);
     }
 
     @Override
@@ -197,8 +205,17 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     }
 
     @Override
-    public Boolean visitSubquery(SubqueryRelation relation, Void context) {
+    public Boolean visitSubqueryRelation(SubqueryRelation relation, Void context) {
         QueryStatement queryStatement = relation.getQueryStatement();
         return visit(queryStatement);
+    }
+
+    @Override
+    public Boolean visitDescTableStmt(DescribeStmt stmt, Void context) {
+        if (stmt.isTableFunctionTable()) {
+            Map<String, String> tableProperties = stmt.getTableFunctionProperties();
+            return hasSecretInProperties(tableProperties);
+        }
+        return false;
     }
 }

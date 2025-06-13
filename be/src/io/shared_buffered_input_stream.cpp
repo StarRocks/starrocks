@@ -57,9 +57,9 @@ Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& 
     // check io range is not overlapped.
     for (size_t i = 1; i < ranges.size(); i++) {
         if (ranges[i].offset < (ranges[i - 1].offset + ranges[i - 1].size)) {
-            LOG(WARNING) << "io ranges are overalpped" << ranges[i].offset << " "
+            LOG(WARNING) << "io ranges are overlapped" << ranges[i].offset << " "
                          << ranges[i - 1].offset + ranges[i - 1].size;
-            return Status::RuntimeError("io ranges are overalpped");
+            return Status::RuntimeError("io ranges are overlapped");
         }
     }
 
@@ -295,6 +295,14 @@ void SharedBufferedInputStream::_update_estimated_mem_usage() {
     // to read it, we need to decompress it, and let's say to add 50% overhead.
     mem_usage += mem_usage / 2;
     _estimated_mem_usage = std::max(mem_usage, _estimated_mem_usage);
+}
+
+int64_t SharedBufferedInputStream::current_range_ref_sum() const {
+    int64_t ref = 0;
+    for (const auto& [_, sb] : _map) {
+        ref += sb->ref_count;
+    }
+    return ref;
 }
 
 } // namespace starrocks::io

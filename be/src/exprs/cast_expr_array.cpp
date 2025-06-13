@@ -127,10 +127,12 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
     }
 }
 
-Status CastStringToArray::prepare(RuntimeState* state, ExprContext* context) {
-    RETURN_IF_ERROR(Expr::prepare(state, context));
-    if (is_constant()) {
-        ASSIGN_OR_RETURN(_constant_res, evaluate_const(context));
+Status CastStringToArray::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    RETURN_IF_ERROR(Expr::open(state, context, scope));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        if (is_constant()) {
+            ASSIGN_OR_RETURN(_constant_res, evaluate_const(context));
+        }
     }
     return Status::OK();
 }
@@ -143,7 +145,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(rows);
         } else {
-            return ConstColumn::create(input->data_column()->clone_shared(), rows);
+            return ConstColumn::create(input->data_column()->clone(), rows);
         }
     }
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
@@ -153,8 +155,8 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
 
     LogicalType element_type = _cast_elements_expr->type().type;
     ColumnViewer<TYPE_VARCHAR> src(column);
-    UInt32Column::Ptr offsets = UInt32Column::create();
-    NullColumn::Ptr null_column = NullColumn::create();
+    UInt32Column::MutablePtr offsets = UInt32Column::create();
+    NullColumn::MutablePtr null_column = NullColumn::create();
 
     std::vector<char> stack;
 
@@ -217,15 +219,15 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(elements, offsets);
+    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
 
     if (column->is_nullable() || has_null) {
-        res = NullableColumn::create(res, null_column);
+        res = NullableColumn::create(std::move(res), std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(res, column->size());
+        res = ConstColumn::create(std::move(res), column->size());
     }
     return res;
 }
@@ -258,8 +260,8 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
 
     LogicalType element_type = _cast_elements_expr->type().type;
     ColumnViewer<TYPE_JSON> src(column);
-    UInt32Column::Ptr offsets = UInt32Column::create();
-    NullColumn::Ptr null_column = NullColumn::create();
+    UInt32Column::MutablePtr offsets = UInt32Column::create();
+    NullColumn::MutablePtr null_column = NullColumn::create();
 
     // 1. Cast JsonArray to ARRAY<JSON>
     uint32_t offset = 0;
@@ -297,14 +299,14 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(elements, offsets);
+    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
     if (column->is_nullable()) {
-        res = NullableColumn::create(res, null_column);
+        res = NullableColumn::create(std::move(res), std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(res, column->size());
+        res = ConstColumn::create(std::move(res), column->size());
     }
     return res;
 }

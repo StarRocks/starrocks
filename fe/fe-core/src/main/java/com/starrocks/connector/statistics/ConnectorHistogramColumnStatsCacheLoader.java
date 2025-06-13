@@ -26,6 +26,8 @@ import com.starrocks.sql.optimizer.statistics.HistogramUtils;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.ArrayList;
@@ -41,7 +43,7 @@ import static com.starrocks.connector.statistics.StatisticsUtils.getTableByUUID;
 
 public class ConnectorHistogramColumnStatsCacheLoader implements
         AsyncCacheLoader<ConnectorTableColumnKey, Optional<Histogram>> {
-
+    private static final Logger LOG = LogManager.getLogger(ConnectorHistogramColumnStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
@@ -56,12 +58,13 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
                         queryHistogramStatistics(connectContext, cacheKey.tableUUID, Lists.newArrayList(cacheKey.column));
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
                 if (!statisticData.isEmpty()) {
-                    return Optional.of(convert2Histogram(cacheKey.tableUUID, statisticData.get(0)));
+                    return Optional.of(convert2Histogram(connectContext, cacheKey.tableUUID, statisticData.get(0)));
                 } else {
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -75,30 +78,32 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
             @NonNull Iterable<? extends @NonNull ConnectorTableColumnKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             Map<ConnectorTableColumnKey, Optional<Histogram>> result = new HashMap<>();
+            String tableUUID = null;
+            List<String> columns = new ArrayList<>();
+            if (!keys.iterator().hasNext()) {
+                return result;
+            }
+            for (ConnectorTableColumnKey key : keys) {
+                tableUUID = key.tableUUID;
+                columns.add(key.column);
+                result.put(key, Optional.empty());
+            }
+
             try {
-                String tableUUID = null;
-                List<String> columns = new ArrayList<>();
-                if (!keys.iterator().hasNext()) {
-                    return result;
-                }
-                for (ConnectorTableColumnKey key : keys) {
-                    tableUUID = key.tableUUID;
-                    columns.add(key.column);
-                    result.put(key, Optional.empty());
-                }
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(connectContext, tableUUID, columns);
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
-                    Histogram histogram = convert2Histogram(tableUUID, histogramStatsData);
+                    Histogram histogram = convert2Histogram(connectContext, tableUUID, histogramStatsData);
                     result.put(new ConnectorTableColumnKey(tableUUID, histogramStatsData.columnName),
                             Optional.of(histogram));
                 }
 
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return result;
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -118,8 +123,9 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
         return statisticExecutor.queryHistogram(context, tableUUID, column);
     }
 
-    private Histogram convert2Histogram(String tableUUID, TStatisticData statisticData) throws AnalysisException {
-        Table table = getTableByUUID(tableUUID);
+    private Histogram convert2Histogram(ConnectContext context, String tableUUID, TStatisticData statisticData)
+            throws AnalysisException {
+        Table table = getTableByUUID(context, tableUUID);
         Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
 
         List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, columnType);

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Helm 部署 StarRocks 集群
@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
     1. 添加 Helm Chart Repo。
 
        ```Bash
-       helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
+       helm repo add starrocks https://starrocks.github.io/starrocks-kubernetes-operator
        ```
 
     2. 更新 Helm Chart Repo 至最新版本。
@@ -29,11 +29,11 @@ displayed_sidebar: "Chinese"
     3. 查看所添加的 Helm Chart Repo。
 
        ```Bash
-       $ helm search repo starrocks-community
+       $ helm search repo starrocks
        NAME                                     CHART VERSION   APP VERSION   DESCRIPTION
-       starrocks-community/kube-starrocks       1.8.0           3.1-latest    kube-starrocks includes two subcharts, starrock...
-       starrocks-community/operator             1.8.0           1.8.0         A Helm chart for StarRocks operator
-       starrocks-community/starrocks            1.8.0           3.1-latest    A Helm chart for StarRocks cluster
+       starrocks/kube-starrocks       1.8.0           3.1-latest    kube-starrocks includes two subcharts, starrock...
+       starrocks/operator             1.8.0           1.8.0         A Helm chart for StarRocks operator
+       starrocks/starrocks            1.8.0           3.1-latest    A Helm chart for StarRocks cluster
        ```
 
 2. 您可以使用 Helm Chart 默认的 **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** 来部署 StarRocks Operator 和 StarRocks 集群，也可以新建 YAML 文件并且自定义配置来部署。
@@ -42,7 +42,7 @@ displayed_sidebar: "Chinese"
        执行如下命令，部署 StarRocks Operator 和 StarRocks 集群。StarRocks 集群包含一个 FE 和一个 BE。
 
        ```Bash
-       $ helm install starrocks starrocks-community/kube-starrocks
+       $ helm install starrocks starrocks/kube-starrocks
        # 返回如下结果，表示正在部署 StarRocks Operator 和 StarRocks 集群。
        NAME: starrocks
        LAST DEPLOYED: Tue Aug 15 15:12:00 2023
@@ -58,7 +58,7 @@ displayed_sidebar: "Chinese"
         - 执行如下命令，使用 **my-values.yaml** 中的自定义配置部署 StarRocks Operator 和 StarRocks 集群。
 
           ```Bash
-           helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
+           helm install -f my-values.yaml starrocks starrocks/kube-starrocks
           ```
 
         部署需要一定时间。期间，您可以根据上述部署命令返回结果中的提示命令查询部署状态，默认的提示命令如下：

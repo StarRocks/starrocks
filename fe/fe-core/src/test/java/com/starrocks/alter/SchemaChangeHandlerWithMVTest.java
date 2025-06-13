@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -100,8 +101,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             starRocksAssert.withRefreshedMaterializedView(mv);
 
             AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(alterColumn);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm);
-
+            DDLStmtExecutor.execute(dropValColStm, connectContext);
             Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
             waitAlterJobDone(alterJobs);
         } finally {

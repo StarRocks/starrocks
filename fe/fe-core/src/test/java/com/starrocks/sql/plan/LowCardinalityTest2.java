@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -140,7 +144,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `low_card_t2` (\n" +
@@ -150,14 +154,14 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  `c_new` int(11) ,\n" +
                 "  `cpc` int(11)\n" +
                 ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`d_date`, `c_mr`)\n" +
+                "PRIMARY KEY(`d_date`, `c_mr`)\n" +
                 "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`d_date`, `c_mr`) BUCKETS 16 \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
@@ -268,26 +272,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "select cte1.L_SHIPMODE, cte1.L_COMMENT from cte1 join[broadcast] cte2 on cte1.L_SHIPMODE = cte2.P_COMMENT";
 
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  4:Decode\n" +
                 "  |  <dict id 51> : <string id 18>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: max[([49: L_COMMENT, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true]\n" +
-                "  |  group by: [15: L_SHIPMODE, CHAR, false]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  1:OlapScanNode\n" +
-                "     table: lineitem, rollup: lineitem\n" +
-                "     preAggregation: on\n" +
-                "     dict_col=L_COMMENT\n" +
-                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
-                "     tabletList=\n" +
-                "     actualRows=0, avgRowSize=54.0\n" +
+                "  3:EXCHANGE\n" +
+                "     distribution type: ROUND_ROBIN\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (15: L_SHIPMODE)"));
+                "     - filter_id = 0, probe_expr = (<slot 15>)"));
     }
 
     @Test
@@ -299,6 +292,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  <slot 4> : 4: dept_name"));
+    }
+
+    @Test
+    public void testDecodeNodeRewriteLength() throws Exception {
+        String sql = "select length(dept_name), char_length(dept_name) from dept group by dept_name,state";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  2:Project\n" +
+                "  |  <slot 4> : DictDecode(6: dept_name, [length(<place-holder>)])\n" +
+                "  |  <slot 5> : DictDecode(6: dept_name, [char_length(<place-holder>)])"));
     }
 
     @Test
@@ -355,6 +357,43 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(enableLowCardinalityOptimize);
             connectContext.getSessionVariable().setNewPlanerAggStage(newPlannerAggStage);
         }
+    }
+
+    @Test
+    public void testIdentifyBlocking() throws Exception {
+        String sql = "select * from low_card_t1 order by 1";
+        boolean hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(cpc) from low_card_t1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "(select sum(cpc) from low_card_t1) union all (select sum(cpc) from low_card_t2)";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertFalse(hasBlockingNode);
+        sql = "(select sum(cpc) from low_card_t1) union all (select sum(cpc) from low_card_t2) order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(ss) from " +
+                "((select sum(cpc) as ss from low_card_t1) union all (select sum(cpc) as ss from low_card_t2)) x";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select * from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertFalse(hasBlockingNode);
+        sql = "select * from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(a.cpc) from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
     }
 
     @Test
@@ -931,15 +970,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // Test multi input Expression with DictColumn
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                        "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
+        assertContains(plan,
+                "predicates: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
+                        "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)");
 
         // Test multi input Expression with No-String Column
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_NAME as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
+        assertContains(plan,
+                "predicates: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)");
 
         // Test Two input column. one could apply the other couldn't apply
         // The first expression that can accept a full rewrite. the second couldn't apply
@@ -953,9 +992,14 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false) " +
                 "and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE), " +
-                "DictDecode(13: S_COMMENT, [NOT (<place-holder> LIKE '%kks%')])"));
+        assertContains(plan, "  1:SELECT\n" +
+                "  |  predicates: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
+                "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: DictDecode(13: S_COMMENT, [NOT (<place-holder> LIKE '%kks%')])");
 
     }
 
@@ -1639,7 +1683,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
     @Test
     public void testMetaScan2() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
 
         Assert.assertTrue(plan, plan.contains("  0:MetaScan\n" +
@@ -1651,15 +1695,16 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
                 "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
-                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), " +
+                "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:INT))])]"));
     }
 
     @Test
     public void testMetaScan3() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a)\n" +
+                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a, 255)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
@@ -1700,14 +1745,33 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testMetaScanException() throws Exception {
+        String sql = "select dict_merge(t1a, 10000000000) from test_all_type [_META_]";
+        try {
+            String plan = getFragmentPlan(sql);
+            Assert.fail();
+        } catch (SemanticException e) {
+            assertContains(e.getMessage(), "The second parameter of DICT_MERGE must be a constant positive integer");
+        }
+        sql = "select dict_merge(t1a, -1) from test_all_type [_META_]";
+        try {
+            String plan = getFragmentPlan(sql);
+            Assert.fail();
+        } catch (SemanticException e) {
+            assertContains(e.getMessage(), "The second parameter of DICT_MERGE must be a constant positive integer");
+        }
+
+    }
+
+    @Test
     public void testHasGlobalDictButNotFound() throws Exception {
         IDictManager dictManager = IDictManager.getInstance();
 
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict(anyLong, "S_ADDRESS", anyLong);
+                dictManager.hasGlobalDict(anyLong, ColumnId.create("S_ADDRESS"), anyLong);
                 result = true;
-                dictManager.getGlobalDict(anyLong, "S_ADDRESS");
+                dictManager.getGlobalDict(anyLong, ColumnId.create("S_ADDRESS"));
                 result = Optional.empty();
             }
         };
@@ -1930,7 +1994,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
     @Test
     public void testProjectAggregate() throws Exception {
-        String sql = "SELECT DISTINCT x1, x2 from (" +
+        String sql = "SELECT /*+SET_VAR(enable_eliminate_agg=false)*/ DISTINCT x1, x2 from (" +
                 "   SELECT lower(t_a_0.`c`) AS x1, t_a_0.`c` AS x2 " +
                 "   FROM (select distinct upper(S_ADDRESS) c from supplier) t_a_0) t_a_1;";
 
@@ -2032,18 +2096,22 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "WHERE c_mr IN ('02', '03') AND D_DATE>concat(year(str_to_date('2023-03-26', '%Y-%m-%d'))-1, '1231') " +
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  10:Project\n" +
-                "  |  <slot 28> : '2023-03-26'\n" +
-                "  |  <slot 29> : DictDecode(55: c_mr, [if(<place-holder> = '01', '部', '户部')])\n" +
-                "  |  <slot 30> : '门'\n" +
-                "  |  <slot 31> : '3'\n" +
-                "  |  <slot 32> : '入'\n" +
-                "  |  <slot 33> : '2'\n" +
-                "  |  <slot 34> : 'KPI2'\n" +
-                "  |  <slot 35> : ifnull(round(27: sum / 100000000, 5), 0)\n" +
-                "  |  <slot 36> : 56: expr\n" +
-                "  |  <slot 37> : DictDecode(55: c_mr, [<place-holder>])\n" +
-                "  |  <slot 38> : DictDecode(55: c_mr, [<place-holder>])");
+        assertContains(plan, "  0:UNION\n" +
+                "  |  \n" +
+                "  |----12:Decode\n" +
+                "  |    |  <dict id 56> : <string id 36>\n" +
+                "  |    |  <dict id 57> : <string id 37>\n" +
+                "  |    |  <dict id 58> : <string id 38>\n" +
+                "  |    |  <dict id 59> : <string id 29>\n" +
+                "  |    |  \n" +
+                "  |    11:EXCHANGE\n" +
+                "  |    \n" +
+                "  6:Decode\n" +
+                "  |  <dict id 50> : <string id 2>\n" +
+                "  |  <dict id 51> : <string id 3>\n" +
+                "  |  <dict id 52> : <string id 4>\n" +
+                "  |  \n" +
+                "  5:EXCHANGE\n");
     }
 
     @Test
@@ -2141,5 +2209,40 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "17: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
         assertContains(plan, "15: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
+    }
+
+    @Test
+    public void testTempPartition() throws Exception {
+        FeConstants.unitTestView = false;
+        try {
+            String sql = "ALTER TABLE lineitem_partition ADD TEMPORARY PARTITION px VALUES [('1998-01-01'), ('1999-01-01'));";
+            starRocksAssert.alterTable(sql);
+            sql = "select distinct L_COMMENT from lineitem_partition TEMPORARY PARTITION(px)";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "dict_col");
+        } finally {
+            FeConstants.unitTestView = true;
+        }
+    }
+
+    @Test
+    public void testExistRequiredDistribution() throws Exception {
+        String sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY) from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        ExecPlan execPlan = getExecPlan(sql);
+        Assert.assertTrue("joinNode is in the same fragment with a table contains global dict, " +
+                "we cannot change its distribution", execPlan.getOptExpression(3).isExistRequiredDistribution());
+        Assert.assertTrue("table contains global dict, we cannot change its distribution",
+                execPlan.getOptExpression(0).isExistRequiredDistribution());
+
+        Assert.assertFalse("table doesn't contain global dict, we can change its distribution",
+                execPlan.getOptExpression(1).isExistRequiredDistribution());
+    }
+
+    @Test
+    public void testShortCircuitQuery() throws Exception {
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        String sql = "select * from low_card_t2 where d_date='20160404' and c_mr = '12'";
+        final String plan = getFragmentPlan(sql);
+        assertContains(plan, "Short Circuit Scan: true");
     }
 }

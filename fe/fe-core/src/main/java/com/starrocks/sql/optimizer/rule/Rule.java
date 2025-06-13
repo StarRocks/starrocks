@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -62,6 +63,14 @@ public abstract class Rule {
         return 1;
     }
 
+    public List<Rule> predecessorRules() {
+        return Collections.emptyList();
+    }
+
+    public List<Rule> successorRules() {
+        return Collections.emptyList();
+    }
+
     public boolean check(final OptExpression input, OptimizerContext context) {
         return true;
     }
@@ -81,6 +90,6 @@ public abstract class Rule {
 
     @Override
     public String toString() {
-        return type.name() + " " + type.id();
+        return type.name();
     }
 }

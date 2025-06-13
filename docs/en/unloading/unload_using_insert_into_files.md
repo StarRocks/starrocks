@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Unload data using INSERT INTO FILES
@@ -12,7 +12,7 @@ Compared to other data export methods supported by StarRocks, unloading data wit
 
 > **NOTE**
 >
-> Please note that unloading data with INSERT INTO FILES does not support exporting data into local file systems.
+> Please note that unloading data with INSERT INTO FILES does not support directly exporting data into local file systems. However, you can export the data into local files by using NFS. See [Unload to local files using NFS](#unload-to-local-files-using-nfs).
 
 ## Preparation
 
@@ -55,7 +55,7 @@ For more about the remote storage systems and credential methods supported by FI
 
 INSERT INTO FILES supports unloading data into a single file or multiple files. You can further partition these data files by specifying separate storage paths for them.
 
-When unloading data using INSERT INTO FILES, you must manually set the compression algorithm using the property `compression`. For more information on the data compression algorithm supported by StarRocks, see [Data compression](../table_design/data_compression.md).
+When unloading data using INSERT INTO FILES, you must manually set the compression algorithm using the property `compression`. For more information on the data compression algorithm supported by FILES, see [unload_data_param](../sql-reference/sql-functions/table-functions/files.md#unload_data_param).
 
 ### Unload data into multiple files
 
@@ -201,7 +201,31 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
+### Unload to local files using NFS
+
+To access the files in NFS via the `file://` protocol, you need to mount a NAS device as NFS under the same directory of each BE or CN node.
+
+Example:
+
+```SQL
+-- Unload data into CSV files.
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/csvfile/', 
+  'format' = 'csv', 
+  'csv.column_separator' = ',', 
+  'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- Unload data into Parquet files.
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/parquetfile/',
+   'format' = 'parquet'
+)
+SELECT * FROM sales_records;
+```
+
 ## See also
 
-- For more instructions on the usage of INSERT, see [SQL reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+- For more instructions on the usage of INSERT, see [SQL reference - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 - For more instructions on the usage of FILES(), see [SQL reference - FILES()](../sql-reference/sql-functions/table-functions/files.md).

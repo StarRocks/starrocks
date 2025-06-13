@@ -22,7 +22,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class ImpersonatePrivInfo implements Writable {
@@ -69,8 +68,5 @@ public class ImpersonatePrivInfo implements Writable {
     }
 
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 }

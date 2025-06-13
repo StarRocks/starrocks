@@ -1,0 +1,148 @@
+-- name: test_predicate_columns @sequential
+admin set frontend config ('enable_statistic_collect_on_first_load'='false');
+-- result:
+-- !result
+admin set frontend config ('enable_statistic_collect'='false');
+-- result:
+-- !result
+create database analyze_test_${uuid0};
+-- result:
+-- !result
+use analyze_test_${uuid0};
+-- result:
+-- !result
+create table t1(c1 int, c2 bigint, c3 string, c4 string) 
+properties('replication_num'='1');
+-- result:
+-- !result
+insert into t1 values (1, 1, 's1', 's1');
+-- result:
+-- !result
+insert into t1 values (2, 2, 's2', 's2');
+-- result:
+-- !result
+insert into t1 values (3, 3, 's3', 's3');
+-- result:
+-- !result
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+-- result:
+-- !result
+[UC]analyze table t1 predicate columns;
+-- result:
+analyze_test_ba8d1c9661a1461a93c99977040981fa.t1	analyze	status	OK
+-- !result
+select count(*) from t1 where c1 = 1;
+-- result:
+1
+-- !result
+select count(*) from t1 where c1 = 2;
+-- result:
+1
+-- !result
+select count(*) from t1 where c1 > 2;
+-- result:
+1
+-- !result
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+-- result:
+-- !result
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+-- result:
+t1	c1	normal,predicate
+t1	c2	normal
+t1	c3	normal
+t1	c4	normal
+-- !result
+[UC]analyze table t1 predicate columns with sync mode;
+-- result:
+analyze_test_ba8d1c9661a1461a93c99977040981fa.t1	analyze	status	OK
+-- !result
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+-- result:
+t1	ALL
+t1	c1
+-- !result
+select c1, count(c1), sum(c2), max(c3), min(c4) from t1 group by c1;
+-- result:
+1	1	1	s1	s1
+2	1	2	s2	s2
+3	1	3	s3	s3
+-- !result
+select c2, count(c1), max(c3), min(c4) from t1 where c1 > 2 group by c2;
+-- result:
+3	1	s3	s3
+-- !result
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+-- result:
+-- !result
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+-- result:
+t1	c1	normal,predicate,group_by
+t1	c2	normal,group_by
+t1	c3	normal
+t1	c4	normal
+-- !result
+[UC]analyze table t1 predicate columns;
+-- result:
+analyze_test_ba8d1c9661a1461a93c99977040981fa.t1	analyze	status	OK
+-- !result
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+-- result:
+t1	ALL
+t1	c1
+t1	c1,c2
+-- !result
+create table t2(c5 int, c6 bigint, c7 string, c8 string) 
+properties('replication_num'='1');
+-- result:
+-- !result
+insert into t2 select * from t1;
+-- result:
+-- !result
+select * from t1 join t2 on t1.c1 = t2.c5;
+-- result:
+2	2	s2	s2	2	2	s2	s2
+1	1	s1	s1	1	1	s1	s1
+3	3	s3	s3	3	3	s3	s3
+-- !result
+select * from t1 join t2 on t1.c1 = t2.c5 where t1.c1 > 2;
+-- result:
+3	3	s3	s3	3	3	s3	s3
+-- !result
+select * from t1 join t2 on t1.c1 = t2.c5 where t1.c2 > 2 and t1.c3 = 's2';
+-- result:
+-- !result
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+-- result:
+-- !result
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+-- result:
+t1	c1	normal,predicate,join,group_by
+t1	c2	normal,predicate,group_by
+t1	c3	normal,predicate
+t1	c4	normal
+-- !result
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't2' order by column_name;
+-- result:
+t2	c5	normal,predicate,join
+t2	c6	normal
+t2	c7	normal
+t2	c8	normal
+-- !result
+[UC]analyze table t1 predicate columns;
+-- result:
+analyze_test_ba8d1c9661a1461a93c99977040981fa.t1	analyze	status	OK
+-- !result
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+-- result:
+t1	ALL
+t1	c1
+t1	c1,c2
+t1	c1,c2,c3
+-- !result
+admin set frontend config ('enable_statistic_collect_on_first_load'='true');
+-- result:
+-- !result
+admin set frontend config ('enable_statistic_collect'='false');
+-- result:
+-- !result

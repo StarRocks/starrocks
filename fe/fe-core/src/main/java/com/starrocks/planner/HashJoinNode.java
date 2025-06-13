@@ -41,7 +41,9 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TNormalHashJoinNode;
@@ -50,7 +52,9 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Hash join between left child and right child.
@@ -58,6 +62,12 @@ import java.util.List;
  * a single input tuple.
  */
 public class HashJoinNode extends JoinNode {
+    private boolean isSkewJoin = false;
+    // only set when isSkewJoin = true
+    private HashJoinNode skewJoinFriend;
+
+    // only set when isSkewJoin = true && shuffle join
+    private Map<Integer, Integer> eqJoinConjunctsIndexToRfId;
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("HASH JOIN", id, outer, inner, innerRef, eqJoinConjuncts, otherJoinConjuncts);
@@ -66,6 +76,41 @@ public class HashJoinNode extends JoinNode {
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("HASH JOIN", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
+    }
+
+    public boolean isSkewJoin() {
+        return isSkewJoin;
+    }
+
+    public void setSkewJoin(boolean skewJoin) {
+        isSkewJoin = skewJoin ;
+    }
+
+    public boolean isSkewShuffleJoin() {
+        return isSkewJoin && distrMode == DistributionMode.PARTITIONED;
+    }
+
+    public boolean isSkewBroadJoin() {
+        return isSkewJoin && distrMode == DistributionMode.BROADCAST;
+    }
+
+    public HashJoinNode getSkewJoinFriend() {
+        return skewJoinFriend;
+    }
+
+    public void setSkewJoinFriend(HashJoinNode skewJoinFriend) {
+        this.skewJoinFriend = skewJoinFriend;
+    }
+
+    public Map<Integer, Integer> getEqJoinConjunctsIndexToRfId() {
+        if (eqJoinConjunctsIndexToRfId == null) {
+            eqJoinConjunctsIndexToRfId = new HashMap<>();
+        }
+        return eqJoinConjunctsIndexToRfId;
+    }
+
+    public int getRfIdByEqJoinConjunctsIndex(int index) {
+        return eqJoinConjunctsIndexToRfId.get(index);
     }
 
     @Override
@@ -115,9 +160,23 @@ public class HashJoinNode extends JoinNode {
             msg.hash_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+
         msg.hash_join_node.setLate_materialization(enableLateMaterialization);
-        msg.hash_join_node.setBuild_runtime_filters_from_planner(
-                ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
+        // predicate filtration rate
+        double predicateRate = getCardinality() / (double) getChild(0).getCardinality();
+        if (enableLateMaterialization) {
+            // If join late materialize is turned on higher filtering can lead to performance degradation.
+            if (predicateRate > Config.partition_hash_join_min_cardinality_rate) {
+                msg.hash_join_node.setEnable_partition_hash_join(sv.enablePartitionHashJoin());
+            } else {
+                msg.hash_join_node.setEnable_partition_hash_join(false);
+            }
+        } else {
+            msg.hash_join_node.setEnable_partition_hash_join(sv.enablePartitionHashJoin());
+        }
+        msg.hash_join_node.setBuild_runtime_filters_from_planner(sv.getEnableGlobalRuntimeFilter());
+
         if (partitionExprs != null) {
             msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
         }
@@ -128,8 +187,10 @@ public class HashJoinNode extends JoinNode {
         }
 
         if (getCanLocalShuffle()) {
-            msg.hash_join_node.setInterpolate_passthrough(
-                    ConnectContext.get().getSessionVariable().isHashJoinInterpolatePassthrough());
+            msg.hash_join_node.setInterpolate_passthrough(sv.isHashJoinInterpolatePassthrough());
+        }
+        if (isSkewJoin) {
+            msg.hash_join_node.setIs_skew_join(isSkewJoin);
         }
     }
 

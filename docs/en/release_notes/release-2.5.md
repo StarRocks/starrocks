@@ -1,8 +1,24 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 2.5
+
+## 2.5.22
+
+Release date: June 20, 2024
+
+### Improvements
+
+- Optimized a partition check logic used for building query execution plan, significantly reducing the time consumption of complex queries that involve multiple tables. [#46781](https://github.com/StarRocks/starrocks/pull/46781)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Function Call does not handle child errors correctly. [#42590](https://github.com/StarRocks/starrocks/pull/42590)
+- The internal data statistics were not cleaned up regularly, causing inaccurate estimated information and thereby inefficient query plans. This will cause a drop in query performance and a surge in memory usage. [#45839](https://github.com/StarRocks/starrocks/pull/45839)
+- Using a stale column histogram may lead to the Division by Zero exception. [#45614](https://github.com/StarRocks/starrocks/pull/45614)
 
 ## 2.5.21
 
@@ -276,7 +292,7 @@ Release date: August 28, 2023
 
 ### Improvements
 
-- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/en-us/3.1/reference/System_variable) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/docs/sql-reference/System_variable/#enable_strict_type) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - Optimized the prompt returned if users do not specify `hive.metastore.uri` when they create an Iceberg Catalog. The error prompt is more accurate. [#16543](https://github.com/StarRocks/starrocks/issues/16543)
 - Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - Dynamic partitioning further supports the partitioning unit to be `year`. [#28386](https://github.com/StarRocks/starrocks/pull/28386)

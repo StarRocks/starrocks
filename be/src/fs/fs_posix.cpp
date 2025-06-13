@@ -15,12 +15,16 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <climits>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/encrypt_file.h"
 #include "fs/fd_cache.h"
 #include "fs/fs.h"
 #include "gutil/gscoped_ptr.h"
@@ -93,12 +97,16 @@ static Status io_error(const std::string& context, int err_number) {
     switch (err_number) {
     case 0:
         return Status::OK();
+    case EIO:
+        return Status::IOError(fmt::format("{}: {}", context, std::strerror(err_number)));
     case ENOENT:
         return Status::NotFound(fmt::format("{}: {}", context, std::strerror(err_number)));
     case EEXIST:
         return Status::AlreadyExist(fmt::format("{}: {}", context, std::strerror(err_number)));
+    case ENOSPC:
+        return Status::CapacityLimitExceed(fmt::format("{}: {}", context, std::strerror(err_number)));
     default:
-        return Status::IOError(fmt::format("{}: {}", context, std::strerror(err_number)));
+        return Status::InternalError(fmt::format("{}: {}", context, std::strerror(err_number)));
     }
 }
 
@@ -204,6 +212,7 @@ public:
     Status append(const Slice& data) override { return appendv(&data, 1); }
 
     Status appendv(const Slice* data, size_t cnt) override {
+        TEST_ERROR_POINT("PosixFileSystem::appendv");
 #ifdef USE_STAROS
         staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
 #endif
@@ -221,6 +230,7 @@ public:
     }
 
     Status pre_allocate(uint64_t size) override {
+        TEST_ERROR_POINT("PosixFileSystem::pre_allocate");
         uint64_t offset = std::max(_filesize, _pre_allocated_size);
         int ret;
         RETRY_ON_EINTR(ret, fallocate(_fd, 0, offset, size));
@@ -238,6 +248,7 @@ public:
     }
 
     Status close() override {
+        TEST_ERROR_POINT("PosixFileSystem::close");
         if (_closed) {
             return Status::OK();
         }
@@ -277,6 +288,7 @@ public:
     }
 
     Status flush(FlushMode mode) override {
+        TEST_ERROR_POINT("PosixFileSystem::flush");
 #if defined(__linux__)
         int flags = SYNC_FILE_RANGE_WRITE;
         if (mode == FLUSH_SYNC) {
@@ -295,6 +307,7 @@ public:
     }
 
     Status sync() override {
+        TEST_ERROR_POINT("PosixFileSystem::sync");
         MonotonicStopWatch watch;
         watch.start();
         if (_pending_sync) {
@@ -329,19 +342,19 @@ public:
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const string& fname) override {
-        (void)opts;
         int fd;
         RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        auto stream = std::make_shared<io::FdInputStream>(fd);
+        auto stream = std::make_unique<io::FdInputStream>(fd);
         stream->set_close_on_delete(true);
-        return std::make_unique<SequentialFile>(std::move(stream), fname);
+        return SequentialFile::from(std::move(stream), fname, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& fname) override {
+        std::unique_ptr<io::FdInputStream> fstream;
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Handle* h = FdCache::Instance()->lookup(fname);
             if (h == nullptr) {
@@ -352,19 +365,18 @@ public:
                 }
                 h = FdCache::Instance()->insert(fname, fd);
             }
-            auto stream = std::make_shared<CachedFdInputStream>(h);
-            stream->set_close_on_delete(false);
-            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+            fstream = std::make_unique<CachedFdInputStream>(h);
+            fstream->set_close_on_delete(false);
         } else {
             int fd;
             RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
             if (fd < 0) {
                 return io_error(fname, errno);
             }
-            auto stream = std::make_shared<io::FdInputStream>(fd);
-            stream->set_close_on_delete(true);
-            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+            fstream = std::make_unique<io::FdInputStream>(fd);
+            fstream->set_close_on_delete(true);
         }
+        return RandomAccessFile::from(std::move(fstream), fname, false, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {
@@ -387,7 +399,8 @@ public:
         if (opts.mode == MUST_EXIST) {
             ASSIGN_OR_RETURN(file_size, get_file_size(fname));
         }
-        return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
+        return wrap_encrypted(std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close),
+                              opts.encryption_info);
     }
 
     Status path_exists(const std::string& fname) override {
@@ -519,6 +532,24 @@ public:
     }
 
     Status create_dir_recursive(const std::string& dirname) override {
+        // Should be compatible with the scenario where `dirname` exists as a symbolic link
+        // and linked to an existing directory.
+        // On CentOS create_directories() will fail in this situation, but on Ubuntu, it won't.
+        // So we make a precheck here in order to have the same expected behavior on both and probably
+        // all the other platforms.
+        if (std::filesystem::is_symlink(dirname)) {
+            char real_path[PATH_MAX];
+            char* result = realpath(dirname.c_str(), real_path);
+            if (result == nullptr) {
+                return io_error(fmt::format("create {} recursively", dirname), errno);
+            }
+            if (std::filesystem::is_directory(real_path)) {
+                return Status::OK();
+            } else {
+                return io_error(fmt::format("create {} recursively", dirname), ENOTDIR);
+            }
+        }
+
         std::error_code ec;
         // If `dirname` already exist and is a directory, the return value would be false and ec.value() would be 0
         (void)std::filesystem::create_directories(dirname, ec);

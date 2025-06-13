@@ -48,33 +48,43 @@ public class RewriteTreeTask extends OptimizerTask {
         Preconditions.checkState(planTree.getOp().getOpType() == OperatorType.LOGICAL);
     }
 
+    public RewriteTreeTask(TaskContext context, OptExpression root, Rule rule, boolean onlyOnce) {
+        this(context, root, List.of(rule), onlyOnce);
+    }
+
     public OptExpression getResult() {
         return planTree.getInputs().get(0);
     }
 
     @Override
     public void execute() {
+        if (rules.stream().allMatch(rule -> context.getOptimizerContext()
+                .getOptimizerOptions().isRuleDisable(rule.type()))) {
+            return;
+        }
         // first node must be RewriteAnchorNode
         rewrite(planTree, 0, planTree.getInputs().get(0));
         // pushdownNotNullPredicates should task-bind, reset it before another RewriteTreeTask
         // TODO: refactor TaskContext to make it local to support this requirement better?
         context.getOptimizerContext().clearNotNullPredicates();
         if (change > 0 && !onlyOnce) {
-            pushTask(new RewriteTreeTask(context, planTree, rules, onlyOnce));
+            pushTask(new RewriteTreeTask(context, planTree, rules, false));
         }
     }
 
     protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
-
-        root = applyRules(parent, childIndex, root);
+        root = applyRules(parent, childIndex, root, rules);
         // prune cte column depend on prune right child first
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {
             rewrite(root, i, root.getInputs().get(i));
         }
     }
 
-    protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root) {
+    protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root, List<Rule> rules) {
         for (Rule rule : rules) {
+            if (context.getOptimizerContext().getOptimizerOptions().isRuleDisable(rule.type())) {
+                continue;
+            }
             if (rule.exhausted(context.getOptimizerContext())) {
                 continue;
             }
@@ -82,13 +92,18 @@ public class RewriteTreeTask extends OptimizerTask {
                 continue;
             }
 
+            if (!rule.predecessorRules().isEmpty()) {
+                root = applyRules(parent, childIndex, root, rule.predecessorRules());
+            }
+
+            OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, root);
             List<OptExpression> result;
-            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.toString())) {
                 result = rule.transform(root, context.getOptimizerContext());
             }
             Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
 
-            OptimizerTraceUtil.logApplyRule(context.getOptimizerContext(), rule, root, result);
+            OptimizerTraceUtil.logApplyRuleAfter(result);
 
             if (result.isEmpty()) {
                 continue;
@@ -98,6 +113,10 @@ public class RewriteTreeTask extends OptimizerTask {
             root = result.get(0);
             change++;
             deriveLogicalProperty(root);
+
+            if (!rule.successorRules().isEmpty()) {
+                root = applyRules(parent, childIndex, root, rule.successorRules());
+            }
         }
         return root;
     }
@@ -107,8 +126,8 @@ public class RewriteTreeTask extends OptimizerTask {
             return false;
         }
 
-        if (pattern.children().size() > 0 && pattern.children().size() != root.getInputs().size() &&
-                pattern.children().stream().noneMatch(Pattern::isPatternMultiLeaf)) {
+        if (!pattern.children().isEmpty() && pattern.children().size() != root.getInputs().size() &&
+                pattern.children().stream().noneMatch(p -> p.is(OperatorType.PATTERN_MULTI_LEAF))) {
             return false;
         }
         int patternIndex = 0;
@@ -122,7 +141,7 @@ public class RewriteTreeTask extends OptimizerTask {
                 return false;
             }
 
-            if (!(childPattern.isPatternMultiLeaf() && (root.getInputs().size() - childIndex) >
+            if (!(childPattern.is(OperatorType.PATTERN_MULTI_LEAF) && (root.getInputs().size() - childIndex) >
                     (pattern.children().size() - patternIndex))) {
                 patternIndex++;
             }

@@ -15,25 +15,26 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
 
 import java.util.Optional;
 
 public interface IDictManager {
-    boolean hasGlobalDict(long tableId, String columnName, long versionTime);
+    boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
 
-    void updateGlobalDict(long tableId, String columnName, long collectedVersion, long versionTime);
+    void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime);
 
-    boolean hasGlobalDict(long tableId, String columnName);
+    boolean hasGlobalDict(long tableId, ColumnId columnName);
 
-    void removeGlobalDict(long tableId, String columnName);
+    void removeGlobalDict(long tableId, ColumnId columnName);
 
     void disableGlobalDict(long tableId);
 
     void enableGlobalDict(long tableId);
 
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
-    Optional<ColumnDict> getGlobalDict(long tableId, String columnName);
+    Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName);
 
     static IDictManager getInstance() {
         if (FeConstants.USE_MOCK_DICT_MANAGER) {

@@ -104,13 +104,13 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         List<Long> selectPartitionIds = ImmutableList.of(1L);
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
-        coord.startScheduling();
+        coord.exec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
         Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
@@ -146,11 +146,11 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
-        coord.startScheduling();
+        coord.exec();
         Assert.assertTrue(coord.getNext().isEos());
     }
 

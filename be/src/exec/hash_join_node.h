@@ -32,7 +32,6 @@ class ExprContext;
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
-static constexpr size_t kHashJoinKeyColumnOffset = 1;
 class HashJoinNode final : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -59,7 +58,7 @@ private:
 
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state);
     // local join includes: broadcast join and colocate join.
     Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
     void _final_update_profile() {
@@ -117,6 +116,10 @@ private:
     bool _is_push_down = false;
     bool _enable_late_materialization = false;
 
+    bool _enable_partition_hash_join = false;
+
+    bool _is_skew_join = false;
+
     JoinHashTable _ht;
 
     ChunkPtr _cur_left_input_chunk = nullptr;
@@ -144,6 +147,7 @@ private:
     RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
     RuntimeProfile::Counter* _probe_timer = nullptr;
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
+    RuntimeProfile::Counter* _probe_counter = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* _build_rows_counter = nullptr;

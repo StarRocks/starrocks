@@ -14,7 +14,6 @@
 
 #include "exec/aggregate/aggregate_base_node.h"
 
-#include "exprs/anyval_util.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -35,6 +34,13 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {
             return Status::NotSupported(fmt::format("group by type {} is not supported", type_desc.debug_string()));
+        }
+    }
+    if (tnode.agg_node.__isset.build_runtime_filters) {
+        for (const auto& desc : tnode.agg_node.build_runtime_filters) {
+            auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
+            RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
+            _build_runtime_filters.emplace_back(rf_desc);
         }
     }
     return Status::OK();
@@ -66,6 +72,24 @@ void AggregateBaseNode::close(RuntimeState* state) {
         _aggregator.reset();
     }
     ExecNode::close(state);
+}
+
+void AggregateBaseNode::push_down_tuple_slot_mappings(RuntimeState* state,
+                                                      const std::vector<TupleSlotMapping>& parent_mappings) {
+    _tuple_slot_mappings = parent_mappings;
+
+    DCHECK(_tuple_ids.size() == 1);
+    for (auto& expr_ctx : _group_by_expr_ctxs) {
+        if (expr_ctx->root()->is_slotref()) {
+            auto ref = dynamic_cast<ColumnRef*>(expr_ctx->root());
+            DCHECK(ref != nullptr);
+            _tuple_slot_mappings.emplace_back(ref->tuple_id(), ref->slot_id(), _tuple_ids[0], ref->slot_id());
+        }
+    }
+
+    for (auto& child : _children) {
+        child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
+    }
 }
 
 void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {

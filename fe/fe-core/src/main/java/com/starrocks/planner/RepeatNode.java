@@ -42,7 +42,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRepeatNode;
@@ -52,7 +52,6 @@ import com.starrocks.thrift.TRepeatNode;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.util.Strings;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -116,7 +115,7 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
     }
 
     @Override
@@ -154,11 +153,6 @@ public class RepeatNode extends PlanNode {
         }
 
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
     }
 
     @Override
@@ -204,5 +198,10 @@ public class RepeatNode extends PlanNode {
         planNode.setRepeat_node(repeatNode);
         planNode.setNode_type(TPlanNodeType.REPEAT_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
     }
 }

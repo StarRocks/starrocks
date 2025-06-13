@@ -15,7 +15,7 @@ package com.starrocks.common.lock;
 
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.DeadlockException;
-import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import org.junit.Assert;
 
@@ -67,19 +67,30 @@ public class LockTestUtils {
         assertLockSuccess(testLockers.get(deadLockIdx).release(rids.get(deadLockIdx).first, rids.get(deadLockIdx).second));
 
         boolean hasSuccess = false;
-        for (int i = 0; i < waitLockers.size(); ++i) {
-            if (i == deadLockIdx) {
-                continue;
-            }
-            Future<LockResult> waitLocker = waitLockers.get(i);
-
-            try {
-                LockResult lockResult = waitLocker.get();
-                if (LockResult.LockTaskResultType.SUCCESS.equals(lockResult.resultType)) {
-                    hasSuccess = true;
+        int retryTimes = 5;
+        while (retryTimes-- > 0) {
+            for (int i = 0; i < waitLockers.size(); ++i) {
+                if (i == deadLockIdx) {
+                    continue;
                 }
-            } catch (ExecutionException | InterruptedException e) {
-                throw new RuntimeException(e);
+                Future<LockResult> waitLocker = waitLockers.get(i);
+
+                try {
+                    LockResult lockResult = waitLocker.get();
+                    if (LockResult.LockTaskResultType.SUCCESS.equals(lockResult.resultType)) {
+                        hasSuccess = true;
+                        break;
+                    } else {
+                        System.out.println("LockResult" + retryTimes + " : " + lockResult.resultType);
+                    }
+
+                } catch (ExecutionException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            if (hasSuccess) {
+                break;
             }
         }
 
@@ -92,7 +103,7 @@ public class LockTestUtils {
         try {
             LockResult lockResult = lockTaskResultFuture.get();
             Assert.assertSame(LockResult.LockTaskResultType.FAIL, lockResult.resultType);
-            Assert.assertTrue(lockResult.exception instanceof IllegalLockStateException);
+            Assert.assertTrue(lockResult.exception instanceof LockException);
             Assert.assertTrue(lockResult.exception.getMessage().contains(msg));
         } catch (ExecutionException | InterruptedException e) {
             throw new RuntimeException(e);

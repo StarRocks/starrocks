@@ -70,6 +70,9 @@ public class QueryState {
 
         IO_ERR,
 
+        // execution Timeout
+        EXEC_TIME_OUT,
+
         UNKNOWN
     }
 

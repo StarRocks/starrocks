@@ -117,9 +117,9 @@ public class InPredicate extends Predicate {
         return isNotIn;
     }
 
-    public boolean isLiteralChildren() {
+    public boolean isConstantValues() {
         for (int i = 1; i < children.size(); ++i) {
-            if (!(children.get(i) instanceof LiteralExpr)) {
+            if (!(children.get(i).isConstant())) {
                 return false;
             }
         }
@@ -165,8 +165,8 @@ public class InPredicate extends Predicate {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (super.equalsWithoutChild(obj)) {
             InPredicate expr = (InPredicate) obj;
             return isNotIn == expr.isNotIn;
         }

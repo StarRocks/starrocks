@@ -37,17 +37,18 @@ public class LakeTableTestHelper {
     long partitionId = 9002;
     long indexId = 9003;
     long[] tabletId = {9004, 90005};
+    long physicalPartitionId = 90006;
     long nextTxnId = 10000;
 
     LakeTable buildLakeTable() {
         MaterializedIndex index = new MaterializedIndex(indexId);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long id : tabletId) {
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, 0, TStorageMedium.HDD, true);
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
             index.addTablet(new LakeTablet(id), tabletMeta);
         }
-        Partition partition = new Partition(partitionId, "p0", index, null);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p0", index, null);
         LakeTable table = new LakeTable(
                 tableId, "t0",
                 Lists.newArrayList(new Column("c0", Type.BIGINT)),

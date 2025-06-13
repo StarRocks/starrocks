@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 部署前提条件
@@ -17,10 +17,6 @@ StarRocks 依靠 AVX2 指令集充分发挥其矢量化能力。因此，在生�
 ```Bash
 cat /proc/cpuinfo | grep avx2
 ```
-
-> **说明**
->
-> ARM 架构不支持 SIMD 指令集，因此在某些场景下的性能不及 x86 架构。我们只推荐您在开发环境中部署 ARM 架构下的 StarRocks。
 
 ### 内存
 
@@ -40,24 +36,12 @@ StarRocks 支持 HDD 和 SSD 作为存储介质。
 
 ## 操作系统
 
-StarRocks 支持在 CentOS Linux 7.9 和 Ubuntu Linux 22.04 上部署。
+StarRocks 支持在 Red Hat Enterprise Linux 7.9、CentOS Linux 7.9 或 Ubuntu Linux 22.04 上部署。
 
 ## 软件
 
-您必须在服务器上安装 JDK 8 以运行 StarRocks。v2.5 及以上版本建议安装 JDK 11。
+您必须在服务器上安装 JDK 17 以运行 StarRocks v3.5 及以上版本。
 
 > **注意**
 >
-> - StarRocks 不支持 JRE。
-> - 如果您需要在 Ubuntu 22.04 上部署 StarRocks，则必须安装 JDK 11。
-
-按照以下步骤安装 JDK 8：
-
-1. 进入需要安装 JDK 的路径。
-2. 运行以下命令下载 JDK：
-
-   ```Bash
-   wget --no-check-certificate --no-cookies \
-       --header "Cookie: oraclelicense=accept-securebackup-cookie"  \
-       http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.tar.gz
-   ```
+> StarRocks 不支持 JRE。

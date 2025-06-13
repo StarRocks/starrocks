@@ -39,8 +39,11 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateDesc;
 
 import java.util.Set;
+
+import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
 
 /**
  * This is a result of semantic analysis for AddMaterializedViewClause.
@@ -54,16 +57,19 @@ public class MVColumnItem {
     private Type type;
     private boolean isKey;
     private AggregateType aggregationType;
+    private AggStateDesc aggStateDesc;
     private boolean isAllowNull;
     private boolean isAggregationTypeImplicit;
     private Expr defineExpr;
     private Set<String> baseColumnNames;
 
-    public MVColumnItem(String name, Type type, AggregateType aggregateType, boolean isAggregationTypeImplicit,
+    public MVColumnItem(String name, Type type, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                        boolean isAggregationTypeImplicit,
                         Expr defineExpr, boolean isAllowNull, Set<String> baseColumnNames) {
         this.name = name;
         this.type = type;
         this.aggregationType = aggregateType;
+        this.aggStateDesc = aggStateDesc;
         this.isAggregationTypeImplicit = isAggregationTypeImplicit;
         this.defineExpr = defineExpr;
         this.isAllowNull = isAllowNull;
@@ -124,8 +130,8 @@ public class MVColumnItem {
         Column result;
         boolean hasUniqueId = olapTable.getMaxColUniqueId() >= 0;
         if (baseColumn == null) {
-            result = new Column(name, type, isKey, aggregationType, isAllowNull,
-                    null, "");
+            result = new Column(name, type, isKey, aggregationType, aggStateDesc, isAllowNull,
+                    null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
             if (defineExpr != null) {
                 result.setDefineExpr(defineExpr);
             }

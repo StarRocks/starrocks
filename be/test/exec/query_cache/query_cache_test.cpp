@@ -107,27 +107,31 @@ TEST_F(QueryCacheTest, testCacheManager) {
         auto col = Int8Column::create();
         auto payload = byte_size - sizeof(query_cache::CacheValue);
         col->resize(payload);
-        chk->append_column(col, 0);
+        chk->append_column(std::move(col), 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
+    size_t total_key_size = 0;
     for (auto i = 0; i < 10; ++i) {
+        std::string key = strings::Substitute("key_$0", i);
+        size_t key_size = sizeof(LRUHandle) - 1 + key.size();
+        total_key_size += key_size;
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
 
     for (auto i = 20; i < 30; ++i) {
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
@@ -173,7 +177,7 @@ ChunkPtr create_test_chunk(query_cache::LaneOwnerType owner, long from, long to,
     for (auto i = from; i < to; ++i) {
         data[i - from] = double(i);
     }
-    chunk->append_column(column, SlotId(1));
+    chunk->append_column(std::move(column), SlotId(1));
     return chunk;
 }
 struct Task {

@@ -43,6 +43,7 @@
 #include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
@@ -57,6 +58,7 @@
 #include "storage/type_utils.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
+#include "util/failpoint/fail_point.h"
 #include "util/slice.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
@@ -233,7 +235,13 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
 
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
+    if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
+    }
+
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -348,10 +356,17 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
+    if (_encryption_info) {
+        file_opts.encryption_info = *_encryption_info;
+    } else if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        file_opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
+    }
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info));
 
     PageReadOptions opts;
-    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.use_page_cache = lake_io_opts.use_page_cache;
     opts.read_file = read_file.get();
     opts.page_pointer = _short_key_index_page;
     opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
@@ -380,16 +395,7 @@ bool Segment::has_loaded_index() const {
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
-    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
-        const auto& column_pb = footer->columns(ordinal);
-        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
-        if (UNLIKELY(!ok)) {
-            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
-                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
-            return Status::InternalError("Duplicate column id");
-        }
-    }
-
+    RETURN_IF_ERROR(_check_column_unique_id_uniqueness(footer, column_id_to_footer_ordinal));
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
         const auto& column = _tablet_schema->column(ordinal);
         auto iter = column_id_to_footer_ordinal.find(column.unique_id());
@@ -402,6 +408,38 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             return res.status();
         }
         _column_readers.emplace(column.unique_id(), std::move(res).value());
+    }
+    return Status::OK();
+}
+
+DEFINE_FAIL_POINT(ingest_duplicate_column_unique_id);
+Status Segment::_check_column_unique_id_uniqueness(
+        SegmentFooterPB* footer, std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal) {
+    // check uniqueness of column ids in footer
+    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
+        const auto& column_pb = footer->columns(ordinal);
+        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
+                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
+            return Status::InternalError("Duplicate column id");
+        }
+    }
+
+    // check uniqueness of column ids in tablet schema
+    std::unordered_map<uint32_t, uint32_t> column_id_to_tablet_schema_ordinal;
+    FAIL_POINT_TRIGGER_EXECUTE(ingest_duplicate_column_unique_id,
+                               { column_id_to_tablet_schema_ordinal.emplace(1, 2); });
+
+    for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
+        const auto& column = _tablet_schema->column(ordinal);
+        auto [it, ok] = column_id_to_tablet_schema_ordinal.emplace(column.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column.unique_id() << " found between column '"
+                       << _tablet_schema->column(it->second).name() << "' and column '" << column.name()
+                       << "' in tablet schema";
+            return Status::InternalError("Duplicate column id found in tablet schema");
+        }
     }
     return Status::OK();
 }
@@ -470,7 +508,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     } else {
         tablet_schema = TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]);
     }
-    FileInfo info{.path = dcg.column_files(parent_name(_segment_file_info.path))[idx]};
+    ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
+    FileInfo info{.path = filepath};
+    if (idx < dcg.encryption_metas().size()) {
+        info.encryption_meta = dcg.encryption_metas()[idx];
+    }
     return Segment::open(_fs, info, 0, tablet_schema, nullptr);
 }
 

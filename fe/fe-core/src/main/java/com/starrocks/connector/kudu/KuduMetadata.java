@@ -26,13 +26,16 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -89,7 +92,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         if (metastore.isPresent()) {
             return metastore.get().getAllDatabaseNames().stream()
                     .filter(schemaName -> !HIVE_SYSTEM_SCHEMA.contains((schemaName)))
@@ -138,7 +141,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         if (metastore.isPresent()) {
             List<String> allTableNames = metastore.get().getAllTableNames(dbName);
             return allTableNames.stream().filter(tableName -> {
@@ -168,7 +171,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         if (metastore.isPresent()) {
             return metastore.get().getDb(dbName);
         }
@@ -196,7 +199,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         if (metastore.isPresent()) {
             return metastore.get().getTable(dbName, tblName);
         }
@@ -251,13 +254,11 @@ public class KuduMetadata implements ConnectorMetadata {
 
     private String getKuduFullTableName(KuduTable table) {
         return table.getKuduTableName().orElse(
-                getKuduFullTableName(table.getDbName(), table.getTableName()));
+                getKuduFullTableName(table.getCatalogDBName(), table.getCatalogTableName()));
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
         String kuduTableName = getKuduFullTableName(kuduTable);
@@ -268,11 +269,11 @@ public class KuduMetadata implements ConnectorMetadata {
             throw new RuntimeException(e);
         }
         KuduScanToken.KuduScanTokenBuilder builder = kuduClient.newScanTokenBuilder(nativeTable);
-        builder.setProjectedColumnNames(fieldNames);
-        if (limit > 0) {
-            builder.limit(limit);
+        builder.setProjectedColumnNames(params.getFieldNames());
+        if (params.getLimit() > 0) {
+            builder.limit(params.getLimit());
         }
-        addConstraintPredicates(nativeTable, builder, predicate);
+        addConstraintPredicates(nativeTable, builder, params.getPredicate());
         List<KuduScanToken> tokens = builder.build();
         List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                 KuduRemoteFileDesc.createKuduRemoteFileDesc(tokens));
@@ -306,7 +307,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange versionRange) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -316,7 +318,7 @@ public class KuduMetadata implements ConnectorMetadata {
         long rowCount;
         if (metastore.isPresent()) {
             HivePartitionStats tableStatistics =
-                    metastore.get().getTableStatistics(kuduTable.getDbName(), kuduTable.getTableName());
+                    metastore.get().getTableStatistics(kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName());
             rowCount = tableStatistics.getCommonStats().getRowNums();
         } else {
             try {

@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -48,7 +46,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
-import static com.starrocks.connector.PartitionUtil.executeInNewThread;
 import static com.starrocks.connector.hive.HiveWriteUtils.checkLocationProperties;
 import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
 import static com.starrocks.connector.hive.HiveWriteUtils.isDirectory;
@@ -282,9 +279,9 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, Partition> getPartitionByPartitionKeys(Table table, List<PartitionKey> partitionKeys) {
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
-        List<String> partitionColumnNames = ((HiveMetaStoreTable) table).getPartitionColumnNames();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+        List<String> partitionColumnNames = (table).getPartitionColumnNames();
         List<String> partitionNames = partitionKeys.stream()
                 .map(partitionKey -> PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
@@ -293,8 +290,8 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, Partition> getPartitionByNames(Table table, List<String> partitionNames) {
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
         return metastore.getPartitionsByNames(dbName, tblName, partitionNames);
     }
 
@@ -303,9 +300,9 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        String catalogName = (table).getCatalogName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
                 .peek(hivePartitionName -> checkState(hivePartitionName.getPartitionNames().isPresent(),
@@ -315,13 +312,6 @@ public class HiveMetastoreOperations {
         Map<String, HivePartitionStats> partitionStats;
         if (enableCatalogLevelCache) {
             partitionStats = metastore.getPresentPartitionsStatistics(hivePartitionNames);
-            if (partitionStats.size() == partitionNames.size()) {
-                return partitionStats;
-            }
-
-            String backgroundThreadName = String.format(BACKGROUND_THREAD_NAME_PREFIX + "%s-%s-%s",
-                    catalogName, dbName, tblName);
-            executeInNewThread(backgroundThreadName, () -> metastore.getPartitionStatistics(table, partitionNames));
         } else {
             partitionStats = metastore.getPartitionStatistics(table, partitionNames);
         }

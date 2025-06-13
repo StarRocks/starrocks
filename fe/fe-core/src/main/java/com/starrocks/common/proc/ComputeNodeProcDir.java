@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.proc;
 
 import com.google.common.base.Stopwatch;
@@ -20,12 +19,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
@@ -51,8 +50,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
-                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
-                .add("DataCacheMetrics").add("HasStoragePath");
+                .add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataCacheMetrics").add("HasStoragePath").add("StatusCode");
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
@@ -95,7 +94,6 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     /**
      * get compute nodes of cluster
      * copy from getClusterBackendInfos, It is necessary to refactor the two methods later
-     * @return
      */
     public static List<List<String>> getClusterComputeNodesInfos() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -143,7 +141,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(computeNode.getHeartbeatErrMsg());
             computeNodeInfo.add(computeNode.getVersion());
 
-            computeNodeInfo.add(BackendCoreStat.getCoresOfBe(computeNodeId));
+            computeNodeInfo.add(computeNode.getCpuCores());
+            computeNodeInfo.add(DebugUtil.getPrettyStringBytes(computeNode.getMemLimitBytes()));
 
             computeNodeInfo.add(computeNode.getNumRunningQueries());
             double memUsedPct = computeNode.getMemUsedPct();
@@ -168,6 +167,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             }
 
             computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+            computeNodeInfo.add(computeNode.getStatus().name());
 
             if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));

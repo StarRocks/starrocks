@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 20
 ---
 # Primary Key table
 
@@ -16,7 +17,7 @@ The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL cons
 - Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified separately. As such, table creation flexibility is improved.
 - Since v3.1, StarRocks shared-data clusters support creating Primary Key tables. 
   - Since v3.1.4, persistent indexes can be created and stored in **local disks**.
-  - Since v3.3.0, persistent indexes can be created and stored in **object storages**.
+  - Since v3.3.2, persistent indexes can be created and stored in **object storages**.
 
 :::
 
@@ -37,10 +38,10 @@ The overall process of writing and reading data within the Primary Key table is 
 
 - The data writing is achieved through StarRocks's internal Loadjob that includes a batch of data change operations (Insert, Update, and Delete). StarRocks loads the primary key indexes of the corresponding tablets into memory. For Delete operations, StarRocks first uses the primary key index to find the original location (data file and row number) of each data row, marking the data row as deleted in the DelVector (which stores and manages delete markers generated during data loading). For Update operations, in addition to marking the original data row as deleted in the DelVector, StarRocks also writes the latest data row to a new data file, essentially transforming the Update into a Delete+Insert (as shown in the following figure). The primary key index is also updated to record the new location (data file and row number) of the changed data row.
 
-   ![pk1](../../assets/table_design/pk1.png)
+   ![pk1](../../_assets/table_design/pk1.png)
 - During data reading, because historical duplicate records in various data files have already been marked as deleted during data writing, only the latest data row with the the same primary key value needs to be read. Multiple versions of data files no longer need to be read online to deduplicate data and find the latest data. When the underlying data files are scanned, filter operators and various indexes help reduce scanning overhead (as shown in the following figure). Therefore, query performance can be significantly improved. Compared to the Merge-On-Read strategy of the Unique Key table, the Delete+Insert strategy of the Primary Key table can help improve query performance by 3 to 10 times.
 
-   ![pk2](../../assets/table_design/pk2.png)
+   ![pk2](../../_assets/table_design/pk2.png)
 
 <details>
 <summary>More details</summary>
@@ -58,11 +59,11 @@ During data reading, the metadata is used to find which rowsets need to be read 
 
 - **Tablet**: A table is divided into multiple tablets based on partition and bucket mechanisms. It is the actual physical storage unit and is distributed as replicas across different BEs.
 
-   ![pk3](../../assets/table_design/pk3.png)
+   ![pk3](../../_assets/table_design/pk3.png)
 
 - **Metadata**: The metadata stores the version history of the tablet and information about each version (for example, which rowsets are included). The commit phase of each Loadjob or compaction generates a new version.
 
-   ![pk4](../../assets/table_design/pk4.png)
+   ![pk4](../../_assets/table_design/pk4.png)
 
 - **Primary key index**: The primary key index stores the mapping between the data rows identified by those primary key values and the locations of those data rows. It is implemented as a HashMap, where the keys represent the encoded primary key values, and the values represent the locations of data rows（including `rowset_id`, `segment_id` and `rowid`）. Normarlly, the primary key index is only used during data writing to find the rowset and row in which each data row identified by a specific primary key value resides.
 - **DelVector**: The DelVector stores the delete markers for each segment file (columnar file) in every rowset.
@@ -103,7 +104,7 @@ For example, the `order_id` field in the order table can uniquely identify data 
 
 Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key. Therefore, you can choose columns frequently used as query filter conditions to form the sort key. For example, if you frequently query product sales performance based on the combination of two dimensions, order date and merchant, you can specify the sort key as `dt` and `merchant_id` using the `ORDER BY (dt,merchant_id)` clause.
 
-Note that if you use [data distribution strategies](../Data_distribution.md), the Primary Key table currently requires the primary key to include partitioning and bucketing columns. For example, the data distribution strategy uses `dt` as the partitioning column and `merchant_id` as the hash bucketing column. The primary key also needs to include `dt` and `merchant_id`.
+Note that if you use [data distribution strategies](../data_distribution/Data_distribution.md), the Primary Key table currently requires the primary key to include partitioning and bucketing columns. For example, the data distribution strategy uses `dt` as the partitioning column and `merchant_id` as the hash bucketing column. The primary key also needs to include `dt` and `merchant_id`.
 
 In summary, the CREATE TABLE statement for the above order table can be as follows:
 
@@ -138,7 +139,7 @@ Take note of the following considerations about the primary key:
 - In the CREATE TABLE statement, the primary key columns must be defined before other columns.
 - The primary key columns must include partitioning and bucketing columns.
 - The primary key columns support the following data types: numeric (including integers and BOOLEAN), string, and date (DATE and DATETIME).
-- The maximum length of a encoded primary key value is 128 bytes.
+- By default, the maximum length of an encoded primary key value is 128 bytes.
 - The primary key cannot be modified after table creation.
 - For data consistency purposes, the primary key values cannot be updated.
 
@@ -154,11 +155,7 @@ When `enable_persistent_index` is set to `true` (default), the primary key index
 
 If the disk is an SSD, it is recommended to set it to `true`. If the disk is an HDD and the load frequency is not high, you can also set it to `true`.
 
-:::info
-
-Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
-
-:::
+Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters support index persistence onto local disks. And from v3.3.2 onwards, StarRocks shared-data clusters further support index persistence onto object storage. You can enable this feature by setting the table property `persistent_index_type` to `CLOUD_NATIVE`.
 
 </TabItem>
 
@@ -182,12 +179,12 @@ The Primary Key table with the fully in-memory primary key indexes is suitable f
   
   As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
 
-   ![pk5](../../assets/table_design/pk5.png)
+   ![pk5](../../_assets/table_design/pk5.png)
 
 - The table is a flat table that is composed of hundreds or thousands of columns. The Primary Key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
   
   As shown in the following figure, the table contains only a few rows, and the Primary Key of the table comprises only a small portion of the table.
-   ![pk6](../../assets/table_design/pk6.png)
+   ![pk6](../../_assets/table_design/pk6.png)
 
 </TabItem>
 
@@ -208,8 +205,8 @@ During data loading, the data is stored after being sorted according to the sort
 
 ## What's more
 
-- To load data into the table created, you can refer to [Loading overview](../../loading/loading_introduction/Loading_intro.md) to choose an appropriate load options.
-- If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md), [UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)).
-- If you want to further accelerate queries, you can refer to [Query Acceleration](../../cover_pages/query_acceleration.mdx).
-- If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+- To load data into the table created, you can refer to [Loading overview](../../loading/Loading_intro.md) to choose an appropriate load options.
+- If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md), [UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)).
+- If you want to further accelerate queries, you can refer to [Query Acceleration](../../using_starrocks/async_mv/Materialized_view.md).
+- If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 - An [AUTO_INCREMENT](../../sql-reference/sql-statements/generated_columns.md) column can be used as the Primary Key.

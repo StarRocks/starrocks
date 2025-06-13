@@ -17,8 +17,14 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -51,12 +57,15 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean withoutColocateRequirement = false;
 
     private boolean usePkIndex = false;
+    private TableSampleClause sample;
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
 
     // Rewriting the scan column ref also needs to rewrite the pruned predicate at the same time.
     private List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     private long gtid = 0;
 
@@ -75,7 +84,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     List<Long> hintsReplicaId,
                                     List<ScalarOperator> prunedPartitionPredicates,
                                     Projection projection,
-                                    boolean usePkIndex) {
+                                    boolean usePkIndex,
+                                    VectorSearchOptions vectorSearchOptions) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.distributionSpec = distributionDesc;
         this.selectedIndexId = selectedIndexId;
@@ -84,6 +94,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.hintsReplicaId = hintsReplicaId;
         this.prunedPartitionPredicates = prunedPartitionPredicates;
         this.usePkIndex = usePkIndex;
+        this.vectorSearchOptions = vectorSearchOptions;
     }
 
     public PhysicalOlapScanOperator(LogicalOlapScanOperator scanOperator) {
@@ -96,6 +107,12 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.hintsReplicaId = scanOperator.getHintsReplicaIds();
         this.prunedPartitionPredicates = scanOperator.getPrunedPartitionPredicates();
         this.usePkIndex = scanOperator.isUsePkIndex();
+        this.vectorSearchOptions = scanOperator.getVectorSearchOptions();
+        this.sample = scanOperator.getSample();
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
     }
 
     public long getSelectedIndexId() {
@@ -120,6 +137,21 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public List<Long> getSelectedTabletId() {
         return selectedTabletId;
+    }
+
+    /**
+     * Get total number of tablets(before tablet pruning) in selected partitions
+     */
+    public long getNumTabletsInSelectedPartitions() {
+        int totalTabletsNum = 0;
+        for (Long partitionId : getSelectedPartitionId()) {
+            final Partition partition = ((OlapTable) getTable()).getPartition(partitionId);
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                final MaterializedIndex selectedTable = subPartition.getIndex(getSelectedIndexId());
+                totalTabletsNum += selectedTable.getTablets().size();
+            }
+        }
+        return totalTabletsNum;
     }
 
     public List<Long> getHintsReplicaId() {
@@ -190,6 +222,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return usePkIndex;
     }
 
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
+    }
+
     @Override
     public String toString() {
         return "PhysicalOlapScan" + " {" +
@@ -211,7 +251,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
-                selectedTabletId);
+                selectedTabletId, sample);
     }
 
     @Override
@@ -230,6 +270,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
+                Objects.equals(sample, that.sample) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId);
     }
 
@@ -278,6 +319,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.usePkIndex = operator.usePkIndex;
             builder.globalDicts = operator.globalDicts;
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
+            builder.vectorSearchOptions = operator.vectorSearchOptions;
+            builder.sample = operator.getSample();
             return this;
         }
 

@@ -24,10 +24,10 @@
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+#include "util/thrift_rpc_helper.h"
 
 using namespace fmt::literals;
 
@@ -56,66 +56,53 @@ inline BrokerServiceClientCache* client_cache() {
     return ExecEnv::GetInstance()->broker_client_cache();
 }
 
-static Status to_status(const TBrokerOperationStatus& st) {
+static Status to_status(const TBrokerOperationStatus& st, const TNetworkAddress& broker) {
     switch (st.statusCode) {
     case TBrokerOperationStatusCode::OK:
         return Status::OK();
     case TBrokerOperationStatusCode::END_OF_FILE:
-        return Status::EndOfFile(st.message);
+        return Status::EndOfFile(fmt::format("error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::NOT_AUTHORIZED:
-        return Status::IOError("No broker permission, " + st.message);
+        return Status::IOError(fmt::format("No broker permission, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::DUPLICATE_REQUEST:
-        return Status::InternalError("Duplicate broker request, " + st.message);
+        return Status::InternalError(
+                fmt::format("Duplicate broker request, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::INVALID_INPUT_OFFSET:
-        return Status::InvalidArgument("Invalid broker offset, " + st.message);
+        return Status::InvalidArgument(
+                fmt::format("Invalid broker offset, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::INVALID_ARGUMENT:
-        return Status::InvalidArgument("Invalid broker argument, " + st.message);
+        return Status::InvalidArgument(
+                fmt::format("Invalid broker argument, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::INVALID_INPUT_FILE_PATH:
-        return Status::NotFound("Invalid broker file path, " + st.message);
+        return Status::NotFound(
+                fmt::format("Invalid broker file path, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::FILE_NOT_FOUND:
-        return Status::NotFound("Broker file not found, " + st.message);
+        return Status::NotFound(fmt::format("Broker file not found, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::TARGET_STORAGE_SERVICE_ERROR:
-        return Status::InternalError("Broker storage service error, " + st.message);
+        return Status::InternalError(
+                fmt::format("Broker storage service error, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::OPERATION_NOT_SUPPORTED:
-        return Status::NotSupported("Broker operation not supported, " + st.message);
+        return Status::NotSupported(
+                fmt::format("Broker operation not supported, error={}, broker={}", st.message, broker.hostname));
     }
-    return Status::InternalError("Unknown broker error, " + st.message);
+    return Status::InternalError(fmt::format("Unknown broker error, error={}, broker={}", st.message, broker.hostname));
 }
 
 template <typename Method, typename Request, typename Response>
 static Status call_method(const TNetworkAddress& broker, Method method, const Request& request, Response* response,
                           int retry_count = 1, int timeout_ms = DEFAULT_TIMEOUT_MS) {
-    TFileBrokerServiceClient* client;
-#ifndef BE_TEST
-    Status status;
-    BrokerServiceConnection conn(client_cache(), broker, timeout_ms, &status);
-    if (!status.ok()) {
-        LOG(WARNING) << "Fail to get broker client: " << status;
-        return status;
-    }
-    client = conn.get();
+#ifdef BE_TEST
+    TFileBrokerServiceClient* client = g_broker_client;
+    (client->*method)(*response, request);
+    return Status::OK();
 #else
-    client = g_broker_client;
+    return ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+            broker,
+            [method, response, &request](BrokerServiceConnection& client) {
+                (client.get()->*method)(*response, request);
+            },
+            timeout_ms, retry_count);
 #endif
-
-    while (true) {
-        try {
-            (client->*method)(*response, request);
-            return Status::OK();
-        } catch (apache::thrift::transport::TTransportException& e) {
-#ifndef BE_TEST
-            RETURN_IF_ERROR(conn.reopen());
-            client = conn.get();
-#endif
-            if (retry_count-- > 0) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-            } else {
-                return Status::ThriftRpcError(e.what());
-            }
-        } catch (apache::thrift::TException& e) {
-            return Status::ThriftRpcError(e.what());
-        }
-    }
 }
 
 // This function will *NOT* return EOF status.
@@ -136,7 +123,7 @@ static Status broker_pread(void* buff, const TNetworkAddress& broker, const TBro
         if (response.opStatus.statusCode == TBrokerOperationStatusCode::END_OF_FILE) {
             break;
         } else if (response.opStatus.statusCode != TBrokerOperationStatusCode::OK) {
-            return to_status(response.opStatus);
+            return to_status(response.opStatus, broker);
         } else if (response.data.empty()) {
             break;
         }
@@ -155,7 +142,7 @@ static void broker_close_reader(const TNetworkAddress& broker, const TBrokerFD& 
     request.__set_fd(fd);
 
     Status st = call_method(broker, &BrokerServiceClient::closeReader, request, &response);
-    LOG_IF(WARNING, !st.ok()) << "Fail to close broker reader, " << st.to_string();
+    LOG_IF(WARNING, !st.ok()) << "Fail to close broker reader, error=" << st.to_string();
 }
 
 static Status broker_close_writer(const TNetworkAddress& broker, const TBrokerFD& fd, int timeout_ms) {
@@ -167,12 +154,12 @@ static Status broker_close_writer(const TNetworkAddress& broker, const TBrokerFD
 
     Status st = call_method(broker, &BrokerServiceClient::closeWriter, request, &response, 1, timeout_ms);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to close broker writer: " << st;
+        LOG(WARNING) << "Fail to close broker writer, error=" << st;
         return st;
     }
     if (response.statusCode != TBrokerOperationStatusCode::OK) {
-        LOG(WARNING) << "Fail to close broker writer: " << response.message;
-        return to_status(response);
+        LOG(WARNING) << "Fail to close broker writer, error=" << response.message << ", broker=" << broker.hostname;
+        return to_status(response, broker);
     }
     return Status::OK();
 }
@@ -226,12 +213,13 @@ public:
 
         Status st = call_method(_broker, &BrokerServiceClient::pwrite, request, &response, 0, _timeout_ms);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to append " << _path << ": " << st;
+            LOG(WARNING) << "Fail to append " << _path << ", error=" << st;
             return st;
         }
         if (response.statusCode != TBrokerOperationStatusCode::OK) {
-            LOG(WARNING) << "Fail to append " << _path << ": " << response.message;
-            return to_status(response);
+            LOG(WARNING) << "Fail to append " << _path << ", error=" << response.message
+                         << ", broker=" << _broker.hostname;
+            return to_status(response, _broker);
         }
         _offset += data.size;
         return Status::OK();
@@ -278,6 +266,7 @@ private:
 
 StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const SequentialFileOptions& opts,
                                                                                 const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -288,12 +277,13 @@ StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(
 
     Status st = call_method(_broker_addr, &BrokerServiceClient::openReader, request, &response);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to open " << path << ": " << st;
+        LOG(WARNING) << "Fail to open " << path << ", error=" << st;
         return st;
     }
     if (response.opStatus.statusCode != TBrokerOperationStatusCode::OK) {
-        LOG(WARNING) << "Fail to open " << path << ": " << response.opStatus.message;
-        return to_status(response.opStatus);
+        LOG(WARNING) << "Fail to open " << path << ", error=" << response.opStatus.message
+                     << ", broker=" << _broker_addr.hostname;
+        return to_status(response.opStatus, _broker_addr);
     }
 
     // Get file size.
@@ -304,6 +294,8 @@ StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(
 
 StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(
         const RandomAccessFileOptions& opts, const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
+
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -314,12 +306,13 @@ StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_
 
     Status st = call_method(_broker_addr, &BrokerServiceClient::openReader, request, &response);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to open " << path << ": " << st;
+        LOG(WARNING) << "Fail to open " << path << ", error=" << st;
         return st;
     }
     if (response.opStatus.statusCode != TBrokerOperationStatusCode::OK) {
-        LOG(WARNING) << "Fail to open " << path << ": " << response.opStatus.message;
-        return to_status(response.opStatus);
+        LOG(WARNING) << "Fail to open " << path << ", error=" << response.opStatus.message
+                     << ", broker=" << _broker_addr.hostname;
+        return to_status(response.opStatus, _broker_addr);
     }
 
     // Get file size.
@@ -334,6 +327,7 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
 
 StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(const WritableFileOptions& opts,
                                                                             const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(path); st.ok()) {
             return Status::NotSupported(fmt::format("Cannot truncate a file by broker, path={}", path));
@@ -350,8 +344,7 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
                     fmt::format("Cannot open an already exists file through broker, path={}", path));
         }
     } else {
-        auto msg = strings::Substitute("Unsupported open mode $0", opts.mode);
-        return Status::NotSupported(msg);
+        return Status::NotSupported(fmt::format("Unsupported open mode {}", opts.mode));
     }
 
     TBrokerOpenWriterRequest request;
@@ -365,13 +358,14 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
 
     Status st = call_method(_broker_addr, &BrokerServiceClient::openWriter, request, &response, 1, _timeout_ms);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to open " << path << ": " << st;
+        LOG(WARNING) << "Fail to open " << path << ", error=" << st;
         return st;
     }
 
     if (response.opStatus.statusCode != TBrokerOperationStatusCode::OK) {
-        LOG(WARNING) << "Fail to open " << path << ": " << response.opStatus.message;
-        return to_status(response.opStatus);
+        LOG(WARNING) << "Fail to open " << path << ", error=" << response.opStatus.message
+                     << ", broker=" << _broker_addr.hostname;
+        return to_status(response.opStatus, _broker_addr);
     }
 
     return std::make_unique<BrokerWritableFile>(_broker_addr, path, response.fd, 0, _timeout_ms);
@@ -389,7 +383,7 @@ Status BrokerFileSystem::_path_exists(const std::string& path) {
     request.__set_version(TBrokerVersion::VERSION_ONE);
     RETURN_IF_ERROR(call_method(_broker_addr, &BrokerServiceClient::checkPathExist, request, &response));
     if (response.opStatus.statusCode != TBrokerOperationStatusCode::OK) {
-        return to_status(response.opStatus);
+        return to_status(response.opStatus, _broker_addr);
     }
     return response.isPathExist ? Status::OK() : Status::NotFound(path);
 }
@@ -426,14 +420,14 @@ Status BrokerFileSystem::_delete_file(const std::string& path) {
 
     Status st = call_method(_broker_addr, &BrokerServiceClient::deletePath, request, &response);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to delete " << path << ": " << st.message();
+        LOG(WARNING) << "Fail to delete " << path << ", error=" << st.message() << ", broker=" << _broker_addr.hostname;
         return st;
     }
-    st = to_status(response);
+    st = to_status(response, _broker_addr);
     if (st.ok()) {
         LOG(INFO) << "Deleted " << path;
     } else {
-        LOG(WARNING) << "Fail to delete " << path << ": " << st.message();
+        LOG(WARNING) << "Fail to delete " << path << ", error=" << st.message();
     }
     return st;
 }
@@ -504,12 +498,12 @@ Status BrokerFileSystem::_list_file(const std::string& path, TBrokerFileStatus* 
         return Status::NotFound(path);
     } else if (response.opStatus.statusCode == TBrokerOperationStatusCode::OK) {
         if (response.files.size() != 1) {
-            return Status::InternalError(strings::Substitute("unexpected file list size=$0", response.files.size()));
+            return Status::InternalError(fmt::format("unexpected file list size={}", response.files.size()));
         }
         swap(*stat, response.files[0]);
         return Status::OK();
     } else {
-        return to_status(response.opStatus);
+        return to_status(response.opStatus, _broker_addr);
     }
 }
 

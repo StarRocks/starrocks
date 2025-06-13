@@ -34,7 +34,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     @Override
     public R visitInsertStatement(InsertStmt statement, C context) {
         if (statement.getQueryStatement() != null) {
-            visit(statement.getQueryStatement());
+            visit(statement.getQueryStatement(), context);
         }
         return null;
     }
@@ -43,7 +43,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     public R visitUpdateStatement(UpdateStmt statement, C context) {
         //Update Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
         if (statement.getQueryStatement() != null) {
-            visit(statement.getQueryStatement());
+            visit(statement.getQueryStatement(), context);
         }
         return null;
     }
@@ -52,7 +52,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     public R visitDeleteStatement(DeleteStmt statement, C context) {
         //Delete Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
         if (statement.getQueryStatement() != null) {
-            visit(statement.getQueryStatement());
+            visit(statement.getQueryStatement(), context);
         }
         return null;
     }
@@ -60,10 +60,10 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     @Override
     public R visitSubmitTaskStatement(SubmitTaskStmt statement, C context) {
         if (statement.getInsertStmt() != null) {
-            visit(statement.getInsertStmt());
+            visit(statement.getInsertStmt(), context);
         }
         if (statement.getCreateTableAsSelectStmt() != null) {
-            visit(statement.getCreateTableAsSelectStmt());
+            visit(statement.getCreateTableAsSelectStmt(), context);
         }
         return null;
     }
@@ -71,7 +71,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     @Override
     public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
         if (statement.getInsertStmt() != null) {
-            visit(statement.getInsertStmt());
+            visit(statement.getInsertStmt(), context);
         }
         return null;
     }
@@ -79,79 +79,103 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     @Override
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
         if (statement.getQueryStatement() != null) {
-            visit(statement.getQueryStatement());
+            visit(statement.getQueryStatement(), context);
         }
         if (statement.getInsertStmt() != null) {
-            visit(statement.getInsertStmt());
+            visit(statement.getInsertStmt(), context);
         }
         return null;
     }
 
-    // ------------------------------------------- Relation ----------------------------------==------------------------
+    // ------------------------------------------- DDL Statement -------------------------------------------------------
+
+    @Override
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        statement.getAlterClauseList().forEach(x -> visit(x, context));
+        return null;
+    }
+
+    @Override
+    public R visitAlterViewStatement(AlterViewStmt statement, C context) {
+        if (statement.getAlterClause() != null) {
+            visit(statement.getAlterClause(), context);
+        }
+        return null;
+    }
+
+    @Override
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, C context) {
+        if (statement.getAlterTableClause() != null) {
+            visit(statement.getAlterTableClause(), context);
+        }
+        return null;
+    }
+
+    // ------------------------------------------- Relation ------------------------------------------------------------
 
     @Override
     public R visitSelect(SelectRelation node, C context) {
         if (node.hasWithClause()) {
-            node.getCteRelations().forEach(this::visit);
+            node.getCteRelations().forEach(x -> visit(x, context));
         }
 
         if (node.getOrderBy() != null) {
             for (OrderByElement orderByElement : node.getOrderBy()) {
-                visit(orderByElement.getExpr());
+                visit(orderByElement.getExpr(), context);
             }
         }
 
         if (node.getOutputExpression() != null) {
-            node.getOutputExpression().forEach(this::visit);
+            node.getOutputExpression().forEach(x -> visit(x, context));
         }
 
         if (node.getPredicate() != null) {
-            visit(node.getPredicate());
+            visit(node.getPredicate(), context);
         }
 
         if (node.getGroupBy() != null) {
-            node.getGroupBy().forEach(this::visit);
+            node.getGroupBy().forEach(x -> visit(x, context));
         }
 
         if (node.getAggregate() != null) {
-            node.getAggregate().forEach(this::visit);
+            node.getAggregate().forEach(x -> visit(x, context));
         }
 
         if (node.getHaving() != null) {
-            visit(node.getHaving());
+            visit(node.getHaving(), context);
         }
 
-        return visit(node.getRelation());
+        return visit(node.getRelation(), context);
     }
 
     @Override
     public R visitJoin(JoinRelation node, C context) {
         if (node.getOnPredicate() != null) {
-            visit(node.getOnPredicate());
+            visit(node.getOnPredicate(), context);
         }
 
-        visit(node.getLeft());
-        visit(node.getRight());
+        visit(node.getLeft(), context);
+        visit(node.getRight(), context);
         return null;
     }
 
     @Override
-    public R visitSubquery(SubqueryRelation node, C context) {
-        return visit(node.getQueryStatement());
+    public R visitSubqueryRelation(SubqueryRelation node, C context) {
+        return visit(node.getQueryStatement(), context);
     }
 
     @Override
     public R visitSetOp(SetOperationRelation node, C context) {
         if (node.hasWithClause()) {
-            node.getCteRelations().forEach(this::visit);
+            node.getCteRelations().forEach(x -> visit(x, context));
         }
-        node.getRelations().forEach(this::visit);
+        node.getRelations().forEach(x -> visit(x, context));
         return null;
     }
 
     @Override
     public R visitCTE(CTERelation node, C context) {
-        return visit(node.getCteQueryStatement());
+        return visit(node.getCteQueryStatement(), context);
     }
 
     @Override
@@ -163,12 +187,12 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
 
     @Override
     public R visitExpression(Expr node, C context) {
-        node.getChildren().forEach(this::visit);
+        node.getChildren().forEach(x -> visit(x, context));
         return null;
     }
 
     @Override
-    public R visitSubquery(Subquery node, C context) {
-        return visit(node.getQueryStatement());
+    public R visitSubqueryExpr(Subquery node, C context) {
+        return visit(node.getQueryStatement(), context);
     }
 }

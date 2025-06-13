@@ -108,6 +108,51 @@ public class ReduceCastRuleTest {
         assertEquals(OperatorType.CONSTANT, result.getOpType());
     }
 
+    @Test
+    public void testReduceCastToVarcharInDatetimeCast() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+        {
+            // cast(cast(id_date as varchar) as datetime) -> cast(id_date as datetime)
+            ScalarOperator operator = new CastOperator(Type.DATETIME,
+                    new CastOperator(Type.VARCHAR, new ColumnRefOperator(0, Type.DATE, "id_date", false)));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isDatetime());
+            assertEquals(Type.DATE, result.getChild(0).getType());
+        }
+        {
+            // cast(cast(id_datetime as varchar) as date) -> cast(id_datetime as date)
+            ScalarOperator operator = new CastOperator(Type.DATE,
+                    new CastOperator(Type.VARCHAR, new ColumnRefOperator(0, Type.DATETIME, "id_datetime", false)));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isDate());
+            assertEquals(Type.DATETIME, result.getChild(0).getType());
+        }
+        {
+            // cast(cast(id_datetime as varchar) as datetime) -> id_datetime
+            ScalarOperator operator = new CastOperator(Type.DATETIME,
+                    new CastOperator(Type.VARCHAR, new ColumnRefOperator(0, Type.DATETIME, "id_datetime", false)));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isDatetime());
+            assertTrue(result instanceof ColumnRefOperator);
+        }
+        {
+            // cast(cast(id_date as varchar) as date) -> id_date
+            ScalarOperator operator = new CastOperator(Type.DATE,
+                    new CastOperator(Type.VARCHAR, new ColumnRefOperator(0, Type.DATE, "id_date", false)));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isDate());
+            assertTrue(result instanceof ColumnRefOperator);
+        }
+    }
+
     private ConstantOperator createConstOperatorFromType(Type type) {
         if (type.isTinyint()) {
             return ConstantOperator.createTinyInt(Byte.MAX_VALUE);
@@ -456,5 +501,16 @@ public class ReduceCastRuleTest {
             ScalarOperator afterOptimize = reduceCastRule.apply(beforeOptimize, null);
             Assert.assertSame(beforeOptimize, afterOptimize);
         }
+    }
+
+    @Test
+    public void testPrecisionLoss() {
+        ReduceCastRule rule = new ReduceCastRule();
+        // cast(96.1) as int = 96, we can't change it into 96.1 = cast(96) as double
+        ScalarOperator castOperator = new CastOperator(Type.INT, ConstantOperator.createDouble(96.1));
+        BinaryPredicateOperator beforeOptimize =
+                BinaryPredicateOperator.eq(castOperator, ConstantOperator.createInt(96));
+        ScalarOperator result = rule.apply(beforeOptimize, null);
+        Assert.assertTrue(result.getChild(0) instanceof CastOperator);
     }
 }

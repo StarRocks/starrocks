@@ -334,14 +334,14 @@ public class ColumnTest {
 
     @Test
     public void testLscColumn() {
-        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, false,
+        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, null, false,
                 new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
 
         Index i0 = new Index("i0",
-                Collections.singletonList("f0"), IndexType.BITMAP, "");
+                Collections.singletonList(ColumnId.create("f0")), IndexType.BITMAP, "");
 
-        Set<String> bfColumns = new HashSet<>();
-        bfColumns.add("f0");
+        Set<ColumnId> bfColumns = new HashSet<>();
+        bfColumns.add(ColumnId.create("f0"));
         TColumn t0 = f0.toThrift();
         f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 
@@ -360,5 +360,14 @@ public class ColumnTest {
         String str = "{\"name\": \"test\"}";
         Column column = GsonUtils.GSON.fromJson(str, Column.class);
         Assert.assertEquals("test", column.getColumnId().getId());
+    }
+
+    @Test
+    public void testToSqlWithoutAggregateTypeName() {
+        String comment = "{\"id\":\"0\",\"value\":\"1\"}";
+        Column column = new Column("col", ScalarType.createType(PrimitiveType.JSON), false, null, true, null, comment);
+        String toSql = column.toSqlWithoutAggregateTypeName(null);
+
+        Assert.assertEquals("`col` json NULL COMMENT \"{\\\"id\\\":\\\"0\\\",\\\"value\\\":\\\"1\\\"}\"", toSql);
     }
 }

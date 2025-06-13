@@ -21,6 +21,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
+
 public class IntervalLiteral extends LiteralExpr {
     private final Expr value;
     private final UnitIdentifier unitIdentifier;
@@ -45,7 +46,7 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     protected String toSqlImpl() {
-        return "interval " + value.toSql() + unitIdentifier;
+        return "interval " + value.toSql() + " " + unitIdentifier.toSql();
     }
 
     @Override

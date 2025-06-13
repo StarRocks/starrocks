@@ -243,35 +243,11 @@ public:
     using reference = value_type&;
 
     PredicateNodeIterator(ColumnNodeMapIterator col_map_it, ColumnNodeMapIterator col_map_end_it,
-                          CompoundNodeIterator compound_it, CompoundNodeIterator compound_end_it)
-            : _col_map_it(col_map_it),
-              _col_map_end_it(col_map_end_it),
-              _col_it(_col_map_it != _col_map_end_it ? _col_map_it->second.begin() : ColumnNodeIterator{}),
-              _col_end_it(_col_map_it != _col_map_end_it ? _col_map_it->second.end() : ColumnNodeIterator{}),
-              _compound_it(compound_it),
-              _compound_end_it(compound_end_it) {
-        skip_empty_col_nodes();
-    }
+                          CompoundNodeIterator compound_it, CompoundNodeIterator compound_end_it);
 
-    NodePtr operator*() {
-        if (is_in_col_nodes()) {
-            return NodePtr(&(*_col_it));
-        } else {
-            return NodePtr(&(*_compound_it));
-        }
-    }
+    NodePtr operator*();
 
-    PredicateNodeIterator& operator++() {
-        if (!is_in_col_nodes()) {
-            ++_compound_it;
-        } else {
-            if (_col_it != _col_end_it) {
-                ++_col_it;
-            }
-            skip_empty_col_nodes();
-        }
-        return *this;
-    }
+    PredicateNodeIterator& operator++();
 
     bool operator!=(const PredicateNodeIterator& other) const { return !this->operator==(other); }
 
@@ -286,20 +262,7 @@ public:
 private:
     /// The PredicateColumnNodes of `map<ColumnId, PredicateColumnNodes>` may be empty.
     /// This function is used to skip the empty PredicateColumnNodes.
-    void skip_empty_col_nodes() {
-        if (!is_in_col_nodes()) {
-            return;
-        }
-
-        while (_col_it == _col_end_it) {
-            if (++_col_map_it == _col_map_end_it) {
-                _col_it = ColumnNodeIterator{};
-                break;
-            }
-            _col_it = _col_map_it->second.begin();
-            _col_end_it = _col_map_it->second.end();
-        }
-    }
+    void skip_empty_col_nodes();
     bool is_in_col_nodes() const { return _col_map_it != _col_map_end_it; }
 
     ColumnNodeMapIterator _col_map_it;

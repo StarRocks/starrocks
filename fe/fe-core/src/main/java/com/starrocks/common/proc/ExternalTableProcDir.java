@@ -19,6 +19,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 
@@ -30,6 +32,7 @@ public class ExternalTableProcDir implements ProcDirInterface {
             .build();
 
     public static final String SCHEMA = "schema";
+    public static final String PARTITIONS = "partitions";
 
     // TODO implementing show proc external table partitions
     private static final ImmutableList<String> CHILDREN_NODES = new ImmutableList.Builder<String>()
@@ -68,6 +71,15 @@ public class ExternalTableProcDir implements ProcDirInterface {
 
         if (entryName.equals(SCHEMA)) {
             return new ExternalSchemaProcNode(table);
+        } else if (entryName.equals(PARTITIONS)) {
+            if (table instanceof PaimonTable) {
+                PaimonTable paimonTable = (PaimonTable) table;
+                PartitionType partitionType = paimonTable.isUnPartitioned() ?
+                        PartitionType.UNPARTITIONED : PartitionType.LIST;
+                return new PaimonTablePartitionsProcDir(table, partitionType);
+            } else {
+                throw new AnalysisException("table is not support: " + entryName);
+            }
         } else {
             throw new AnalysisException("Not implemented yet: " + entryName);
         }

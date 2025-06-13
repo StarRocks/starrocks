@@ -14,15 +14,16 @@
 
 package com.starrocks.connector.delta;
 
-
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.CachingMetastore;
-import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -38,23 +39,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
+import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 
-public class CachingDeltaLakeMetastore extends CachingMetastore implements IMetastore {
+public class CachingDeltaLakeMetastore extends CachingMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(CachingDeltaLakeMetastore.class);
+    private static final int MEMORY_META_SAMPLES = 10;
 
-    public final IMetastore delegate;
+    public final IDeltaLakeMetastore delegate;
     private final Map<DatabaseTableName, Long> lastAccessTimeMap;
+    protected LoadingCache<DatabaseTableName, DeltaLakeSnapshot> tableSnapshotCache;
 
-    public CachingDeltaLakeMetastore(IMetastore metastore, Executor executor, long expireAfterWriteSec,
+    public CachingDeltaLakeMetastore(IDeltaLakeMetastore metastore, Executor executor, long expireAfterWriteSec,
                                      long refreshIntervalSec, long maxSize) {
         super(executor, expireAfterWriteSec, refreshIntervalSec, maxSize);
         this.delegate = metastore;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
+        tableSnapshotCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
+                .build(asyncReloading(CacheLoader.from(dbTableName ->
+                        getLatestSnapshot(dbTableName.getDatabaseName(), dbTableName.getTableName())), executor));
     }
 
-    public static CachingDeltaLakeMetastore createQueryLevelInstance(IMetastore metastore, long perQueryCacheMaxSize) {
+    public static CachingDeltaLakeMetastore createQueryLevelInstance(IDeltaLakeMetastore metastore, long perQueryCacheMaxSize) {
         return new CachingDeltaLakeMetastore(
                 metastore,
                 newDirectExecutorService(),
@@ -63,10 +71,15 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
                 perQueryCacheMaxSize);
     }
 
-    public static CachingDeltaLakeMetastore createCatalogLevelInstance(IMetastore metastore, Executor executor,
-                                                                  long expireAfterWrite, long refreshInterval,
-                                                                  long maxSize) {
+    public static CachingDeltaLakeMetastore createCatalogLevelInstance(IDeltaLakeMetastore metastore, Executor executor,
+                                                                       long expireAfterWrite, long refreshInterval,
+                                                                       long maxSize) {
         return new CachingDeltaLakeMetastore(metastore, executor, expireAfterWrite, refreshInterval, maxSize);
+    }
+
+    @Override
+    public String getCatalogName() {
+        return delegate.getCatalogName();
     }
 
     @Override
@@ -104,6 +117,19 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
         return delegate.getTable(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
     }
 
+    public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+        return get(tableSnapshotCache, databaseTableName);
+    }
+
+    @Override
+    public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+        if (delegate instanceof CachingDeltaLakeMetastore) {
+            return ((CachingDeltaLakeMetastore) delegate).getCachedSnapshot(DatabaseTableName.of(dbName, tableName));
+        } else {
+            return delegate.getLatestSnapshot(dbName, tableName);
+        }
+    }
+
     @Override
     public MetastoreTable getMetastoreTable(String dbName, String tableName) {
         return delegate.getMetastoreTable(dbName, tableName);
@@ -115,7 +141,8 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
             DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
             lastAccessTimeMap.put(databaseTableName, System.currentTimeMillis());
         }
-        return get(tableCache, DatabaseTableName.of(dbName, tableName));
+        DeltaLakeSnapshot snapshot = getCachedSnapshot(DatabaseTableName.of(dbName, tableName));
+        return DeltaUtils.convertDeltaSnapshotToSRTable(getCatalogName(), snapshot);
     }
 
     @Override
@@ -173,5 +200,37 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
         Set<DatabaseTableName> cachedTableName = tableCache.asMap().keySet();
         lastAccessTimeMap.keySet().retainAll(cachedTableName);
         LOG.info("Refresh table {}.{} in background", dbName, tblName);
+    }
+
+    public void invalidateAll() {
+        super.invalidateAll();
+        if (delegate instanceof DeltaLakeMetastore) {
+            ((DeltaLakeMetastore) delegate).invalidateAll();
+        }
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> dbSamples = databaseCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+        List<Object> tableSamples = tableCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+
+        List<Pair<List<Object>, Long>> samples = delegate.getSamples();
+        samples.add(Pair.create(dbSamples, databaseCache.size()));
+        samples.add(Pair.create(tableSamples, tableCache.size()));
+        return samples;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        Map<String, Long> delegateCount = Maps.newHashMap(delegate.estimateCount());
+        delegateCount.put("databaseCache", databaseCache.size());
+        delegateCount.put("tableCache", tableCache.size());
+        return delegateCount;
     }
 }

@@ -16,7 +16,6 @@ package com.starrocks.connector.kudu;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
-import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -54,6 +53,7 @@ public class KuduConnector implements Connector {
     private final String schemaEmulationPrefix;
     private final HdfsEnvironment hdfsEnvironment;
     private final Map<String, String> properties;
+    private final Optional<IHiveMetastore> hiveMetastoreClient;
 
     public KuduConnector(ConnectorContext context) {
         this.properties = context.getProperties();
@@ -68,6 +68,14 @@ public class KuduConnector implements Connector {
 
         validateCatalogType(catalogType);
         validateMetastoreUrisIfNecessary(catalogType, metastoreUris);
+
+        if (HIVE.equals(catalogType) || GLUE.equals(catalogType)) {
+            HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+            MetastoreType metastoreType = MetastoreType.get(catalogType);
+            hiveMetastoreClient = Optional.of(new HiveMetastore(metaClient, catalogName, metastoreType));
+        } else {
+            hiveMetastoreClient = Optional.empty();
+        }
     }
 
     private String getPropertyOrThrow(String propertyName) {
@@ -93,22 +101,7 @@ public class KuduConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        Optional<IHiveMetastore> hiveMetastore = Optional.empty();
-        if (isHiveOrGlueCatalogType()) {
-            MetastoreType metastoreType = MetastoreType.get(catalogType);
-            HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(this.hdfsEnvironment, properties);
-            hiveMetastore = Optional.of(new HiveMetastore(metaClient, catalogName, metastoreType));
-            // TODO caching hiveMetastore support
-        }
         return new KuduMetadata(catalogName, hdfsEnvironment, kuduMaster, schemaEmulationEnabled, schemaEmulationPrefix,
-                hiveMetastore);
-    }
-
-    private boolean isHiveOrGlueCatalogType() {
-        if (HIVE.equals(catalogType)) {
-            Util.validateMetastoreUris(metastoreUris);
-            return true;
-        }
-        return GLUE.equals(catalogType);
+                hiveMetastoreClient);
     }
 }

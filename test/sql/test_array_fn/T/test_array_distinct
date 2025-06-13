@@ -1,0 +1,21 @@
+-- name: test_array_distinct
+
+CREATE TABLE t1 (
+    c1 INT,
+    c2 ARRAY<BIGINT>
+)
+DUPLICATE KEY(C1)
+DISTRIBUTED BY HASH(C1) BUCKETS 1
+PROPERTIES("replication_num"="1");
+
+CREATE TABLE t2 (
+    c1 INT,
+    c2 ARRAY<ARRAY<BIGINT>>
+)
+DUPLICATE KEY(C1)
+DISTRIBUTED BY HASH(C1) BUCKETS 1
+PROPERTIES("replication_num"="1");
+
+insert into t1 select generate_series, array_append([], generate_series) from TABLE(generate_series(1, 5000000));
+insert into t2 select 1, array_agg(c2) from t1;
+select array_length(array_distinct(c2)) from t2;

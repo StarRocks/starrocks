@@ -38,7 +38,7 @@ TEST_F(AnalytorTest, find_peer_group_end) {
     c1->append_value_multiple_times(&v, 10);
 
     analytor._input_rows += 20;
-    analytor._order_columns.emplace_back(c1);
+    analytor._order_columns.emplace_back(std::move(c1));
     analytor._partition.is_real = true;
     analytor._partition.end = 20;
 
@@ -83,8 +83,8 @@ TEST_F(AnalytorTest, find_partition_end) {
 
     analytor1._input_rows += 20;
     analytor1._input_eos = true;
-    analytor1._partition_columns.emplace_back(c1);
-    analytor1._partition_columns.emplace_back(c2);
+    analytor1._partition_columns.emplace_back(std::move(c1));
+    analytor1._partition_columns.emplace_back(std::move(c2));
 
     analytor1._current_row_position = analytor1._partition.end;
     analytor1._find_partition_end();

@@ -12,6 +12,7 @@ column statistics:
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 * s_address-->[-Infinity, Infinity, 0.0, 40.0, 1.0] ESTIMATE
 * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
+* l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
@@ -71,6 +72,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=84.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (1: s_suppkey)
@@ -217,6 +219,7 @@ NON-PARTITION PREDICATES: 36: l_shipdate >= '1995-07-01', 36: l_shipdate < '1995
 MIN/MAX PREDICATES: 36: l_shipdate >= '1995-07-01', 36: l_shipdate < '1995-10-01'
 partitions=1/1
 avgRowSize=40.0
+dataCacheOptions={populate: false}
 cardinality: 21862767
 column statistics:
 * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -255,6 +258,7 @@ NON-PARTITION PREDICATES: 18: l_shipdate >= '1995-07-01', 18: l_shipdate < '1995
 MIN/MAX PREDICATES: 18: l_shipdate >= '1995-07-01', 18: l_shipdate < '1995-10-01'
 partitions=1/1
 avgRowSize=40.0
+dataCacheOptions={populate: false}
 cardinality: 21862767
 column statistics:
 * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE

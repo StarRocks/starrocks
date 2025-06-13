@@ -1,13 +1,18 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 4
+sidebar_position: 50
 ---
+
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 # Full-text inverted index
 
+<Beta />
+
 Since version 3.3.0, StarRocks supports full-text inverted indexes, which can break the text into smaller words, and create an index entry for each word that can show the mapping relationship between the word and its corresponding row number in the data file. For full-text searches, StarRocks queries the inverted index based on the search keywords, quickly locating the data rows that match the keywords.
 
-The full-text inverted index is not yet supported in the shared-data clusters.
+The full-text inverted index is not yet supported in Primary Key tables and shared-data clusters.
 
 ## Overview
 
@@ -77,7 +82,7 @@ MySQL [example_db]> SHOW CREATE TABLE t\G
 Execute `ALTER TABLE ADD INDEX` or `DROP INDEX` to delete full-text inverted indexes.
 
 ```SQL
-DROP INDEX index idx on t;
+DROP INDEX idx on t;
 ALTER TABLE t DROP index idx;
 ```
 

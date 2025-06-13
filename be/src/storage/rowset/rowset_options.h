@@ -21,9 +21,10 @@
 #include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_filter_predicate.h"
+#include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -41,6 +42,8 @@ class DeletePredicates;
 class ChunkPredicate;
 struct RowidRangeOption;
 struct ShortKeyRangesOption;
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 class RowsetReadOptions {
     using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -55,6 +58,7 @@ public:
 
     PredicateTree pred_tree;
     PredicateTree pred_tree_for_zone_map;
+    RuntimeFilterPredicates runtime_filter_preds;
 
     // whether rowset should return rows in sorted order.
     bool sorted = true;
@@ -79,7 +83,7 @@ public:
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
 
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
@@ -87,6 +91,14 @@ public:
 
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
+    bool has_preaggregation = true;
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
+
+    TTableSampleOptions sample_options;
+    bool enable_join_runtime_filter_pushdown = false;
 };
 
 } // namespace starrocks

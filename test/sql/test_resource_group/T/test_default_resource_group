@@ -1,0 +1,5 @@
+-- name: test_default_resource_group
+
+-- The cpu_weight of `default_wg` should be greater than 1.
+SHOW RESOURCE GROUP default_wg;
+

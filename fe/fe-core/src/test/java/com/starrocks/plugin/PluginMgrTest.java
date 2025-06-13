@@ -35,8 +35,6 @@
 package com.starrocks.plugin;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,13 +44,9 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -89,25 +83,9 @@ public class PluginMgrTest {
             info.properties.put("md5sum", "cf0c536b8f2a0a0690b44d783d019e90");
             pluginMgr.replayLoadDynamicPlugin(info);
 
-        } catch (IOException | UserException e) {
-            e.printStackTrace();
-            assert false;
-        }
-    }
-
-    private void testSerializeBuiltinPlugin(PluginMgr mgr) {
-        try {
-            DataOutputBuffer dob = new DataOutputBuffer();
-            DataOutputStream dos = new DataOutputStream(dob);
-            mgr.write(dos);
-
-            PluginMgr test = new PluginMgr();
-
-            test.readFields(new DataInputStream(new ByteArrayInputStream(dob.getData())));
-            assertEquals(1, test.getAllDynamicPluginInfo().size());
-
         } catch (IOException e) {
             e.printStackTrace();
+            assert false;
         }
     }
 }

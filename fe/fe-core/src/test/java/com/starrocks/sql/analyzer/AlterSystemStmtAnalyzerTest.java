@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -169,17 +168,17 @@ public class AlterSystemStmtAnalyzerTest {
     public void testModifyBackendLocationPersistence() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getNodeMgr().save(initialImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(initialImage.getImageWriter());
 
         modifyBackendLocation("c:d");
 
         // make final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getNodeMgr().save(finalImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(finalImage.getImageWriter());
 
         // test replay
         NodeMgr nodeMgrFollower = new NodeMgr();
-        nodeMgrFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        nodeMgrFollower.load(initialImage.getMetaBlockReader());
         Backend persistentState =
                 (Backend) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
         nodeMgrFollower.getClusterInfo().updateInMemoryStateBackend(persistentState);
@@ -188,7 +187,7 @@ public class AlterSystemStmtAnalyzerTest {
 
         // test restart
         NodeMgr nodeMgrLeader = new NodeMgr();
-        nodeMgrLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        nodeMgrLeader.load(finalImage.getMetaBlockReader());
         Assert.assertEquals("{c=d}",
                 nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
     }

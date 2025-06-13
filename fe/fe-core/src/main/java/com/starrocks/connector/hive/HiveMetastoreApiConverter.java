@@ -67,6 +67,7 @@ import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -90,6 +91,7 @@ import static com.starrocks.catalog.HiveTable.HIVE_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HiveTable.HIVE_TABLE_INPUT_FORMAT;
 import static com.starrocks.catalog.HiveTable.HIVE_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_BASE_PATH;
+import static com.starrocks.catalog.HudiTable.HUDI_HMS_TABLE_TYPE;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_NAMES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
@@ -193,8 +195,8 @@ public class HiveMetastoreApiConverter {
 
     public static Table toMetastoreApiTable(HiveTable table) {
         Table apiTable = new Table();
-        apiTable.setDbName(table.getDbName());
-        apiTable.setTableName(table.getTableName());
+        apiTable.setDbName(table.getCatalogDBName());
+        apiTable.setTableName(table.getCatalogTableName());
         apiTable.setTableType(table.getHiveTableType().name());
         apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
         apiTable.setParameters(toApiTableProperties(table));
@@ -215,7 +217,7 @@ public class HiveMetastoreApiConverter {
 
     private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
         SerDeInfo serdeInfo = new SerDeInfo();
-        serdeInfo.setName(table.getTableName());
+        serdeInfo.setName(table.getCatalogTableName());
         HiveStorageFormat storageFormat = table.getStorageFormat();
         serdeInfo.setSerializationLib(storageFormat.getSerde());
 
@@ -317,7 +319,8 @@ public class HiveMetastoreApiConverter {
         }
 
         HoodieTableMetaClient metaClient =
-                HoodieTableMetaClient.builder().setConf(configuration).setBasePath(hudiBasePath).build();
+                HoodieTableMetaClient.builder().setConf(new HadoopStorageConfiguration(configuration))
+                        .setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema hudiSchema;
@@ -469,6 +472,10 @@ public class HiveMetastoreApiConverter {
     public static List<Column> toFullSchemasForHudiTable(Table table, Schema hudiSchema) {
         List<Schema.Field> allHudiColumns = hudiSchema.getFields();
         List<FieldSchema> allFieldSchemas = getAllFieldSchemas(table);
+        Map<String, String> schemaCommentMap = new HashMap<>();
+        for (FieldSchema schema : allFieldSchemas) {
+            schemaCommentMap.put(schema.getName(), schema.getComment());
+        }
         List<Column> fullSchema = Lists.newArrayList();
         for (int i = 0; i < allHudiColumns.size(); i++) {
             Schema.Field fieldSchema = allHudiColumns.get(i);
@@ -479,7 +486,8 @@ public class HiveMetastoreApiConverter {
                 LOG.error("Failed to convert hudi type {}", fieldSchema.schema().getType().getName(), e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(fieldSchema.name(), type, true, allFieldSchemas.get(i).getComment());
+            String fieldName = fieldSchema.name();
+            Column column = new Column(fieldName, type, true, schemaCommentMap.get(fieldName));
             fullSchema.add(column);
         }
         return fullSchema;
@@ -536,11 +544,10 @@ public class HiveMetastoreApiConverter {
         }
 
         hudiProperties.put(HUDI_TABLE_TYPE, metaClient.getTableType().name());
+        hudiProperties.put(HUDI_HMS_TABLE_TYPE, metastoreTable.getTableType());
 
         StringBuilder columnNamesBuilder = new StringBuilder();
         StringBuilder columnTypesBuilder = new StringBuilder();
-        List<FieldSchema> allFields = metastoreTable.getSd().getCols();
-        allFields.addAll(metastoreTable.getPartitionKeys());
 
         boolean isFirst = true;
         for (Schema.Field hudiField : tableSchema.getFields()) {
@@ -550,12 +557,6 @@ public class HiveMetastoreApiConverter {
             }
 
             String columnName = hudiField.name().toLowerCase(Locale.ROOT);
-            Optional<FieldSchema> field = allFields.stream()
-                    .filter(f -> f.getName().equals(columnName)).findFirst();
-            if (!field.isPresent()) {
-                throw new StarRocksConnectorException(
-                        "Hudi column [" + hudiField.name() + "] not exists in hive metastore.");
-            }
             columnNamesBuilder.append(columnName);
             String columnType = fromHudiTypeToHiveTypeString(hudiField.schema());
             columnTypesBuilder.append(columnType);
@@ -627,7 +628,11 @@ public class HiveMetastoreApiConverter {
         if (totalSize == -1 && Config.enable_reuse_spark_column_statistics) {
             totalSize = getLongParam("spark.sql.statistics.totalSize", params);
         }
-        return new HiveCommonStats(numRows, totalSize);
+        long numFiles = getLongParam(NUM_FILES, params);
+        if (numFiles < 0) {
+            numFiles = 0;
+        }
+        return new HiveCommonStats(numRows, totalSize, numFiles);
     }
 
     public static Map<String, Map<String, HiveColumnStats>> toPartitionColumnStatistics(
@@ -667,6 +672,7 @@ public class HiveMetastoreApiConverter {
 
         result.put(ROW_COUNT, String.valueOf(statistics.getRowNums()));
         result.put(TOTAL_SIZE, String.valueOf(statistics.getTotalFileBytes()));
+        result.put(NUM_FILES, String.valueOf(statistics.getNumFiles()));
 
         if (!parameters.containsKey("STATS_GENERATED_VIA_STATS_TASK")) {
             result.put("STATS_GENERATED_VIA_STATS_TASK", "workaround for potential lack of HIVE-12730");
@@ -716,7 +722,8 @@ public class HiveMetastoreApiConverter {
     }
 
     /**
-     * Refer to https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L77
+     * Refer to https://github.com/apache/hive/blob/rel/release-3.1
+     * .3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L77
      */
     public static ColumnStatisticsObj convertSparkColumnStatistics(FieldSchema fieldSchema, Map<String, String> parameters) {
 
@@ -804,7 +811,8 @@ public class HiveMetastoreApiConverter {
     }
 
     /**
-     * Refer to https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L318
+     * Refer to https://github.com/apache/hive/blob/rel/release-3.1
+     * .3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L318
      */
     private static Date readDateValue(String dateStr) {
         // try either yyyy-mm-dd, or integer representing days since epoch

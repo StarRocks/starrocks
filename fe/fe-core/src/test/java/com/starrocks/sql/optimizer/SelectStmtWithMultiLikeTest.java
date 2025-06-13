@@ -19,6 +19,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -34,6 +36,7 @@ public class SelectStmtWithMultiLikeTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeAll
+    @BeforeClass
     public static void setUp()
             throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -56,6 +59,7 @@ public class SelectStmtWithMultiLikeTest {
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable(createTblStmtStr);
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -70,9 +74,27 @@ public class SelectStmtWithMultiLikeTest {
         test(sql, patterns);
     }
 
+    @Test
+    public void testMultiNotLikes() throws Exception {
+        String sql = "select count(1) from t0 where " +
+                "site not like '%ABC%' and " +
+                "region not like '%ABC%' and region not like '%DEF%'";
+        List<String> patterns = Lists.newArrayList(
+                "Predicates: NOT (1: region REGEXP '^((.*ABC.*)|(.*DEF.*))$'), NOT (3: site LIKE '%ABC%')");
+        test(sql, patterns);
+    }
+
     private static Stream<Arguments> multiLikeTestCases() {
         String sqlFormat = "select count(1) from t0 where %s";
         String[][] testCases = new String[][] {
+                {"order_date > '2024-01-1' and site = 'ABC' and income = 10.0 and ship_mode = 3 and " +
+                        "ship_code = 3 and region not like '%ABC%' and region not like '%DEF%'",
+                        "Predicates: [2: order_date, DATE, false] > '2024-01-01', " +
+                                "[3: site, VARCHAR, false] = 'ABC', " +
+                                "cast([4: income, DECIMAL64(7,0), false] as DECIMAL64(8,1)) = 10.0, " +
+                                "[5: ship_mode, INT, false] = 3, [6: ship_code, INT, true] = 3, " +
+                                "NOT (1: region REGEXP '^((.*ABC.*)|(.*DEF.*))$')"
+                },
                 {"region like '%ABC' or region like 'DEF_G'",
                         "Predicates: " +
                                 "1: region REGEXP '^((.*ABC)|(DEF.G))$'"},

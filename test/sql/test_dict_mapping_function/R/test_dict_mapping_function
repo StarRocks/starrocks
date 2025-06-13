@@ -13,7 +13,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -30,7 +30,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -126,7 +126,7 @@ INSERT INTO t VALUES (1, NULL);
 -- !result
 SELECT dict_mapping("dict", col_1, col_2) FROM t;
 -- result:
-E: (1064, 'invalid parameter : get NULL paramenter')
+[REGEX].*invalid parameter : get NULL paramenter.*
 -- !result
 DROP DATABASE test_dictmapping_null_column;
 -- result:
@@ -280,7 +280,7 @@ DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -291,11 +291,11 @@ insert into t_dictmapping_null_if_not_found values (1,default);
 -- !result
 select dict_mapping("t_dictmapping_null_if_not_found", 2);
 -- result:
-E: (1064, 'query failed if record not exist in dict table.')
+[REGEX].*query failed if record not exist in dict table.*
 -- !result
 select dict_mapping("t_dictmapping_null_if_not_found", 2, false);
 -- result:
-E: (1064, 'query failed if record not exist in dict table.')
+[REGEX].*query failed if record not exist in dict table.*
 -- !result
 select dict_mapping("t_dictmapping_null_if_not_found", 2, true);
 -- result:
@@ -305,5 +305,31 @@ drop table t_dictmapping_null_if_not_found;
 -- result:
 -- !result
 drop database test_dictmapping_null_if_not_found;
+-- result:
+-- !result
+-- name: test_dictmapping_multiple_open_crash
+CREATE TABLE `t_dictmapping_multiple_open_crash` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AUTO_INCREMENT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictmapping_multiple_open_crash VALUES (1, DEFAULT);
+-- result:
+-- !result
+select dict_mapping("t_dictmapping_multiple_open_crash", k) from t_dictmapping_multiple_open_crash where dict_mapping("t_dictmapping_multiple_open_crash", k) != 0;
+-- result:
+1
+-- !result
+DROP TABLE t_dictmapping_multiple_open_crash;
 -- result:
 -- !result

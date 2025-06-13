@@ -34,29 +34,32 @@ public:
 
     ~StructColumnIterator() override = default;
 
-    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
+    Status init(const ColumnIteratorOptions& opts) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status seek_to_first() override;
+    Status seek_to_first() override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+    Status seek_to_ordinal(ordinal_t ord) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
     ordinal_t num_rows() const override { return _access_iters[0]->num_rows(); }
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) override;
+    Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst, ColumnAccessPath* path) override;
+    Status next_batch(const SparseRange<>& range, Column* dst, ColumnAccessPath* path) override;
 
-    [[nodiscard]] Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     ColumnReader* get_column_reader() override { return _reader; }
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
 
 private:
     ColumnReader* _reader;
@@ -170,6 +173,21 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
 
     _current_ordinal = _access_iters[0]->get_current_ordinal();
     return Status::OK();
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> StructColumnIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                          Column* dst) {
+    std::vector<std::pair<int64_t, int64_t>> res;
+    if (_null_iter != nullptr) {
+        ASSIGN_OR_RETURN(auto vec, _null_iter->get_io_range_vec(range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+
+    for (size_t i = 0; i < _access_iters.size(); i++) {
+        ASSIGN_OR_RETURN(auto vec, _access_iters[i]->get_io_range_vec(range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+    return res;
 }
 
 Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {

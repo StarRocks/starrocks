@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 分析查询
@@ -43,7 +43,7 @@ order by count(*) limit 100;
 
 Query Plan 可以分为逻辑执行计划（Logical Query Plan），和物理执行计划（Physical Query Plan），本章节所讲述的 Query Plan 默认指代的都是逻辑执行计划。
 
-通过 [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) 命令查看 Query Plan。
+通过 [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) 命令查看 Query Plan。
 
 ```sql
 EXPLAIN sql_statement;
@@ -229,7 +229,7 @@ Fragment 1 集成了三个 Join 算子的执行，采用默认的 BROADCAST 方�
 
 抛开具体的表达式不谈，下图从宏观的角度展示了 query96.sql 的 Query Plan。
 
-![8-5](../assets/8-5.png)
+![8-5](../_assets/8-5.png)
 
 ## 查看分析 Profile
 
@@ -332,9 +332,9 @@ Query hint 是一种指令或注释，显式地向查询优化器建议如何执
 
 ### 系统变量 hint
 
-在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
+在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../sql-reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
 
-相比于[系统变量的一般用法](../reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
+相比于[系统变量的一般用法](../sql-reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
@@ -371,9 +371,9 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 hint
 
-在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
+在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../sql-reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
 
-相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
+相比于[用户自定义变量的一般用法](../sql-reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
@@ -427,6 +427,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
 * Bucket Shuffle Join
   
   如果关联查询中 Join 等值表达式命中表 A 的分桶键 ，尤其是在表 A 和表 B 均是大表的情况下，您可以设置 Join hint 为 Bucket Shuffle Join。表 B 数据会按照表 A 数据的分布方式，Shuffle 到表 A 数据所在机器上，再进行 Join 操作。Bucket Shuffle Join 是在 Broadcast Join 的基础上进一步优化，Shuffle B 表的数据量全局只有一份，比 Broadcast Join 少传输了很多倍数据量。
+  参与 Bucket Shuffle Join 的表必须是非分区表或者 Colocate Join 表。
 
   ```SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -448,7 +449,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
 ```
 
-![8-9](../assets/8-9.png)
+![8-9](../_assets/8-9.png)
 
 ## 查看 SQL 指纹
 

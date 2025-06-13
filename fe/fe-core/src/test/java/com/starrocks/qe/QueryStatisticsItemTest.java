@@ -25,10 +25,12 @@ class QueryStatisticsItemTest {
         String warehouseName = "wh1";
 
         final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+                .customQueryId("abc")
                 .queryId("123")
                 .warehouseName("wh1").build();
 
         Assert.assertEquals("wh1", item.getWarehouseName());
+        Assert.assertEquals("abc", item.getCustomQueryId());
         Assert.assertEquals("123", item.getQueryId());
     }
 }

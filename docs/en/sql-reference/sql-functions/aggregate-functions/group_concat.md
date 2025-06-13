@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # group_concat
@@ -33,7 +33,7 @@ VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
 
 Returns a string value for each group and returns NULL if there are no non-NULL values.
 
-You can limit the length of the string returned by group_concat by setting the [session variable](../../../reference/System_variable.md) `group_concat_max_len`, which defaults to 1024. Minimum value: 4. Unit: characters.
+You can limit the length of the string returned by group_concat by setting the [session variable](../../System_variable.md) `group_concat_max_len`, which defaults to 1024. Minimum value: 4. Unit: characters.
 
 Example:
 

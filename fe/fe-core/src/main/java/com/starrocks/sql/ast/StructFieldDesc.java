@@ -95,6 +95,22 @@ public class StructFieldDesc implements ParseNode {
         return null;
     }
 
+    public List<String> getNestedParentFieldNames() {
+        return nestedParentFieldNames;
+    }
+
+    public String getFieldName() {
+        return fieldName;
+    }
+
+    public Type getType() {
+        return typeDef.getType();
+    }
+
+    public ColumnPosition getFieldPos() {
+        return fieldPos;
+    }
+
     public void analyze(Column baseCol, boolean dropField) throws AnalysisException {
         if (baseCol == null) {
             throw new AnalysisException(String.format("Analyze add/drop field failed, modify column is not exist"));

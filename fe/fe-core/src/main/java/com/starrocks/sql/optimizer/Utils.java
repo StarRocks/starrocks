@@ -31,17 +31,21 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -57,6 +61,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -65,10 +70,12 @@ import org.roaringbitmap.RoaringBitmap;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -148,29 +155,15 @@ public class Utils {
     }
 
     public static List<ColumnRefOperator> extractColumnRef(ScalarOperator root) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return new LinkedList<>();
         }
 
-        LinkedList<ColumnRefOperator> list = new LinkedList<>();
-        if (OperatorType.VARIABLE.equals(root.getOpType())) {
-            list.add((ColumnRefOperator) root);
-            return list;
-        }
-
-        for (ScalarOperator child : root.getChildren()) {
-            list.addAll(extractColumnRef(child));
-        }
-
-        return list;
+        return root.getColumnRefs();
     }
 
     public static int countColumnRef(ScalarOperator root) {
-        return countColumnRef(root, 0);
-    }
-
-    private static int countColumnRef(ScalarOperator root, int count) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return 0;
         }
 
@@ -178,8 +171,9 @@ public class Utils {
             return 1;
         }
 
+        int count = 0;
         for (ScalarOperator child : root.getChildren()) {
-            count += countColumnRef(child, count);
+            count += countColumnRef(child);
         }
 
         return count;
@@ -386,6 +380,16 @@ public class Utils {
         return count;
     }
 
+    public static boolean hasPrunableJoin(OptExpression expression) {
+        if (expression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOp = expression.getOp().cast();
+            JoinOperator joinType = joinOp.getJoinType();
+            return joinType.isInnerJoin() || joinType.isCrossJoin() ||
+                    joinType.isLeftOuterJoin() || joinType.isRightOuterJoin();
+        }
+        return expression.getInputs().stream().anyMatch(Utils::hasPrunableJoin);
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
@@ -420,6 +424,10 @@ public class Utils {
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalDeltaLakeScanOperator)  {
+                return ((LogicalDeltaLakeScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalPaimonScanOperator) {
+                return ((LogicalPaimonScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -607,6 +615,14 @@ public class Utils {
         return num < 0 ? 1 : num + 1;
     }
 
+    public static int log2(int n) {
+        return 31 - Integer.numberOfLeadingZeros(n);
+    }
+
+    public static long log2(long n) {
+        return 63 - Long.numberOfLeadingZeros(n);
+    }
+
     /**
      * Check the input expression is not nullable or not.
      * @param nullOutputColumnOps the nullable column reference operators.
@@ -632,7 +648,8 @@ public class Utils {
                 }
             }
         } catch (Throwable e) {
-            LOG.warn("Failed to eliminate null: {}", DebugUtil.getStackTrace(e));
+            LOG.warn("[query_id={}] Failed to eliminate null: {}",
+                    DebugUtil.getSessionQueryId(), DebugUtil.getStackTrace(e));
             return false;
         }
         return false;
@@ -756,8 +773,11 @@ public class Utils {
         return false;
     }
 
-    // without distinct function, the common distinctCols is an empty list.
-    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+    // 1. without distinct function, the common distinctCols is an empty list.
+    // 2. If has some distinct function, but distinct columns are not exactly same, ruturn Optional.empty
+    // 3. If has some distinct function and distinct columns are exactly same or only one distinct function, return Optional.of(distinctCols)
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(
+            Collection<CallOperator> aggCallOperators) {
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
         for (CallOperator callOperator : aggCallOperators) {
             if (callOperator.isDistinct()) {
@@ -772,6 +792,28 @@ public class Utils {
             }
         }
         return Optional.of(Lists.newArrayList(distinctChildren));
+    }
+
+    // like select array_agg(distinct LO_REVENUE), count(distinct LO_REVENUE) will return true
+    public static Boolean hasMultipleDistinctFuncShareSameDistinctColumns(Collection<CallOperator> aggCallOperators) {
+        List<CallOperator> distinctFuncs =
+                aggCallOperators.stream().filter(CallOperator::isDistinct).collect(Collectors.toList());
+        if (distinctFuncs.size() <= 1) {
+            return false;
+        }
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : aggCallOperators) {
+            if (distinctChildren.isEmpty()) {
+                distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+            } else {
+                Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
@@ -806,7 +848,8 @@ public class Utils {
         try {
             statisticsCalculator.estimatorStats();
         } catch (Exception e) {
-            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            LOG.warn("[query={}] Failed to calculate statistics for expression: {}",
+                    DebugUtil.getSessionQueryId(), expr, e);
             return;
         }
 
@@ -841,59 +884,24 @@ public class Utils {
     }
 
     /**
-     * Check if the operator has applied the rule
-     * @param op input operator to be checked
-     * @param ruleMask specific rule mask
-     * @return true if the operator has applied the rule, false otherwise
-     */
-    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return false;
-        }
-        // TODO: support cte inline
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & ruleMask) != 0;
-    }
-
-    /**
-     * Set the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void setOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.setOpRuleMask(op.getOpRuleMask() | ruleMask);
-    }
-
-    /**
-     * Reset the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void resetOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.setOpRuleMask(op.getOpRuleMask() | (~ ruleMask));
-    }
-
-    /**
      * Check if the optExpression has applied the rule in recursively
      * @param optExpression input optExpression to be checked
      * @param ruleMask specific rule mask
      * @return true if the optExpression or its children have applied the rule, false otherwise
      */
     public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        return isOptHasAppliedRule(optExpression, op -> op.isOpRuleBitSet(ruleMask));
+    }
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, Predicate<Operator> pred) {
         if (optExpression == null) {
             return false;
         }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+        if (pred.test(optExpression.getOp())) {
             return true;
         }
         for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
+            if (isOptHasAppliedRule(child, pred)) {
                 return true;
             }
         }
@@ -913,5 +921,113 @@ public class Utils {
     public static <T, S extends T> S mustCast(T obj, Class<S> klass) {
         return downcast(obj, klass)
                 .orElseThrow(() -> new IllegalArgumentException("Cannot cast " + obj.getClass() + " to " + klass));
+    }
+
+    // this method is useful when map is small, but key is very complex  like compound predicate with 1000 OR
+    // in which case key's hashCode() can be super slow because of bad time complexity
+    // so we can use equals' short-circuit logic to help us find whether key is in map quickly
+    // which means key's type is not same as map's key's types
+    public static <K, V> V getValueIfExists(Map<K, V> map, K key) {
+        V value = null;
+
+        if (map.size() < 4) {
+            for (Map.Entry<K, V> entry : map.entrySet()) {
+                if (entry.getKey().equals(key)) {
+                    value = entry.getValue();
+                    break;
+                }
+            }
+        } else {
+            value = map.get(key);
+        }
+
+        return value;
+    }
+
+    /**
+     * Recursively resolve the column ref for complicated expressions
+     * Throw exception if that ref cannot be found in the operator expression
+     *
+     * @param ref     column ref
+     * @param factory column factory
+     * @param expr    operator expression
+     * @return all resolved columns
+     */
+    public static List<Pair<Table, Column>> resolveColumnRefRecursive(ColumnRefOperator ref, ColumnRefFactory factory,
+                                                                      OptExpression expr) {
+        // consult the factory
+        Pair<Table, Column> tableAndColumn = factory.getTableAndColumn(ref);
+        if (tableAndColumn != null) {
+            return List.of(tableAndColumn);
+        }
+
+        // When deriving stats, the OptExpression is not exist but only a GroupExpression. We cannot resolve the
+        // ColumnRef from it
+        if (expr == null) {
+            return null;
+        }
+
+        // Consult the projection
+        if (expr.getOp().getProjection() != null) {
+            ScalarOperator impl = expr.getOp().getProjection().resolveColumnRef(ref);
+            if (impl != null) {
+                List<ColumnRefOperator> subRefs = Utils.extractColumnRef(impl);
+                if (impl instanceof ColumnRefOperator) {
+                    subRefs.remove(impl);
+                }
+                List<Pair<Table, Column>> subColumns = Lists.newArrayList();
+                for (ColumnRefOperator subRef : subRefs) {
+                    subColumns.addAll(ListUtils.emptyIfNull(resolveColumnRefRecursive(subRef, factory, expr)));
+                }
+                return subColumns;
+            }
+        }
+
+        // Consult the corresponding children
+        if (expr.getOp() instanceof LogicalSetOperator setOp) {
+            List<ColumnRefOperator> childrenRefs = setOp.resolveColumnRef(ref);
+            if (CollectionUtils.isNotEmpty(childrenRefs)) {
+                List<Pair<Table, Column>> result = Lists.newArrayList();
+                for (int i = 0; i < expr.getInputs().size(); i++) {
+                    List<Pair<Table, Column>> pairs =
+                            resolveColumnRefRecursive(childrenRefs.get(i), factory, expr.getInputs().get(i));
+                    if (CollectionUtils.isNotEmpty(pairs)) {
+                        result.addAll(pairs);
+                    }
+                }
+                return result;
+            }
+
+        }
+
+        // consult children operators
+        for (OptExpression child : expr.getInputs()) {
+            List<Pair<Table, Column>> children = resolveColumnRefRecursive(ref, factory, child);
+            if (CollectionUtils.isNotEmpty(children)) {
+                return children;
+            }
+        }
+
+        return null;
+    }
+
+    public static Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> separateEqualityPredicates(
+            ScalarOperator predicate) {
+        List<ScalarOperator> conjunctivePredicates = extractConjuncts(predicate);
+        Map<ColumnRefOperator, ConstantOperator> columnConstMap = new HashMap<>();
+        List<ScalarOperator> otherPredicates = new ArrayList<>();
+
+        for (ScalarOperator op : conjunctivePredicates) {
+            if (ScalarOperator.isColumnEqualConstant(op)) {
+                BinaryPredicateOperator binaryOp = (BinaryPredicateOperator) op;
+                ColumnRefOperator column = (ColumnRefOperator) binaryOp.getChild(0);
+                ConstantOperator constant = (ConstantOperator) binaryOp.getChild(1);
+                columnConstMap.put(column, constant);
+            } else {
+                otherPredicates.add(op);
+            }
+        }
+
+        return new Pair<>(columnConstMap, otherPredicates);
     }
 }

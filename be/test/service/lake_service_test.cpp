@@ -15,6 +15,8 @@
 #include "service/service_be/lake_service.h"
 
 #include <brpc/controller.h>
+#include <brpc/server.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
@@ -23,6 +25,7 @@
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel_mgr.h"
+#include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -35,18 +38,30 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/await.h"
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
 
+class MockLakeServiceImpl : public starrocks::LakeService {
+public:
+    MOCK_METHOD4(publish_version, void(::google::protobuf::RpcController*, const ::starrocks::PublishVersionRequest*,
+                                       ::starrocks::PublishVersionResponse*, ::google::protobuf::Closure* done));
+    MOCK_METHOD4(compact, void(::google::protobuf::RpcController*, const ::starrocks::CompactRequest*,
+                               ::starrocks::CompactResponse*, ::google::protobuf::Closure* done));
+};
+using ::testing::_;
+using ::testing::Invoke;
+using ::testing::Return;
+
 class LakeServiceTest : public testing::Test {
 public:
     LakeServiceTest()
             : _tablet_id(next_id()),
               _partition_id(next_id()),
-              _location_provider(new lake::FixedLocationProvider(kRootLocation)),
+              _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
               _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
               _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
@@ -58,7 +73,6 @@ public:
     ~LakeServiceTest() override {
         CHECK_OK(fs::remove_all(kRootLocation));
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
-        delete _location_provider;
     }
 
     void create_tablet() {
@@ -102,9 +116,9 @@ protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
     int64_t _tablet_id;
     int64_t _partition_id;
-    lake::LocationProvider* _location_provider;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
     lake::TabletManager* _tablet_mgr;
-    lake::LocationProvider* _backup_location_provider;
+    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
     LakeServiceImpl _lake_service;
 };
 
@@ -691,6 +705,8 @@ TEST_F(LakeServiceTest, test_abort) {
         log.mutable_op_compaction()->mutable_output_rowset()->set_data_size(4096);
         log.mutable_op_compaction()->mutable_output_rowset()->add_segments(generate_segment_file(txn_id));
         log.mutable_op_compaction()->mutable_output_rowset()->add_segments(generate_segment_file(txn_id));
+        log.mutable_op_compaction()->set_new_segment_offset(0);
+        log.mutable_op_compaction()->set_new_segment_count(2);
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -962,6 +978,128 @@ TEST_F(LakeServiceTest, test_compact) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
         ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
+    }
+}
+
+TEST_F(LakeServiceTest, test_aggregate_compact) {
+    auto agg_compact = [this](::google::protobuf::RpcController* cntl, const AggregateCompactRequest* request,
+                              CompactResponse* response) {
+        CountDownLatch latch(1);
+        auto cb = ::google::protobuf::NewCallback(&latch, &CountDownLatch::count_down);
+        _lake_service.aggregate_compact(cntl, request, response, cb);
+        latch.wait();
+    };
+
+    auto txn_id = next_id();
+    // empty requests
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactResponse response;
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("empty requests", cntl.ErrorText());
+    }
+    // compute nodes size not equal to requests size
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("compute nodes size not equal to requests size", cntl.ErrorText());
+    }
+    // compute node missing host/port
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        ComputeNodePB cn;
+        cn.set_id(1);
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_EQ("compute node missing host/port", response.status().error_msgs(0));
+    }
+    brpc::ServerOptions options;
+    options.num_threads = 1;
+    brpc::Server server;
+    MockLakeServiceImpl mock_service;
+    ASSERT_EQ(server.AddService(&mock_service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+    ASSERT_EQ(server.Start(0, &options), 0);
+
+    butil::EndPoint server_addr = server.listen_address();
+    const int port = server_addr.port;
+    EXPECT_CALL(mock_service, compact(_, _, _, _))
+            .WillRepeatedly(Invoke([&](::google::protobuf::RpcController*, const CompactRequest*, CompactResponse* resp,
+                                       ::google::protobuf::Closure* done) {
+                TxnLogPB txnlog;
+                txnlog.set_tablet_id(100);
+                txnlog.set_txn_id(100);
+                txnlog.set_partition_id(99);
+                resp->add_txn_logs()->CopyFrom(txnlog);
+                TxnLogPB txnlog2;
+                txnlog2.set_tablet_id(101);
+                txnlog2.set_txn_id(100);
+                txnlog2.set_partition_id(99);
+                resp->add_txn_logs()->CopyFrom(txnlog2);
+                resp->mutable_status()->set_status_code(0);
+                done->Run();
+            }));
+    // compact success - single cn
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        ComputeNodePB cn;
+        cn.set_host("127.0.0.1");
+        cn.set_brpc_port(port);
+        cn.set_id(1);
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        request.set_timeout_ms(3000);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+    // compact success - 3 cn
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        for (int i = 1; i <= 3; i++) {
+            CompactRequest request;
+            ComputeNodePB cn;
+            cn.set_host("127.0.0." + std::to_string(i));
+            cn.set_brpc_port(port);
+            cn.set_id(i);
+            request.add_tablet_ids(_tablet_id);
+            request.set_txn_id(txn_id);
+            request.set_version(1);
+            request.set_timeout_ms(3000);
+            // add request to agg_request
+            agg_request.add_requests()->CopyFrom(request);
+            agg_request.add_compute_nodes()->CopyFrom(cn);
+        }
+        CompactResponse response;
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
     }
 }
 
@@ -1298,6 +1436,25 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
     }
 }
 
+TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
+    // Publish EMPTY_TXN_LOG
+    {
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(-1);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
+    ASSERT_EQ(2, metadata->version());
+    ASSERT_EQ(_tablet_id, metadata->id());
+}
+
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     // write 1 rowset when schema change
     {
@@ -1564,6 +1721,39 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+
+    // Write some data into the tablet, num_rows = 1024, data_size=65536
+    size_t expected_num_rows = 1024;
+    size_t expected_data_size = 65536;
+    auto txn_log = generate_write_txn_log(2, expected_num_rows, expected_data_size);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version request
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(3);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(txn_log.txn_id());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        // Publish txn batch
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    { // get the tablet stat again
+        TabletStatRequest request;
+        TabletStatResponse response;
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(_tablet_id);
+        info->set_version(3);
+        _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+        EXPECT_EQ(1, response.tablet_stats_size());
+        EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+        EXPECT_EQ(expected_num_rows, response.tablet_stats(0).num_rows());
+        EXPECT_EQ(expected_data_size, response.tablet_stats(0).data_size());
+    }
+
     // get_tablet_stats() should not fill metadata cache
     auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
     ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
@@ -1839,7 +2029,9 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         ptablet->set_partition_id(partition_id);
         ptablet->set_tablet_id(metadata->id());
 
-        load_mgr->open(nullptr, request, &response, nullptr);
+        MockClosure closure;
+        load_mgr->open(nullptr, request, &response, &closure);
+        ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
         ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 
@@ -1854,7 +2046,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        Chunk chunk({c0, c1}, schema);
+        Chunk chunk({std::move(c0), std::move(c1)}, schema);
         chunk.set_slot_id_to_index(0, 0);
         chunk.set_slot_id_to_index(1, 1);
         return chunk;
@@ -2210,6 +2402,151 @@ TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
         }
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
     }
+}
+
+TEST_F(LakeServiceTest, test_delete_data_ok) {
+    // delete the data from a tablet, but the tablet is not found from TabletManager
+    DeleteDataRequest request;
+    request.add_tablet_ids(_tablet_id);
+    request.set_txn_id(12345);
+    request.mutable_delete_predicate()->set_version(1);
+
+    DeleteDataResponse response;
+    _tablet_mgr->prune_metacache();
+    _lake_service.delete_data(nullptr, &request, &response, nullptr);
+
+    EXPECT_EQ(0L, response.failed_tablets().size());
+}
+
+TEST_F(LakeServiceTest, test_aggregate_publish_version) {
+    brpc::ServerOptions options;
+    options.num_threads = 1;
+    brpc::Server server;
+    MockLakeServiceImpl mock_service;
+    ASSERT_EQ(server.AddService(&mock_service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+    ASSERT_EQ(server.Start(0, &options), 0);
+
+    butil::EndPoint server_addr = server.listen_address();
+    const int port = server_addr.port;
+    AggregatePublishVersionRequest request;
+    auto* compute_node = request.add_compute_nodes();
+    compute_node->set_host("127.0.0.1");
+    compute_node->set_brpc_port(port);
+    auto* publish_req = request.add_publish_reqs();
+    publish_req->set_timeout_ms(5000);
+
+    TabletSchemaPB schema_pb1;
+    {
+        schema_pb1.set_id(10);
+        schema_pb1.set_num_short_key_columns(1);
+        schema_pb1.set_keys_type(DUP_KEYS);
+        schema_pb1.set_num_rows_per_row_block(65535);
+        auto c0 = schema_pb1.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+
+    TabletSchemaPB schema_pb2;
+    {
+        schema_pb2.set_id(11);
+        schema_pb2.set_num_short_key_columns(1);
+        schema_pb2.set_keys_type(DUP_KEYS);
+        schema_pb2.set_num_rows_per_row_block(65535);
+        auto c1 = schema_pb2.add_column();
+        c1->set_unique_id(1);
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+    }
+
+    TabletSchemaPB schema_pb3;
+    {
+        schema_pb3.set_id(12);
+        schema_pb3.set_num_short_key_columns(1);
+        schema_pb3.set_keys_type(DUP_KEYS);
+        schema_pb3.set_num_rows_per_row_block(65535);
+        auto c2 = schema_pb3.add_column();
+        c2->set_unique_id(2);
+        c2->set_name("c2");
+        c2->set_type("INT");
+        c2->set_is_key(false);
+        c2->set_is_nullable(false);
+    }
+
+    starrocks::TabletMetadataPB metadata1;
+    {
+        metadata1.set_id(1);
+        metadata1.set_version(2);
+        metadata1.mutable_schema()->CopyFrom(schema_pb1);
+        auto& item1 = (*metadata1.mutable_historical_schemas())[10];
+        item1.CopyFrom(schema_pb1);
+        auto& item2 = (*metadata1.mutable_historical_schemas())[11];
+        item2.CopyFrom(schema_pb2);
+        (*metadata1.mutable_rowset_to_schema())[3] = 11;
+    }
+
+    starrocks::TabletMetadataPB metadata2;
+    {
+        metadata2.set_id(2);
+        metadata2.set_version(2);
+        metadata2.mutable_schema()->CopyFrom(schema_pb1);
+        auto& item1 = (*metadata1.mutable_historical_schemas())[10];
+        item1.CopyFrom(schema_pb1);
+        auto& item2 = (*metadata1.mutable_historical_schemas())[12];
+        item2.CopyFrom(schema_pb3);
+    }
+
+    // normal response
+    {
+        EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+                .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                     PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                    resp->mutable_status()->set_status_code(0);
+                    auto& item1 = (*resp->mutable_tablet_metas())[1];
+                    item1.CopyFrom(metadata1);
+                    auto& item2 = (*resp->mutable_tablet_metas())[2];
+                    item2.CopyFrom(metadata2);
+                    done->Run();
+                }));
+
+        PublishVersionResponse response;
+        brpc::Controller cntl;
+        google::protobuf::Closure* done = brpc::NewCallback([]() {});
+        _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+        EXPECT_EQ(response.status().status_code(), 0);
+        auto res = _tablet_mgr->get_single_tablet_metadata(1, 2);
+        ASSERT_TRUE(res.ok());
+        TabletMetadataPtr metadata3 = std::move(res).value();
+        ASSERT_EQ(metadata3->schema().id(), 10);
+        ASSERT_EQ(metadata3->historical_schemas_size(), 2);
+    }
+
+    // publish version failed
+    {
+        EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+                .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                     PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                    resp->mutable_status()->set_status_code(1);
+                    auto& item1 = (*resp->mutable_tablet_metas())[1];
+                    item1.CopyFrom(metadata1);
+                    done->Run();
+                }));
+
+        PublishVersionResponse response;
+        brpc::Controller cntl;
+        google::protobuf::Closure* done = brpc::NewCallback([]() {});
+        _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+        EXPECT_EQ(response.status().status_code(), 6);
+    }
+
+    server.Stop(0);
+    server.Join();
 }
 
 } // namespace starrocks

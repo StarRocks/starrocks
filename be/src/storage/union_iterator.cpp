@@ -41,7 +41,7 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
-    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         for (auto& child : _children) {
             RETURN_IF_ERROR(child->init_encoded_schema(dict_maps));
@@ -49,7 +49,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         for (auto& child : _children) {
             RETURN_IF_ERROR(child->init_output_schema(unused_output_column_ids));

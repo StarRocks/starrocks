@@ -43,13 +43,14 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TLateMaterializeMode;
 import com.starrocks.thrift.TNormalExchangeNode;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSortInfo;
@@ -82,9 +83,13 @@ public class ExchangeNode extends PlanNode {
     // Offset after which the exchange begins returning rows. Currently valid
     // only if mergeInfo_ is non-null, i.e. this is a merging exchange node.
     private long offset;
-
+    // partitionType is used for BE's exchange source node to specify the input partition type
+    // exchange source then decide whether local shuffle is needed
+    // to be set in ExecutionDAG::connectXXXFragmentToDestFragments
     private TPartitionType partitionType;
+    // this is the same as input fragment's output dataPartition, right now only used for explain
     private DataPartition dataPartition;
+    // distributionType is used for plan fragment builder to decide join's DistributionMode(broadcast,colocate,etc)
     private DistributionSpec.DistributionType distributionType;
     // Specify the columns which need to send, work on CTE, and keep empty in other sense
     private List<Integer> receiveColumns;
@@ -143,12 +148,27 @@ public class ExchangeNode extends PlanNode {
         return mergeInfo != null;
     }
 
+    public long getOffset() {
+        return offset;
+    }
+    public void setOffset(long offset) {
+        this.offset = offset;
+    }
+
     public void setReceiveColumns(List<Integer> receiveColumns) {
         this.receiveColumns = receiveColumns;
     }
 
     public List<Integer> getReceiveColumns() {
         return receiveColumns;
+    }
+
+    @Override
+    public final void setLimit(long limit) {
+        if (limit != -1) {
+            super.setLimit(limit);
+            cardinality = Math.min(limit, cardinality);
+        }
     }
 
     @Override
@@ -159,7 +179,7 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         super.init(analyzer);
         Preconditions.checkState(conjuncts.isEmpty());
     }
@@ -191,8 +211,10 @@ public class ExchangeNode extends PlanNode {
         if (partitionType != null) {
             msg.exchange_node.setPartition_type(partitionType);
         }
-        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        msg.exchange_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        msg.exchange_node.setEnable_parallel_merge(sv.isEnableParallelMerge());
+        TLateMaterializeMode mode = TLateMaterializeMode.valueOf(sv.getParallelMergeLateMaterializationMode().toUpperCase());
+        msg.exchange_node.setParallel_merge_late_materialize_mode(mode);
     }
 
     @Override
@@ -230,11 +252,6 @@ public class ExchangeNode extends PlanNode {
                     .append('\n');
         }
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return numInstances;
     }
 
     @Override
@@ -283,34 +300,9 @@ public class ExchangeNode extends PlanNode {
     private boolean pushCrossExchange(RuntimeFilterPushDownContext context, Expr probeExpr,
                                       List<Expr> partitionByExprs) {
         RuntimeFilterDescription description = context.getDescription();
-        if (!description.canPushAcrossExchangeNode()) {
+        if (!description.canPushAcrossExchangeNode() ||
+                !canCrossExchangeNode(description, probeExpr, partitionByExprs)) {
             return false;
-        }
-
-        boolean crossExchange = false;
-        // TODO: remove this later when multi columns on grf is default on.
-        // broadcast or only one RF, always can be cross exchange
-        if (description.isBroadcastJoin() || description.getEqualCount() == 1) {
-            crossExchange = true;
-        } else if (description.getEqualCount() > 1 && partitionByExprs.size() == 1) {
-            // RF nums > 1 and only partition by one column, only send the RF which RF's column equals partition column
-            Expr pExpr = partitionByExprs.get(0);
-            if (probeExpr instanceof SlotRef && pExpr instanceof SlotRef &&
-                    ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) pExpr).getSlotId().asInt()) {
-                crossExchange = true;
-            }
-        }
-
-        if (!crossExchange) {
-            // If partitionByExprs's size is 1 and it is not the probeExpr, don't push down it
-            // because multi GRFs will cause performance decrease which multi GRFs will increase
-            // scan's wait time.
-            if (description.getEqualCount() > 1 && partitionByExprs.size() == 1) {
-                return false;
-            }
-            if (!ConnectContext.get().getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter()) {
-                return false;
-            }
         }
 
         boolean accept = false;
@@ -323,6 +315,36 @@ public class ExchangeNode extends PlanNode {
         }
         description.exitExchangeNode();
         return accept;
+    }
+
+    private boolean canCrossExchangeNode(RuntimeFilterDescription description,
+                                         Expr probeExpr,
+                                         List<Expr> partitionByExprs) {
+        // broadcast or only one RF, always can be cross exchange
+        if (description.isBroadcastJoin() || description.getEqualCount() == 1) {
+            return true;
+        }
+
+        if (partitionByExprs.size() == 1 && description.getEqualCount() > 1) {
+            // TODO(lism): support non-slot-ref partition by exprs later
+            // RF nums > 1 and only partition by one column, only send the RF which RF's column equals partition column
+            return isPartitionByExprSlotRef(probeExpr, partitionByExprs.get(0));
+        } else {
+            // TODO(lism): support non-slot-ref partition by exprs later
+            if (partitionByExprs.stream().anyMatch(expr -> !(expr instanceof SlotRef)) ||
+                    partitionByExprs.stream().noneMatch(expr -> isPartitionByExprSlotRef(probeExpr, expr))) {
+                return false;
+            }
+            return ConnectContext.get().getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter();
+        }
+    }
+
+    private boolean isPartitionByExprSlotRef(Expr probeExpr, Expr partitionByExpr) {
+        if (probeExpr instanceof SlotRef && partitionByExpr instanceof SlotRef) {
+            return ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) partitionByExpr).getSlotId().asInt();
+        } else {
+            return false;
+        }
     }
 
     @Override

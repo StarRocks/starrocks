@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 
@@ -23,7 +23,7 @@ STDDEV(expr)
 
 返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
 
-![image](../../../assets/stddevpop_formula.png)
+![image](../../../_assets/stddevpop_formula.png)
 
 <!--$$
 \sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \bar{x})^2}

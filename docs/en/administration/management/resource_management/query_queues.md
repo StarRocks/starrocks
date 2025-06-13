@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # Query queues
@@ -59,9 +60,9 @@ You can set the thresholds that trigger query queues via the following global se
 
 | **Variable**                        | **Default** | **Description**                                              |
 | ----------------------------------- | ----------- | ------------------------------------------------------------ |
-| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. |
-| query_queue_mem_used_pct_limit      | 0           | The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Range: [0, 1] |
-| query_queue_cpu_used_permille_limit | 0           | The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Range: [0, 1000] |
+| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
+| query_queue_mem_used_pct_limit      | 0           | The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1] |
+| query_queue_cpu_used_permille_limit | 0           | The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1000] |
 
 > **NOTE**
 >
@@ -117,7 +118,7 @@ You can view information related to query queues using the following methods.
 
 ### SHOW PROC
 
-You can check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC](../../../sql-reference/sql-statements/Administration/SHOW_PROC.md):
+You can check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md):
 
 ```Plain
 mysql> SHOW PROC '/backends'\G
@@ -130,7 +131,7 @@ mysql> SHOW PROC '/backends'\G
 
 ### SHOW PROCESSLIST
 
-You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md):
+You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md):
 
 ```Plain
 mysql> SHOW PROCESSLIST;

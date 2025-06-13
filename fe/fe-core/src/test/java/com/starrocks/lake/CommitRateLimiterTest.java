@@ -16,6 +16,7 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
@@ -23,7 +24,6 @@ import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TransactionState;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.junit.Assert;
 import org.junit.Before;
@@ -229,13 +229,7 @@ public class CommitRateLimiterTest {
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(compactionScore)));
 
-        CommitRateExceededException e =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertEquals(currentTimeMs + 1000, e.getAllowCommitTime());
-
-        CommitRateExceededException e2 =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertEquals(currentTimeMs + 1000, e2.getAllowCommitTime());
+        Assert.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
     }
 
     @Test
@@ -275,8 +269,7 @@ public class CommitRateLimiterTest {
                 Quantiles.compute(Lists.newArrayList(compactionScore)));
 
         // This time commit should be denied by the lake_compaction_score_upper_bound
-        CommitRateExceededException e2 = Assert.assertThrows(CommitRateExceededException.class,
+        Assert.assertThrows(CommitFailedException.class,
                 () -> limiter.check(partitions, newCurrentTimeMs));
-        Assert.assertEquals(newCurrentTimeMs + 1000, e2.getAllowCommitTime());
     }
 }

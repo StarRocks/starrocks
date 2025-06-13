@@ -1,15 +1,16 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 外部表
 
-StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、StarRocks、Elasticsearch、Apache Hive™、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前，除 StarRocks 外部表外，其他外部表功能已经废弃。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 > **NOTICE**
 >
-> * 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
+> * 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
 > * 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md)。
+> * 从 3.2.9、3.3.1 版本起，对于查询 Oracle 和 SQLServer 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
 
 从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见 [Data Cache](data_cache.md)。
 
@@ -90,7 +91,7 @@ insert into external_t select * from other_table;
 * 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致。
 * 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上。
 
-## 更多数据库（JDBC）的外部表
+## (已弃用) 更多数据库（JDBC）的外部表
 
 自 2.3.0 版本起，StarRocks 支持通过外部表的方式查询支持 JDBC 的数据库，无需将数据导入至 StarRocks，即可实现对这类数据库的极速分析。本文介绍如何在 StarRocks 创建外部表，查询支持 JDBC 的数据库中的数据。
 
@@ -126,7 +127,7 @@ PROPERTIES (
 
 * `password`：目标数据库用户登录密码。
 
-* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
+* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
 
     > **说明**
     >
@@ -314,7 +315,7 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 * 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
 * 查询 JDBC 外部表时，不支持下推函数。
 
-## (Deprecated) Elasticsearch 外部表
+## (已弃用) Elasticsearch 外部表
 
 如要查询 Elasticsearch 中的数据，需要在 StarRocks 中创建 Elasticsearch 外部表，并将外部表与待查询的 Elasticsearch 表建立映射。StarRocks 与 Elasticsearch 都是目前流行的分析系统。StarRocks 擅长大规模分布式计算，且支持通过外部表查询 Elasticsearch。Elasticsearch 擅长全文检索。两者结合提供了一个更完善的 OLAP 解决方案。
 
@@ -571,7 +572,7 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 * 支持查询使用 HTTP Basic 认证的 Elasticsearch 集群。
 * 一些通过 StarRocks 的查询会比直接请求 Elasticsearch 会慢很多，比如 count 相关查询。这是因为 Elasticsearch 内部会直接读取满足条件的文档个数相关的元数据，不需要对真实的数据进行过滤操作，使得 count 的速度非常快。
 
-## (Deprecated) Hive 外部表
+## (已弃用) Hive 外部表
 
 使用 Hive 外部表前，确保服务器上已安装 JDK 1.8。
 
@@ -594,7 +595,7 @@ SHOW RESOURCES;
 DROP RESOURCE "hive0";
 ~~~
 
-StarRocks 2.3 及以上版本支持修改 Hive 资源的 `hive.metastore.uris`。更多信息，参见 [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+StarRocks 2.3 及以上版本支持修改 Hive 资源的 `hive.metastore.uris`。更多信息，参见 [ALTER RESOURCE](../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 
 ### 创建数据库
 
@@ -693,65 +694,6 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
   1. Hive 中新增或者删除分区时，需要刷新 **表** 的元数据信息：`REFRESH EXTERNAL TABLE hive_t`，其中 `hive_t` 是 StarRocks 中的外表名称。
   2. Hive 中向某些 partition 新增数据时，需要 **指定 partition** 进行刷新：`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')`，其中 `hive_t` 是 StarRocks 中的外表名称，'k1 = 01/k2 = 02'、 'k1 = 03/k2 = 04'是 hive 中的 partition 名称。
   3. 在执行 `REFRESH EXTERNAL TABLE hive_t` 命令时，StarRocks 会先检查 Hive 外部表中的列信息和 Hive Metastore 返回的 Hive 表中的列信息是否一致。若发现 Hive 表的 schema 有修改，如增加列或减少列，那么 StarRocks 会将修改的信息同步到 Hive 外部表。同步后，Hive 外部表的列顺序和 Hive 表的列顺序保持一致，且分区列为最后一列。
-  
-#### 自动增量更新元数据缓存
-
-自动增量更新元数据缓存主要是通过定期消费 Hive Metastore 的 event 来实现，新增分区以及分区新增数据无需通过手动执行 refresh 来更新。用户需要在 Hive Metastore 端开启元数据 Event 机制。相比 Loading Cache 的自动刷新机制，自动增量更新性能更好，建议用户开启该功能。开启该功能后，Loading Cache 的自动刷新机制将不再生效。
-
-* Hive Metastore 开启 event 机制
-
-   用户需要在 $HiveMetastore/conf/hive-site.xml 中添加如下配置，并重启 Hive Metastore. 以下配置为 Hive Metastore 3.1.2 版本的配置，用户可以将以下配置先拷贝到 hive-site.xml 中进行验证，因为在 Hive Metastore 中配置不存在的参数只会提示 WARN 信息，不会抛出任何异常。
-
-~~~xml
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-  </property>
-  <property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-  </property>
-  <property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-  </property>
-  <property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-  </property>
-  <property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-  </property>
-  <property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-  </property>
-  <property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-  </property>
-~~~
-
-* StarRocks 开启自动增量元数据同步
-
-    用户需要在 $FE_HOME/conf/fe.conf 中添加如下配置并重启 FE。
-     `enable_hms_events_incremental_sync=true`
-    自动增量元数据同步相关配置如下，如无特殊需求，无需修改。
-
-   | 参数值                             | 说明                                      | 默认值 |
-   | --- | --- | ---|
-   | enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能            | false |
-   | hms_events_polling_interval_ms     | StarRocks 拉取 Hive Metastore Event 事件间隔 | 5000 毫秒 |
-   | hms_events_batch_size_per_rpc      | StarRocks 每次拉取 Event 事件的最大数量      | 500 |
-   | enable_hms_parallel_process_evens  | 对接收的 Events 是否并行处理                | true |
-   | hms_process_events_parallel_num    | 处理 Events 事件的并发数                    | 4 |
-
-* 注意事项
-  * 不同版本 Hive Metastore 的 Events 事件可能不同，且上述开启 HiveMetastore Event 机制的配置在不同版本也存在不同。使用时相关配置可根据实际版进行适当调整。当前已经验证可以开启 Hive Metastore Event 机制的版本有 2.X 和 3.X。用户可以在 FE 日志中搜索 "event id" 来验证 event 是否开启成功，如果没有开启成功，event id 始终保持为 0。如果无法判断是否成功开启 Event 机制，请在 StarRocks 用户交流群中联系值班同学进行排查。
-  * 当前 Hive 元数据缓存模式为懒加载，即：如果 Hive 新增了分区，StarRocks 只会将新增分区的 partition key 进行缓存，不会立即缓存该分区的文件信息。只有当查询该分区时或者用户手动执行 refresh 分区操作时，该分区的文件信息才会被加载。StarRocks 首次缓存该分区统计信息后，该分区后续的元数据变更就会自动同步到 StarRocks 中。
-  * 手动执行缓存方式执行效率较低，相比之下自动增量更新性能开销较小，建议用户开启该功能进行更新缓存。
-  * 当 Hive 数据存储为 Parquet、ORC、CSV 格式时，StarRocks 2.3及以上版本支持 Hive 外部表同步 ADD COLUMN、REPLACE COLUMN 等表结构变更（Schema Change）。
 
 ### 访问对象存储
 
@@ -858,7 +800,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 
 3. 重启 FE，BE。
 
-## (Deprecated) Iceberg 外部表
+## (已弃用) Iceberg 外部表
 
 如要查询 Iceberg 数据，需要在 StarRocks 中创建 Iceberg 外部表，并将外部表与需要查询的 Iceberg 表建立映射。
 
@@ -933,7 +875,7 @@ PROPERTIES (
 | iceberg.catalog.type | Iceberg 的 catalog 类型。目前支持 Hive catalog 和 custom catalog。 如要使用 Hive catalog， 需指定该参数值为 `HIVE`。 如要使用 custom catalog，需指定该参数值为 `CUSTOM`。 |
 | iceberg.catalog-impl   | 开发的 custom catalog 的全限定类名。FE 会根据该类名查找开发的 custom catalog。如果 custom catalog 中包含自定义的配置项，需要在创建 Iceberg 外部表时将其以键值对的形式添加到 SQL 语句的 `PROPERTIES` 中。 |
 
-StarRocks 2.3 及以上版本支持修改 Iceberg 资源的 `hive.metastore.uris` 和 `iceberg.catalog-impl`。更多信息，参见 [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+StarRocks 2.3 及以上版本支持修改 Iceberg 资源的 `hive.metastore.uris` 和 `iceberg.catalog-impl`。更多信息，参见 [ALTER RESOURCE](../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 
 **查看 Iceberg 资源**
 
@@ -1039,7 +981,7 @@ StarRocks 不支持查询以下类型的数据： TIMESTAMPTZ、STRUCT 和 MAP�
 select count(*) from iceberg_tbl;
 ~~~
 
-## (Deprecated) Hudi 外部表
+## (已弃用) Hudi 外部表
 
 从 2.2.0 版本开始，StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在 StarRock 创建外表，查询 Hudi 中的数据。
 
@@ -1076,7 +1018,7 @@ PROPERTIES (
 | type  | 资源类型，固定取值为 **hudi**。 |
 | hive.metastore.uris | Hive Metastore 的 thrift URI。<br /> Hudi 通过连接 Hive Metastore，以创建并管理表。您需要传入该 Hive Metastore 的 thrift URI。格式为 **`thrift://<Hudi元数据的IP地址>:<端口号>`**，端口号默认为 9083。 |
 
-StarRocks 2.3 及以上版本支持修改 Hudi 资源的 `hive.metastore.uris`。更多信息，参见 [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+StarRocks 2.3 及以上版本支持修改 Hudi 资源的 `hive.metastore.uris`。更多信息，参见 [ALTER RESOURCE](../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 
 执行如下命令，查看 StarRocks 中的所有 Hudi 资源。
 
@@ -1157,7 +1099,7 @@ PROPERTIES (
 SELECT COUNT(*) FROM hudi_tbl;
 ~~~
 
-## (Deprecated) MySQL 外部表
+## (已弃用) MySQL 外部表
 
 星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过更新表或者主键表实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
 

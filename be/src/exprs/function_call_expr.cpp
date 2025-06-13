@@ -20,14 +20,13 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/anyval_util.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
-#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 #include "util/failpoint/fail_point.h"
 #include "util/slice.h"
 #include "util/utf8.h"
@@ -40,27 +39,61 @@ DEFINE_FAIL_POINT(expr_prepare_fragment_thread_local_call_failed);
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
-    RETURN_IF_ERROR(Expr::prepare(state, context));
-
-    if (!_fn.__isset.fid) {
-        return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);
-    }
-
+const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const TFunction& fn) {
     // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
     // refs: https://github.com/StarRocks/starrocks/pull/17803
     // @todo: remove this code when branch-3.0 is deprecated
-    int64_t fid = _fn.fid;
-    if (_fn.fid == 150102 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL32) {
+    int64_t fid = fn.fid;
+    if (fn.fid == 150102 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL32) {
         fid = 150103;
-    } else if (_fn.fid == 150103 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL64) {
+    } else if (fn.fid == 150103 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL64) {
         fid = 150104;
-    } else if (_fn.fid == 150104 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL128) {
+    } else if (fn.fid == 150104 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL128) {
         fid = 150105;
     }
+    return BuiltinFunctions::find_builtin_function(fid);
+}
 
-    _fn_desc = BuiltinFunctions::find_builtin_function(fid);
+const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function(const TFunction& fn,
+                                                                    const std::vector<TypeDescriptor>& arg_types,
+                                                                    const TypeDescriptor& return_type,
+                                                                    std::vector<bool> arg_nullables) {
+    if (fn.__isset.agg_state_desc) {
+        // For _state combinator function, it's created according to the agg_state_desc rather than fid.
+        auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
+        _agg_state_func = std::make_shared<AggStateFunction>(agg_state_desc, return_type, std::move(arg_nullables));
+        auto execute_func = std::bind(&AggStateFunction::execute, _agg_state_func.get(), std::placeholders::_1,
+                                      std::placeholders::_2);
+        auto prepare_func = std::bind(&AggStateFunction::prepare, _agg_state_func.get(), std::placeholders::_1,
+                                      std::placeholders::_2);
+        auto close_func = std::bind(&AggStateFunction::close, _agg_state_func.get(), std::placeholders::_1,
+                                    std::placeholders::_2);
+        _agg_func_desc = std::make_shared<FunctionDescriptor>(fn.name.function_name, arg_types.size(), execute_func,
+                                                              prepare_func, close_func, true, false);
+        return _agg_func_desc.get();
+    } else {
+        return _get_function_by_fid(fn);
+    }
+}
 
+Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
+
+    // parpare result type and arg types
+    FunctionContext::TypeDesc return_type = _type;
+    if (!_fn.__isset.fid && !_fn.__isset.agg_state_desc) {
+        return Status::InternalError("Vectorized engine doesn't implement agg state function " +
+                                     _fn.name.function_name);
+    }
+    std::vector<FunctionContext::TypeDesc> args_types;
+    std::vector<bool> arg_nullblaes;
+    for (Expr* child : _children) {
+        args_types.push_back(child->type());
+        arg_nullblaes.emplace_back(child->is_nullable());
+    }
+
+    // initialize function descriptor
+    _fn_desc = _get_function(_fn, args_types, return_type, arg_nullblaes);
     if (_fn_desc == nullptr || _fn_desc->scalar_function == nullptr) {
         return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);
     }
@@ -73,13 +106,6 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
 
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_failed);
-
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
-    std::vector<FunctionContext::TypeDesc> args_types;
-
-    for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
-    }
 
     // todo: varargs use for allocate slice memory, need compute buffer size
     //  for varargs in vectorized engine?
@@ -99,7 +125,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        std::vector<ColumnPtr> const_columns;
+        Columns const_columns;
         const_columns.reserve(_children.size());
         for (const auto& child : _children) {
             ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
@@ -123,9 +149,8 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     if (_fn.name.function_name == "round" && _type.type == TYPE_DOUBLE) {
         if (_children[1]->is_constant()) {
             ASSIGN_OR_RETURN(ColumnPtr ptr, _children[1]->evaluate_checked(context, nullptr));
-            _output_scale =
-                    std::static_pointer_cast<Int32Column>(std::static_pointer_cast<ConstColumn>(ptr)->data_column())
-                            ->get_data()[0];
+            _output_scale = Int32Column::static_pointer_cast(ConstColumn::static_pointer_cast(ptr)->data_column())
+                                    ->get_data()[0];
         }
     }
 
@@ -192,11 +217,7 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     }
     RETURN_IF_ERROR(result);
     if (_fn_desc->check_overflow) {
-        std::string err_msg;
-        if (UNLIKELY(result.value()->capacity_limit_reached(&err_msg))) {
-            return Status::InternalError(
-                    fmt::format("Result column of function {} exceed limit: {}", _fn_desc->name, err_msg));
-        }
+        RETURN_IF_ERROR(result.value()->capacity_limit_reached());
     }
 
     // For no args function call (pi, e)
@@ -213,14 +234,29 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
     std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
     // initialize ngram_state: determine whether this index useful or not, split needle into ngram_set if useful
+    // this is not thread-safe, but every scan thread will has its own ExprContext, so it's ok
     if (ngram_state == nullptr) {
         ngram_state = std::make_unique<NgramBloomFilterState>();
-        std::vector<Slice>& ngram_set = ngram_state->ngram_set;
+        std::vector<std::string>& ngram_set = ngram_state->ngram_set;
         bool index_useful;
-        if (_fn_desc->name == "LIKE") {
-            index_useful = split_like_string_to_ngram(fn_ctx, reader_options, ngram_set);
+
+        // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
+
+        const auto& needle_column = fn_ctx->get_constant_column(1);
+        std::string needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column).to_string();
+
+        // for case_insensitive, we need to convert needle to lower case
+        if (!reader_options.index_case_sensitive) {
+            std::transform(needle.begin(), needle.end(), needle.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+        }
+
+        if (!simdjson::validate_utf8(needle.data(), needle.size())) {
+            index_useful = false;
+        } else if (_fn_desc->name == "LIKE") {
+            index_useful = split_like_string_to_ngram(needle, reader_options, ngram_set);
         } else {
-            index_useful = split_normal_string_to_ngram(fn_ctx, reader_options, ngram_state.get(), _fn_desc->name);
+            index_useful = split_normal_string_to_ngram(needle, fn_ctx, reader_options, ngram_set, _fn_desc->name);
         }
         ngram_state->initialized = true;
         ngram_state->index_useful = index_useful;
@@ -239,7 +275,7 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
     if (_fn_desc->name == "LIKE") {
         for (auto& ngram : ngram_state->ngram_set) {
             // if any ngram in needle doesn't hit bf, this page has nothing to do with target,so filter it
-            if (!bf->test_bytes(ngram.get_data(), ngram.get_size())) {
+            if (!bf->test_bytes(ngram.data(), ngram.size())) {
                 return false;
             }
         }
@@ -248,7 +284,7 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
     } else {
         for (auto& ngram : ngram_state->ngram_set) {
             // if any ngram in needle hit bf, this page may have something to do with needle, so don't filter it
-            if (bf->test_bytes(ngram.get_data(), ngram.get_size())) {
+            if (bf->test_bytes(ngram.data(), ngram.size())) {
                 return true;
             }
         }
@@ -269,13 +305,12 @@ bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context
 }
 
 // return false if this index can not be used, otherwise set ngram_set and return true
-bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(FunctionContext* fn_ctx,
+bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needle, FunctionContext* fn_ctx,
                                                               const NgramBloomFilterReaderOptions& reader_options,
-                                                              NgramBloomFilterState* ngram_state,
-                                                              const string& func_name) const {
+                                                              std::vector<std::string>& ngram_set,
+                                                              const std::string& func_name) {
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
-    std::vector<Slice>& ngram_set = ngram_state->ngram_set;
 
     auto gram_num_column = fn_ctx->get_constant_column(2);
     if (gram_num_column != nullptr) {
@@ -291,18 +326,6 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(FunctionContext* f
         return false;
     }
 
-    // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
-    Slice needle;
-    const auto& needle_column = fn_ctx->get_constant_column(1);
-
-    if (index_case_sensitive) {
-        needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
-    } else {
-        // for case_insensitive, we need to convert needle to lower case
-        std::string& buf = ngram_state->buffer;
-        needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column).tolower(buf);
-    }
-
     std::vector<size_t> index;
     size_t slice_gram_num = get_utf8_index(needle, &index);
     // case like "ngram_search
@@ -316,59 +339,71 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(FunctionContext* f
         // find next ngram
         size_t cur_ngram_length = j + index_gram_num < slice_gram_num ? index[j + index_gram_num] - index[j]
                                                                       : needle.get_size() - index[j];
-        Slice cur_ngram = Slice(needle.data + index[j], cur_ngram_length);
-
-        ngram_set.push_back(cur_ngram);
+        ngram_set.emplace_back(needle.data + index[j], cur_ngram_length);
     }
     // case like "ngram_search(col, "nee", 3) when col has a 4gram bloom filter, don't use this index
     if (ngram_set.empty()) return false;
     return true;
 }
 
-bool VectorizedFunctionCallExpr::split_like_string_to_ngram(FunctionContext* fn_ctx,
+bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
                                                             const NgramBloomFilterReaderOptions& reader_options,
-                                                            std::vector<Slice>& ngram_set) const {
+                                                            std::vector<std::string>& ngram_set) {
     size_t index_gram_num = reader_options.index_gram_num;
-    auto needle_column = fn_ctx->get_constant_column(1);
-    if (needle_column == nullptr) {
-        return false;
-    }
 
-    Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
-
-    size_t cur_valid_grams_num = 0;
+    // below is a window sliding algorithm which consider escaped character
+    // cur_grams_begin_index is window's left site, cur_grams_end_index is window's right site
+    // in each iteration of while loop, we will keep moving window's right site from cur_grams_begin_index until we find a valid ngram and save it into  ngram_set
+    // then move window's left site cur_grams_begin_index to the next utf-8 gram
     size_t cur_grams_begin_index = 0;
-    bool escaped = false;
+    size_t cur_grams_end_index = 0;
+    while (cur_grams_end_index < needle.size) {
+        size_t cur_valid_grams_num = 0;
+        bool escaped = false;
+        std::string cur_valid_grams;
+        cur_valid_grams.reserve(index_gram_num);
+        // when iteration begin,[cur_grams_begin_index, cur_grams_end_index) is the current ngram
+        // cur_valid_grams contains the number of utf-8 gram in needle[cur_grams_begin_index, cur_grams_end_index) without '\\'
+        // cur_valid_grams_num is the number of utf-8 gram in needle[cur_grams_begin_index, cur_grams_end_index)
+        // escaped means needle[cur_grams_end_index - 1] is '\\'
+        cur_grams_end_index = cur_grams_begin_index;
+        while (cur_grams_end_index < needle.size) {
+            if (escaped && (needle[cur_grams_end_index] == '%' || needle[cur_grams_end_index] == '_' ||
+                            needle[cur_grams_end_index] == '\\')) {
+                cur_valid_grams += needle[cur_grams_end_index];
+                ++cur_valid_grams_num;
+                escaped = false;
+                ++cur_grams_end_index;
+            } else if (!escaped && (needle[cur_grams_end_index] == '%' || needle[cur_grams_end_index] == '_')) {
+                // not enough grams, so move left site of window to need[i+1]
+                ++cur_grams_end_index;
+                cur_grams_begin_index = cur_grams_end_index;
+                break;
+            } else if (!escaped && needle[cur_grams_end_index] == '\\') {
+                escaped = true;
+                ++cur_grams_end_index;
+            } else {
+                // add next gram into cur_valid_grams
+                size_t cur_gram_length =
+                        UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(needle.data[cur_grams_end_index])];
+                cur_valid_grams.append(&needle[cur_grams_end_index], cur_gram_length);
+                cur_grams_end_index += cur_gram_length;
+                ++cur_valid_grams_num;
+                escaped = false;
+            }
 
-    // when iteration begin,[cur_grams_begin_index, i) is the current ngram
-    // cur_valid_grams_num is the number of utf-8 gram in slice[cur_grams_begin_index, i)
-    // escaped means needle[i - 1] is '\\'
-    for (size_t i = 0; i < needle.size;) {
-        if (escaped && (needle[i] == '%' || needle[i] == '_' || needle[i] == '\\')) {
-            ++cur_valid_grams_num;
-            escaped = false;
-            ++i;
-        } else if (!escaped && (needle[i] == '%' || needle[i] == '_')) {
-            cur_valid_grams_num = 0;
-            escaped = false;
-            ++i;
-            cur_grams_begin_index = i;
-        } else if (!escaped && needle[i] == '\\') {
-            escaped = true;
-            ++i;
-        } else {
-            size_t cur_gram_length = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(needle.data[i])];
-            i += cur_gram_length;
-            ++cur_valid_grams_num;
-            escaped = false;
-        }
-
-        if (cur_valid_grams_num == index_gram_num) {
-            ngram_set.emplace_back(needle.data + cur_grams_begin_index, i - cur_grams_begin_index);
-            cur_valid_grams_num = 0;
-            cur_grams_begin_index = i;
+            if (cur_valid_grams_num == index_gram_num) {
+                // got enough grams, add them to ngram_set and move window's left site(cur_grams_begin_index) to the next utf-8 gram
+                ngram_set.push_back(std::move(cur_valid_grams));
+                cur_valid_grams.clear();
+                cur_valid_grams_num = 0;
+                cur_grams_begin_index +=
+                        UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(needle.data[cur_grams_begin_index])];
+                break;
+            }
         }
     }
+
     // case like "like(col, "nee") when col has a 4gram bloom filter, don't use this index
     if (ngram_set.empty()) return false;
     return true;

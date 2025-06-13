@@ -107,10 +107,6 @@ public class CTEContext {
         return Optional.empty();
     }
 
-    public List<Integer> getAllCTEProduce() {
-        return produces;
-    }
-
     public int getCTEConsumeNum(int cteId) {
         if (!consumeNums.containsKey(cteId)) {
             return 0;

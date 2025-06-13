@@ -118,7 +118,6 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     page_opts.codec = nullptr; // ordinal index page uses NO_COMPRESSION right now
     page_opts.stats = opts.stats;
     page_opts.use_page_cache = opts.use_page_cache;
-    page_opts.kept_in_memory = opts.kept_in_memory;
 
     // read index page
     PageHandle page_handle;
@@ -181,6 +180,11 @@ OrdinalPageIndexIterator OrdinalIndexReader::seek_by_page_index(int page_index) 
     }
 
     return {this, page_index};
+}
+
+void OrdinalIndexReader::print_debug_info() {
+    LOG(INFO) << fmt::format("ordinals: {}", fmt::join(_ordinals.get(), _ordinals.get() + _num_pages, ", "));
+    LOG(INFO) << fmt::format("pages: {}", fmt::join(_pages.get(), _pages.get() + _num_pages, ", "));
 }
 
 } // namespace starrocks

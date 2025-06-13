@@ -57,10 +57,14 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+
+    // the actual output property of this expression
     private PhysicalPropertySet outputProperty;
+
     private UKFKConstraints constraints;
 
-    private Boolean isShortCircuit = false;
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
 
     private OptExpression() {
     }
@@ -73,13 +77,6 @@ public class OptExpression {
     public static OptExpression create(Operator op, OptExpression... inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = Lists.newArrayList(inputs);
-        return expr;
-    }
-
-    public static OptExpression createForShortCircuit(Operator op, OptExpression input, boolean isShortCircuit) {
-        OptExpression expr = new OptExpression(op);
-        expr.inputs = Lists.newArrayList(input);
-        expr.setShortCircuit(isShortCircuit);
         return expr;
     }
 
@@ -150,10 +147,13 @@ public class OptExpression {
         return op.getDomainProperty(inputs);
     }
 
-    public void initRowOutputInfo() {
+    public void clearStatsAndInitOutputInfo() {
         for (OptExpression optExpression : inputs) {
-            optExpression.initRowOutputInfo();
+            optExpression.clearStatsAndInitOutputInfo();
         }
+        // clear statistics cache and row output info cache
+        setStatistics(null);
+        op.clearRowOutputInfo();
         getRowOutputInfo();
     }
 
@@ -222,14 +222,6 @@ public class OptExpression {
         this.cost = cost;
     }
 
-    public Boolean getShortCircuit() {
-        return isShortCircuit;
-    }
-
-    public void setShortCircuit(Boolean shortCircuit) {
-        isShortCircuit = shortCircuit;
-    }
-
     @Override
     public String toString() {
         return op + " child size " + inputs.size();
@@ -243,18 +235,25 @@ public class OptExpression {
         return debugString("", "", limitLine);
     }
 
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
+    }
+
     private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
-        sb.append('\n');
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
-
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
+            sb.append('\n');
             sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
         }
         return sb.toString();
@@ -277,6 +276,7 @@ public class OptExpression {
             optExpression.groupExpression = other.groupExpression;
             optExpression.requiredProperties = other.requiredProperties;
             optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            optExpression.outputProperty = other.outputProperty;
             return this;
         }
 
@@ -302,6 +302,11 @@ public class OptExpression {
 
         public Builder setCost(double cost) {
             optExpression.cost = cost;
+            return this;
+        }
+
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            optExpression.requiredProperties = requiredProperties;
             return this;
         }
 

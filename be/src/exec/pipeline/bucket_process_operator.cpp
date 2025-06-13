@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/bucket_process_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.h"
 #include "exec/pipeline/operator.h"
@@ -40,7 +42,10 @@ Status BucketProcessContext::finish_current_sink(RuntimeState* state) {
 
 Status BucketProcessSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _ctx->sink->set_observer(observer());
+    _ctx->attach_sink_observer(state, observer());
     RETURN_IF_ERROR(_ctx->sink->prepare(state));
+    _ctx->sink->set_runtime_filter_probe_sequence(_runtime_filter_probe_sequence);
     return Status::OK();
 }
 
@@ -60,6 +65,7 @@ bool BucketProcessSinkOperator::is_finished() const {
 }
 
 Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _ctx->defer_notify_source();
     ONCE_DETECT(_set_finishing_once);
     auto defer = DeferOp([&]() {
         if (_ctx->spill_channel != nullptr) {
@@ -86,6 +92,7 @@ Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    auto notify = _ctx->defer_notify_source();
     auto info = chunk->owner_info();
     if (!chunk->is_empty()) {
         RETURN_IF_ERROR(_ctx->sink->push_chunk(state, chunk));
@@ -103,6 +110,9 @@ Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 
 Status BucketProcessSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _ctx->source->set_runtime_filter_probe_sequence(_runtime_filter_probe_sequence);
+    _ctx->source->set_observer(observer());
+    _ctx->attach_source_observer(state, observer());
     return _ctx->source->prepare(state);
 }
 // case 1: has_output() is true then call pull_chunk to pull chunk
@@ -125,6 +135,7 @@ void BucketProcessSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> BucketProcessSourceOperator::pull_chunk(RuntimeState* state) {
+    auto notify = _ctx->defer_notify_sink();
     // BucketProcessSink::set_finishing execution timing is uncertain
     ChunkPtr chunk;
     if (_ctx->source->has_output()) {
@@ -160,12 +171,12 @@ SpillProcessChannelPtr get_spill_channel(const OperatorPtr& op) {
     return nullptr;
 }
 
-BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(
-        int32_t id, int32_t plan_node_id, const BucketProcessContextFactoryPtr& context_factory,
-        const OperatorFactoryPtr& factory)
+BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                                   BucketProcessContextFactoryPtr context_factory,
+                                                                   OperatorFactoryPtr factory)
         : OperatorFactory(id, "bucket_process_sink_factory", plan_node_id),
-          _factory(factory),
-          _ctx_factory(context_factory) {}
+          _factory(std::move(factory)),
+          _ctx_factory(std::move(context_factory)) {}
 
 OperatorPtr BucketProcessSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);
@@ -188,12 +199,12 @@ void BucketProcessSinkOperatorFactory::close(RuntimeState* state) {
     _factory->close(state);
 }
 
-BucketProcessSourceOperatorFactory::BucketProcessSourceOperatorFactory(
-        int32_t id, int32_t plan_node_id, const BucketProcessContextFactoryPtr& context_factory,
-        const OperatorFactoryPtr& factory)
+BucketProcessSourceOperatorFactory::BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                                       BucketProcessContextFactoryPtr context_factory,
+                                                                       OperatorFactoryPtr factory)
         : SourceOperatorFactory(id, "bucket_process_factory", plan_node_id),
-          _factory(factory),
-          _ctx_factory(context_factory) {}
+          _factory(std::move(factory)),
+          _ctx_factory(std::move(context_factory)) {}
 
 OperatorPtr BucketProcessSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);

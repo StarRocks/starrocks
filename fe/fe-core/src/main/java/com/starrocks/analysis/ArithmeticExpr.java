@@ -423,8 +423,8 @@ public class ArithmeticExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         return ((ArithmeticExpr) obj).opcode == opcode;

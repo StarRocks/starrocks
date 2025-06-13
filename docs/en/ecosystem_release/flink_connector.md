@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Releases of StarRocks Connector for Flink
@@ -26,11 +26,13 @@ displayed_sidebar: "English"
 
 **Version requirements:**
 
-| Connector | Flink                    | StarRocks     | Java | Scala     |
-| --------- | ------------------------ | ------------- | ---- | --------- |
-| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 and later | 8    | 2.11,2.12 |
 
 > **NOTICE**
 >
@@ -39,6 +41,48 @@ displayed_sidebar: "English"
 ## Release notes
 
 ### 1.2
+
+## Release 1.2.11
+
+Release data: June 3, 2025
+
+**Features**
+
+- Supports LZ4 compression for the CSV format. [#408](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/408)
+- Adds support for Flink 1.20. [#409](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/409)
+
+**Improvements**
+
+- Adds an option to disable wrapping JSON into JSON arrays. [#344](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/344)
+- Updated FastJSON to resolve CVE-2022-25845. [#394](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/394)
+- Removed data row metrics from warn logs to avoid exposing payload in logs. [#420](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/420)
+
+**Bug Fixes**
+
+- Wrong pushdown results caused by the shadow clone of StarRocksDynamicTableSource (After the fix, a deep copy of StarRocksDynamicTableSource will be used). [#421](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/421)
+
+#### 1.2.10
+
+**Features**
+
+- Supports reading JSON columns. [#334](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/334)
+- Supports reading ARRAY, STRUCT, and MAP columns. [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+- Supports LZ4 compression when sinking data with the JSON format. [#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
+- Supports Flink 1.19. [#379](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/379)
+
+**Improvements**
+
+- Supports configuring socket timeout. [#319](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/319)
+- The Stream Load transaction interface supports asynchronous `prepare` and `commit` operations. [#328](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/328)
+- Supports mapping a subset of columns in a StarRocks table to a Flink source table. [#352](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/352)
+- Supports setting a specific warehouse when using the Stream Load transaction interface. [#361](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/361)
+
+**Bug Fixes**
+
+Fixed the following issues:
+
+- `StarRocksSourceBeReader` in `StarRocksDynamicLookupFunction` is not closed after data reading completes. [#351](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/351)
+- An exception was thrown when loading an empty JSON string into a JSON column. [#380](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/380)
 
 #### 1.2.9
 

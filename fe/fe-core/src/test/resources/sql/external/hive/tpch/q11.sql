@@ -10,6 +10,7 @@ cardinality: 1600000
 column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
 * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
+* expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F05)
 
@@ -71,6 +72,7 @@ OutPut Exchange Id: 28
 |  assert number of rows: LE 1
 |  cardinality: 1
 |  column statistics:
+|  * sum-->[1.0, 9999000.0, 0.0, 16.0, 1.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
 26:Project
@@ -135,6 +137,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 20: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=20.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 3, probe_expr = (20: ps_suppkey)
@@ -177,6 +180,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 24: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (27: s_nationkey)
@@ -203,6 +207,7 @@ NON-PARTITION PREDICATES: 32: n_name = 'PERU'
 MIN/MAX PREDICATES: 32: n_name <= 'PERU', 32: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -256,6 +261,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 2: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (2: ps_suppkey)
@@ -299,6 +305,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 6: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (9: s_nationkey)
@@ -325,6 +332,7 @@ NON-PARTITION PREDICATES: 14: n_name = 'PERU'
 MIN/MAX PREDICATES: 14: n_name <= 'PERU', 14: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE

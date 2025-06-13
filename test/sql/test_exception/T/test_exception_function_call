@@ -17,3 +17,7 @@ admin disable failpoint 'expr_prepare_fragment_local_call_failed';
 admin enable failpoint 'expr_prepare_fragment_thread_local_call_failed';
 [UC]select max(regexp_replace(c1, '1', '2')) from t0;
 admin disable failpoint 'expr_prepare_fragment_thread_local_call_failed';
+
+admin enable failpoint 'not_exist_agg_function';
+[UC]select * from (select l.c0,r.c1  from t0 l join [bucket](select regexp_replace(sum(c1), '1', '2') c1, c0 from t0 group by c0) r on l.c0 = r.c0) t;
+admin disable failpoint 'not_exist_agg_function';

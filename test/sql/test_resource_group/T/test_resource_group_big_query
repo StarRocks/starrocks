@@ -1,0 +1,48 @@
+-- name: test_resource_group_big_query
+create table t1 (
+    k1 int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 32
+properties("replication_num" = "1");
+
+insert into t1 select generate_series FROM TABLE(generate_series(1, 65535));
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+insert into t1 select k1 from t1;
+
+create resource group rg_${uuid0} 
+    to ( user='user_${uuid0}' ) 
+    with ('cpu_core_limit' = '1', 'mem_limit' = '0.99', 'big_query_cpu_second_limit'='1');
+
+
+with w1 as (select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1)
+select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from w1;
+
+
+alter resource group rg_${uuid0} with ('big_query_cpu_second_limit'='0','big_query_scan_rows_limit'='1');
+select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from t1;
+
+
+select count(1) from t1;
+
+

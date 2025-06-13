@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Read data from StarRocks using Flink connector
@@ -20,21 +20,22 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
   With the Flink connector of StarRocks, Flink can first obtain the query plan from the responsible FE, then distribute the obtained query plan as parameters to all the involved BEs, and finally obtain the data returned by the BEs.
 
-  ![- Flink connector of StarRocks](../assets/5.3.2-1.png)
+  ![- Flink connector of StarRocks](../_assets/5.3.2-1.png)
 
 - JDBC connector of Flink
 
   With the JDBC connector of Flink, Flink can only read data from individual FEs, one at a time. Data reads are slow.
 
-  ![JDBC connector of Flink](../assets/5.3.2-2.png)
+  ![JDBC connector of Flink](../_assets/5.3.2-2.png)
 
 ## Version requirements
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 |-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Prerequisites
 
@@ -101,7 +102,7 @@ Follow these steps to deploy the Flink connector:
 
 ### Network configuration
 
-Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
 
 ## Parameters
 
@@ -114,7 +115,7 @@ The following parameters apply to both the Flink SQL and Flink DataStream readin
 | connector                   | Yes      | STRING    | The type of connector that you want to use to read data. Set the value to `starrocks`.                                |
 | scan-url                    | Yes      | STRING    | The address that is used to connect the FE from the web server. Format: `<fe_host>:<fe_http_port>`. The default port is `8030`. You can specify multiple addresses, which must be separated with a comma (,). Example: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`. |
 | jdbc-url                    | Yes      | STRING    | The address that is used to connect the MySQL client of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`. The default port number is `9030`. |
-| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/user_privs/User_privilege.md). |
+| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/user_privs/authorization/User_privilege.md). |
 | password                    | Yes      | STRING    | The password of your StarRocks cluster account.              |
 | database-name               | Yes      | STRING    | The name of the StarRocks database to which the StarRocks table you want to read belongs. |
 | table-name                  | Yes      | STRING    | The name of the StarRocks table you want to read.            |
@@ -159,6 +160,10 @@ The following data type mapping is valid only for Flink reading data from StarRo
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
+| JSON       | STRING <br /> **NOTE:** <br /> **Supported since version 1.2.10** |
+| ARRAY      | ARRAY  <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| STRUCT     | ROW    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| MAP        | MAP    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
 
 ## Examples
 
@@ -284,6 +289,7 @@ When you read data by using Flink SQL, take note of the following points:
 - Predicate pushdown is supported. For example, if your query contains a filter condition `char_1 <> 'A' and int_1 = -126`, the filter condition will be pushed down to the Flink connector and transformed into a statement that can be executed by StarRocks before the query is run. You do not need to perform extra configurations.
 - The LIMIT statement is not supported.
 - StarRocks does not support the checkpointing mechanism. As a result, data consistency cannot be guaranteed if the read task fails.
+- The order of the fields in the created table must be the same as in the StarRocks table.
 
 ### Read data using Flink DataStream
 

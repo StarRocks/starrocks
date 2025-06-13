@@ -103,6 +103,9 @@ public:
                                                          OpFactories& pred_operators,
                                                          const PartitionExprsGenerator& self_partition_exprs_generator);
 
+    OpFactories maybe_interpolate_local_bucket_shuffle_exchange(RuntimeState* state, int32_t plan_node_id,
+                                                                OpFactories& pred_operators,
+                                                                const std::vector<ExprContext*>& partition_expr_ctxs);
     // The intput data is already ordered by partition_exprs. Then we can use a simply approach to split them into different channels
     // as long as the data of the same partition_exprs are in the same channel.
     OpFactories maybe_interpolate_local_ordered_partition_exchange(
@@ -120,10 +123,14 @@ public:
     // Append a LocalExchangeSinkOperator to the tail of each pipeline.
     // Create a new pipeline with a LocalExchangeSourceOperator.
     // These local exchange sink operators and the source operator share a passthrough exchanger.
+    // pass_through_type specify how to move chunk from prev pipeline to new pipeline.
     OpFactories maybe_gather_pipelines_to_one(RuntimeState* state, int32_t plan_node_id,
-                                              std::vector<OpFactories>& pred_operators_list);
+                                              std::vector<OpFactories>& pred_operators_list,
+                                              LocalExchanger::PassThroughType pass_through_type);
 
     OpFactories maybe_interpolate_collect_stats(RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators);
+
+    OpFactories maybe_interpolate_debug_ops(RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators);
 
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
 

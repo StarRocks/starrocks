@@ -14,11 +14,14 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.RemoteMetaSplit;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
-import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.THdfsScanNode;
@@ -29,28 +32,41 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.apache.hadoop.shaded.com.google.common.base.Strings;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class IcebergMetadataScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanNode.class);
-    private final LogicalIcebergMetadataTable table;
+
+    private static final Set<String> STATS_COLUMNS =
+            ImmutableSet.of(
+                    "column_sizes",
+                    "value_counts",
+                    "null_value_counts",
+                    "nan_value_counts",
+                    "lower_bounds",
+                    "upper_bounds");
+
+    private final MetadataTable table;
     private String icebergPredicate = "";
 
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> result = new ArrayList<>();
-    private String temporalClause;
     private String serializedTable;
     private boolean loadColumnStats;
+    private final TableVersionRange version;
+    private final MetadataTableType metadataTableType;
 
-    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, String temporalClause) {
+    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TableVersionRange version) {
         super(id, desc, planNodeName);
-        this.table = (LogicalIcebergMetadataTable) desc.getTable();
-        this.temporalClause = temporalClause;
+        this.table = (MetadataTable) desc.getTable();
+        this.metadataTableType = table.getMetadataTableType();
+        this.version = version;
     }
 
     public void preProcessIcebergPredicate(String icebergPredicate) {
@@ -66,22 +82,27 @@ public class IcebergMetadataScanNode extends ScanNode {
         return result;
     }
 
-    public void setupScanRangeLocations() throws UserException {
+    public void setupScanRangeLocations() throws StarRocksException {
         String catalogName = table.getCatalogName();
         String originDbName = table.getOriginDb();
         String originTableName = table.getOriginTable();
 
-        long snapshotId = -1;
-        // TODO(stephen): parse version by AstBuilder
-        if (!Strings.isNullOrEmpty(temporalClause)) {
-            String kw = "for version as of";
-            temporalClause = temporalClause.substring(kw.length()).trim();
-            snapshotId = Long.parseLong(temporalClause);
+        long snapshotId = version.end().isPresent() ? version.end().get() : -1;
+        IcebergMetaSpec serializedMetaSpec = GlobalStateMgr.getCurrentState().getMetadataMgr().getSerializedMetaSpec(
+                catalogName, originDbName, originTableName, snapshotId, icebergPredicate, metadataTableType).cast();
+
+        if (serializedMetaSpec == IcebergMetaSpec.EMPTY) {
+            return;
         }
 
-
-        IcebergMetaSpec serializedMetaSpec = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getSerializedMetaSpec(catalogName, originDbName, originTableName, snapshotId, icebergPredicate).cast();
+        if (metadataTableType == MetadataTableType.FILES) {
+            for (SlotDescriptor slot : desc.getSlots()) {
+                if (STATS_COLUMNS.contains(slot.getColumn().getName())) {
+                    serializedMetaSpec.setLoadColumnStats(true);
+                    break;
+                }
+            }
+        }
 
         this.serializedTable = serializedMetaSpec.getTable();
         this.loadColumnStats = serializedMetaSpec.loadColumnStats();
@@ -126,6 +147,7 @@ public class IcebergMetadataScanNode extends ScanNode {
         tHdfsScanNode.setSerialized_table(serializedTable);
         tHdfsScanNode.setSerialized_predicate(icebergPredicate);
         tHdfsScanNode.setLoad_column_stats(loadColumnStats);
+        tHdfsScanNode.setMetadata_table_type(metadataTableType.name());
 
         msg.hdfs_scan_node = tHdfsScanNode;
     }

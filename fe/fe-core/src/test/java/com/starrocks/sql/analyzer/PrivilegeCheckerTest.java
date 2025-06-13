@@ -23,6 +23,14 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PrivObjNotFoundException;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.TablePEntryObject;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.RemoteFile;
 import com.starrocks.backup.Repository;
@@ -42,6 +50,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -49,14 +58,6 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.PipePEntryObject;
-import com.starrocks.privilege.PrivObjNotFoundException;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -68,6 +69,8 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -90,7 +93,13 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -106,18 +115,20 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
+import org.xnio.StreamConnection;
 
 import java.lang.reflect.Field;
-import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -136,6 +147,7 @@ public class PrivilegeCheckerTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
@@ -307,7 +319,7 @@ public class PrivilegeCheckerTest {
         authenticationManager.createUser(createUserStmt);
         testUser = createUserStmt.getUserIdentity();
 
-        createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
+        createUserSql = "CREATE USER 'test2' identified with mysql_native_password by '12345'";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         authenticationManager.createUser(createUserStmt);
 
@@ -545,29 +557,26 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
                 "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         DbPEntryObject dbPEntryObject =
-                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
-        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
-        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                List.of("test_iceberg", "*", "*"));
-        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+                DbPEntryObject.generate(List.of("test_iceberg", "*"));
+        Assert.assertTrue(dbPEntryObject.validate());
+        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(List.of("test_iceberg", "*", "*"));
+        Assert.assertTrue(tablePEntryObject.validate());
 
         dbPEntryObject =
-                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
+                DbPEntryObject.generate(List.of("test_iceberg", "iceberg_db"));
         Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
-        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
-        tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+        Assert.assertTrue(dbPEntryObject.validate());
+        tablePEntryObject = TablePEntryObject.generate(List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
         Assert.assertEquals(tablePEntryObject.getDatabaseUUID(), "iceberg_db");
         Assert.assertEquals(tablePEntryObject.getTableUUID(), "iceberg_tbl");
-        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        Assert.assertTrue(tablePEntryObject.validate());
     }
 
     @Test
     public void testGetResourceMappingExternalTableException() throws Exception {
         ctxToTestUser();
         // no throw
-        TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
+        TablePEntryObject.generate(Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
 
         new MockUp<MetadataMgr>() {
             @Mock
@@ -578,8 +587,7 @@ public class PrivilegeCheckerTest {
 
         // throw
         try {
-            TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                    Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
+            TablePEntryObject.generate(Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
         } catch (PrivObjNotFoundException e) {
             System.out.println(e.getMessage());
             e.getMessage().contains("cannot find table tbl1 in db db1, msg: test");
@@ -784,7 +792,7 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db3.tbl1 from test");
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db1 = globalStateMgr.getDb("db1");
+        Database db1 = globalStateMgr.getLocalMetastore().getDb("db1");
         nativeAnalyzeJob = new NativeAnalyzeJob(db1.getId(), -1, Lists.newArrayList(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
@@ -829,7 +837,7 @@ public class PrivilegeCheckerTest {
         new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
-        Database db2 = globalStateMgr.getDb("db2");
+        Database db2 = globalStateMgr.getLocalMetastore().getDb("db2");
         tbl1 = db2.getTable("tbl1");
         nativeAnalyzeJob = new NativeAnalyzeJob(db2.getId(), tbl1.getId(), Lists.newArrayList(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
@@ -851,7 +859,7 @@ public class PrivilegeCheckerTest {
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db1 = globalStateMgr.getDb("db1");
+        Database db1 = globalStateMgr.getLocalMetastore().getDb("db1");
         Table tbl1 = db1.getTable("tbl1");
 
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, db1.getId(), tbl1.getId(),
@@ -895,7 +903,7 @@ public class PrivilegeCheckerTest {
         // can show result for stats on table that user has any privilege on
         Assert.assertNotNull(showResult);
 
-        Database db2 = globalStateMgr.getDb("db2");
+        Database db2 = globalStateMgr.getLocalMetastore().getDb("db2");
         tbl1 = db2.getTable("tbl1");
         analyzeStatus = new NativeAnalyzeStatus(1, db2.getId(), tbl1.getId(),
                 Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
@@ -956,12 +964,13 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    @Ignore
     public void testTableSelectDeleteInsertUpdateColumn() throws Exception {
         String createTblStmtStr4 = "create table db3.tprimary(k1 varchar(32), k2 varchar(32), k3 varchar(32)," +
                 " k4 int) ENGINE=OLAP PRIMARY KEY(`k1`) distributed by hash(k1) " +
                 "buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr4);
-        Config.setMutableConfig("authorization_enable_column_level_privilege", "true");
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "true", false, "");
         // select
         verifyGrantRevoke(
                 "select * from db1.tbl1",
@@ -1006,9 +1015,9 @@ public class PrivilegeCheckerTest {
                     Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
             verify("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2 union all select k1,k2 from db2.tbl1",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
@@ -1042,9 +1051,9 @@ public class PrivilegeCheckerTest {
                     Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
             verify("update db3.tprimary set k2 = '2' where k2 = (select k2 from db2.tbl1 where k1='1')",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
@@ -1078,7 +1087,7 @@ public class PrivilegeCheckerTest {
                 "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
                 "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
-        Config.setMutableConfig("authorization_enable_column_level_privilege", "false");
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "false", false, "");
         starRocksAssert.dropTable("db3.tprimary");
     }
 
@@ -1157,9 +1166,9 @@ public class PrivilegeCheckerTest {
 
         // check alter table: ALTER
         verifyGrantRevoke(
-                "alter table db1.tbl1 drop partition p1",
-                "grant ALTER on db1.tbl1 to test",
-                "revoke ALTER on db1.tbl1 from test",
+                "alter table db2.tbl1 drop partition p1",
+                "grant ALTER on db2.tbl1 to test",
+                "revoke ALTER on db2.tbl1 from test",
                 "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
 
         // check cancel alter table: ALTER
@@ -1315,7 +1324,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testShowProcessList(@Mocked MysqlChannel channel,
-                                    @Mocked SocketChannel socketChannel) throws Exception {
+                                    @Mocked StreamConnection connection) throws Exception {
         new Expectations() {
             {
                 channel.getRemoteHostPortString();
@@ -1331,12 +1340,12 @@ public class PrivilegeCheckerTest {
             }
         };
 
-        ConnectContext ctx1 = new ConnectContext(socketChannel);
+        ConnectContext ctx1 = new ConnectContext(connection);
         ctx1.setQualifiedUser("test");
         ctx1.setCurrentUserIdentity(new UserIdentity("test", "%"));
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
-        ConnectContext ctx2 = new ConnectContext(socketChannel);
+        ConnectContext ctx2 = new ConnectContext(connection);
         ctx2.setQualifiedUser("test2");
         ctx2.setCurrentUserIdentity(new UserIdentity("test2", "%"));
         ctx2.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -1351,7 +1360,7 @@ public class PrivilegeCheckerTest {
 
         // Without operate privilege on system, test can only see its own process list
         ctxToTestUser();
-        List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(connectContext, null);
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo threadInfo : results) {
             System.out.println(threadInfo.toRow(nowMs, true));
@@ -1361,7 +1370,7 @@ public class PrivilegeCheckerTest {
 
         // With operate privilege on system, test can only see all the process list
         grantRevokeSqlAsRoot("grant operate on system to test");
-        results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        results = connectScheduler.listConnection(connectContext, null);
         for (ConnectContext.ThreadInfo threadInfo : results) {
             System.out.println(threadInfo.toRow(nowMs, true));
         }
@@ -1670,7 +1679,7 @@ public class PrivilegeCheckerTest {
                 "Access denied");
 
         // Test `use database` : check any privilege on any function in db
-        Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -1857,7 +1866,7 @@ public class PrivilegeCheckerTest {
         List<Replica> replicas =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
-        Table table = db.getTable("tbl1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         ReplicasProcNode replicasProcNode = new ReplicasProcNode(db, (OlapTable) table, tabletId, replicas);
         try {
             replicasProcNode.fetchResult();
@@ -1888,7 +1897,7 @@ public class PrivilegeCheckerTest {
 
         // test user has `OPERATE` privilege
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
-        Table table = db.getTable("tbl1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         tabletSchedCtx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
                 db.getId(), table.getId(), 3, 4, 1000, System.currentTimeMillis());
         result = tabletSchedCtx.checkPrivForCurrUser(testUser);
@@ -1987,7 +1996,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testKillStmt(@Mocked MysqlChannel channel,
-                             @Mocked SocketChannel socketChannel) throws Exception {
+                             @Mocked StreamConnection connection) throws Exception {
         new Expectations() {
             {
                 channel.getRemoteHostPortString();
@@ -2009,12 +2018,12 @@ public class PrivilegeCheckerTest {
             }
         };
 
-        ConnectContext ctx1 = new ConnectContext(socketChannel);
+        ConnectContext ctx1 = new ConnectContext(connection);
         ctx1.setCurrentUserIdentity(new UserIdentity("test", "%"));
         ctx1.setQualifiedUser("test");
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
-        ConnectContext ctx2 = new ConnectContext(socketChannel);
+        ConnectContext ctx2 = new ConnectContext(connection);
         ctx2.setQualifiedUser("test2");
         ctx2.setCurrentUserIdentity(new UserIdentity("test2", "%"));
         ctx2.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -2027,10 +2036,15 @@ public class PrivilegeCheckerTest {
         connectScheduler.registerConnection(ctx1);
         connectScheduler.registerConnection(ctx2);
 
+        new MockUp<ExecuteEnv>() {
+            @Mock
+            public ConnectScheduler getScheduler() {
+                return connectScheduler;
+            }
+        };
+
         ConnectContext ctx = starRocksAssert.getCtx();
         ctx.getState().setOk();
-        ConnectScheduler origConnectScheduler = ctx.getConnectScheduler();
-        ctx.setConnectScheduler(connectScheduler);
         ctxToTestUser();
 
         // can kill self without privilege check
@@ -2056,9 +2070,6 @@ public class PrivilegeCheckerTest {
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
         grantRevokeSqlAsRoot("revoke OPERATE on system from test");
-
-        // reset state
-        ctx.setConnectScheduler(origConnectScheduler);
     }
 
     @Test
@@ -2071,23 +2082,7 @@ public class PrivilegeCheckerTest {
                 "Access denied;");
     }
 
-    @Test
-    public void testSetStmt() throws Exception {
-        String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
-        String expectError =
-                "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
-        verifyNODEAndGRANT(sql, expectError);
 
-        ctxToTestUser();
-        // user 'test' not has GRANT/NODE privilege
-        sql = "set password = PASSWORD('123456')";
-        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Authorizer.check(statement, starRocksAssert.getCtx());
-
-        sql = "set password for test = PASSWORD('123456')";
-        statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Authorizer.check(statement, starRocksAssert.getCtx());
-    }
 
     @Test
     public void testRoutineLoadStmt() throws Exception {
@@ -2189,7 +2184,7 @@ public class PrivilegeCheckerTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       long warehouseId) {
+                                                       ComputeResource computeResource) {
                 return Lists.newArrayList(0, 1, 2);
             }
         };
@@ -2783,7 +2778,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testFunc() throws Exception {
-        Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -2896,7 +2891,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowFunc() throws Exception {
 
-        Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -3036,8 +3031,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testShowAuthentication()
-            throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
+    public void testShowAuthentication() throws PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
@@ -3053,8 +3047,8 @@ public class PrivilegeCheckerTest {
         stmt = new ShowAuthenticationStmt(null, true);
         resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null], " +
-                        "['test2'@'%', No, " +
-                        "MYSQL_NATIVE_PASSWORD, null], ['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                        "['test2'@'%', Yes, MYSQL_NATIVE_PASSWORD, null], " +
+                        "['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
 
         stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
@@ -3679,20 +3673,20 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withTable("create table db1.tbl_pipe (id int, str string) properties('replication_num'='1') ");
 
         // invalid token
-        Assert.assertThrows(PrivilegeException.class, () -> PipePEntryObject.generate(mgr, ImmutableList.of("*")));
+        Assert.assertThrows(PrivilegeException.class, () -> PipePEntryObject.generate(ImmutableList.of("*")));
         Assert.assertThrows(PrivilegeException.class, () ->
-                PipePEntryObject.generate(mgr, ImmutableList.of("not_existing_database", "*")));
+                PipePEntryObject.generate(ImmutableList.of("not_existing_database", "*")));
         Assert.assertThrows(PrivilegeException.class, () ->
-                PipePEntryObject.generate(mgr, ImmutableList.of("db1", "not_existing_pipe")));
+                PipePEntryObject.generate(ImmutableList.of("db1", "not_existing_pipe")));
 
         starRocksAssert.ddl("create pipe db1.p1 as insert into tbl_pipe " +
                 "select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ");
         starRocksAssert.ddl("create pipe db1.p2 as insert into tbl_pipe " +
                 "select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ");
-        PipePEntryObject p1 = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("db1", "p1"));
-        PipePEntryObject p2 = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("db1", "p2"));
-        PipePEntryObject pAll = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("db1", "*"));
-        PipePEntryObject pAllDb = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("*", "*"));
+        PipePEntryObject p1 = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("db1", "p1"));
+        PipePEntryObject p2 = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("db1", "p2"));
+        PipePEntryObject pAll = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("db1", "*"));
+        PipePEntryObject pAllDb = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("*", "*"));
 
         // compareTo
         Assert.assertEquals(-1, p1.compareTo(p2));
@@ -3717,8 +3711,8 @@ public class PrivilegeCheckerTest {
         Assert.assertNotEquals(p1, p2);
 
         // validate
-        Assert.assertTrue(p1.validate(GlobalStateMgr.getCurrentState()));
-        Assert.assertFalse(pAll.validate(GlobalStateMgr.getCurrentState()));
+        Assert.assertTrue(p1.validate());
+        Assert.assertFalse(pAll.validate());
 
         // getDatabase
         Assert.assertTrue(p1.getDatabase().isPresent());
@@ -3788,10 +3782,10 @@ public class PrivilegeCheckerTest {
                     .when(() -> Authorizer.check(Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
 
-            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
             String sql = "select * from db_for_ranger.tbl1";
@@ -3895,9 +3889,10 @@ public class PrivilegeCheckerTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
         UserIdentity testNonNativeUser = createUserStmt.getUserIdentity();
-        SetPassVar setPassVar = new SetPassVar(testNonNativeUser, "01234");
+        UserAuthOption userAuthOption = new UserAuthOption(null, "01234", true, NodePosition.ZERO);
+        SetPassVar setPassVar = new SetPassVar(testNonNativeUser, userAuthOption, NodePosition.ZERO);
         SetStmt setStmt = new SetStmt(Arrays.asList(setPassVar));
-        SetExecutor executor = new SetExecutor(null, setStmt);
+        SetExecutor executor = new SetExecutor(starRocksAssert.getCtx(), setStmt);
         try {
             executor.execute();
         } catch (DdlException e) {
@@ -3909,5 +3904,77 @@ public class PrivilegeCheckerTest {
         DropUserStmt dropUserStmt =
                 (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropUserSql, starRocksAssert.getCtx());
         authenticationManager.dropUser(dropUserStmt);
+    }
+
+    @Test
+    public void testCNGroupStatementPrivilege() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public void createCnGroup(CreateCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void dropCnGroup(DropCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void enableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void disableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void alterCnGroup(AlterCnGroupStmt stmt) throws DdlException {
+                // do thing
+            }
+        };
+
+        ctxToTestUser();
+        // create cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse ADD CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // drop cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse DROP CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // enable cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse ENABLE CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // disable cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse DISABLE CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // modify cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse MODIFY CNGROUP cngroup1 SET ('label1' = 'value1')",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
     }
 }

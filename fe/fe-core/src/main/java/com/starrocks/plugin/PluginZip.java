@@ -37,7 +37,7 @@ package com.starrocks.plugin;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Util;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
@@ -86,7 +86,7 @@ class PluginZip {
      * download and extract the zip file to the target path.
      * return the path dir which contains all extracted files.
      */
-    public Path extract(Path targetPath) throws IOException, UserException {
+    public Path extract(Path targetPath) throws IOException, StarRocksException {
         try {
             Path zipPath = downloadZip(targetPath);
             return extractZip(zipPath, targetPath);
@@ -103,7 +103,7 @@ class PluginZip {
      * return the zip file path.
      * This zip file is currently in a temp directory, such ash
      **/
-    Path downloadZip(Path targetPath) throws IOException, UserException {
+    Path downloadZip(Path targetPath) throws IOException, StarRocksException {
         if (Strings.isNullOrEmpty(source)) {
             throw new PluginException("empty plugin source path: " + source);
         }
@@ -126,7 +126,7 @@ class PluginZip {
     /**
      * download zip and check md5
      **/
-    Path downloadRemoteZip(Path targetPath) throws IOException, UserException {
+    Path downloadRemoteZip(Path targetPath) throws IOException, StarRocksException {
         LOG.info("download plugin zip from: " + source);
 
         Path zip = Files.createTempFile(targetPath, ".plugin_", ".zip");
@@ -143,7 +143,7 @@ class PluginZip {
                 BufferedReader br = new BufferedReader(new InputStreamReader(in));
                 expectedChecksum = br.readLine();
             } catch (IOException e) {
-                throw new UserException(e.getMessage() +
+                throw new StarRocksException(e.getMessage() +
                         ". you should set md5sum in plugin properties or provide a md5 URI to check plugin file");
             }
         }
@@ -152,7 +152,7 @@ class PluginZip {
         final String actualChecksum = DigestUtils.md5Hex(Files.readAllBytes(zip));
 
         if (!StringUtils.equalsIgnoreCase(expectedChecksum, actualChecksum)) {
-            throw new UserException(
+            throw new StarRocksException(
                     "MD5 check mismatch, expected " + expectedChecksum + " but actual " + actualChecksum);
         }
 
@@ -163,7 +163,7 @@ class PluginZip {
      * if `zipOrPath` is a zip file, unzip the specified .zip file to the targetPath.
      * if `zipOrPath` is a dir, copy the dir and its content to targetPath.
      */
-    Path extractZip(Path zip, Path targetPath) throws IOException, UserException {
+    Path extractZip(Path zip, Path targetPath) throws IOException, StarRocksException {
         if (!Files.exists(zip)) {
             throw new PluginException("Download plugin zip failed. zip file does not exist. source: " + source);
         }
@@ -180,7 +180,7 @@ class PluginZip {
             while ((entry = zipInput.getNextEntry()) != null) {
                 Path targetFile = targetPath.resolve(entry.getName());
                 if (entry.getName().startsWith("starrocks/")) {
-                    throw new UserException("Not use \"starrocks\" directory within the plugin zip.");
+                    throw new StarRocksException("Not use \"starrocks\" directory within the plugin zip.");
                 }
                 // Using the entry name as a path can result in an entry outside of the plugin dir,
                 // either if the name starts with the root of the filesystem, or it is a relative
@@ -188,7 +188,7 @@ class PluginZip {
                 // normalizing the path (which removes foo/..) and ensuring the normalized entry
                 // is still rooted with the target plugin directory.
                 if (!targetFile.normalize().startsWith(targetPath)) {
-                    throw new UserException("Zip contains entry name '" +
+                    throw new StarRocksException("Zip contains entry name '" +
                             entry.getName() + "' resolving outside of plugin directory");
                 }
 

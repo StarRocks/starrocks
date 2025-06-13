@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * `TableSnapshotInfo` represents a snapshot of the base table of materialized view.
@@ -33,6 +34,8 @@ public class TableSnapshotInfo {
     Map<String, MaterializedView.BasePartitionInfo> refreshedPartitionInfos = Maps.newHashMap();
 
     public TableSnapshotInfo(BaseTableInfo baseTableInfo, Table baseTable) {
+        Objects.requireNonNull(baseTableInfo);
+        Objects.requireNonNull(baseTable);
         this.baseTableInfo = baseTableInfo;
         this.baseTable = baseTable;
     }
@@ -41,6 +44,18 @@ public class TableSnapshotInfo {
         return baseTableInfo;
     }
 
+    public long getId() {
+        return baseTable.getId();
+    }
+
+    public String getName() {
+        return baseTable.getName();
+    }
+
+    /**
+     * NOTE: Base table is only copied from the real table if it's an OlapTable or MaterializedView,
+     * otherwise the real table is returned.
+     */
     public Table getBaseTable() {
         return baseTable;
     }
@@ -55,10 +70,25 @@ public class TableSnapshotInfo {
 
     @Override
     public String toString() {
-        return "TableSnapshotInfo{" +
-                "baseTableInfo=" + baseTableInfo +
-                ", baseTable=" + baseTable.getName() +
-                ", refreshedPartitionInfos=" + refreshedPartitionInfos +
-                '}';
+        return "baseTable=" + baseTable.getName() +
+                ", refreshedPartitionInfos=" + refreshedPartitionInfos;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        TableSnapshotInfo that = (TableSnapshotInfo) o;
+        return Objects.equals(baseTableInfo, that.baseTableInfo) &&
+                Objects.equals(baseTable, that.baseTable);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(baseTableInfo, baseTable);
     }
 }

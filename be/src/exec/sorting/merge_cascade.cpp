@@ -273,6 +273,23 @@ Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
     return Status::OK();
 }
 
+Status MergeCursorsCascade::consume_all_with_limit(const ChunkConsumer& consumer, size_t limit) {
+    while (!is_eos() && limit) {
+        ChunkUniquePtr chunk = try_get_next();
+        if (!!chunk) {
+            size_t num_rows = chunk->num_rows();
+            if (limit >= num_rows) {
+                limit -= num_rows;
+            } else {
+                chunk->set_num_rows(limit);
+                limit = 0;
+            }
+            RETURN_IF_ERROR(consumer(std::move(chunk)));
+        }
+    }
+    return Status::OK();
+}
+
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
                                    std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output) {
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
@@ -286,6 +303,15 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());
     return merger.consume_all(std::move(consumer));
+}
+
+Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
+                                   std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
+                                   const ChunkConsumer& consumer, size_t limit) {
+    MergeCursorsCascade merger;
+    RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
+    CHECK(merger.is_data_ready());
+    return merger.consume_all_with_limit(std::move(consumer), limit);
 }
 
 } // namespace starrocks

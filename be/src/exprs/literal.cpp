@@ -19,10 +19,13 @@
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exprs/jit/ir_helper.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
 #include "types/constexpr.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -165,6 +168,8 @@ StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Ch
     return column;
 }
 
+#ifdef STARROCKS_JIT_ENABLE
+
 bool VectorizedLiteral::is_compilable(RuntimeState* state) const {
     return IRHelper::support_jit(_type.type);
 }
@@ -187,6 +192,7 @@ StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JI
     }
     return datum;
 }
+#endif
 
 std::string VectorizedLiteral::debug_string() const {
     std::stringstream out;

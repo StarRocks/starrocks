@@ -14,8 +14,9 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Strings;
+import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.TableRelation;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 
@@ -23,6 +24,7 @@ public class IcebergView extends ConnectorView {
     private final String defaultCatalogName;
     private final String defaultDbName;
     private final String location;
+    public static final String STARROCKS_DIALECT = "starrocks";
 
     public IcebergView(long id, String catalogName, String dbName, String name, List<Column> schema,
                        String definition, String defaultCatalogName, String defaultDbName, String location) {
@@ -33,14 +35,23 @@ public class IcebergView extends ConnectorView {
     }
 
     @Override
-    protected void formatRelations(List<TableRelation> tableRelations) {
+    protected void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
-            if (Strings.isNullOrEmpty(tableRelation.getName().getCatalog())) {
-                tableRelation.getName().setCatalog(defaultCatalogName);
+            TableName name = tableRelation.getName();
+            // do not fill catalog and database name to cte relation
+            if (Strings.isNullOrEmpty(name.getCatalog()) &&
+                    Strings.isNullOrEmpty(name.getDb()) &&
+                    cteRelationNames.contains(name.getTbl())) {
+                return;
+            }
+
+            // iceberg view query statement with external catalog which created by starrocks must have catalog name
+            if (Strings.isNullOrEmpty(name.getCatalog())) {
+                name.setCatalog(defaultCatalogName);
             }
 
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
-                tableRelation.getName().setDb(defaultDbName);
+                name.setDb(defaultDbName);
             }
         }
     }

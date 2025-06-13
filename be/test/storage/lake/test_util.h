@@ -39,7 +39,11 @@
 namespace starrocks::lake {
 
 StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                        int64_t new_version, int64_t txn_id);
+                                                        int64_t new_version, int64_t txn_id,
+                                                        bool rebuild_pindex = false);
+
+Status TEST_aggregate_publish_version(TabletManager* tablet_mgr, std::vector<int64_t> tablet_ids, int64_t new_version,
+                                      int64_t txn_id, bool rebuild_pindex);
 
 Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                        int64_t log_version);
@@ -70,10 +74,10 @@ protected:
     explicit TestBase(std::string test_dir, int64_t cache_limit = 1024 * 1024)
             : _test_dir(std::move(test_dir)),
               _parent_tracker(std::make_unique<MemTracker>(-1)),
-              _mem_tracker(std::make_unique<MemTracker>(1024 * 1024, "", _parent_tracker.get())),
-              _lp(std::make_unique<FixedLocationProvider>(_test_dir)),
-              _update_mgr(std::make_unique<UpdateManager>(_lp.get(), _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp.get(), _update_mgr.get(), cache_limit)) {}
+              _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
+              _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
+              _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {}
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }
 
@@ -93,7 +97,11 @@ protected:
         ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }
 
-    StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id);
+    StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id,
+                                                       bool rebuild_pindex = false);
+
+    Status aggregate_publish_version(std::vector<int64_t> tablet_ids, int64_t new_version, int64_t txn_id,
+                                     bool rebuild_pindex = false);
 
     Status publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version);
 
@@ -103,7 +111,7 @@ protected:
     std::string _test_dir;
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<LocationProvider> _lp;
+    std::shared_ptr<LocationProvider> _lp;
     std::unique_ptr<UpdateManager> _update_mgr;
     std::unique_ptr<TabletManager> _tablet_mgr;
 };
@@ -112,10 +120,12 @@ struct PrimaryKeyParam {
     bool enable_persistent_index = false;
     PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
+    bool enable_transparent_data_encryption = false;
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                               int64_t new_version, int64_t txn_id) {
+                                                               int64_t new_version, int64_t txn_id,
+                                                               bool rebuild_pindex) {
     PublishVersionRequest request;
     PublishVersionResponse response;
 
@@ -124,6 +134,9 @@ inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* ta
     request.set_base_version(new_version - 1);
     request.set_new_version(new_version);
     request.set_commit_time(time(nullptr));
+    if (rebuild_pindex) {
+        request.add_rebuild_pindex_tablet_ids(tablet_id);
+    }
 
     auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
     lake_service.publish_version(nullptr, &request, &response, nullptr);
@@ -133,6 +146,38 @@ inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* ta
     } else {
         return Status::InternalError(fmt::format("failed to publish version. tablet_id={} txn_id={} new_version={}",
                                                  tablet_id, txn_id, new_version));
+    }
+}
+
+inline Status TEST_aggregate_publish_version(TabletManager* tablet_mgr, std::vector<int64_t> tablet_ids,
+                                             int64_t new_version, int64_t txn_id, bool rebuild_pindex) {
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+
+    for (auto& tablet_id : tablet_ids) {
+        request.add_tablet_ids(tablet_id);
+        if (rebuild_pindex) {
+            request.add_rebuild_pindex_tablet_ids(tablet_id);
+        }
+    }
+    request.add_txn_ids(txn_id);
+    request.set_base_version(new_version - 1);
+    request.set_new_version(new_version);
+    request.set_commit_time(time(nullptr));
+    request.set_enable_aggregate_publish(true);
+
+    auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
+    lake_service.publish_version(nullptr, &request, &response, nullptr);
+
+    if (response.failed_tablets_size() == 0 && response.status().status_code() == 0) {
+        std::map<int64_t, TabletMetadataPB> tablet_metas;
+        for (const auto& meta : response.tablet_metas()) {
+            tablet_metas.emplace(meta.first, meta.second);
+        }
+        return tablet_mgr->put_aggregate_tablet_metadata(tablet_metas);
+    } else {
+        return Status::InternalError(fmt::format("failed to publish version. tablet_sz={} txn_id={} new_version={}",
+                                                 tablet_ids.size(), txn_id, new_version));
     }
 }
 
@@ -183,8 +228,14 @@ inline Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t
 }
 
 inline StatusOr<TabletMetadataPtr> TestBase::publish_single_version(int64_t tablet_id, int64_t new_version,
-                                                                    int64_t txn_id) {
-    return TEST_publish_single_version(_tablet_mgr.get(), tablet_id, new_version, txn_id);
+                                                                    int64_t txn_id, bool rebuild_pindex) {
+    return TEST_publish_single_version(_tablet_mgr.get(), tablet_id, new_version, txn_id, rebuild_pindex);
+}
+
+inline Status TestBase::aggregate_publish_version(std::vector<int64_t> tablet_ids, int64_t new_version, int64_t txn_id,
+                                                  bool rebuild_pindex) {
+    return TEST_aggregate_publish_version(_tablet_mgr.get(), std::move(tablet_ids), new_version, txn_id,
+                                          rebuild_pindex);
 }
 
 inline Status TestBase::publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version) {

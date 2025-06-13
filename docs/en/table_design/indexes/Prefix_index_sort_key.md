@@ -1,10 +1,9 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Prefix indexes
-
-## Description
 
 Specify one or more columns to comprise the sort key at table creation. The data rows in the table will be sorted based on the sort key and then stored on the disk.
 

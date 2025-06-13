@@ -39,13 +39,13 @@ private:
     static ColumnPtr generate_null_column(int64_t num_rows) {
         auto nullable_column = NullableColumn::create(Int8Column::create(), NullColumn::create());
         nullable_column->append_nulls(1);
-        return ConstColumn::create(nullable_column, num_rows);
+        return ConstColumn::create(std::move(nullable_column), num_rows);
     }
 
     static ColumnPtr generate_repeat_column(int64_t value, int64_t num_rows) {
         auto ptr = RunTimeColumnType<TYPE_BIGINT>::create();
         ptr->append_datum(Datum(value));
-        return ConstColumn::create(ptr, num_rows);
+        return ConstColumn::create(std::move(ptr), num_rows);
     }
 
     void extend_and_update_columns(ChunkPtr* curr_chunk, ChunkPtr* chunk);
@@ -72,7 +72,7 @@ private:
 
     // column for grouping_id and virtual columns for grouping()/grouping_id() for reusing.
     // It has chunk_size rows.
-    std::vector<std::vector<ColumnPtr>> _grouping_columns;
+    std::vector<Columns> _grouping_columns;
 
     // _grouping_list for gourping_id'value and grouping()/grouping_id()'s value.
     // It's a two dimensional array.

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Overview
@@ -17,13 +17,13 @@ StarRocks supports the catalog feature from v2.3 onwards. Catalogs enable you to
 
 Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
 
-![figure1](../../assets/3.8.1.png)
+![figure1](../../_assets/3.8.1.png)
 
 - **Internal catalog** manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default_catalog](../catalog/default_catalog.md).
 
 - **External catalog** acts like a link to externally managed metastores, which grants StarRocks direct access to external data sources. You can query external data directly with zero data loading or migration. Currently, StarRocks supports the following types of external catalogs:
   - [Hive catalog](../catalog/hive_catalog.md): used to query data from Hive.
-  - [Iceberg catalog](../catalog/iceberg_catalog.md): used to query data from Iceberg.
+  - [Iceberg catalog](./iceberg/iceberg_catalog.md): used to query data from Iceberg.
   - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.
   - [Delta Lake catalog](../catalog/deltalake_catalog.md): used to query data from Delta Lake.
   - [JDBC catalog](../catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
@@ -39,7 +39,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
 ## Access catalog
 
-You can use the [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
+You can use the [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
 
 ## Query data
 

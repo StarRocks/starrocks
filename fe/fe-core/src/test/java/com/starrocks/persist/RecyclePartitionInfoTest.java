@@ -20,12 +20,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.RecyclePartitionInfoV1;
 import com.starrocks.catalog.RecyclePartitionInfoV2;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Type;
@@ -56,7 +53,7 @@ public class RecyclePartitionInfoTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(1L, "p1", new MaterializedIndex(), null);
+        Partition partition = new Partition(1L, 11L, "p1", new MaterializedIndex(), null);
 
         RecycleRangePartitionInfo info1 = new RecycleRangePartitionInfo(11L, 22L,
                 partition, range, dataProperty, (short) 1, false, null);
@@ -72,40 +69,6 @@ public class RecyclePartitionInfoTest {
         Assert.assertEquals(22L, rInfo1.getTableId());
 
         Assert.assertEquals(range, rInfo1.getRange());
-
-        dos.flush();
-        dos.close();
-    }
-
-    @Test
-    public void testSerializationV1() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./RecyclePartitionInfoV1");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        List<Column> columns = Lists.newArrayList(new Column("k1", Type.INT));
-        Range<PartitionKey> range =
-                Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
-                        BoundType.CLOSED,
-                        PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
-                        BoundType.CLOSED);
-        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        DistributionInfo distributionInfo = new RandomDistributionInfo(32);
-        Partition partition = new Partition(1L, "p1", new MaterializedIndex(), distributionInfo);
-
-        RecyclePartitionInfoV1 info1 = new RecyclePartitionInfoV1(11L, 22L,
-                partition, range, dataProperty, (short) 1, false);
-        info1.write(dos);
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        Assert.assertEquals(11L, dis.readLong());
-
-        RecyclePartitionInfoV1 rinfo1 = new RecyclePartitionInfoV1();
-        rinfo1.readFields(dis);
-
-        Assert.assertEquals(22L, rinfo1.getTableId());
 
         dos.flush();
         dos.close();

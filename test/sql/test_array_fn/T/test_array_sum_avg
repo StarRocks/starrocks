@@ -1,0 +1,97 @@
+-- name: test_array_sum_avg
+CREATE TABLE test_array_functions (
+    id INT,
+    array_boolean ARRAY<BOOLEAN>,
+    array_tinyint ARRAY<TINYINT>,
+    array_smallint ARRAY<SMALLINT>,
+    array_int ARRAY<INT>,
+    array_bigint ARRAY<BIGINT>,
+    array_largeint ARRAY<LARGEINT>,
+    array_float ARRAY<FLOAT>,
+    array_double ARRAY<DOUBLE>,
+    array_decimal32 ARRAY<DECIMAL32(9, 2)>,
+    array_decimal64 ARRAY<DECIMAL64(18, 2)>,
+    array_decimal128 ARRAY<DECIMAL128(38, 10)>,
+    array_decimalv2 ARRAY<DECIMALV2>
+) 
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO test_array_functions VALUES
+(1, [true, false, true], [1, 2, 3], [100, 200, 300], [10, 20, 30], [1000, 2000, 3000], 
+ [9223372036854775806, 9223372036854775807], [1.5, 2.5, 3.5], [2.34, 1.23, 3.45], 
+ [12345.67, 45678.90], [1234567890.12, 987654321.12], [12345678901234567890.1234567890, 9876543210987654321.1234567890], 
+ [12345.67, 67890.12]),
+(2, [false, true], [4, 5], [400, 500], [40, 50], [4000, 5000], 
+ [9223372036854775805, 9223372036854775804], [4.5, 5.5], [4.56, 5.67], 
+ [56789.01, 67890.12], [2345678901.23, 3456789012.34], [456789123456789123.1234567890, 789123456789012345.1234567890], 
+ [34567.89, 23456.78]),
+(3, [true, true], [6, 7], [600, 700], [60, 70], [6000, 7000], 
+ [9223372036854775803, 9223372036854775802], [6.5, 7.5], [6.78, 7.89], 
+ [78901.12, 12345.67], [987654321.12, 1234567890.12], [9876543210987654321.1234567890, 12345678901234567890.1234567890], 
+ [78901.34, 12345.67]),
+(4, [false], [8], [800], [80], [8000], 
+ [9223372036854775801], [8.5], [8.90], 
+ [12345.67], [6789012345.67], [7891234567890123456.1234567890], 
+ [45678.90]),
+(5, [true, false, true], [9, 10, 11], [900, 1000, 1100], [90, 100, 110], [9000, 10000, 11000], 
+ [9223372036854775800, 9223372036854775799, 9223372036854775798], [9.5, 10.5, 11.5], [9.12, 10.34, 11.56], 
+ [45678.12, 23456.34, 78901.56], [3456789012.45, 2345678901.23, 1234567890.12], 
+ [1234567890123456789.1234567890, 987654321098765432.1234567890, 456789123456789123.1234567890], 
+ [56789.12, 23456.34, 78901.56]),
+(6, [false, false], [12, 13], [1200, 1300], [120, 130], [12000, 13000], 
+ [9223372036854775797, 9223372036854775796], [12.5, 13.5], [12.34, 13.45], 
+ [1234.56, 1234.56], [123456.78, 123456.78], [1234567890.1234567890, 1234567890.1234567890], 
+ [1234.56, 1234.56]),
+(7, [true], [14], [1400], [140], [14000], 
+ [9223372036854775795], [14.5], [14.67], 
+ [23456.78], [345678901.23], [9876543210123456789.9876543210], 
+ [12345.67]),
+(8, [false, true, false], [15, 16, 17], [1500, 1600, 1700], [150, 160, 170], [15000, 16000, 17000], 
+ [9223372036854775794, 9223372036854775793, 9223372036854775792], [15.5, 16.5, 17.5], [15.34, 16.45, 17.56], 
+ [12345.67, 67890.12, 45678.90], [987654321.12, 123123123.45, 1234567890.12], 
+ [12345678901234567890.1234567890, 456789123456789123.1234567890, 9876543210987654321.1234567890], 
+ [67890.12, 78901.34, 12345.67]),
+(9, [true, true, false], [18, 19, 20], [1800, 1900, 2000], [180, 190, 200], [18000, 19000, 20000], 
+ [9223372036854775791, 9223372036854775790, 9223372036854775789], [18.5, 19.5, 20.5], [18.67, 19.78, 20.89], 
+ [56789.01, 67890.12, 78901.34], [1234567890.12, 2345678901.23, 3456789012.34], 
+ [9876543210987654321.1234567890, 12345678901234567890.1234567890, 456789123456789123.1234567890], 
+ [34567.89, 45678.90, 12345.67]),
+(10, [false, true, false], [21, 22, 23], [2100, 2200, 2300], [210, 220, 230], [21000, 22000, 23000], 
+ [9223372036854775788, 9223372036854775787, 9223372036854775786], [21.5, 22.5, 23.5], [21.23, 22.34, 23.45], 
+ [1234.56, 4567.89, 6789.01], [345678901.23, 1234567890.12, 987654321.12], 
+ [456789123456789123.1234567890, 12345678901234567890.1234567890, 9876543210987654321.1234567890], 
+ [1234.56, 4567.89, 6789.01]);
+
+SELECT 
+    id, 
+    array_sum(array_boolean) AS sum_boolean, 
+    array_sum(array_tinyint) AS sum_tinyint, 
+    array_sum(array_smallint) AS sum_smallint, 
+    array_sum(array_int) AS sum_int, 
+    array_sum(array_bigint) AS sum_bigint, 
+    array_sum(array_largeint) AS sum_largeint, 
+    array_sum(array_float) AS sum_float, 
+    array_sum(array_double) AS sum_double, 
+    array_sum(array_decimal32) AS sum_decimal32, 
+    array_sum(array_decimal64) AS sum_decimal64, 
+    array_sum(array_decimal128) AS sum_decimal128, 
+    array_sum(array_decimalv2) AS sum_decimalv2
+FROM test_array_functions;
+
+SELECT 
+    id, 
+    array_avg(array_boolean) AS avg_boolean, 
+    array_avg(array_tinyint) AS avg_tinyint, 
+    array_avg(array_smallint) AS avg_smallint, 
+    array_avg(array_int) AS avg_int, 
+    array_avg(array_bigint) AS avg_bigint, 
+    array_avg(array_largeint) AS avg_largeint, 
+    array_avg(array_float) AS avg_float, 
+    array_avg(array_double) AS avg_double, 
+    array_avg(array_decimal32) AS avg_decimal32, 
+    array_avg(array_decimal64) AS avg_decimal64, 
+    array_avg(array_decimal128) AS avg_decimal128, 
+    array_avg(array_decimalv2) AS avg_decimalv2
+FROM test_array_functions;

@@ -113,4 +113,8 @@ private:
 #endif
 };
 
+#define DISK_ACQUIRE_ERROR(acquire_size, dir)                                                                      \
+    Status::RuntimeError(fmt::format("acquire size error: dir {} try acquire:{} usage:{} capacity:{}", dir->dir(), \
+                                     acquire_size, dir->get_current_size(), dir->get_max_size()))
+
 } // namespace starrocks::spill

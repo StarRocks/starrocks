@@ -9,15 +9,12 @@ PARTITION BY RANGE(k1) (
 )
 DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:
-[]
 -- !result
 INSERT INTO t0 VALUES('2023-12-31', 0),('2024-01-01', 1),('2024-01-31', 2),('2024-02-02', 3),('2024-03-03', 4);
 -- result:
-[]
 -- !result
 ALTER TABLE t0 DROP PARTITION p1;
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -28,7 +25,6 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 RECOVER PARTITION p1 FROM t0;
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -40,7 +36,6 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 INSERT INTO t0 VALUES('2023-12-01', 10);
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -53,7 +48,6 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 ALTER TABLE t0 DROP PARTITION p2 FORCE;
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -93,15 +87,12 @@ PARTITION p20240405 VALUES [('2024-04-05'), ('2024-04-06'))
 )
 DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:
-[]
 -- !result
 INSERT INTO t0 VALUES('2024-04-01', 0),('2024-04-02', 1),('2024-04-03', 2),('2024-04-04', 3),('2024-04-05', 4);
 -- result:
-[]
 -- !result
 ALTER TABLE t0 DROP PARTITIONS IF EXISTS START("2024-04-01") END("2024-04-03") EVERY (INTERVAL 1 DAY);
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -111,11 +102,9 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 RECOVER PARTITION p20240401 FROM t0;
 -- result:
-[]
 -- !result
 RECOVER PARTITION p20240402 FROM t0;
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -127,7 +116,6 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 INSERT INTO t0 VALUES('2024-04-01', 10);
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -140,7 +128,6 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 ALTER TABLE t0 DROP PARTITIONS IF EXISTS START("2024-04-01") END("2024-04-03") EVERY (INTERVAL 1 DAY) FORCE;
 -- result:
-[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -181,15 +168,12 @@ PARTITION BY LIST(k1) (
 )
 DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:
-[]
 -- !result
 INSERT INTO t1 VALUES('beijing', 1),('shanghai', 2),('shanghai', 3),('guangzhou', 4),('shenzhen', 5),('jinan', 6),('hefei', 7);
 -- result:
-[]
 -- !result
 ALTER TABLE t1 DROP PARTITION p1;
 -- result:
-[]
 -- !result
 SELECT * FROM t1 ORDER BY k1;
 -- result:
@@ -204,7 +188,6 @@ E: (1064, 'Does not support recover list partition')
 -- !result
 ALTER TABLE t1 DROP PARTITION p2 FORCE;
 -- result:
-[]
 -- !result
 SELECT * FROM t1 ORDER BY k1;
 -- result:

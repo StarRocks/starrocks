@@ -16,9 +16,13 @@
 
 #include <glog/logging.h>
 
+#include <cstring>
+
+#include "util/hash_util.hpp"
+
 namespace starrocks::parquet {
 
-CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type codec) {
+CompressionTypePB ParquetUtils::convert_compression_codec(tparquet::CompressionCodec::type codec) {
     switch (codec) {
     case tparquet::CompressionCodec::UNCOMPRESSED:
         return NO_COMPRESSION;
@@ -35,6 +39,8 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type cod
         return LZO;
     case tparquet::CompressionCodec::BROTLI:
         return BROTLI;
+    case tparquet::CompressionCodec::LZ4_RAW:
+        return LZ4;
     default:
         return UNKNOWN_COMPRESSION;
     }
@@ -44,7 +50,7 @@ int decimal_precision_to_byte_count_inner(int precision) {
     return std::ceil((std::log(std::pow(10, precision) - 1) / std::log(2) + 1) / 8);
 }
 
-int decimal_precision_to_byte_count(int precision) {
+int ParquetUtils::decimal_precision_to_byte_count(int precision) {
     DCHECK(precision > 0 && precision <= 38);
     static std::array<int, 39> table = {
             0,
@@ -89,6 +95,60 @@ int decimal_precision_to_byte_count(int precision) {
     };
 
     return table[precision];
+}
+
+int64_t ParquetUtils::get_column_start_offset(const tparquet::ColumnMetaData& column) {
+    int64_t offset = column.data_page_offset;
+    if (column.__isset.index_page_offset) {
+        offset = std::min(offset, column.index_page_offset);
+    }
+    if (column.__isset.dictionary_page_offset) {
+        offset = std::min(offset, column.dictionary_page_offset);
+    }
+    return offset;
+}
+
+int64_t ParquetUtils::get_row_group_start_offset(const tparquet::RowGroup& row_group) {
+    const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
+    int64_t offset = get_column_start_offset(first_column);
+
+    if (row_group.__isset.file_offset) {
+        offset = std::min(offset, row_group.file_offset);
+    }
+    return offset;
+}
+
+int64_t ParquetUtils::get_row_group_end_offset(const tparquet::RowGroup& row_group) {
+    // following computation is not correct. `total_compressed_size` means compressed size of all columns
+    // but between columns there could be holes, which means end offset inaccurate.
+    // if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
+    //     return row_group.file_offset + row_group.total_compressed_size;
+    // }
+    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
+    return get_column_start_offset(last_column) + last_column.total_compressed_size;
+}
+
+std::string ParquetUtils::get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
+                                             uint64_t file_size) {
+    std::string key;
+    key.resize(14);
+    char* data = key.data();
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    const std::string& prefix = cache_key_prefix[type];
+    memcpy(data + 8, prefix.data(), prefix.size());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (modification_time > 0) {
+        uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+    return key;
 }
 
 } // namespace starrocks::parquet

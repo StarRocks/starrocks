@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Flink connector 版本发布
@@ -28,11 +28,13 @@ displayed_sidebar: "Chinese"
 
 **版本要求：**
 
-| Connector | Flink       | StarRocks  | Java | Scala      |
-| --------- | ----------- | ---------- | ---- | ---------- |
-| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
-| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
-| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 及以上     | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -41,6 +43,48 @@ displayed_sidebar: "Chinese"
 ## 发布记录
 
 ### 1.2
+
+## 版本 1.2.11
+
+发布日期：2025 年 6 月 3 日
+
+**新增特性**
+
+- 支持对 CSV 格式使用 LZ4 压缩。[#408](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/408)
+- 增加对 Flink 1.20 的支持。[#409](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/409)
+
+**功能优化**
+
+- 新增选项用于禁用将 JSON 包装为 JSON 数组的行为。[#344](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/344)
+- 升级 FastJSON 以修复安全漏洞 CVE-2022-25845。[#394](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/394)
+- 移除警告日志中的数据行指标，以避免在日志中暴露 Payload 信息。[#420](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/420)
+
+**问题修复**
+
+- StarRocksDynamicTableSource 的 Shadow Clone 导致下推结果错误的问题（修复后改为使用深拷贝）。[#421](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/421)
+
+#### 1.2.10
+
+**新增特性**
+
+- 支持读取 JSON 列。[#334](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/334)
+- 支持读取 ARRAY、STRUCT 和 MAP 列。[#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+- 支持在使用 JSON 格式导入数据时进行 LZ4 压缩。[#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
+- 支持 Flink 1.19。[#379](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/379)
+
+**功能优化**
+
+- 支持配置 Socket 超时时间。[#319](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/319)
+- Stream Load 事务接口支持异步 `prepare` 和 `commit` 操作。[#328](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/328)
+- 支持将 StarRocks 表中的部分列映射到 Flink 源表。[#352](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/352)
+- 支持在使用 Stream Load 事务接口时指定 Warehouse。[#361](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/361)
+
+**问题修复**
+
+修复了如下问题：
+
+- `StarRocksDynamicLookupFunction` 中的 `StarRocksSourceBeReader` 在数据读取完成后未关闭。[#351](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/351)
+- 将空 JSON 字符串导入到 JSON 列时会抛出异常。[#380](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/380)
 
 #### 1.2.9
 

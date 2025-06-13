@@ -15,18 +15,23 @@
 #include <type_traits>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/runtime_filter.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
+#include "storage/olap_type_infra.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
+#include "types/logical_type.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
 template <LogicalType field_type, typename ItemSet>
-class ColumnInPredicate : public ColumnPredicate {
+class ColumnInPredicate final : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     static_assert(std::is_same_v<ValueType, typename ItemSet::value_type>);
 
@@ -192,7 +197,7 @@ private:
 
 // Template specialization for binary column
 template <LogicalType field_type>
-class BinaryColumnInPredicate : public ColumnPredicate {
+class BinaryColumnInPredicate final : public ColumnPredicate {
 public:
     BinaryColumnInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
@@ -360,9 +365,223 @@ public:
         return true;
     }
 
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "((columnId=" << _column_id << ")IN(";
+        int i = 0;
+        for (auto& item : _zero_padded_strs) {
+            if (i++ != 0) {
+                ss << ",";
+            }
+            ss << this->type_info()->to_string(&item);
+        }
+        ss << "))";
+        return ss.str();
+    }
+
 private:
     std::vector<std::string> _zero_padded_strs;
     ItemHashSet<Slice> _slices;
+};
+
+class DictionaryCodeInPredicate final : public ColumnPredicate {
+private:
+    enum LogicOp { ASSIGN, AND, OR };
+
+public:
+    DictionaryCodeInPredicate(const TypeInfoPtr& type_info, ColumnId id, const std::vector<int32_t>& operands,
+                              size_t size)
+            : ColumnPredicate(type_info, id), _bit_mask(size) {
+        for (auto item : operands) {
+            DCHECK(item < size);
+            _bit_mask[item] = 1;
+        }
+    }
+
+    ~DictionaryCodeInPredicate() override = default;
+
+    template <LogicOp Op>
+    inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+        const Int32Column* dict_code_column = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
+        const auto& data = dict_code_column->get_data();
+        Filter filter(to - from, 1);
+
+        if (column->has_null()) {
+            const NullColumn* null_column = down_cast<const NullableColumn*>(column)->null_column().get();
+            const auto& null_data = null_column->get_data();
+            for (auto i = from; i < to; i++) {
+                auto index = data[i] >= _bit_mask.size() ? 0 : data[i];
+                filter[i - from] = (!null_data[i]) & _bit_mask[index];
+            }
+        } else {
+            for (auto i = from; i < to; i++) {
+                filter[i - from] = _bit_mask[data[i]];
+            }
+        }
+
+        for (auto i = from; i < to; i++) {
+            if constexpr (Op == ASSIGN) {
+                sel[i] = filter[i - from];
+            } else if constexpr (Op == AND) {
+                sel[i] &= filter[i - from];
+            } else {
+                sel[i] |= filter[i - from];
+            }
+        }
+    }
+
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ASSIGN>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<AND>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<OR>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    bool can_vectorized() const override { return false; }
+
+    PredicateType type() const override { return PredicateType::kInList; }
+
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override {
+        const auto to_type = target_type_info->type();
+        if (to_type == LogicalType::TYPE_INT) {
+            *output = this;
+            return Status::OK();
+        }
+        CHECK(false) << "Not support, from_type=" << LogicalType::TYPE_INT << ", to_type=" << to_type;
+        return Status::OK();
+    }
+
+private:
+    std::vector<uint8_t> _bit_mask;
+};
+
+template <LogicalType LT>
+class BitsetInPredicate final : public ColumnPredicate {
+public:
+    using CppType = typename Bitset<LT>::CppType;
+
+    BitsetInPredicate(const TypeInfoPtr& type_info, ColumnId id, const Bitset<LT>& bitset)
+            : ColumnPredicate(type_info, id), _bitset(bitset) {}
+    ~BitsetInPredicate() override = default;
+
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        _t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        _t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        _t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+        auto* v = reinterpret_cast<const CppType*>(column->raw_data());
+
+        uint16_t new_size = 0;
+        if (!column->has_null()) {
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                sel[new_size] = data_idx;
+                new_size += _bitset.template contains<true /*CheckRange*/>(v[data_idx], true);
+            }
+        } else {
+            /* must use uint8_t* to make vectorized effect */
+            const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                sel[new_size] = data_idx;
+                new_size += _bitset.template contains<true /*CheckRange*/>(v[data_idx], null_data[data_idx] == 0);
+            }
+        }
+        return new_size;
+    }
+
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& min = detail.min_or_null_value();
+        const auto& max = detail.max_value();
+
+        if (min.is_null() && max.is_null()) {
+            return false;
+        }
+
+        const auto min_value = min.is_null() ? _bitset.min_value() : min.get<CppType>();
+        const auto max_value = max.is_null() ? _bitset.max_value() : max.get<CppType>();
+
+        return _bitset.contains_range(min_value, max_value);
+    }
+
+    bool support_bitmap_filter() const override { return false; }
+    bool support_original_bloom_filter() const override { return false; }
+
+    PredicateType type() const override { return PredicateType::kInList; }
+    bool can_vectorized() const override { return true; }
+
+    std::vector<Datum> values() const override {
+        std::vector<Datum> ret;
+        auto value = Bitset<LT>::to_numeric(_bitset.min_value());
+        const auto max_value = Bitset<LT>::to_numeric(_bitset.max_value());
+        for (; value <= max_value; ++value) {
+            if (_bitset.template contains<false /*CheckRange*/>(CppType{value}, true)) {
+                ret.emplace_back(CppType{value});
+            }
+        }
+        return ret;
+    }
+
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override {
+        const auto to_type = target_type_info->type();
+        if (to_type == LT) {
+            *output = this;
+            return Status::OK();
+        }
+        DCHECK(false) << fmt::format("Not support convert from type [{}] to type [{}]", LT, to_type);
+        return Status::NotSupported(fmt::format("Not support convert from type [{}] to type [{}]", LT, to_type));
+    }
+
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "BitsetInPredicate("                  //
+           << "columnId=" << _column_id             //
+           << ", min_value=" << _bitset.min_value() //
+           << ", max_value=" << _bitset.max_value() //
+           << ")";
+        return ss.str();
+    }
+
+private:
+    template <typename Op>
+    inline void _t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+        auto* v = reinterpret_cast<const CppType*>(column->raw_data());
+        if (!column->has_null()) {
+            for (size_t i = from; i < to; i++) {
+                const uint8_t res = _bitset.template contains<true /*CheckRange*/>(v[i], true);
+                sel[i] = Op::apply(sel[i], res);
+            }
+        } else {
+            const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
+            for (size_t i = from; i < to; i++) {
+                const uint8_t res = _bitset.template contains<true /*CheckRange*/>(v[i], null_data[i] == 0);
+                sel[i] = Op::apply(sel[i], res);
+            }
+        }
+    }
+
+    Bitset<LT> _bitset;
 };
 
 template <template <typename, size_t...> typename Set, size_t... Args>
@@ -506,5 +725,76 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type_info, ColumnId 
         return new_column_in_predicate_small(type_info, id, strs);
     }
 }
+
+template <template <typename, size_t...> typename Set, size_t... Args>
+ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, ColumnId id,
+                                                 const std::vector<Datum>& operands) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                if constexpr (lt_is_string<LT>) {
+                    std::vector<std::string> strings;
+                    strings.reserve(operands.size());
+                    for (const auto& v : operands) {
+                        strings.emplace_back(v.get_slice().to_string());
+                    }
+                    return new BinaryColumnInPredicate<LT>(type_info, id, std::move(strings));
+                } else {
+                    using SetType = Set<typename CppTypeTraits<LT>::CppType, (Args)...>;
+                    SetType value_set = predicate_internal::datums_to_set<LT>(operands);
+                    return new ColumnInPredicate<LT, SetType>(type_info, id, std::move(value_set));
+                }
+            });
+}
+
+ColumnPredicate* new_column_in_predicate_small(const TypeInfoPtr& type_info, ColumnId id,
+                                               const std::vector<Datum>& operands) {
+    if (operands.size() == 3) {
+        return new_column_in_predicate_generic<ArraySet, 3>(type_info, id, operands);
+    } else if (operands.size() == 2) {
+        return new_column_in_predicate_generic<ArraySet, 2>(type_info, id, operands);
+    } else if (operands.size() == 1) {
+        return new_column_in_predicate_generic<ArraySet, 1>(type_info, id, operands);
+    }
+    CHECK(false) << "unreachable path";
+    return nullptr;
+}
+
+ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id,
+                                                    const std::vector<Datum>& operands) {
+    if (operands.size() > 3) {
+        return new_column_in_predicate_generic<ItemHashSet>(type_info, id, operands);
+    } else {
+        return new_column_in_predicate_small(type_info, id, operands);
+    }
+}
+
+ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
+                                                  const std::vector<int32_t>& operands, size_t size) {
+    DCHECK(is_integer_type(type->type()));
+    if (operands.size() <= 3 || size > 1024) {
+        std::vector<std::string> str_codes;
+        str_codes.reserve(operands.size());
+        for (int code : operands) {
+            str_codes.emplace_back(std::to_string(code));
+        }
+        return new_column_in_predicate(type, id, str_codes);
+    } else {
+        return new DictionaryCodeInPredicate(type, id, operands, size);
+    }
+}
+
+template <LogicalType LT>
+ColumnPredicate* new_bitset_in_predicate(const TypeInfoPtr& type_info, ColumnId id, const Bitset<LT>& bitset) {
+    return new BitsetInPredicate<LT>(type_info, id, bitset);
+}
+
+#define InstantiateNewBitsetInPredicate(LT)                                                          \
+    template ColumnPredicate* new_bitset_in_predicate<LT>(const TypeInfoPtr& type_info, ColumnId id, \
+                                                          const Bitset<LT>& bitset);
+
+APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(InstantiateNewBitsetInPredicate)
+
+#undef InstantiateRuntimeFilter
 
 } //namespace starrocks

@@ -254,3 +254,66 @@ select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), 
 select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;
 
 drop materialized view mv0;
+
+--- test simple case
+CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
+select LO_ORDERDATE, sum(LO_REVENUE), count(LO_REVENUE), sum(lo_suppkey), count(lo_suppkey), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
+from lineorder l group by LO_ORDERDATE;
+refresh materialized view mv0 with sync mode;
+
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1;", "mv0")
+
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE),  avg(LO_REVENUE), avg(lo_suppkey), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;
+
+-- test push down with decimal types
+CREATE TABLE `test_pt8` (
+  `id` bigint(20) NULL COMMENT "id",
+  `pt` date NOT NULL COMMENT "",
+  `gmv` bigint(20) NULL COMMENT "gmv",
+  `gmv2` bigint(20) NULL COMMENT "gmv2"
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', pt)
+DISTRIBUTED BY HASH(`pt`)
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into test_pt8 values(1,'20241126',1,2);
+
+CREATE TABLE `test_pt9` (
+  `id` bigint(20) NULL COMMENT "id",
+  `pt` date NOT NULL COMMENT "",
+  `name` varchar(20) NULL COMMENT "gmv"
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', pt)
+DISTRIBUTED BY HASH(`pt`)
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into test_pt9 values(1,'20241126','a');
+
+CREATE MATERIALIZED VIEW `test_mv1` 
+PARTITION BY (`pt`)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+REFRESH DEFERRED ASYNC START("2024-11-22 17:34:45") EVERY(INTERVAL 1 MINUTE)
+PROPERTIES (
+    "query_rewrite_consistency" = "LOOSE",
+    "replication_num" = "1"
+)
+AS
+SELECT  `id`,`pt`,SUM((`gmv` + `gmv2`) * 0.01) AS `sum_channel_direct_indirect_gmv`
+FROM `test_pt8`
+GROUP BY  `id`,`pt`;
+REFRESH MATERIALIZED VIEW `test_mv1` WITH SYNC MODE;
+
+function: check_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
+SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');

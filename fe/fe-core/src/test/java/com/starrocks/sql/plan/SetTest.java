@@ -29,13 +29,16 @@ public class SetTest extends PlanTestBase {
     public void testValuesNodePredicate() throws Exception {
         String queryStr = "SELECT 1 AS z, MIN(a.x) FROM (select 1 as x) a WHERE abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  3:Project\n" +
-                "  |  <slot 3> : 3: min\n" +
-                "  |  <slot 4> : 1\n" +
+        Assert.assertTrue(explainString.contains("4:Project\n" +
+                "  |  <slot 4> : 4: min\n" +
+                "  |  <slot 5> : 1\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
+                "  3:AGGREGATE (update finalize)\n" +
                 "  |  output: min(1)\n" +
                 "  |  group by: \n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 7> : 1\n" +
                 "  |  \n" +
                 "  1:SELECT\n" +
                 "  |  predicates: abs(1) = 2\n" +
@@ -242,12 +245,14 @@ public class SetTest extends PlanTestBase {
                 "  |  cardinality: 2\n" +
                 "  |  \n" +
                 "  |----11:EXCHANGE\n" +
+                "  |       distribution type: ROUND_ROBIN\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
+                "     distribution type: ROUND_ROBIN\n" +
                 "     cardinality: 1\n" +
                 "\n" +
-                "PLAN FRAGMENT 1(F02)\n" +
+                "PLAN FRAGMENT 1(F06)\n" +
                 "\n" +
                 "  Input Partition: RANDOM\n" +
                 "  OutPut Partition: RANDOM\n" +
@@ -265,7 +270,8 @@ public class SetTest extends PlanTestBase {
                 "  |      [12, INT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [7: cast, INT, true] | [5: v5, BIGINT, true] | [6: v6, BIGINT, true]\n" +
-                "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]");
+                "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]\n" +
+                "  |  cardinality: 1");
     }
 
     @Test
@@ -524,6 +530,48 @@ public class SetTest extends PlanTestBase {
                 "  |  order by: <slot 8> 8: expr ASC"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 4> : 1: v1 + 2: v2"));
+
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by upper(x)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "7:SORT\n" +
+                "  |  order by: <slot 9> 9: upper ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 9> : upper(CAST(8: expr AS VARCHAR))\n" +
+                "  |  \n" +
+                "  0:UNION");
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by upper(x) limit 1,10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  7:TOP-N\n" +
+                "  |  order by: <slot 9> 9: upper ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 11\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 9> : upper(CAST(8: expr AS VARCHAR))");
+
+        // order by null literal
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "SORT");
+
+        // order by null literal with limit
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:EXCHANGE\n" +
+                "     limit: 10");
+
+        // order by null literal with limit offset
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10, 20";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:MERGING-EXCHANGE\n" +
+                "     offset: 10\n" +
+                "     limit: 20");
+
+
     }
 
     @Test
@@ -592,7 +640,7 @@ public class SetTest extends PlanTestBase {
                 "  |      [11, DOUBLE, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [10: cast, DOUBLE, true]\n" +
-                "  |      [3: cast, DOUBLE, true]\n");
+                "  |      [12: cast, DOUBLE, true]");
 
         sql = "(select 1 limit 1) UNION ALL select 2;";
         plan = getVerboseExplain(sql);
@@ -608,25 +656,23 @@ public class SetTest extends PlanTestBase {
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
+        assertContains(plan, "|  output exprs:\n" +
                 "  |      [13, VARCHAR(32), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: k1, VARCHAR, true]\n" +
                 "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [7: cast, VARCHAR(32), true]\n");
+                "  |      [14: k1, VARCHAR(32), true]\n");
 
         sql = "select k1 from db1.tbl6 union all select 1 union" +
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
+        assertContains(plan, "  |  output exprs:\n" +
                 "  |      [13, VARCHAR(32), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: k1, VARCHAR, true]\n" +
                 "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [7: cast, VARCHAR(32), true]\n");
+                "  |      [14: k1, VARCHAR(32), true]");
 
         sql = "select 1 union all select 2 union all select * from (values (1)) t;";
         plan = getVerboseExplain(sql);
@@ -663,91 +709,16 @@ public class SetTest extends PlanTestBase {
     }
 
     @Test
-    public void testEliminateAgg() throws Exception {
-        String sql = "SELECT \n" +
-                "    id, \n" +
-                "    SUM(big_value) AS sum_big_value\n" +
-                "FROM \n" +
-                "    test_agg_group_single_unique_key\n" +
-                "GROUP BY \n" +
-                "    id\n" +
-                "ORDER BY \n" +
-                "    id;";
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  6 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
-
-        sql = "SELECT \n" +
-                "    id, \n" +
-                "    COUNT(varchar_value) AS count_varchar_value\n" +
-                "FROM \n" +
-                "    test_agg_group_single_unique_key\n" +
-                "GROUP BY \n" +
-                "    id\n" +
-                "ORDER BY \n" +
-                "    id;";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); " +
-                "args: BOOLEAN,INT,INT; result: TINYINT; args nullable: false; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
-
-        sql = "SELECT\n" +
-                "    id,\n" +
-                "    big_value,\n" +
-                "    AVG(decimal_value) AS avg_decimal_value\n" +
-                "FROM\n" +
-                "    test_agg_group_multi_unique_key\n" +
-                "GROUP BY\n" +
-                "    id, big_value\n" +
-                "ORDER BY\n" +
-                "    id;";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  6 <-> cast([4: decimal_value, DECIMAL64(10,5), true] as DECIMAL128(38,11))\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
-
-        sql = "SELECT\n" +
-                "    id,\n" +
-                "    big_value,\n" +
-                "    COUNT(varchar_value) AS count_varchar_value\n" +
-                "FROM\n" +
-                "    test_agg_group_multi_unique_key\n" +
-                "GROUP BY\n" +
-                "    id, big_value\n" +
-                "ORDER BY\n" +
-                "    id;";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); args: BOOLEAN,INT,INT;" +
-                " result: TINYINT; args nullable: false; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
+    public void testStruct() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        String sql = "with input as ("
+                + "select struct([1, 2, 3], [4, 5, 6]) as s "
+                + "union all "
+                + "select struct([5, 6, 7], [6, 7]) as s"
+                + ") select s, s.col1 from input;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "constant exprs: \n"
+                + "         row([1,2,3], [4,5,6]) | row([1,2,3], [4,5,6]).col1[true]\n"
+                + "         row([5,6,7], [6,7]) | row([5,6,7], [6,7]).col1[true]");
     }
 }

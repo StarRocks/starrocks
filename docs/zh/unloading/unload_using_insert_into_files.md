@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 INSERT INTO FILES 导出数据
@@ -12,7 +12,7 @@ displayed_sidebar: "Chinese"
 
 > **说明**
 >
-> 使用 INSERT INTO FILES 导出数据不支持将数据导出至本地文件系统。
+> 使用 INSERT INTO FILES 导出数据不支持将数据直接导出至本地文件系统，但您可以使用 NFS 将数据导出到本地文件。请参阅 [使用 NFS 导出到本地文件](#使用-nfs-导出到本地文件)。
 
 ## 准备工作
 
@@ -55,7 +55,7 @@ VALUES
 
 INSERT INTO FILES 支持将数据导出到单个文件或多个文件。您可以通过为这些文件指定不同的存储路径来进一步分区。
 
-在使用 INSERT INTO FILES 导出数据时，您必须通过设置 `compression` 属性手动设置压缩算法。有关 StarRocks 支持的数据压缩算法，请参阅[数据压缩](../table_design/data_compression.md)。
+在使用 INSERT INTO FILES 导出数据时，您必须通过设置 `compression` 属性手动设置压缩算法。有关数据导出支持的压缩算法，请参阅 [unload_data_param](../sql-reference/sql-functions/table-functions/files.md#unload_data_param)。
 
 ### 导出数据到多个文件
 
@@ -199,7 +199,29 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
+### 使用 NFS 导出到本地文件
+
+如需通过 `file://` 协议访问 NFS 中的文件，需要将同一 NAS 设备作为 NFS 挂载到每个 BE 或 CN 节点的相同目录下。
+
+```SQL
+-- 导出为 CSV 文件。
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/csvfile/', 
+  'format' = 'csv', 
+  'csv.column_separator' = ',', 
+  'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- 导出为 Parquet 文件。
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/parquetfile/',
+   'format' = 'parquet'
+)
+SELECT * FROM sales_records;
+```
+
 ## 另请参阅
 
-- 有关使用 INSERT 的更多说明，请参阅 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。
+- 有关使用 INSERT 的更多说明，请参阅 [SQL 参考 - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。
 - 有关使用 FILES() 的更多说明，请参阅 [SQL 参考 - FILES()](../sql-reference/sql-functions/table-functions/files.md)。

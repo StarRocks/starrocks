@@ -14,8 +14,8 @@
 
 package com.starrocks.udf;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -86,7 +86,7 @@ public class CallStubGeneratorTest {
         assert batchCall != null;
         batchCall.invoke(null, testSize, sum, state, inputs);
 
-        Assert.assertEquals(expect, state.val);
+        Assertions.assertEquals(expect, state.val);
     }
 
     @Test
@@ -118,7 +118,7 @@ public class CallStubGeneratorTest {
         }
 
         batchCall.invoke(null, testSize, concat, state, inputs1, inputs2);
-        Assert.assertEquals(expect, state.val);
+        Assertions.assertEquals(expect, state.val);
     }
 
     public static class ScalarAdd {
@@ -153,7 +153,7 @@ public class CallStubGeneratorTest {
 
         final String[] res = (String[])batchCall.invoke(null, testSize, concat, inputs1, inputs2);
         for (int i = 0; i < testSize; i++) {
-            Assert.assertEquals(expects[i], res[i]);
+            Assertions.assertEquals(expects[i], res[i]);
         }
     }
 }

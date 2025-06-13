@@ -19,13 +19,14 @@
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
+#include "olap_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "util/bloom_filter.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -186,6 +187,25 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
     return nullptr;
 }
 
+template <template <LogicalType> typename Predicate, template <LogicalType> typename BinaryPredicate>
+static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                using CppType = typename CppTypeTraits<LT>::CppType;
+                // ColumnRangeBuilder treats TINYINT and BOOLEAN as INT.
+                constexpr auto MappingLogicalType = LT == TYPE_TINYINT || LT == TYPE_BOOLEAN ? TYPE_INT : LT;
+                using MappingCppType = typename CppTypeTraits<MappingLogicalType>::CppType;
+
+                if constexpr (lt_is_string<LT>) {
+                    return new BinaryPredicate<LT>(type_info, id, operand.get_slice());
+                } else {
+                    const auto value = static_cast<CppType>(operand.get<MappingCppType>());
+                    return new Predicate<LT>(type_info, id, value);
+                }
+            });
+}
+
 // Base class for column predicate
 template <LogicalType field_type, class Eval>
 class ColumnPredicateCmpBase : public ColumnPredicate {
@@ -250,7 +270,7 @@ protected:
 };
 
 template <LogicalType field_type>
-class ColumnGePredicate : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+class ColumnGePredicate final : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GeEval<field_type>>;
@@ -296,7 +316,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnGtPredicate : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+class ColumnGtPredicate final : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GtEval<field_type>>;
@@ -342,7 +362,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnLePredicate : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+class ColumnLePredicate final : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LeEval<field_type>>;
@@ -389,7 +409,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnLtPredicate : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+class ColumnLtPredicate final : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LtEval<field_type>>;
@@ -436,7 +456,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnEqPredicate : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+class ColumnEqPredicate final : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, EqEval<field_type>>;
@@ -495,7 +515,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnNePredicate : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+class ColumnNePredicate final : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, NeEval<field_type>>;
@@ -647,7 +667,7 @@ protected:
 };
 
 template <LogicalType field_type>
-class BinaryColumnEqPredicate : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+class BinaryColumnEqPredicate final : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::equal_to<ValueType>>;
@@ -700,7 +720,7 @@ public:
 };
 
 template <LogicalType field_type>
-class BinaryColumnGePredicate : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+class BinaryColumnGePredicate final : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater_equal<ValueType>>;
@@ -744,7 +764,7 @@ public:
 };
 
 template <LogicalType field_type>
-class BinaryColumnGtPredicate : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+class BinaryColumnGtPredicate final : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater<ValueType>>;
@@ -787,7 +807,7 @@ public:
 };
 
 template <LogicalType field_type>
-class BinaryColumnLtPredicate : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+class BinaryColumnLtPredicate final : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less<ValueType>>;
@@ -831,7 +851,7 @@ public:
 };
 
 template <LogicalType field_type>
-class BinaryColumnLePredicate : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+class BinaryColumnLePredicate final : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less_equal<ValueType>>;
@@ -874,7 +894,7 @@ public:
 };
 
 template <LogicalType field_type>
-class BinaryColumnNePredicate : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+class BinaryColumnNePredicate final : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::not_equal_to<ValueType>>;
@@ -945,6 +965,30 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
     }
 }
 
+ColumnPredicate* new_column_ne_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnNePredicate, BinaryColumnNePredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_eq_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnEqPredicate, BinaryColumnEqPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_lt_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnLtPredicate, BinaryColumnLtPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_le_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnLePredicate, BinaryColumnLePredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_gt_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnGtPredicate, BinaryColumnGtPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_ge_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnGePredicate, BinaryColumnGePredicate>(type_info, id, operand);
+}
+
 std::ostream& operator<<(std::ostream& os, PredicateType p) {
     switch (p) {
     case PredicateType::kUnknown:
@@ -995,6 +1039,9 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
         break;
     case PredicateType::kMap:
         os << "map";
+        break;
+    case PredicateType::kPlaceHolder:
+        os << "placeholder";
         break;
     default:
         CHECK(false) << "unknown predicate " << p;

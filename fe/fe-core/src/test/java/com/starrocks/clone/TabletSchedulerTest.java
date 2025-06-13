@@ -37,7 +37,9 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
@@ -52,6 +54,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
@@ -87,6 +90,7 @@ public class TabletSchedulerTest {
     TabletSchedulerStat tabletSchedulerStat;
     FakeEditLog fakeEditLog;
     LockManager lockManager;
+    VariableMgr variableMgr;
 
     @Before
     public void setup() throws Exception {
@@ -95,6 +99,8 @@ public class TabletSchedulerTest {
         tabletSchedulerStat = new TabletSchedulerStat();
         fakeEditLog = new FakeEditLog();
         lockManager = new LockManager();
+        variableMgr = new VariableMgr();
+
 
         new Expectations() {
             {
@@ -125,6 +131,18 @@ public class TabletSchedulerTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = new ClusterSnapshotMgr();
             }
         };
 
@@ -144,12 +162,12 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table badTable = new Table(3, "mal", Table.TableType.OLAP, new ArrayList<>());
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition badPartition = new Partition(5, "mal", null, null);
-        Partition goodPartition = new Partition(6, "bueno", null, null);
+        Partition badPartition = new Partition(5, 55, "mal", null, null);
+        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
 
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(badDb, new HashSet<>());
+        recycleBin.recycleDatabase(badDb, new HashSet<>(), true);
         recycleBin.recycleTable(goodDB.getId(), badTable, true);
         RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(goodDB.getId(), goodTable.getId(),
                 badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
@@ -167,7 +185,7 @@ public class TabletSchedulerTest {
                     TabletSchedCtx.Type.REPAIR,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
-                    triple.getRight().getId(),
+                    triple.getRight().getDefaultPhysicalPartition().getId(),
                     1,
                     1,
                     System.currentTimeMillis(),
@@ -196,7 +214,7 @@ public class TabletSchedulerTest {
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition goodPartition = new Partition(6, "bueno", null, null);
+        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
 
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
@@ -218,10 +236,10 @@ public class TabletSchedulerTest {
                 Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
-                    locker.lockDatabase(goodDB, LockType.READ);
+                    locker.lockDatabase(goodDB.getId(), LockType.READ);
                     tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
                 } finally {
-                    locker.unLockDatabase(goodDB, LockType.READ);
+                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
                 }
             }
         }, "testAddCtx").start();

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 管理 BE 黑名单
@@ -19,7 +19,7 @@ displayed_sidebar: "Chinese"
 
 ## 添加 BE 节点至黑名单
 
-您可以使用 [ADD BACKEND BLACKLIST](../../sql-reference/sql-statements/Administration/ADD_BACKEND_BLACKLIST.md) 语句手动将一个 BE 节点添加到 BE 黑名单中。您需要在此语句中指定该 BE 节点的 ID。您可以通过执行 [SHOW BACKENDS](../../sql-reference/sql-statements/Administration/SHOW_BACKENDS.md) 语句来获取 BE 节点的 ID。
+您可以使用 [ADD BACKEND BLACKLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/ADD_BACKEND_BLACKLIST.md) 语句手动将一个 BE 节点添加到 BE 黑名单中。您需要在此语句中指定该 BE 节点的 ID。您可以通过执行 [SHOW BACKENDS](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKENDS.md) 语句来获取 BE 节点的 ID。
 
 示例：
 
@@ -36,7 +36,7 @@ ADD BACKEND BLACKLIST 10001;
 
 ## 从黑名单中移除 BE 节点
 
-您可以使用 [DELETE BACKEND BLACKLIST](../../sql-reference/sql-statements/Administration/DELETE_BACKEND_BLACKLIST.md) 语句手动将一个 BE 节点从 BE 黑名单中移除。您同样需要在此语句中指定 BE 节点的 ID。
+您可以使用 [DELETE BACKEND BLACKLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/DELETE_BACKEND_BLACKLIST.md) 语句手动将一个 BE 节点从 BE 黑名单中移除。您同样需要在此语句中指定 BE 节点的 ID。
 
 示例：
 
@@ -46,7 +46,7 @@ DELETE BACKEND BLACKLIST 10001;
 
 ## 查看 BE 黑名单
 
-您可以使用 [SHOW BACKEND BLACKLIST](../../sql-reference/sql-statements/Administration/SHOW_BACKEND_BLACKLIST.md) 语句查看 BE 黑名单中的节点。
+您可以使用 [SHOW BACKEND BLACKLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKEND_BLACKLIST.md) 语句查看 BE 黑名单中的节点。
 
 示例：
 

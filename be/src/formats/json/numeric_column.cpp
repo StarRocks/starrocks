@@ -16,6 +16,8 @@
 
 #include "column/fixed_length_column.h"
 #include "gutil/strings/substitute.h"
+#include "util/numeric_types.h"
+#include "util/simdjson_util.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -30,7 +32,11 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
 #if defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
-    return (from < std::numeric_limits<ToType>::lowest() || from > std::numeric_limits<ToType>::max());
+    // When the value is in the range [2^63, 2^64), FromType is uint64_t. In this case, using check_signed_number_overflow is fine:
+    // - If ToType is int8_t~int64_t, check_signed_number_overflow will return true.
+    // - If ToType is float, double or int128_t, check_signed_number_overflow will return false,
+    //   because the widening conversion branch is hit.
+    return check_signed_number_overflow<FromType, ToType>(from);
     DIAGNOSTIC_POP
 }
 
@@ -87,6 +93,25 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
         return Status::OK();
     }
 
+    case simdjson::ondemand::number_type::big_integer: {
+        auto s = value->raw_json_token();
+        StringParser::ParseResult r;
+        auto in = StringParser::string_to_int<int128_t>(s.data(), s.size(), &r);
+        if (r != StringParser::PARSE_SUCCESS) {
+            auto err_msg = strings::Substitute("Fail to convert big integer. column=$0, value=$1", name, s);
+            return Status::InvalidArgument(err_msg);
+        }
+
+        T out{};
+        if (!checked_cast(in, &out)) {
+            column->append_numbers(&out, sizeof(out));
+        } else {
+            auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
+            return Status::InvalidArgument(err_msg);
+        }
+        return Status::OK();
+    }
+
     case simdjson::ondemand::number_type::floating_point_number: {
         double in = value->get_double();
         T out{};
@@ -107,7 +132,8 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
 template <typename T>
 static Status add_column_with_string_value(FixedLengthColumn<T>* column, const TypeDescriptor& type_desc,
                                            const std::string& name, simdjson::ondemand::value* value) {
-    std::string_view sv = value->get_string();
+    faststring buffer;
+    std::string_view sv = value_get_string_safe(value, &buffer);
 
     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
 

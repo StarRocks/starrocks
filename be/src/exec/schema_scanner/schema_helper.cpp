@@ -15,6 +15,7 @@
 #include "exec/schema_scanner/schema_helper.h"
 
 #include <sstream>
+#include <utility>
 
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
@@ -29,7 +30,7 @@ Status SchemaHelper::_call_rpc(const SchemaScannerState& state,
                                std::function<void(ClientConnection<FrontendServiceClient>&)> callback) {
     DCHECK(state.param);
     SCOPED_TIMER((state.param)->_rpc_timer);
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, callback, state.timeout_ms);
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, std::move(callback), state.timeout_ms);
 }
 
 Status SchemaHelper::get_db_names(const SchemaScannerState& state, const TGetDbsParams& request,
@@ -209,6 +210,59 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
                                          TGetPartitionsMetaResponse* var_result) {
     return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
         client->getPartitionsMeta(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
+                                            TColumnStatsUsageRes* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getColumnStatsUsage(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_analyze_status(const SchemaScannerState& state, const TAnalyzeStatusReq& var_params,
+                                        TAnalyzeStatusRes* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getAnalyzeStatus(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_cluster_snapshots_info(const SchemaScannerState& state, const TClusterSnapshotsRequest& req,
+                                                TClusterSnapshotsResponse* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotsInfo(*res, req); });
+}
+
+Status SchemaHelper::get_cluster_snapshot_jobs_info(const SchemaScannerState& state,
+                                                    const TClusterSnapshotJobsRequest& req,
+                                                    TClusterSnapshotJobsResponse* res) {
+    return _call_rpc(
+            state, [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotJobsInfo(*res, req); });
+}
+
+Status SchemaHelper::get_applicable_roles(const SchemaScannerState& state, const TGetApplicableRolesRequest& req,
+                                          TGetApplicableRolesResponse* res) {
+    return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->getApplicableRoles(*res, req); });
+}
+
+Status SchemaHelper::get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
+                                  TGetKeywordsResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getKeywords(*response, request);
+    });
+}
+
+Status SchemaHelper::get_warehouse_metrics(const SchemaScannerState& state, const TGetWarehouseMetricsRequest& request,
+                                           TGetWarehouseMetricsRespone* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getWarehouseMetrics(*response, request);
+    });
+}
+
+Status SchemaHelper::get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
+                                           TGetWarehouseQueriesResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getWarehouseQueries(*response, request);
     });
 }
 

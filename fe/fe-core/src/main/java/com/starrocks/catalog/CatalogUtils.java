@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -58,7 +57,7 @@ public class CatalogUtils {
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -73,7 +72,8 @@ public class CatalogUtils {
 
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
     }
@@ -116,12 +116,12 @@ public class CatalogUtils {
 
     // Used to temporarily disable some command on lake table and remove later.
     public static void checkIsLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             return;
         }
 
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             return;
         }
@@ -214,21 +214,21 @@ public class CatalogUtils {
         Set<Object> tempSet = new HashSet<>();
         Set<List<Object>> tempMultiSet = new HashSet<>();
         for (Partition partition : tempPartitionList) {
-            if (!listMap.isEmpty()) {
-                listMap.get(partition.getId()).forEach(item -> {
-                    tempSet.add(item.getRealObjectValue());
-                });
-                newListMap.remove(partition.getId());
-            }
-            if (!multiListMap.isEmpty()) {
-                multiListMap.get(partition.getId()).forEach(itemList -> {
-                    List<Object> cur = new ArrayList<>();
-                    itemList.forEach(item -> {
-                        cur.add(item.getRealObjectValue());
-                    });
-                    tempMultiSet.add(cur);
-                });
+            if (listPartitionInfo.isMultiColumnPartition()) {
+                tempMultiSet = multiListMap.get(partition.getId())
+                        .stream()
+                        .map(literalExprs -> literalExprs
+                                .stream()
+                                .map(LiteralExpr::getRealObjectValue)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toSet());
                 newMultiListMap.remove(partition.getId());
+            } else {
+                tempSet = listMap.get(partition.getId())
+                        .stream()
+                        .map(LiteralExpr::getRealObjectValue)
+                        .collect(Collectors.toSet());
+                newListMap.remove(partition.getId());
             }
         }
 
@@ -274,25 +274,15 @@ public class CatalogUtils {
             Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
-                List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getLiteralExprValues().forEach((k, v) -> {
-                    if (partitionIds.contains(k)) {
-                        allLiteralExprValues.addAll(v);
-                    }
-                });
-
+                Set<LiteralExpr> existingValues = listPartitionInfo.getValuesSet(partitionIds);
                 SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
-                    for (LiteralExpr value : allLiteralExprValues) {
-                        if (item.getStringValue().equals(value.getStringValue())) {
-                            throw new DdlException("Duplicate partition value " + item.getStringValue());
-                        }
+                    if (existingValues.contains(item)) {
+                        throw new DdlException("Duplicate partition value " + item.getStringValue());
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
+                int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
                 checkItemValuesValid(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
                         multiItemListPartitionDesc);
@@ -435,7 +425,7 @@ public class CatalogUtils {
         List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
         boolean dataImported = true;
         for (Partition partition : partitions) {
-            if (partition.getVisibleVersion() == 1) {
+            if (partition.getDefaultPhysicalPartition().getVisibleVersion() == 1) {
                 dataImported = false;
                 break;
             }
@@ -454,7 +444,8 @@ public class CatalogUtils {
         // A tablet will be regarded using the 1GB size
         // And also the number will not be larger than the calBucketNumAccordingToBackends()
         long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
-        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
+        // speculateTabletNum may be not accurate, so we need to take the max value of bucketNum and speculateTabletNum
+        bucketNum = (int) Math.max(bucketNum, speculateTabletNum);
         if (bucketNum == 0) {
             bucketNum = 1;
         }

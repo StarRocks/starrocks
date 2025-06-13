@@ -19,12 +19,13 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
-import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregateCompactRequest;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -45,6 +46,8 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -59,6 +62,8 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PUpdateTransactionStateRequest;
+import com.starrocks.proto.PUpdateTransactionStateResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
@@ -87,6 +92,7 @@ import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -106,6 +112,8 @@ import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
@@ -192,8 +200,8 @@ public class MockedBackend {
 
         lakeService = new MockLakeService();
 
-        ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
-        ((MockGenericPool<?>) ClientPool.backendPool).register(this);
+        ((MockGenericPool<?>) ThriftConnectionPool.beHeartbeatPool).register(this);
+        ((MockGenericPool<?>) ThriftConnectionPool.backendPool).register(this);
 
         new MockUp<BrpcProxy>() {
             @Mock
@@ -393,6 +401,11 @@ public class MockedBackend {
         }
 
         @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) {
+            return new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
         public TStatus submit_routine_load_task(List<TRoutineLoadTask> tasks) {
             return new TStatus(TStatusCode.OK);
         }
@@ -525,8 +538,18 @@ public class MockedBackend {
             return null;
         }
 
+        @Override
+        public Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request) {
+            return null;
+        }
+
         public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request) {
+            throw new NotImplementedException("TODO");
         }
     }
 
@@ -543,6 +566,11 @@ public class MockedBackend {
 
         @Override
         public Future<CompactResponse> compact(CompactRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<CompactResponse> aggregateCompact(AggregateCompactRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 
@@ -608,6 +636,11 @@ public class MockedBackend {
 
         @Override
         public Future<VacuumResponse> vacuum(VacuumRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

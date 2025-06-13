@@ -96,14 +96,19 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             Column c = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
-            if (hasCountAgg) {
+
+            if (aggCall.getFnName().equals(FunctionSet.COUNT) || hasCountAgg) {
                 Column copiedColumn = new Column(c);
-                copiedColumn.setIsAllowNull(true);
+                if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                    copiedColumn.setType(Type.BIGINT);
+                }
+                if (hasCountAgg) {
+                    copiedColumn.setIsAllowNull(true);
+                }
                 newScanColumnRefs.put(metaColumn, copiedColumn);
             } else {
                 newScanColumnRefs.put(metaColumn, c);
             }
-
 
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();
@@ -118,8 +123,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     Collections.singletonList(metaColumn), aggFunction);
             newAggCalls.put(kv.getKey(), newAggCall);
         }
-        LogicalMetaScanOperator newMetaScan = new LogicalMetaScanOperator(scanOperator.getTable(),
-                newScanColumnRefs, aggColumnIdToNames);
+        LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
+                .setTable(scanOperator.getTable())
+                .setColRefToColumnMetaMap(newScanColumnRefs)
+                .setAggColumnIdToNames(aggColumnIdToNames).build();
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), newAggCalls);
 

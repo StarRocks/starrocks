@@ -17,9 +17,9 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
-public class IllegalTransactionParameterException extends UserException {
+public class IllegalTransactionParameterException extends StarRocksException {
 
     private static final long serialVersionUID = 1L;
 

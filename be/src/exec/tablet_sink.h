@@ -42,6 +42,7 @@ class AddBatchCounter;
 class NodeChannel;
 class IndexChannel;
 class TabletSinkSender;
+class TableMetrics;
 
 // Write data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.
@@ -99,6 +100,8 @@ public:
     Status reset_epoch(RuntimeState* state);
 
     TabletSinkProfile* ts_profile() const { return _ts_profile; }
+
+    const PLoadChannelProfileConfig& load_channel_profile_config() const { return _load_channel_profile_config; }
 
 private:
     void _prepare_profile(RuntimeState* state);
@@ -170,6 +173,7 @@ private:
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;
     std::string _merge_condition;
+    std::string _encryption_meta;
     TPartialUpdateMode::type _partial_update_mode;
 
     // this is tuple descriptor of destination OLAP table
@@ -183,6 +187,7 @@ private:
     int _num_senders = -1;
     bool _is_lake_table = false;
     bool _write_txn_log = false;
+    bool _enable_data_file_bundling = false;
 
     TKeysType::type _keys_type;
 
@@ -207,7 +212,7 @@ private:
     std::vector<std::unique_ptr<IndexChannel>> _channels;
     std::vector<OlapTablePartition*> _partitions;
     std::unordered_map<int64_t, std::set<int64_t>> _index_id_partition_ids;
-    std::vector<uint32_t> _tablet_indexes;
+    std::vector<uint32_t> _record_hashes;
     // Store the output expr comput result column
     std::unique_ptr<Chunk> _output_chunk;
     bool _open_done{false};
@@ -243,6 +248,7 @@ private:
     std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
     std::vector<std::vector<std::string>> _partition_not_exist_row_values;
     bool _enable_automatic_partition = false;
+    bool _dynamic_overwrite = false;
     bool _has_automatic_partition = false;
     std::atomic<bool> _is_automatic_partition_running = false;
     Status _automatic_partition_status;

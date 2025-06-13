@@ -15,6 +15,7 @@
 #pragma once
 
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 
 namespace starrocks {
@@ -35,14 +36,16 @@ class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
 
-using IndexValueWithVer = std::pair<int64_t, IndexValue>;
-
 class KeyValueMerger {
 public:
-    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder, bool merge_base_level)
-            : _key(std::move(key)), _builder(builder), _merge_base_level(merge_base_level) {}
+    explicit KeyValueMerger(const std::string& key, uint64_t max_rss_rowid, sstable::TableBuilder* builder,
+                            bool merge_base_level)
+            : _key(std::move(key)),
+              _max_rss_rowid(max_rss_rowid),
+              _builder(builder),
+              _merge_base_level(merge_base_level) {}
 
-    Status merge(const std::string& key, const std::string& value);
+    Status merge(const std::string& key, const std::string& value, uint64_t max_rss_rowid);
 
     void finish() { flush(); }
 
@@ -51,6 +54,7 @@ private:
 
 private:
     std::string _key;
+    uint64_t _max_rss_rowid = 0;
     sstable::TableBuilder* _builder;
     std::list<IndexValueWithVer> _index_value_vers;
     // If do merge base level, that means we can delete NullIndexValue items safely.
@@ -88,7 +92,22 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values) override;
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t rowset_id);
+
+    // Use erase with `rowset_id` instead of this one.
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values) override {
+        return Status::NotSupported("LakePersistentIndex::erase not supported");
+    }
+
+    // batch insert delete operations, used when rebuild index.
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |filter| : used for filter keys that need to skip. `True` means need skip.
+    // |version|: version of values
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    Status replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+                        uint32_t rowset_id);
 
     // batch replace
     // |n|: size of key/value array
@@ -130,19 +149,19 @@ public:
     static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
                                         std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
 
+    // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
+    static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
+
+    // Return the files cnt that need to rebuild.
+    static size_t need_rebuild_file_cnt(const TabletMetadataPB& metadata,
+                                        const PersistentIndexSstableMetaPB& sstable_meta);
+
 private:
     Status flush_memtable();
 
     bool is_memtable_full() const;
 
-    // batch get
-    // |keys|: key array as raw buffer
-    // |values|: value array
-    // |key_indexes|: the indexes of keys.
-    // |found_key_indexes|: founded indexes of keys
-    // |version|: version of values
-    Status get_from_immutable_memtable(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
-                                       KeyIndexSet* found_key_indexes, int64_t version) const;
+    bool too_many_rebuild_files() const;
 
     // batch get
     // |n|: size of key/value array
@@ -152,6 +171,9 @@ private:
     // |version|: version of values
     Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
                              int64_t version) const;
+
+    // rebuild delete operation from rowset.
+    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
@@ -166,9 +188,9 @@ private:
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
-    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    size_t _need_rebuild_file_cnt{0};
     // The size of sstables is not expected to be too large.
     // In major compaction, some sstables will be picked to be merged into one.
     // sstables are ordered with the smaller version on the left.

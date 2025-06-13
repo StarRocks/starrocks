@@ -451,3 +451,80 @@ create analyze table t;
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Don't support create analyze job for temporary table.")
 -- !result
+-- name: test_dynamic_temp_table_config @sequential
+create table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+admin set frontend config("enable_experimental_temporary_table"="false");
+-- result:
+-- !result
+create temporary table `tbl1` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+E: (1064, "Getting syntax error. Detail message: FE config 'enable_experimental_temporary_table' is disabled.")
+-- !result
+create temporary table `tbl2` like `t`;
+-- result:
+E: (1064, "Getting syntax error. Detail message: FE config 'enable_experimental_temporary_table' is disabled.")
+-- !result
+create temporary table `tbl3` as select * from `t`;
+-- result:
+E: (1064, "Getting syntax error. Detail message: FE config 'enable_experimental_temporary_table' is disabled.")
+-- !result
+admin set frontend config("enable_experimental_temporary_table"="true");
+-- result:
+-- !result
+create temporary table `tbl1` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create temporary table `tbl2` like `t`;
+-- result:
+-- !result
+create temporary table `tbl3` as select * from `t`;
+-- result:
+-- !result
+-- name: test_drop_table
+create table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create temporary table `t1` like `t`;
+-- result:
+-- !result
+show temporary tables;
+-- result:
+t1
+-- !result
+drop table `t1`;
+-- result:
+-- !result
+show temporary tables;
+-- result:
+-- !result
+create temporary table `t1` like `t`;
+-- result:
+-- !result
+show temporary tables;
+-- result:
+t1
+-- !result
+drop temporary table `t1`;
+-- result:
+-- !result
+show temporary tables;
+-- result:
+-- !result

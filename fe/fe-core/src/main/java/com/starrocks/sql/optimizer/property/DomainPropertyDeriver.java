@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.property;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -23,32 +24,34 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOperator, ScalarOperator>, Void> {
+public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOperator, DomainPropertyDeriver.DomainMessage>, Void> {
 
     public DomainProperty derive(ScalarOperator scalarOperator) {
-        Map<ScalarOperator, ScalarOperator> domainMap = scalarOperator.accept(this, null);
+        Map<ScalarOperator, DomainMessage> domainMap = scalarOperator.accept(this, null);
         Map<ScalarOperator, DomainProperty.DomainWrapper> newMap = domainMap.entrySet().stream()
-                .filter(e -> !e.getValue().equals(ConstantOperator.TRUE))
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> new DomainProperty.DomainWrapper(entry.getValue())));
+                .filter(e -> !e.getValue().predicateDesc.equals(ConstantOperator.TRUE))
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> new DomainProperty.DomainWrapper(entry.getValue().predicateDesc,
+                                entry.getValue().needDeriveRange)));
         return new DomainProperty(newMap);
     }
 
 
     @Override
-    public Map<ScalarOperator, ScalarOperator> visit(ScalarOperator scalarOperator, Void context) {
+    public Map<ScalarOperator, DomainMessage> visit(ScalarOperator scalarOperator, Void context) {
         return Maps.newHashMap();
     }
 
     @Override
-    public Map<ScalarOperator, ScalarOperator> visitBinaryPredicate(BinaryPredicateOperator binaryPredicate, Void context) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
+    public Map<ScalarOperator, DomainMessage> visitBinaryPredicate(BinaryPredicateOperator binaryPredicate, Void context) {
+        Map<ScalarOperator, DomainMessage> domainMap = Maps.newHashMap();
         if (!binaryPredicate.getBinaryType().isEqualOrRange()) {
             return domainMap;
         }
@@ -65,34 +68,32 @@ public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOpera
             }
         }
 
-        Map<ScalarOperator, ScalarOperator> leftExprMap = left.accept(this, context);
-
-        if (!leftExprMap.containsKey(left) || !leftExprMap.get(left).equals(ConstantOperator.TRUE)) {
-            return domainMap;
+        domainMap.put(left, new DomainMessage(binaryPredicate));
+        List<ColumnRefOperator> usedCols = left.getColumnRefs();
+        if (Sets.newHashSet(usedCols).size() == 1 && !domainMap.containsKey(usedCols.get(0))) {
+            domainMap.put(usedCols.get(0), new DomainMessage(binaryPredicate, false));
         }
-
-        domainMap.put(left, binaryPredicate);
         return domainMap;
     }
 
     @Override
-    public Map<ScalarOperator, ScalarOperator> visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
+    public Map<ScalarOperator, DomainMessage> visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+        Map<ScalarOperator, DomainMessage> domainMap = Maps.newHashMap();
         if (predicate.isNot()) {
             return domainMap;
         } else {
             ScalarOperator left = predicate.getChild(0);
             ScalarOperator right = predicate.getChild(1);
-            Map<ScalarOperator, ScalarOperator> leftDomainMap = left.accept(this, context);
-            Map<ScalarOperator, ScalarOperator> rightDomainMap = right.accept(this, context);
+            Map<ScalarOperator, DomainMessage> leftDomainMap = left.accept(this, context);
+            Map<ScalarOperator, DomainMessage> rightDomainMap = right.accept(this, context);
             return predicate.isAnd() ? mergeAndMap(leftDomainMap, rightDomainMap) : mergeOrMap(leftDomainMap, rightDomainMap);
         }
 
     }
 
     @Override
-    public Map<ScalarOperator, ScalarOperator> visitInPredicate(InPredicateOperator predicate, Void context) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
+    public Map<ScalarOperator, DomainMessage> visitInPredicate(InPredicateOperator predicate, Void context) {
+        Map<ScalarOperator, DomainMessage> domainMap = Maps.newHashMap();
         if (predicate.isNotIn()) {
             return domainMap;
         }
@@ -100,72 +101,59 @@ public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOpera
             return domainMap;
         }
         ScalarOperator left = predicate.getChild(0);
-        Map<ScalarOperator, ScalarOperator> leftExprMap = left.accept(this, context);
+        domainMap.put(left, new DomainMessage(predicate));
 
-        if (!leftExprMap.containsKey(left) || !leftExprMap.get(left).equals(ConstantOperator.TRUE)) {
+        List<ColumnRefOperator> usedCols = left.getColumnRefs();
+        if (Sets.newHashSet(usedCols).size() == 1 && !domainMap.containsKey(usedCols.get(0))) {
+            domainMap.put(usedCols.get(0), new DomainMessage(predicate, false));
+        }
+        return domainMap;
+    }
+
+    @Override
+    public Map<ScalarOperator, DomainMessage> visitCall(CallOperator callOperator, Void context) {
+        Map<ScalarOperator, DomainMessage> domainMap = Maps.newHashMap();
+        if (!callOperator.getType().isBoolean()) {
             return domainMap;
         }
-
-        domainMap.put(left, predicate);
-        return domainMap;
-    }
-
-
-
-    @Override
-    public Map<ScalarOperator, ScalarOperator> visitVariableReference(ColumnRefOperator columnRefOperator, Void context) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
-        domainMap.put(columnRefOperator, ConstantOperator.TRUE);
-        return domainMap;
-    }
-
-    @Override
-    public Map<ScalarOperator, ScalarOperator> visitCall(CallOperator callOperator, Void context) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
-        domainMap.put(callOperator, ConstantOperator.TRUE);
-        return domainMap;
-    }
-
-    @Override
-    public Map<ScalarOperator, ScalarOperator> visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
-        ScalarOperator left = predicate.getChild(0);
-        Map<ScalarOperator, ScalarOperator> leftExprMap = left.accept(this, context);
-
-        if (!leftExprMap.containsKey(left) || !leftExprMap.get(left).equals(ConstantOperator.TRUE)) {
-            return domainMap;
+        List<ColumnRefOperator> usedCols = callOperator.getColumnRefs();
+        if (Sets.newHashSet(usedCols).size() == 1) {
+            domainMap.put(usedCols.get(0), new DomainMessage(callOperator, false));
         }
-
-        domainMap.put(left, ConstantOperator.TRUE);
         return domainMap;
     }
 
-
-    private Map<ScalarOperator, ScalarOperator> mergeAndMap(Map<ScalarOperator, ScalarOperator> leftDomainMap,
-                                                                    Map<ScalarOperator, ScalarOperator> rightDomainMap) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
-        for (Map.Entry<ScalarOperator, ScalarOperator> entry : leftDomainMap.entrySet()) {
+    private Map<ScalarOperator, DomainMessage> mergeAndMap(Map<ScalarOperator, DomainMessage> leftDomainMap,
+                                                                    Map<ScalarOperator, DomainMessage> rightDomainMap) {
+        Map<ScalarOperator, DomainMessage> domainMap = Maps.newHashMap();
+        for (Map.Entry<ScalarOperator, DomainMessage> entry : leftDomainMap.entrySet()) {
             if (rightDomainMap.containsKey(entry.getKey())) {
-                domainMap.put(entry.getKey(), andPredicate(entry.getValue(), rightDomainMap.get(entry.getKey())));
+                ScalarOperator andPredicate = andPredicate(entry.getValue().predicateDesc,
+                        rightDomainMap.get(entry.getKey()).predicateDesc);
+                boolean needDeriveRange = entry.getValue().needDeriveRange || rightDomainMap.get(entry.getKey()).needDeriveRange;
+                domainMap.put(entry.getKey(), new DomainMessage(andPredicate, needDeriveRange));
                 rightDomainMap.remove(entry.getKey());
             } else {
                 domainMap.put(entry.getKey(), entry.getValue());
             }
         }
 
-        for (Map.Entry<ScalarOperator, ScalarOperator> entry : rightDomainMap.entrySet()) {
+        for (Map.Entry<ScalarOperator, DomainMessage> entry : rightDomainMap.entrySet()) {
             domainMap.put(entry.getKey(), entry.getValue());
         }
 
         return domainMap;
     }
 
-    private Map<ScalarOperator, ScalarOperator> mergeOrMap(Map<ScalarOperator, ScalarOperator> leftDomainMap,
-                                                           Map<ScalarOperator, ScalarOperator> rightDomainMap) {
-        Map<ScalarOperator, ScalarOperator> domainMap = Maps.newHashMap();
-        for (Map.Entry<ScalarOperator, ScalarOperator> entry : leftDomainMap.entrySet()) {
+    private Map<ScalarOperator, DomainMessage> mergeOrMap(Map<ScalarOperator, DomainMessage> leftDomainMap,
+                                                           Map<ScalarOperator, DomainMessage> rightDomainMap) {
+        Map<ScalarOperator, DomainMessage> domainMap = Maps.newHashMap();
+        for (Map.Entry<ScalarOperator, DomainMessage> entry : leftDomainMap.entrySet()) {
             if (rightDomainMap.containsKey(entry.getKey())) {
-                domainMap.put(entry.getKey(), orPredicate(entry.getValue(), rightDomainMap.get(entry.getKey())));
+                ScalarOperator orPredicate = orPredicate(entry.getValue().predicateDesc,
+                        rightDomainMap.get(entry.getKey()).predicateDesc);
+                boolean needDeriveRange = entry.getValue().needDeriveRange && rightDomainMap.get(entry.getKey()).needDeriveRange;
+                domainMap.put(entry.getKey(), new DomainMessage(orPredicate, needDeriveRange));
                 rightDomainMap.remove(entry.getKey());
             }
         }
@@ -188,6 +176,22 @@ public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOpera
             return ConstantOperator.TRUE;
         } else {
             return new CompoundPredicateOperator(CompoundType.OR, left, right);
+        }
+    }
+
+    public static class DomainMessage {
+
+        private final ScalarOperator predicateDesc;
+
+        private final boolean needDeriveRange;
+
+        public DomainMessage(ScalarOperator predicateDesc) {
+            this(predicateDesc, true);
+        }
+
+        public DomainMessage(ScalarOperator predicateDesc, boolean needDeriveRange) {
+            this.predicateDesc = predicateDesc;
+            this.needDeriveRange = needDeriveRange;
         }
     }
 

@@ -74,6 +74,11 @@ private:
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
     std::vector<SimpleJsonPath> _root_paths;
     bool _strip_outer_array = false;
+
+    // An empty chunk that can be reused as the container for the result of get_next().
+    // It's mainly for optimizing the performance where get_next() returns Status::Timeout
+    // frequently by avoiding creating a chunk in each call
+    ChunkPtr _reusable_empty_chunk = nullptr;
 };
 
 // Reader to parse the json.
@@ -105,6 +110,8 @@ public:
     };
 
 private:
+    Status _read_chunk_with_except(Chunk* chunk, int32_t rows_to_read);
+
     template <typename ParserType>
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
 
@@ -122,6 +129,8 @@ private:
                              const std::string& col_name);
 
     Status _check_ndjson();
+
+    void _append_error_msg(const std::string&, const std::string& error_msg);
 
 private:
     RuntimeState* _state = nullptr;

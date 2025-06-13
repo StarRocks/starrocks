@@ -29,6 +29,7 @@ Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(_except_ctx->prepare(state, _dst_exprs));
     RETURN_IF_ERROR(_buffer_state->init(state));
+    _except_ctx->observable().attach_sink_observer(state, observer());
 
     return Status::OK();
 }

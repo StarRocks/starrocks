@@ -128,6 +128,8 @@ TEST(TabletSchemaTest, test_schema_with_index) {
     std::unordered_map<IndexType, TabletIndex> res;
     ASSERT_TRUE(tablet_schema.get_indexes_for_column(1, &res).ok());
     ASSERT_FALSE(res.empty());
+
+    ASSERT_FALSE(tablet_schema.has_separate_sort_key());
 }
 
 TEST(TabletSchemaTest, test_is_support_checksum) {

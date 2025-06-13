@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -25,30 +26,32 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
-    private String temporalClause;
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean isTransformed;
+
+    public LogicalIcebergMetadataScanOperator(Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                      long limit,
+                                      ScalarOperator predicate) {
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
+    }
 
     public LogicalIcebergMetadataScanOperator(Table table,
                                               Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                               Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                               long limit,
-                                              ScalarOperator predicate) {
-
+                                              ScalarOperator predicate,
+                                              TableVersionRange versionRange) {
         super(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
                 table,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
-                predicate, null);
+                predicate,
+                null,
+                versionRange);
 
-    }
-
-    public String getTemporalClause() {
-        return temporalClause;
-    }
-
-    public void setTemporalClause(String temporalClause) {
-        this.temporalClause = temporalClause;
     }
 
     private LogicalIcebergMetadataScanOperator() {
@@ -61,6 +64,14 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
 
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
+    }
+
+    public boolean isTransformed() {
+        return isTransformed;
+    }
+
+    public void setTransformed(boolean transformed) {
+        isTransformed = transformed;
     }
 
     @Override
@@ -80,7 +91,7 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
         public LogicalIcebergMetadataScanOperator.Builder withOperator(LogicalIcebergMetadataScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates;
-            builder.temporalClause = scanOperator.temporalClause;
+            builder.isTransformed = scanOperator.isTransformed;
             return this;
         }
     }

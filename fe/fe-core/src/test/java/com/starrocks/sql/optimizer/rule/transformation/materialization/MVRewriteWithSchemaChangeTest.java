@@ -15,7 +15,9 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -31,10 +33,10 @@ import java.util.List;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
-public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
+public class MVRewriteWithSchemaChangeTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         // For mv rewrite with schema change or rollup, need to set it false, otherwise unit tests will be failed.
         FeConstants.runningUnitTest = false;
 
@@ -69,7 +71,6 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan, "sync_mv1");
     }
 
-
     @Test
     public void testMVCacheInvalidAndReValid() throws Exception {
         starRocksAssert.withTable("\n" +
@@ -87,7 +88,6 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 ");");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_cache_mv1 \n" +
                 "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
-                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
                 "partition by date_trunc('day', dt)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -121,12 +121,13 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1  varchar(30);";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             // check mv invalid
-            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-            MaterializedView mv1 = ((MaterializedView) testDb.getTable("test_cache_mv1"));
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_cache_mv1"));
             Assert.assertFalse(mv1.isActive());
             try {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
@@ -144,13 +145,134 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1 bigint;";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
             plan = getFragmentPlan(sql);
             PlanTestBase.assertContains(plan, "test_cache_mv1");
         }
+        starRocksAssert.dropTable("test_base_tbl");
+        starRocksAssert.dropMaterializedView("test_cache_mv1");
+    }
+
+    @Test
+    public void testMVWithSchemaChangeInStrictMode() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE test_base_tbl(\n" +
+                "  `dt` datetime DEFAULT NULL,\n" +
+                "  `col1` int DEFAULT NULL,\n" +
+                "  `col2` bigint DEFAULT NULL,\n" +
+                "  `col3` decimal(32, 2) DEFAULT NULL,\n" +
+                "  `error_code` varchar(100) DEFAULT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (dt)\n" +
+                "PARTITION BY date_trunc('day', dt);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_mv1\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "partition by date_trunc('day', dt)\n" +
+                "AS select dt, col1, col2, col3, error_code from test_base_tbl;");
+        refreshMaterializedView("test", "test_mv1");
+
+        String sql = "SELECT dt, col1, col2, col3 FROM test_base_tbl AS f\n" +
+                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        // active is not supported in strict mode: type's primitive type is the same  but length is different
+        String alterSql = "alter table test_base_tbl modify column error_code varchar(1024);";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
+                connectContext);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        waitForSchemaChangeAlterJobFinish();
+
+        // check mv invalid
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_mv1"));
+        Assert.assertFalse(mv1.isActive());
+        try {
+            cluster.runSql("test", "alter materialized view test_mv1 active;");
+            Assert.fail("could not active the mv");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("column schema not compatible"));
+        }
+
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertNotContains(plan, "test_mv1");
+
+        starRocksAssert.dropTable("test_base_tbl");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testMVWithSchemaChangeInLooseMode() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE test_base_tbl(\n" +
+                "  `dt` datetime DEFAULT NULL,\n" +
+                "  `col1` int DEFAULT NULL,\n" +
+                "  `col2` bigint DEFAULT NULL,\n" +
+                "  `col3` decimal(32, 2) DEFAULT NULL,\n" +
+                "  `error_code` varchar(100) DEFAULT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (dt)\n" +
+                "PARTITION BY date_trunc('day', dt);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_mv1\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "partition by date_trunc('day', dt)\n" +
+                "AS select dt, col1, col2, col3, error_code from test_base_tbl;");
+        refreshMaterializedView("test", "test_mv1");
+
+        String sql = "SELECT dt, col1, col2, col3 FROM test_base_tbl AS f\n" +
+                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        Config.enable_active_materialized_view_schema_strict_check = false;
+
+        {
+            // active is ok: type's primitive type is the same, but length is different
+            String alterSql = "alter table test_base_tbl modify column error_code varchar(1024);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
+                    connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+            waitForSchemaChangeAlterJobFinish();
+
+            cluster.runSql("test", "alter materialized view test_mv1 active;");
+            plan = getFragmentPlan(sql);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        {
+            // invalid base table: type's primitive type is different
+            String alterSql = "alter table test_base_tbl modify column col1 varchar(30);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
+                    connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+            waitForSchemaChangeAlterJobFinish();
+
+            // check mv invalid
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_mv1"));
+            Assert.assertFalse(mv1.isActive());
+            try {
+                cluster.runSql("test", "alter materialized view test_mv1 active;");
+                Assert.fail("could not active the mv");
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains("column schema not compatible"));
+            }
+
+            plan = getFragmentPlan(sql);
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        Config.enable_active_materialized_view_schema_strict_check = true;
+
+        starRocksAssert.dropTable("test_base_tbl");
+        starRocksAssert.dropMaterializedView("test_mv1");
     }
 
     @Test
@@ -273,9 +395,8 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             dropMv("test", "join_mv_1");
         }
 
-
         {
-            starRocksAssert.withTables(cluster, List.of("depts", "emps_par"),
+            starRocksAssert.withMTableNames(cluster, List.of("depts", "emps_par"),
                     () -> {
                         starRocksAssert.withView("create view view1 as " +
                                 " select deptno1, deptno2, empid, name " +

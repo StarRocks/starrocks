@@ -29,7 +29,7 @@ constexpr int HLL_COLUMN_DEFAULT_LEN = HLL_REGISTERS_COUNT + 1;
 constexpr int HLL_EMPTY_SIZE = 1;
 
 const static int MAX_HLL_LOG_K = 20;
-const static int HLL_LOG_K = 17;
+const static uint8_t DEFAULT_HLL_LOG_K = 17;
 
 // For JSON type
 constexpr int kJsonDefaultSize = 128;

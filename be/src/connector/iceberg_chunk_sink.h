@@ -35,7 +35,7 @@ namespace starrocks::connector {
 
 class IcebergChunkSink : public ConnectorChunkSink {
 public:
-    IcebergChunkSink(std::vector<std::string> partition_columns,
+    IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                      std::unique_ptr<LocationProvider> location_provider,
                      std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
@@ -43,25 +43,14 @@ public:
 
     ~IcebergChunkSink() override = default;
 
-    Status init() override;
+    void callback_on_commit(const CommitResult& result) override;
 
-    StatusOr<Futures> add(ChunkPtr chunk) override;
+    const std::vector<std::string>& transform_expr() const { return _transform_exprs; }
 
-    Futures finish() override;
-
-    std::function<void(const formats::FileWriter::CommitResult& result)> callback_on_success() override;
+    Status add(Chunk* chunk) override;
 
 private:
-    const std::vector<std::string> _partition_column_names;
-    std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
-    std::unique_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
-    const int64_t _max_file_size;
-    RuntimeState* _state;
-
-    std::map<std::string, std::shared_ptr<formats::FileWriter>> _partition_writers;
-
-    inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
+    std::vector<std::string> _transform_exprs;
 };
 
 struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
@@ -69,8 +58,10 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
 
     std::string path;
     std::vector<std::string> column_names;
+    std::vector<std::string> partition_column_names;
+    std::vector<std::string> transform_exprs;
     std::vector<std::unique_ptr<ColumnEvaluator>> column_evaluators;
-    std::vector<int32_t> partition_column_indices;
+    std::vector<std::unique_ptr<ColumnEvaluator>> partition_evaluators;
     int64_t max_file_size = 128L * 1024 * 1024;
     std::string format;
     TCompressionType::type compression_type = TCompressionType::UNKNOWN_COMPRESSION;

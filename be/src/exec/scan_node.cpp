@@ -116,7 +116,8 @@ static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeli
         }
     } else {
         for (auto& [operator_seq, morsels] : morsels_per_driver) {
-            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels)));
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::DynamicMorselQueue>(
+                                                           std::move(morsels), morsel_queue->has_more()));
         }
     }
 
@@ -127,7 +128,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         const std::vector<TScanRangeParams>& global_scan_ranges,
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
         int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
-        TTabletInternalParallelMode::type tablet_internal_parallel_mode) {
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan) {
     if (scan_ranges_per_driver_seq.empty() && !in_colocate_exec_group) {
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
@@ -147,6 +148,9 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
                                                                             /*could_local_shuffle*/ true);
         } else {
+            if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
+                scan_dop = pipeline_dop;
+            }
             return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
         }
     } else {
@@ -183,15 +187,10 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
-    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
-    if (!accept_empty_scan_ranges() && scan_ranges.empty()) {
-        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
-    } else {
-        for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
-        }
-    }
-
+    [[maybe_unused]] bool has_more_morsel = false;
+    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+                                             &has_more_morsel);
+    DCHECK(has_more_morsel == false);
     return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
 }
 

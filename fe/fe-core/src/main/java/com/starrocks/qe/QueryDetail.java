@@ -65,6 +65,10 @@ public class QueryDetail implements Serializable {
     // default value will set to be minus one(-1).
     private long endTime;
     private long latency;
+
+    private long pendingTime = -1;
+    private long netTime = -1;
+    private long netComputeTime = -1;
     private QueryMemState state;
     private String database;
     private String sql;
@@ -82,6 +86,8 @@ public class QueryDetail implements Serializable {
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     private String digest;
     private String catalog;
+
+    private long queryFeMemory = 0;
 
     public QueryDetail() {
     }
@@ -148,6 +154,7 @@ public class QueryDetail implements Serializable {
         queryDetail.digest = this.digest;
         queryDetail.resourceGroupName = this.resourceGroupName;
         queryDetail.catalog = this.catalog;
+        queryDetail.queryFeMemory = this.queryFeMemory;
         return queryDetail;
     }
 
@@ -205,6 +212,30 @@ public class QueryDetail implements Serializable {
 
     public long getLatency() {
         return latency;
+    }
+
+    public long getPendingTime() {
+        return pendingTime;
+    }
+
+    public void setPendingTime(long pendingTime) {
+        this.pendingTime = pendingTime;
+    }
+
+    public long getNetTime() {
+        return netTime;
+    }
+
+    public void setNetTime(long netTime) {
+        this.netTime = netTime;
+    }
+
+    public long getNetComputeTime() {
+        return netComputeTime;
+    }
+
+    public void setNetComputeTime(long netComputeTime) {
+        this.netComputeTime = netComputeTime;
     }
 
     public void setState(QueryMemState state) {
@@ -337,5 +368,13 @@ public class QueryDetail implements Serializable {
 
     public void setCatalog(String catalog) {
         this.catalog = catalog;
+    }
+
+    public void setQueryFeMemory(long queryFeMemory) {
+        this.queryFeMemory = queryFeMemory;
+    }
+
+    public long getQueryFeMemory() {
+        return queryFeMemory;
     }
 }

@@ -22,6 +22,8 @@ import org.apache.iceberg.DeleteFiles;
 import org.apache.iceberg.ExpireSnapshots;
 import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.HistoryEntry;
+import org.apache.iceberg.IncrementalAppendScan;
+import org.apache.iceberg.IncrementalChangelogScan;
 import org.apache.iceberg.ManageSnapshots;
 import org.apache.iceberg.OverwriteFiles;
 import org.apache.iceberg.PartitionSpec;
@@ -60,7 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class SerializableTable implements Table, Serializable {
+public class SerializableTable implements Table, Serializable, HasTableOperations {
 
     private final String name;
     private final String location;
@@ -253,6 +255,16 @@ public class SerializableTable implements Table, Serializable {
     }
 
     @Override
+    public IncrementalAppendScan newIncrementalAppendScan() {
+        return lazyTable().newIncrementalAppendScan();
+    }
+
+    @Override
+    public IncrementalChangelogScan newIncrementalChangelogScan() {
+        return lazyTable().newIncrementalChangelogScan();
+    }
+
+    @Override
     public BatchScan newBatchScan() {
         return lazyTable().newBatchScan();
     }
@@ -359,6 +371,11 @@ public class SerializableTable implements Table, Serializable {
 
     private String errorMsg(String operation) {
         return String.format("Operation %s is not supported after the table is serialized", operation);
+    }
+
+    @Override
+    public StaticTableOperations operations() {
+        return (StaticTableOperations) ((BaseTable) lazyTable()).operations();
     }
 
     private static class SerializableConfSupplier implements SerializableSupplier<Configuration> {

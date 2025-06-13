@@ -1,0 +1,48 @@
+diff --git a/src/glog/logging.h.in b/src/glog/logging.h.in
+index ff7c1c2..3a1df70 100644
+--- a/src/glog/logging.h.in
++++ b/src/glog/logging.h.in
+@@ -1662,6 +1662,8 @@ GOOGLE_GLOG_DLL_DECL void InstallFailureSignalHandler();
+ GOOGLE_GLOG_DLL_DECL void InstallFailureWriter(
+     void (*writer)(const char* data, int size));
+
++GOOGLE_GLOG_DLL_DECL void InstallFailureHandlerAfterOutputLog(void (*handler)());
++
+ @ac_google_end_namespace@
+
+ #endif // _LOGGING_H_
+diff --git a/src/signalhandler.cc b/src/signalhandler.cc
+index 961ee96..ec31c06 100644
+--- a/src/signalhandler.cc
++++ b/src/signalhandler.cc
+@@ -154,6 +154,8 @@ void WriteToStderr(const char* data, int size) {
+ // The writer function can be changed by InstallFailureWriter().
+ void (*g_failure_writer)(const char* data, int size) = WriteToStderr;
+
++void (*g_failure_handler_after_output_log)() = nullptr;
++
+ // Dumps time information.  We don't dump human-readable time information
+ // as localtime() is not guaranteed to be async signal safe.
+ void DumpTimeInfo() {
+@@ -347,6 +349,10 @@ void FailureSignalHandler(int signal_number,
+   // causes problems.
+   FlushLogFilesUnsafe(0);
+
++  if (g_failure_handler_after_output_log != nullptr) {
++      (*g_failure_handler_after_output_log)();
++  }
++
+   // Kill ourself by the default signal handler.
+   InvokeDefaultSignalHandler(signal_number);
+ }
+@@ -400,4 +406,10 @@ void InstallFailureWriter(void (*writer)(const char* data, int size)) {
+ #endif  // HAVE_SIGACTION
+ }
+
++void InstallFailureHandlerAfterOutputLog(void (*handler)()) {
++#if defined(HAVE_SIGACTION) || defined(OS_WINDOWS)
++    g_failure_handler_after_output_log = handler;
++#endif  // HAVE_SIGACTION
++}
++
+ _END_GOOGLE_NAMESPACE_

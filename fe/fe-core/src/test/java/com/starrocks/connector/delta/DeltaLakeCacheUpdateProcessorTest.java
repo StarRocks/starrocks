@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -49,7 +50,8 @@ public class DeltaLakeCacheUpdateProcessorTest {
     public void setUp() throws Exception {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
-        metastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore, new Configuration());
+        metastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore, new Configuration(),
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
         executor = Executors.newFixedThreadPool(5);
         cachingDeltaLakeMetastore =
                 CachingDeltaLakeMetastore.createCatalogLevelInstance(metastore, executor, expireAfterWriteSec,
@@ -70,11 +72,17 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        org.apache.hadoop.conf.Configuration configuration,
-                                                        long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
@@ -105,11 +113,25 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        org.apache.hadoop.conf.Configuration configuration,
-                                                        long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);

@@ -33,13 +33,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
@@ -99,6 +100,8 @@ public class LoadPlannerTest {
     private long execMemLimit = 1000000;
 
     @Mocked
+    private GlobalStateMgr globalStateMgr;
+    @Mocked
     Partition partition;
     @Mocked
     OlapTableSink sink;
@@ -123,6 +126,19 @@ public class LoadPlannerTest {
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);
         ctx = UtFrameUtils.createDefaultCtx();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getServingState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isReady();
+                result = true;
+                minTimes = 0;
+            }
+        };
+        SimpleScheduler.disableUpdateBlocklistThread();
     }
 
     @After
@@ -132,8 +148,8 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                     @Injectable Database db, @Injectable OlapTable table) throws UserException {
+    public void testParallelInstance(@Mocked SystemInfoService systemInfoService,
+                                     @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -224,7 +240,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testVectorizedLoad(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testVectorizedLoad(@Mocked SystemInfoService systemInfoService,
                                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -358,8 +374,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdatePlan(@Mocked GlobalStateMgr globalStateMgr,
-                                      @Mocked SystemInfoService systemInfoService,
+    public void testPartialUpdatePlan(@Mocked SystemInfoService systemInfoService,
                                       @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -459,8 +474,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testColumnWithRowPartialUpdate(@Mocked GlobalStateMgr globalStateMgr,
-                                               @Mocked SystemInfoService systemInfoService,
+    public void testColumnWithRowPartialUpdate(@Mocked SystemInfoService systemInfoService,
                                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         new Expectations() {
             {
@@ -518,8 +532,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnDefault(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDefault(@Mocked SystemInfoService systemInfoService,
                                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -608,8 +621,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnDelete(@Mocked GlobalStateMgr globalStateMgr,
-                                           @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDelete(@Mocked SystemInfoService systemInfoService,
                                            @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -700,8 +712,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnExpr(@Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnExpr(@Mocked SystemInfoService systemInfoService,
                                          @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -810,8 +821,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpAutoMapping(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpAutoMapping(@Mocked SystemInfoService systemInfoService,
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -908,7 +918,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testShuffle(@Mocked SystemInfoService systemInfoService,
                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1022,7 +1032,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testAggShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testAggShuffle(@Mocked SystemInfoService systemInfoService,
                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1164,5 +1174,99 @@ public class LoadPlannerTest {
             planner.plan();
             planner.completeTableSink(100);
         }
+    }
+
+    @Test
+    public void testLoadLocalFile(@Mocked SystemInfoService systemInfoService,
+                                  @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, true);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        List<String> columnNames = Lists.newArrayList("c1", "c2");
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("c1");
+                result = columns.get(0);
+                table.getColumn("c2");
+                result = columns.get(1);
+            }
+        };
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("file:///file1", "file:///file2");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, columnNames, null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        brokerFileGroup.setFilePaths(files);
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("file:///file1", false, 268435456, true));
+        fileStatusList.add(new TBrokerFileStatus("file:///file2", false, 268435456, true));
+        fileStatusesList.add(fileStatusList);
+
+        // load_parallel_instance_num: 1
+        Config.load_parallel_instance_num = 1;
+        long startTime = System.currentTimeMillis();
+        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+
+        planner.plan();
+        Assert.assertEquals(1, planner.getScanNodes().size());
+        FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+        Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        // load_parallel_instance_num: 2
+        Config.load_parallel_instance_num = 2;
+        planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+        planner.plan();
+        scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        locationsList = scanNode.getScanRangeLocations(0);
+        Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        // load_parallel_instance_num: 2, pipeline
+        ctx.getSessionVariable().setEnablePipelineEngine(true);
+        Config.enable_pipeline_load = true;
+        Config.load_parallel_instance_num = 2;
+        planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+
+        planner.plan();
+        scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        locationsList = scanNode.getScanRangeLocations(0);
+        Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        Assert.assertNotNull(planner.getExecPlan());
     }
 }

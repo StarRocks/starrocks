@@ -457,7 +457,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testAggregateCompatPartition() throws Exception {
-        connectContext.getSessionVariable().disableJoinReorder();
 
         // Left outer join
         String sql = "select distinct join1.id from join1 left join join2 on join1.id = join2.id;";
@@ -475,7 +474,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // Right outer join
         sql = "select distinct join2.id from join1 right join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         sql = "select distinct join1.id from join1 right join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
@@ -503,8 +502,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id, baseall;";
         plan = getFragmentPlan(sql);
         checkOnePhaseAgg(plan);
-
-        connectContext.getSessionVariable().enableJoinReorder();
     }
 
     @Test
@@ -949,7 +946,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testCastDatePredicate() throws Exception {
         OlapTable lineitem =
-                (OlapTable) connectContext.getGlobalStateMgr().getDb("test").getTable("lineitem");
+                (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test").getTable("lineitem");
 
         MockTpchStatisticStorage mock = new MockTpchStatisticStorage(connectContext, 100);
         connectContext.getGlobalStateMgr().setStatisticStorage(mock);
@@ -1571,12 +1568,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 + t1.v5  and t1.v4 + t1.v5 < t0.v2 and " +
                 "t0.v2 < t1.v4 + t1.v6";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "0:OlapScanNode\n" +
-                "     TABLE: t1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: v4 + 5: v5 <= CAST('test_max_v2' AS BIGINT), " +
-                "4: v4 + 6: v6 >= CAST('test_min_v2' AS BIGINT)\n" +
-                "     partitions=1/1");
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: 7: add <= CAST('test_max_v2' AS BIGINT), 4: v4 + 6: v6 >= CAST('test_min_v2' AS BIGINT)\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 5> : 5: v5\n" +
+                "  |  <slot 6> : 6: v6\n" +
+                "  |  <slot 7> : 4: v4 + 5: v5");
     }
 
     @Test
@@ -1605,16 +1604,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testOneTabletDistinctAgg() throws Exception {
         String sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(3: sum), group_concat(2: name, ',')\n" +
-                "  |  group by: 1: id\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(1: id)\n" +
-                "  |  group by: 1: id, 2: name\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: skew_table");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n"
+                + "  |  STREAMING\n"
+                + "  |  output: sum(3: sum), group_concat(2: name, ',')\n"
+                + "  |  group by: 1: id\n"
+                + "  |  \n"
+                + "  1:AGGREGATE (update serialize)\n"
+                + "  |  output: sum(1: id)\n"
+                + "  |  group by: 1: id, 2: name\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
 
         sql = "select n_name,count(distinct n_regionkey,n_name) from nation group by n_name";
         plan = getFragmentPlan(sql);
@@ -1655,5 +1654,22 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: 2: N_NAME, 3: N_REGIONKEY\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testLocalGroupConcatDistinct() throws Exception {
+        String sql = "select * from ("
+                + "select v1, count(distinct v2) c1, group_concat(distinct v2 SEPARATOR ',') "
+                + "from colocate_t0 group by v1 ) t left join colocate_t1 on v1 = v4 ";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        connectContext.getSessionVariable().disableJoinReorder();
+        connectContext.getSessionVariable().setBroadcastRowCountLimit(0);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        connectContext.getSessionVariable().enableJoinReorder();
+        connectContext.getSessionVariable().setBroadcastRowCountLimit(15000000);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n"
+                + "  |  output: count(2: v2), group_concat(CAST(2: v2 AS VARCHAR), ',')\n"
+                + "  |  group by: 1: v1");
     }
 }

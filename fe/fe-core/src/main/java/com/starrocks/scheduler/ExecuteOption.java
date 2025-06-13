@@ -17,9 +17,12 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class ExecuteOption {
 
@@ -42,14 +45,17 @@ public class ExecuteOption {
     @SerializedName("isReplay")
     private boolean isReplay = false;
 
-    public ExecuteOption(boolean isMergeRedundant) {
-        this.isMergeRedundant = isMergeRedundant;
+    public ExecuteOption(Task task) {
+        this(Constants.TaskRunPriority.LOWEST.value(), task.getSource().isMergeable(), task.getProperties());
     }
 
     public ExecuteOption(int priority, boolean isMergeRedundant, Map<String, String> taskRunProperties) {
         this.priority = priority;
         this.isMergeRedundant = isMergeRedundant;
-        this.taskRunProperties = taskRunProperties;
+        // clone the taskRunProperties to avoid modifying the original map because `mergeProperties` may change it.
+        if (taskRunProperties != null) {
+            this.taskRunProperties = Maps.newHashMap(taskRunProperties);
+        }
     }
 
     public static ExecuteOption makeMergeRedundantOption() {
@@ -67,7 +73,11 @@ public class ExecuteOption {
     public boolean isMergeRedundant() {
         // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
         // hanging after removing it.
-        return !isSync && isMergeRedundant;
+        if (Config.enable_mv_refresh_sync_refresh_mergeable) {
+            return isMergeRedundant;
+        } else {
+            return !isSync && isMergeRedundant;
+        }
     }
 
     public Map<String, String> getTaskRunProperties() {
@@ -96,6 +106,39 @@ public class ExecuteOption {
 
     public void setReplay(boolean replay) {
         isReplay = replay;
+    }
+
+    /**
+     * Check if the current ExecuteOption can be merged with the given option:
+     * - Only all taskRunProperties are empty or the same with specific keys, we can merge two pending task runs.
+     */
+    public boolean isMergeableWith(ExecuteOption other) {
+        if (!isMergeRedundant || !other.isMergeRedundant) {
+            return false;
+        }
+        if (CollectionUtils.sizeIsEmpty(this.taskRunProperties)
+                && CollectionUtils.sizeIsEmpty(other.taskRunProperties)) {
+            return true;
+        }
+        return Objects.equals(this.getTaskRunComparableProperties(), other.getTaskRunComparableProperties());
+    }
+
+    /**
+     * See @{code TaskRun#MV_COMPARABLE_PROPERTIES} for more details.
+     * @return a map of task run properties that are comparable for merging.
+     */
+    public Map<String, String> getTaskRunComparableProperties() {
+        // For non-mv task, we don't need to check the task run properties.
+        if (taskRunProperties == null || !taskRunProperties.containsKey(TaskRun.MV_ID)) {
+            return taskRunProperties;
+        }
+        Map<String, String> result = Maps.newHashMap();
+        for (Map.Entry<String, String> e : taskRunProperties.entrySet()) {
+            if (TaskRun.MV_COMPARABLE_PROPERTIES.contains(e.getKey())) {
+                result.put(e.getKey(), e.getValue());
+            }
+        }
+        return result;
     }
 
     @Override

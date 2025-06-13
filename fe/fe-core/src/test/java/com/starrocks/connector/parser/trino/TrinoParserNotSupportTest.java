@@ -52,13 +52,6 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "Unsupported expression [ALL]");
     }
 
-    // refer to https://trino.io/docs/current/functions/comparison.html#is-distinct-from-and-is-not-distinct-from
-    @Test
-    public void testDistinctFrom() {
-        String sql = "select NULL is distinct from NULL;";
-        analyzeFail(sql, "Trino parser on StarRocks does not support the comparison type IS_DISTINCT_FROM");
-    }
-
     // refer to https://trino.io/docs/current/language/types.html#interval-year-to-month
     @Test
     public void testIntervalDataType() throws Exception {
@@ -67,13 +60,6 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         String sql = "select INTERVAL '2' DAY";
         // It will throw exception in optimize stage
         getFragmentPlan(sql);
-    }
-
-    // refer to https://trino.io/docs/current/language/types.html#row
-    @Test
-    public void testCastRowDataType() {
-        String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
-        analyzeFail(sql, "does not support the type ROW(x BIGINT, y DOUBLE)");
     }
 
     // refer to https://trino.io/docs/current/sql/select.html#tablesample
@@ -88,10 +74,10 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
     @Test
     public void testTimeStampWithTimeZone() {
         String sql = "select TIMESTAMP '2014-03-14 09:30:00 Europe/Berlin'";
-        analyzeFail(sql, "Invalid date literal 2014-03-14 09:30:00 Europe/Berlin");
+        analyzeSuccess(sql);
 
-        sql = "SELECT TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles'";
-        analyzeFail(sql, "Unsupported expression [TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles']");
+        sql = "select TIMESTAMP '2014-09-17 Europe/Berlin'";
+        analyzeSuccess(sql);
     }
 
     // refer to https://trino.io/docs/current/functions/conversion.html#format

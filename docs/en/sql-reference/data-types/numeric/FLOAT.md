@@ -1,10 +1,8 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # FLOAT
-
-## Description
 
 FLOAT
 

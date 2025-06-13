@@ -108,7 +108,7 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     int chunk_size = runtime_state()->chunk_size();
     int reserve_chunk_size = chunk_size;
-    std::vector<ColumnPtr> output_columns;
+    Columns output_columns;
 
     if (reached_limit()) {
         *eos = true;
@@ -230,7 +230,7 @@ void TableFunctionNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const std::vector<ColumnPtr>& output_columns) {
+Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const Columns& output_columns) {
     *chunk = std::make_shared<Chunk>();
 
     for (int outer_idx = 0; outer_idx < _outer_slots.size(); ++outer_idx) {

@@ -15,14 +15,18 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.jdbc.IcebergJdbcCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -32,6 +36,7 @@ import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -49,6 +54,7 @@ public class IcebergConnector implements Connector {
     private ExecutorService icebergJobPlanningExecutor;
     private ExecutorService refreshOtherFeExecutor;
     private final IcebergCatalogProperties icebergCatalogProperties;
+    private final ConnectorProperties connectorProperties;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -56,6 +62,7 @@ public class IcebergConnector implements Connector {
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
+        this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -77,6 +84,8 @@ public class IcebergConnector implements Connector {
                 return new IcebergRESTCatalog(catalogName, conf, properties);
             case HADOOP_CATALOG:
                 return new IcebergHadoopCatalog(catalogName, conf, properties);
+            case JDBC_CATALOG:
+                return new IcebergJdbcCatalog(catalogName, conf, properties);
             default:
                 throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
         }
@@ -85,7 +94,7 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
-                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties);
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties, connectorProperties);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -144,12 +153,12 @@ public class IcebergConnector implements Connector {
     }
 
     @Override
-    public long estimateSize() {
-        return icebergNativeCatalog.estimateSize();
+    public Map<String, Long> estimateCount() {
+        return icebergNativeCatalog.estimateCount();
     }
 
     @Override
-    public Map<String, Long> estimateCount() {
-        return icebergNativeCatalog.estimateCount();
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return icebergNativeCatalog.getSamples();
     }
 }

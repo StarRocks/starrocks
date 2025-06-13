@@ -39,8 +39,8 @@ starrocks::MemTracker* CurrentThread::mem_tracker() {
     }
 }
 
-starrocks::MemTracker* CurrentThread::operator_mem_tracker() {
-    return tls_operator_mem_tracker;
+starrocks::MemTracker* CurrentThread::singleton_check_mem_tracker() {
+    return tls_singleton_check_mem_tracker;
 }
 
 CurrentThread& CurrentThread::current() {

@@ -1,6 +1,6 @@
 # 从 AutoMQ Kafka 持续导入
 
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.md'
 
 [AutoMQ for Kafka](https://www.automq.com/docs) AutoMQ Kafka ) 是一款基于云重新设计的云原生 Kafka。
 AutoMQ Kafka [内核开源](https://github.com/AutoMQ/automq-for-kafka)并且100% 兼容 Kafka 协议，可以充分兑现云的红利。
@@ -31,7 +31,7 @@ PROPERTIES (
 
 ### 准备 AutoMQ Kafka 环境和测试数据
 
-参考 AutoMQ [快速入门](https://docs.automq.com/zh/docs/automq-s3kafka/VKpxwOPvciZmjGkHk5hcTz43nde)部署好 AutoMQ Kafka 集群，确保 AutoMQ Kafka 与 StarRocks 之间保持网络连通性。
+参考 AutoMQ [快速入门](https://docs.automq.com/docs/automq-opensource/EvqhwAkpriAomHklOUzcUtybn7g)部署好 AutoMQ Kafka 集群，确保 AutoMQ Kafka 与 StarRocks 之间保持网络连通性。
 在AutoMQ Kafka中快速创建一个名为 example_topic 的主题并向其中写入一条测试JSON数据，可以通过以下步骤实现：
 
 #### **创建Topic**

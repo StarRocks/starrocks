@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 keywords: ['Stream Load']
 ---
 
 # Load data using Stream Load transaction interface
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 From v2.4 onwards, StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads.
 
@@ -80,7 +80,7 @@ The Stream Load transaction interface has the following limits:
 ## Precautions
 
 - If the `/api/transaction/begin`, `/api/transaction/load`, or `/api/transaction/prepare` operation that you have called returns errors, the transaction fails and is automatically rolled back.
-- When calling the `/api/transaction/begin` operation to start a new transaction, you have the option to specify a label. If you do not specify a label, StarRocks will generate a label for the transaction. Note that the subsequent `/api/transaction/load`, `/api/transaction/prepare`, and `/api/transaction/commit` operations must use the same label as the `/api/transaction/begin` operation.
+- When calling the `/api/transaction/begin` operation to start a new transaction, you must specify a label. Note that the subsequent `/api/transaction/load`, `/api/transaction/prepare`, and `/api/transaction/commit` operations must use the same label as the `/api/transaction/begin` operation.
 - If you the label of a previous transaction to call the `/api/transaction/begin` operation to start a new transaction, the previous transaction will fail and be rolled back.
 - The default column separator and row delimiter that StarRocks supports for CSV-formatted data are `\t` and `\n`. If your data file does not use the default column separator or row delimiter, you must use `"column_separator: <column_separator>"` or `"row_delimiter: <row_delimiter>"` to specify the column separator or row delimiter that is actually used in your data file when calling the `/api/transaction/load` operation.
 
@@ -500,4 +500,4 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Loading from a local file system via Stream Load](../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
 
-For information about the syntax and parameters for creating Stream Load jobs, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+For information about the syntax and parameters for creating Stream Load jobs, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).

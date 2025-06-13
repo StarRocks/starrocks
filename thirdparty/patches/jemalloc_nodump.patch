@@ -1,0 +1,222 @@
+diff --git include/jemalloc/internal/arena_externs.h include/jemalloc/internal/arena_externs.h
+index e6fceaaf..0feeb051 100644
+--- include/jemalloc/internal/arena_externs.h
++++ include/jemalloc/internal/arena_externs.h
+@@ -60,6 +60,7 @@ uint64_t arena_time_until_deferred(tsdn_t *tsdn, arena_t *arena);
+ void arena_do_deferred_work(tsdn_t *tsdn, arena_t *arena);
+ void arena_reset(tsd_t *tsd, arena_t *arena);
+ void arena_destroy(tsd_t *tsd, arena_t *arena);
++void arena_dontdump(tsdn_t *tsdn, arena_t *arena);
+ void arena_cache_bin_fill_small(tsdn_t *tsdn, arena_t *arena,
+     cache_bin_t *cache_bin, cache_bin_info_t *cache_bin_info, szind_t binind,
+     const unsigned nfill);
+diff --git include/jemalloc/internal/extent.h include/jemalloc/internal/extent.h
+index 1d51d410..1e77caa4 100644
+--- include/jemalloc/internal/extent.h
++++ include/jemalloc/internal/extent.h
+@@ -29,6 +29,7 @@ void ecache_dalloc(tsdn_t *tsdn, pac_t *pac, ehooks_t *ehooks,
+     ecache_t *ecache, edata_t *edata);
+ edata_t *ecache_evict(tsdn_t *tsdn, pac_t *pac, ehooks_t *ehooks,
+     ecache_t *ecache, size_t npages_min);
++void ecache_dontdump(tsdn_t *tsdn, ecache_t *ecache);
+
+ void extent_gdump_add(tsdn_t *tsdn, const edata_t *edata);
+ void extent_record(tsdn_t *tsdn, pac_t *pac, ehooks_t *ehooks, ecache_t *ecache,
+diff --git include/jemalloc/internal/pa.h include/jemalloc/internal/pa.h
+index 4748a05b..41fefafb 100644
+--- include/jemalloc/internal/pa.h
++++ include/jemalloc/internal/pa.h
+@@ -164,6 +164,7 @@ void pa_shard_reset(tsdn_t *tsdn, pa_shard_t *shard);
+  * last step in destroying the shard.
+  */
+ void pa_shard_destroy(tsdn_t *tsdn, pa_shard_t *shard);
++void pa_shard_dontdump_retain(tsdn_t *tsdn, pa_shard_t *shard);
+
+ /* Gets an edata for the given allocation. */
+ edata_t *pa_alloc(tsdn_t *tsdn, pa_shard_t *shard, size_t size,
+diff --git include/jemalloc/internal/pac.h include/jemalloc/internal/pac.h
+index 01c4e6af..c5103fec 100644
+--- include/jemalloc/internal/pac.h
++++ include/jemalloc/internal/pac.h
+@@ -175,5 +175,6 @@ ssize_t pac_decay_ms_get(pac_t *pac, extent_state_t state);
+
+ void pac_reset(tsdn_t *tsdn, pac_t *pac);
+ void pac_destroy(tsdn_t *tsdn, pac_t *pac);
++void pac_dontdump_retain(tsdn_t *tsdn, pac_t *pac);
+
+ #endif /* JEMALLOC_INTERNAL_PAC_H */
+diff --git include/jemalloc/internal/typed_list.h include/jemalloc/internal/typed_list.h
+index 6535055a..77c019ce 100644
+--- include/jemalloc/internal/typed_list.h
++++ include/jemalloc/internal/typed_list.h
+@@ -50,6 +50,10 @@ list_type##_empty(list_type##_t *list) {				\
+ static inline void							\
+ list_type##_concat(list_type##_t *list_a, list_type##_t *list_b) {	\
+ 	ql_concat(&list_a->head, &list_b->head, linkage);		\
++}                                                                       \
++static inline el_type*                                                  \
++list_type##_next(list_type##_t *list, el_type *item) {                  \
++    return ql_next(&list->head, item, linkage) ;                        \
+ }
+
+ #endif /* JEMALLOC_INTERNAL_TYPED_LIST_H */
+diff --git src/arena.c src/arena.c
+index 857b27c5..fba416f6 100644
+--- src/arena.c
++++ src/arena.c
+@@ -792,6 +792,12 @@ arena_prepare_base_deletion(tsd_t *tsd, base_t *base_to_destroy) {
+ }
+ #undef ARENA_DESTROY_MAX_DELAYED_MTX
+
++void
++arena_dontdump(tsdn_t *tsdn, arena_t *arena)  {
++    pa_shard_dontdump_retain(tsdn, &arena->pa_shard);
++    // TODO: dontdump dirty or muzzy?
++}
++
+ void
+ arena_destroy(tsd_t *tsd, arena_t *arena) {
+ 	assert(base_ind_get(arena->base) >= narenas_auto);
+diff --git src/ctl.c src/ctl.c
+index 135271ba..cd6f8e9f 100644
+--- src/ctl.c
++++ src/ctl.c
+@@ -162,6 +162,7 @@ CTL_PROTO(arena_i_decay)
+ CTL_PROTO(arena_i_purge)
+ CTL_PROTO(arena_i_reset)
+ CTL_PROTO(arena_i_destroy)
++CTL_PROTO(arena_i_dontdump)
+ CTL_PROTO(arena_i_dss)
+ CTL_PROTO(arena_i_oversize_threshold)
+ CTL_PROTO(arena_i_dirty_decay_ms)
+@@ -494,6 +495,7 @@ static const ctl_named_node_t arena_i_node[] = {
+ 	{NAME("purge"),		CTL(arena_i_purge)},
+ 	{NAME("reset"),		CTL(arena_i_reset)},
+ 	{NAME("destroy"),	CTL(arena_i_destroy)},
++	{NAME("dontdump"),	CTL(arena_i_dontdump)},
+ 	{NAME("dss"),		CTL(arena_i_dss)},
+ 	/*
+ 	 * Undocumented for now, since we anticipate an arena API in flux after
+@@ -2678,6 +2680,67 @@ arena_i_reset_ctl(tsd_t *tsd, const size_t *mib, size_t miblen, void *oldp,
+ 	return ret;
+ }
+
++static void
++arena_i_dontdump(tsdn_t *tsdn, unsigned arena_ind) {
++    malloc_mutex_lock(tsdn, &ctl_mtx);
++    {
++        unsigned narenas = ctl_arenas->narenas;
++        /*
++	 * Access via index narenas is deprecated, and scheduled for
++	 * removal in 6.0.0.
++         */
++        if (arena_ind == MALLCTL_ARENAS_ALL || arena_ind == narenas) {
++            unsigned i;
++            VARIABLE_ARRAY(arena_t *, tarenas, narenas);
++            for (i = 0; i < narenas; i++) {
++                tarenas[i] = arena_get(tsdn, i, false);
++            }
++
++            /*
++             * No further need to hold ctl_mtx, since narenas and
++             * tarenas contain everything needed below.
++             */
++            malloc_mutex_unlock(tsdn, &ctl_mtx);
++
++            for (i = 0; i < narenas; i++) {
++                if (tarenas[i] != NULL) {
++                    arena_dontdump(tsdn, tarenas[i]);
++                }
++            }
++        } else {
++            arena_t *tarena;
++
++            assert(arena_ind < narenas);
++
++            tarena = arena_get(tsdn, arena_ind, false);
++
++            /* No further need to hold ctl_mtx. */
++            malloc_mutex_unlock(tsdn, &ctl_mtx);
++
++            if (tarena != NULL) {
++                arena_dontdump(tsdn, tarena);
++            }
++        }
++    }
++
++}
++
++static int
++arena_i_dontdump_ctl(tsd_t *tsd, const size_t *mib, size_t miblen, void *oldp,
++    size_t *oldlenp, void *newp, size_t newlen) {
++
++        int ret = 0;
++        unsigned arena_ind;
++        NEITHER_READ_NOR_WRITE();
++        MIB_UNSIGNED(arena_ind, 1);
++
++        arena_i_dontdump(tsd_tsdn(tsd), arena_ind);
++
++label_return:
++        return ret;
++}
++
++
+ static int
+ arena_i_destroy_ctl(tsd_t *tsd, const size_t *mib, size_t miblen, void *oldp,
+     size_t *oldlenp, void *newp, size_t newlen) {
+diff --git src/extent.c src/extent.c
+index cf3d1f31..adf0d574 100644
+--- src/extent.c
++++ src/extent.c
+@@ -147,6 +147,21 @@ ecache_dalloc(tsdn_t *tsdn, pac_t *pac, ehooks_t *ehooks, ecache_t *ecache,
+ 	extent_record(tsdn, pac, ehooks, ecache, edata);
+ }
+
++void
++ecache_dontdump(tsdn_t *tsdn, ecache_t *ecache) {
++    malloc_mutex_lock(tsdn, &ecache->mtx);
++
++    eset_t *eset = &ecache->eset;
++    edata_t *edata = edata_list_inactive_first(&eset->lru);
++
++    while (edata != NULL) {
++        pages_dontdump(edata_base_get(edata), edata_size_get(edata));
++        edata = edata_list_inactive_next(&eset->lru, edata);
++    }
++
++    malloc_mutex_unlock(tsdn, &ecache->mtx);
++}
++
+ edata_t *
+ ecache_evict(tsdn_t *tsdn, pac_t *pac, ehooks_t *ehooks,
+     ecache_t *ecache, size_t npages_min) {
+diff --git src/pa.c src/pa.c
+index eb7e4620..40555a2f 100644
+--- src/pa.c
++++ src/pa.c
+@@ -112,6 +112,10 @@ pa_shard_destroy(tsdn_t *tsdn, pa_shard_t *shard) {
+ 	}
+ }
+
++void pa_shard_dontdump_retain(tsdn_t *tsdn, pa_shard_t *shard) {
++    pac_dontdump_retain(tsdn, &shard->pac);
++}
++
+ static pai_t *
+ pa_get_pai(pa_shard_t *shard, edata_t *edata) {
+ 	return (edata_pai_get(edata) == EXTENT_PAI_PAC
+diff --git src/pac.c src/pac.c
+index 53e3d823..f843d5a7 100644
+--- src/pac.c
++++ src/pac.c
+@@ -585,3 +585,8 @@ pac_destroy(tsdn_t *tsdn, pac_t *pac) {
+ 		extent_destroy_wrapper(tsdn, pac, ehooks, edata);
+ 	}
+ }
++
++void
++pac_dontdump_retain(tsdn_t *tsdn, pac_t *pac) {
++    ecache_dontdump(tsdn, &pac->ecache_retained);
++}
++

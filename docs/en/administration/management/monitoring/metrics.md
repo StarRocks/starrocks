@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # General Monitoring Metrics
@@ -513,6 +513,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Average
 - Description: Used disk capacity.
 
+### encryption_keys_created
+
+- Unit: Count
+- Type: Cumulative
+- Description: number of file encryption keys created for file encryption
+
+### encryption_keys_unwrapped
+
+- Unit: Count
+- Type: Cumulative
+- Description: number of encryption meta unwrapped for file decryption
+
+### encryption_keys_in_cache
+
+- Unit: Count
+- Type: Instantaneous
+- Description: number of encryption keys currently in key cache
+
 ### starrocks_fe_meta_log_count
 
 - Unit: Count
@@ -585,7 +603,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates the number of running RESTORE tasks under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse. For a shared-data cluster, this value is always `0`.
 
-### starrocks_fe_memory
+### starrocks_fe_memory_usage
 
 - Unit: Bytes or Count
 - Type: Instantaneous
@@ -1628,6 +1646,7 @@ For more information on how to build a monitoring service for your StarRocks clu
   starrocks_fe_routine_load_jobs{state="PAUSED"} 0
   starrocks_fe_routine_load_jobs{state="STOPPED"} 0
   starrocks_fe_routine_load_jobs{state="CANCELLED"} 1
+  starrocks_fe_routine_load_jobs{state="UNSTABLE"} 0
   ```
 
 ### starrocks_fe_routine_load_paused
@@ -1649,3 +1668,8 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The total number of error rows encountered during data loading by all Routine Load jobs.
+
+### starrocks_fe_sql_block_hit_count
+
+- Unit: Count
+- Description: The number of times blacklisted sql have been intercepted.

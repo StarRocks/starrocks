@@ -23,6 +23,8 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -36,6 +38,8 @@ import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PUpdateTransactionStateRequest;
+import com.starrocks.proto.PUpdateTransactionStateResponse;
 
 import java.util.concurrent.Future;
 
@@ -95,5 +99,11 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PInternalService", methodName = "process_dictionary_cache", onceTalkTimeout = 600000)
     Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "fetch_arrow_schema", onceTalkTimeout = 600000)
+    Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "update_transaction_state", onceTalkTimeout = 600000)
+    Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request);
 }
 

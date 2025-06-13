@@ -43,7 +43,7 @@ None
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ 274.97790000000000000000 * (round(1103.00000000000000000000 * 1.0000,16) /round(1103.00000000000000000000,16));
 -- result:
-E: (1064, "Expr evaluate meet error: The 'mul' operation involving decimal values overflows")
+[REGEX].*Expr evaluate meet error: The 'mul' operation involving decimal values overflows.*
 -- !result
 select cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 1;
 -- result:
@@ -95,51 +95,51 @@ None
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 1;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 2;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 1;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 2;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 1;
 -- result:
-E: (1064, "Expr evaluate meet error: The 'mul' operation involving decimal values overflows")
+[REGEX].*Expr evaluate meet error: The 'mul' operation involving decimal values overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 2;
 -- result:
-E: (1064, "Expr evaluate meet error: The 'mul' operation involving decimal values overflows")
+[REGEX].*Expr evaluate meet error: The 'mul' operation involving decimal values overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 1;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 2;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 1;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 2;
 -- result:
-E: (1064, 'Expr evaluate meet error: The type cast from decimal to decimal overflows')
+[REGEX].*Expr evaluate meet error: The type cast from decimal to decimal overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 1;
 -- result:
-E: (1064, "Expr evaluate meet error: The 'mul' operation involving decimal values overflows")
+[REGEX].*Expr evaluate meet error: The 'mul' operation involving decimal values overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 2;
 -- result:
-E: (1064, "Expr evaluate meet error: The 'mul' operation involving decimal values overflows")
+[REGEX].*Expr evaluate meet error: The 'mul' operation involving decimal values overflows.*
 -- !result
 select c_id - 1.12345678901234567890 from t_decimal_overflow where c_id = 1;
 -- result:
@@ -155,9 +155,9 @@ select avg(c0- 2.8665963056616452*(lt - 3.062472673706541)) as adjust_lt from (s
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ max(lt- 2.8665963056616452*(c2 - 3.062472673706541)) as adjust_lt from (select c0, array_sum(c1) lt, c2 from avg_test) t group by c0;
 -- result:
-E: (1064, "Expr evaluate meet error: The 'mul' operation involving decimal values overflows")
+[REGEX].*Expr evaluate meet error: The 'mul' operation involving decimal values overflows.*
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ avg(lt- 2.8665963056616452*(c2 - 3.062472673706541)) as adjust_lt from (select c0, array_sum(c1) lt, c2 from avg_test) t group by c0;
 -- result:
-E: (1064, "Expr evaluate meet error: The 'mul' operation involving decimal values overflows")
+[REGEX].*Expr evaluate meet error: The 'mul' operation involving decimal values overflows.*
 -- !result

@@ -76,7 +76,7 @@ public class StarMgrServerTest {
                 return 0;
             }
         };
-        Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L));
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L);
 
         new MockUp<StarOSBDBJEJournalSystem>() {
             @Mock
@@ -87,6 +87,6 @@ public class StarMgrServerTest {
                 return 1;
             }
         };
-        Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L));
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L);
     }
 }

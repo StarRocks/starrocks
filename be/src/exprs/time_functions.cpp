@@ -91,7 +91,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             null_result[i] = nulls[i] | (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v->data_column(), null_column);
+        return NullableColumn::create(v->data_column(), std::move(null_column));
     } else {
         auto null_column = NullColumn::create();
         null_column->resize(v1->size());
@@ -103,7 +103,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             nulls[i] = (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v1, null_column);
+        return NullableColumn::create(v1, std::move(null_column));
     }
 }
 
@@ -571,17 +571,6 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(year_week_with_modeImpl, t, m) {
     date_value.to_date(&year, &month, &day);
     uint to_year = 0;
     int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m | 2), &to_year);
-
-    if (week == 53 && day >= 29 && !(m & 4)) {
-        int monday_first = m & WEEK_MONDAY_FIRST;
-        int daynr_of_last_day = TimeFunctions::compute_daynr(year, 12, 31);
-        int weekday_of_last_day = TimeFunctions::compute_weekday(daynr_of_last_day, !monday_first);
-
-        if (weekday_of_last_day - monday_first < 2) {
-            ++to_year;
-            week = 1;
-        }
-    }
     return to_year * 100 + week;
 }
 DEFINE_TIME_BINARY_FN(year_week_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
@@ -845,7 +834,6 @@ template <TimeUnit UNIT>
 TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
-
 #define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
                                                                                                                    \
@@ -1478,7 +1466,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, 
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int64Column::create();
     result->append(value);
-    return ConstColumn::create(result, 1);
+    return ConstColumn::create(std::move(result), 1);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
@@ -1486,7 +1474,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, 
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int32Column::create();
     result->append(value);
-    return ConstColumn::create(result, 1);
+    return ConstColumn::create(std::move(result), 1);
 }
 
 /*
@@ -1637,6 +1625,46 @@ Status TimeFunctions::from_unix_close(FunctionContext* context, FunctionContext:
     return Status::OK();
 }
 
+Status TimeFunctions::from_unix_timezone_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new FromUnixState();
+    context->set_function_state(scope, state);
+
+    if (!context->is_notnull_constant_column(1) || !context->is_notnull_constant_column(2)) {
+        return Status::OK();
+    }
+
+    auto column = context->get_constant_column(1);
+    auto format = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+
+    if (format.size > DEFAULT_DATE_FORMAT_LIMIT) {
+        return Status::InvalidArgument("Time format invalid");
+    }
+
+    state->format_content = convert_format(format);
+
+    auto timezone_column = context->get_constant_column(2);
+    auto timezone = ColumnHelper::get_const_value<TYPE_VARCHAR>(timezone_column);
+
+    state->timezone_content = timezone.to_string();
+
+    state->const_format = true;
+    state->const_timezone = true;
+
+    return Status::OK();
+}
+
+Status TimeFunctions::from_unix_timezone_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
 template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
@@ -1726,6 +1754,104 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
 }
 
 template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_timezone(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 3);
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
+    ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> timezone_column(columns[2]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row) || format_column.is_null(row) || timezone_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        auto format = format_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP || format.empty()) {
+            result.append_null();
+            continue;
+        }
+
+        std::string timezone = timezone_column.value(row).to_string();
+        cctz::time_zone timezone_obj;
+        TimezoneUtils::find_cctz_time_zone(timezone, timezone_obj);
+
+        DateTimeValue dtv;
+        if (!dtv.from_unixtime(date, timezone_obj)) {
+            result.append_null();
+            continue;
+        }
+        // use lambda to avoid adding method for TimeFunctions.
+        if (format.size > DEFAULT_DATE_FORMAT_LIMIT) {
+            result.append_null();
+            continue;
+        }
+
+        std::string new_fmt = convert_format(format);
+
+        char buf[128];
+        if (!dtv.to_format_string((const char*)new_fmt.c_str(), new_fmt.size(), buf)) {
+            result.append_null();
+            continue;
+        }
+        result.append(Slice(buf));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_timezone_const(const std::string& format_content,
+                                                                           const std::string& timezone_content,
+                                                                           FunctionContext* context,
+                                                                           const Columns& columns) {
+    DCHECK_EQ(columns.size(), 3);
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row) || format_content.empty() || timezone_content.empty()) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        cctz::time_zone timezone_obj;
+        TimezoneUtils::find_cctz_time_zone(timezone_content, timezone_obj);
+
+        DateTimeValue dtv;
+        if (!dtv.from_unixtime(date, timezone_obj)) {
+            result.append_null();
+            continue;
+        }
+
+        char buf[128];
+        if (!dtv.to_format_string((const char*)format_content.c_str(), format_content.size(), buf)) {
+            result.append_null();
+            continue;
+        }
+        result.append(Slice(buf));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format(FunctionContext* context,
                                                             const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
@@ -1735,6 +1861,17 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format(FunctionContext* con
         return _t_from_unix_with_format_const<TIMESTAMP_TYPE>(format_content, context, columns);
     }
     return _t_from_unix_with_format_general<TIMESTAMP_TYPE>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_timezone(FunctionContext* context,
+                                                                              const starrocks::Columns& columns) {
+    DCHECK_EQ(columns.size(), 3);
+    auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state->const_format && state->const_timezone) {
+        return _t_from_unix_with_format_timezone_const<TYPE_BIGINT>(state->format_content, state->timezone_content,
+                                                                    context, columns);
+    }
+    return _t_from_unix_with_format_timezone<TYPE_BIGINT>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_64(FunctionContext* context,
@@ -2129,7 +2266,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MM_dd_Impl, v) {
 }
 
 std::string format_for_yyyyMMddHHmmssImpl(const TimestampValue& date_value) {
-    return date_value.to_string();
+    return date_value.to_string(true);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMddHHmmssImpl, v) {
@@ -2760,8 +2897,88 @@ Status TimeFunctions::date_trunc_close(FunctionContext* context, FunctionContext
     return Status::OK();
 }
 
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_dateImpl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
+    return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_datetimeImpl, v) {
+    return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_date(FunctionContext* context,
+                                                                  const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_datetime(FunctionContext* context,
+                                                                      const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
+    return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_datetimeImpl, v) {
+    return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_date(FunctionContext* context,
+                                                                   const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_datetime(FunctionContext* context,
+                                                                       const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_dateImpl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
+    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_datetimeImpl, v) {
+    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_date(FunctionContext* context,
+                                                                 const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_datetime(FunctionContext* context,
+                                                                     const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
+    return hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_hours_since_epoch_datetime(FunctionContext* context,
+                                                                      const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_hours_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
 // used as start point of time_slice.
 TimestampValue TimeFunctions::start_of_time_slice = TimestampValue::create(1, 1, 1, 0, 0, 0);
+TimestampValue TimeFunctions::unix_epoch = TimestampValue::create(1970, 1, 1, 0, 0, 0);
 std::string TimeFunctions::info_reported_by_time_slice = "time used with time_slice can't before 0001-01-01 00:00:00";
 #undef DEFINE_TIME_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_WITH_IMPL
@@ -3231,6 +3448,95 @@ Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::
         delete ctx;
     }
     return Status::OK();
+}
+
+// Format a time value according to a format string
+StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const starrocks::Columns& columns) {
+    if (columns.size() != 2) {
+        return Status::InvalidArgument("FORMAT_TIME requires exactly 2 arguments");
+    }
+
+    const auto& time_column = columns[0];
+    const auto& format_column = columns[1];
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto time_viewer = ColumnViewer<TYPE_TIME>(time_column);
+    auto format_viewer = ColumnViewer<TYPE_VARCHAR>(format_column);
+
+    const size_t size = time_column->size();
+    auto builder = ColumnBuilder<TYPE_VARCHAR>(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (time_viewer.is_null(i) || format_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+
+        TimestampValue time_val;
+        time_val.set_timestamp(time_viewer.value(i));
+        std::string_view format_str = format_viewer.value(i);
+
+        // Convert TimeValue to hours, minutes, seconds
+        int year;
+        int month;
+        int day;
+        int hours;
+        int minutes;
+        int seconds;
+        int microseconds;
+        time_val.to_timestamp(&year, &month, &day, &hours, &minutes, &seconds, &microseconds);
+
+        std::stringstream result;
+        bool in_format = false;
+
+        for (size_t j = 0; j < format_str.size(); ++j) {
+            char c = format_str[j];
+            if (c == '%') {
+                in_format = true;
+                continue;
+            }
+
+            if (!in_format) {
+                result << c;
+                continue;
+            }
+
+            in_format = false;
+            switch (c) {
+            case 'H': // Hour (00-23)
+                result << std::setfill('0') << std::setw(2) << hours;
+                break;
+            case 'h': // Hour (01-12)
+                result << std::setfill('0') << std::setw(2) << (((hours % 12) == 0) ? 12 : (hours % 12));
+                break;
+            case 'i': // Minutes (00-59)
+                result << std::setfill('0') << std::setw(2) << minutes;
+                break;
+            case 'S': // Seconds (00-59)
+            case 's': // Seconds (00-59)
+                result << std::setfill('0') << std::setw(2) << seconds;
+                break;
+            case 'f': // Microseconds (000000-999999)
+                result << std::setfill('0') << std::setw(6) << microseconds;
+                break;
+            case 'p': // AM or PM
+                result << (hours < 12 ? "AM" : "PM");
+                break;
+            default:
+                result << '%' << c;
+                break;
+            }
+        }
+
+        if (in_format) {
+            result << '%'; // Handle trailing %
+        }
+
+        builder.append(result.str());
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks

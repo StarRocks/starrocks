@@ -53,8 +53,8 @@ public:
             second_column->append(22);
 
             auto result_chunk = std::make_shared<Chunk>();
-            result_chunk->append_column(first_column, 0);
-            result_chunk->append_column(second_column, 1);
+            result_chunk->append_column(std::move(first_column), 0);
+            result_chunk->append_column(std::move(second_column), 1);
 
             *chunk = std::move(result_chunk);
         } else {

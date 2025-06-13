@@ -25,6 +25,9 @@
 
 namespace starrocks::spill {
 
+using BlockAffinityGroup = uint64_t;
+static const BlockAffinityGroup kDefaultBlockAffinityGroup = UINT64_MAX;
+
 class BlockReader;
 class BlockReaderOptions;
 // Block represents a continuous storage space and is the smallest storage unit of flush and restore in spill task.
@@ -45,23 +48,23 @@ public:
 
     virtual std::string debug_string() const = 0;
 
+    virtual bool try_acquire_sizes(size_t size) = 0;
+
     size_t size() const { return _size; }
     size_t num_rows() const { return _num_rows; }
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
-    virtual bool preallocate(size_t write_size) = 0;
-
-    bool exclusive() const { return _exclusive; }
-    void set_exclusive(bool exclusive) { _exclusive = exclusive; }
-
     void inc_num_rows(size_t num_rows) { _num_rows += num_rows; }
+
+    void set_affinity_group(BlockAffinityGroup affinity_group) { _affinity_group = affinity_group; }
+    BlockAffinityGroup affinity_group() const { return _affinity_group; }
 
 protected:
     size_t _num_rows{};
     size_t _size{};
     bool _is_remote = false;
-    bool _exclusive{};
+    BlockAffinityGroup _affinity_group = kDefaultBlockAffinityGroup;
 };
 
 using BlockPtr = std::shared_ptr<Block>;
@@ -110,6 +113,9 @@ struct AcquireBlockOptions {
     // The block will occupy the entire container, making it easier to remove the block.
     bool exclusive = false;
     size_t block_size = 0;
+    BlockAffinityGroup affinity_group = kDefaultBlockAffinityGroup;
+    // force to use remote block
+    bool force_remote = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.
@@ -121,9 +127,16 @@ public:
     virtual ~BlockManager() = default;
     virtual Status open() = 0;
     virtual void close() = 0;
+
     // acquire a block from BlockManager, return error if BlockManager can't allocate one.
     virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) = 0;
     // return Block to BlockManager
-    virtual Status release_block(const BlockPtr& block) = 0;
+    virtual Status release_block(BlockPtr block) = 0;
+
+    BlockAffinityGroup acquire_affinity_group() { return _next_affinity_group++; }
+    virtual Status release_affinity_group(const BlockAffinityGroup affinity_group) { return Status::OK(); }
+
+protected:
+    std::atomic<BlockAffinityGroup> _next_affinity_group = 0;
 };
 } // namespace starrocks::spill

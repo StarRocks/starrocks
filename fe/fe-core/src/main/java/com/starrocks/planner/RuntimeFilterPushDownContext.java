@@ -14,13 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.google.api.client.util.Lists;
 import com.starrocks.analysis.DescriptorTable;
-
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Stack;
 
 public class RuntimeFilterPushDownContext {
     private final RuntimeFilterDescription description;

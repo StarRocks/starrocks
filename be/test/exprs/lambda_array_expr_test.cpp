@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <memory>
 
 #include "butil/time.h"
 #include "column/column_helper.h"
@@ -25,6 +26,7 @@
 #include "exprs/array_map_expr.h"
 #include "exprs/cast_expr.h"
 #include "exprs/function_call_expr.h"
+#include "exprs/function_helper.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
@@ -61,25 +63,25 @@ public:
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         array->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
         array->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-        auto* array_values = new_fake_const_expr(array, type_arr_int);
+        auto* array_values = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(array_values);
 
         // null
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(Datum{}); // null
-        auto* const_null = new_fake_const_expr(array, type_arr_int);
+        auto* const_null = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(const_null);
 
         // [null]
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(DatumArray{Datum()});
-        auto* null_array = new_fake_const_expr(array, type_arr_int);
+        auto* null_array = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(null_array);
 
         // []
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(DatumArray{}); // []
-        auto empty_array = new_fake_const_expr(array, type_arr_int);
+        auto empty_array = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(empty_array);
 
         // [null]
@@ -89,39 +91,39 @@ public:
         array->append_datum(DatumArray{Datum()}); // [null]
         array->append_datum(DatumArray{});        // []
         array->append_datum(Datum{});             // NULL
-        auto* array_special = new_fake_const_expr(array, type_arr_int);
+        auto* array_special = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(array_special);
 
         // const([1,4]...)
         array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
-        auto const_col = ConstColumn::create(array, 3);
-        auto* const_array = new_fake_const_expr(const_col, type_arr_int);
+        auto const_col = ConstColumn::create(std::move(array), 3);
+        auto* const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
 
         // const(null...)
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(Datum{}); // null...
-        const_col = ConstColumn::create(array, 3);
-        const_array = new_fake_const_expr(const_col, type_arr_int);
+        const_col = ConstColumn::create(std::move(array), 3);
+        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
 
         // const([null]...)
         array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum()}); // [null]...
-        const_col = ConstColumn::create(array, 3);
-        const_array = new_fake_const_expr(const_col, type_arr_int);
+        const_col = ConstColumn::create(std::move(array), 3);
+        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
 
         // const([]...)
         array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{}); // []...
-        const_col = ConstColumn::create(array, 3);
-        const_array = new_fake_const_expr(const_col, type_arr_int);
+        const_col = ConstColumn::create(std::move(array), 3);
+        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
     }
 
-    FakeConstExpr* new_fake_const_expr(ColumnPtr value, const TypeDescriptor& type) {
+    FakeConstExpr* new_fake_const_expr(MutableColumnPtr&& value, const TypeDescriptor& type) {
         TExprNode node;
         node.__set_node_type(TExprNodeType::INT_LITERAL);
         node.__set_num_children(0);
@@ -253,7 +255,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
-            lambda->get_slot_ids(&ids);
+            lambda->get_captured_slot_ids(&ids);
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -272,37 +274,37 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
                 ASSERT_FALSE(result->is_constant());
                 ASSERT_FALSE(result->is_numeric());
 
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
-                EXPECT_EQ(4, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(0).get_array()[1].get_int32());
                 ASSERT_TRUE(result->get(1).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array()[1].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
-                EXPECT_EQ(12, result->get(2).get_array()[1].get_int32());
+                ASSERT_EQ(12, result->get(2).get_array()[1].get_int32());
             } else if (i == 0 && j == 1) { // array_map(x -> x is null, array<int>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(0, result->get(0).get_array()[0].get_int8());
-                EXPECT_EQ(0, result->get(0).get_array()[1].get_int8());
-                EXPECT_EQ(1, result->get(1).get_array()[0].get_int8());
-                EXPECT_EQ(1, result->get(1).get_array()[1].get_int8());
-                EXPECT_EQ(1, result->get(2).get_array()[0].get_int8());
-                EXPECT_EQ(0, result->get(2).get_array()[1].get_int8());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(0, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(0).get_array()[1].get_int8());
+                ASSERT_EQ(1, result->get(1).get_array()[0].get_int8());
+                ASSERT_EQ(1, result->get(1).get_array()[1].get_int8());
+                ASSERT_EQ(1, result->get(2).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(2).get_array()[1].get_int8());
             } else if (i == 0 && j == 2) { // // array_map(x -> x+a, array<int>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(2, result->get(0).get_array()[0].get_int32());
-                EXPECT_EQ(5, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(2, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(0).get_array()[1].get_int32());
                 ASSERT_TRUE(result->get(1).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array()[1].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
-                EXPECT_EQ(13, result->get(2).get_array()[1].get_int32());
+                ASSERT_EQ(13, result->get(2).get_array()[1].get_int32());
             } else if (i == 0 && j == 3) {
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(0).get_array()[1].get_int32());
-                EXPECT_EQ(-110, result->get(1).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(1).get_array()[1].get_int32());
-                EXPECT_EQ(-110, result->get(2).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(2).get_array()[1].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
             }
 
             Expr::close(expr_ctxs, &_runtime_state);
@@ -329,7 +331,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
-            lambda->get_slot_ids(&ids);
+            lambda->get_captured_slot_ids(&ids);
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -338,40 +340,39 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
             } else {
                 ASSERT_TRUE(ids.empty());
             }
-
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
             if (i == 1) { // array_map(x->xxx,null)
-                EXPECT_EQ(1, result->size());
+                ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->is_null(0));
             } else if (i == 2 && (j == 0 || j == 2)) { // array_map( x->x || x->x+a, [null])
-                EXPECT_EQ(1, result->size());
+                ASSERT_EQ(1, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
             } else if (i == 2 && j == 1) { // array_map(x -> x is null,[null])
-                EXPECT_EQ(1, result->size());
-                EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(1, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int8());
             } else if (i == 2 && j == 3) { // array_map(x -> -110,[null])
-                EXPECT_EQ(1, result->size());
-                EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(1, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
             } else if (i == 3) { // array_map(x->xxx,[])
-                EXPECT_EQ(1, result->size());
+                ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array().empty());
             } else if (i == 4 && (j == 0 || j == 2)) { // array_map(x->x || x->x+a, array<special>)
                                                        // [null]
                                                        // []
                                                        // NULL
-                EXPECT_EQ(3, result->size());
+                ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
             } else if (i == 4 && j == 1) { // array_map(x->x is null, array<special>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int8());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
             } else if (i == 4 && j == 3) { // array_map(x-> -110, array<special>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
             }
@@ -400,7 +401,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
-            lambda->get_slot_ids(&ids);
+            lambda->get_captured_slot_ids(&ids);
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -409,77 +410,78 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
             } else {
                 ASSERT_TRUE(ids.empty());
             }
-
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
             if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
-                EXPECT_EQ(4, result->get(0).get_array()[1].get_int32());
-                EXPECT_EQ(1, result->get(1).get_array()[0].get_int32());
-                EXPECT_EQ(4, result->get(1).get_array()[1].get_int32());
-                EXPECT_EQ(1, result->get(2).get_array()[0].get_int32());
-                EXPECT_EQ(4, result->get(2).get_array()[1].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(1, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(1, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(4, result->get(2).get_array()[1].get_int32());
             } else if (i == 5 && j == 1) { // array_map(x->x is null, array<const[1,4]...>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(0, result->get(0).get_array()[0].get_int8());
-                EXPECT_EQ(0, result->get(0).get_array()[1].get_int8());
-                EXPECT_EQ(0, result->get(1).get_array()[0].get_int8());
-                EXPECT_EQ(0, result->get(1).get_array()[1].get_int8());
-                EXPECT_EQ(0, result->get(2).get_array()[0].get_int8());
-                EXPECT_EQ(0, result->get(2).get_array()[1].get_int8());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(0, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(0).get_array()[1].get_int8());
+                ASSERT_EQ(0, result->get(1).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(1).get_array()[1].get_int8());
+                ASSERT_EQ(0, result->get(2).get_array()[0].get_int8());
+                ASSERT_EQ(0, result->get(2).get_array()[1].get_int8());
+                LOG(INFO) << "pass";
             } else if (i == 5 && j == 2) { // // array_map( x->x + a, array<const[1,4]...>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(2, result->get(0).get_array()[0].get_int32());
-                EXPECT_EQ(5, result->get(0).get_array()[1].get_int32());
-                EXPECT_EQ(2, result->get(1).get_array()[0].get_int32());
-                EXPECT_EQ(5, result->get(1).get_array()[1].get_int32());
-                EXPECT_EQ(2, result->get(2).get_array()[0].get_int32());
-                EXPECT_EQ(5, result->get(2).get_array()[1].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(2, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(2, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(2, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(5, result->get(2).get_array()[1].get_int32());
             } else if (i == 5 && j == 3) { // // array_map( x-> -110, array<const[1,4]...>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(0).get_array()[1].get_int32());
-                EXPECT_EQ(-110, result->get(1).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(1).get_array()[1].get_int32());
-                EXPECT_EQ(-110, result->get(2).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(2).get_array()[1].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(0).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[1].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
             } else if (i == 6) { // array_map(x -> x || x->x is null || x -> x+a, array<const(null...)>)
-                EXPECT_EQ(3, result->size());
+                ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->is_null(0));
                 ASSERT_TRUE(result->is_null(1));
                 ASSERT_TRUE(result->is_null(2));
             } else if (i == 7 && (j == 0 || j == 2)) { // array_map(x -> x || x-> x+a,array<const([null]...)>)
-                EXPECT_EQ(3, result->size());
+                ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
 
             } else if (i == 7 && j == 1) { // array_map(x -> x is null, array<const([null]...)>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
-                EXPECT_EQ(1, result->get(1).get_array()[0].get_int8());
-                EXPECT_EQ(1, result->get(2).get_array()[0].get_int8());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(1, result->get(0).get_array()[0].get_int8());
+                ASSERT_EQ(1, result->get(1).get_array()[0].get_int8());
+                ASSERT_EQ(1, result->get(2).get_array()[0].get_int8());
             } else if (i == 7 && j == 3) { // array_map(x -> -110, array<const([null]...)>)
-                EXPECT_EQ(3, result->size());
-                EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(1).get_array()[0].get_int32());
-                EXPECT_EQ(-110, result->get(2).get_array()[0].get_int32());
+                ASSERT_EQ(3, result->size());
+                ASSERT_EQ(-110, result->get(0).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(1).get_array()[0].get_int32());
+                ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
             } else if (i == 8) { // array_map(x -> x || x -> x is null || x -> x+a || x -> -110, array<const([]...)>)
-                EXPECT_EQ(3, result->size());
+                ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array().empty());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->get(2).get_array().empty());
             }
 
             if (j == 1) { // array<int> -> array<bool>
-                if (result->is_nullable()) {
-                    auto col = std::dynamic_pointer_cast<NullableColumn>(result);
-                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(col->data_column());
-                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // nullable bool
-                } else {
-                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(result);
-                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // nullable bool
+                auto data_column = result;
+                if (data_column->is_constant()) {
+                    data_column = FunctionHelper::get_data_column_of_const(data_column);
                 }
+                if (data_column->is_nullable()) {
+                    data_column = down_cast<NullableColumn*>(data_column.get())->data_column();
+                }
+                auto array_col = ArrayColumn::dynamic_pointer_cast(data_column);
+                ASSERT_EQ(2, array_col->elements_column()->type_size());
             }
             Expr::close(expr_ctxs, &_runtime_state);
         }

@@ -39,7 +39,7 @@ public:
 
     bool has_output() const override { return false; }
 
-    bool need_input() const override { return true; }
+    bool need_input() const override { return !_partition_topn_ctx->is_full(); }
 
     bool is_finished() const override { return _is_finished; }
 
@@ -48,6 +48,9 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status set_finishing(RuntimeState* state) override;
+
+    bool releaseable() const override { return true; }
+    void set_execute_mode(int performance_level) override;
 
 private:
     bool _is_finished = false;
@@ -65,6 +68,7 @@ public:
             : OperatorFactory(id, "local_partition_topn_sink", plan_node_id),
               _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
     ~LocalPartitionTopnSinkOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

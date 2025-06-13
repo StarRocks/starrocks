@@ -273,6 +273,8 @@ public class TypeManager {
         } else if ((type2.isBoolean() && type1.isNumericType()) ||
                 (type2.isFixedPointType() && type1.isFloatingPointType())) {
             return type1;
+        } else if (type1.isBinaryType() && type2.isVarchar()) {
+            return type1;
         }
 
         return Type.DOUBLE;

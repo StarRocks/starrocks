@@ -125,7 +125,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 // skip information_schema database
                 continue;
             }
-            Database db = globalStateMgr.getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -133,7 +133,7 @@ public class StatisticProcDir implements ProcDirInterface {
             ++totalDbNum;
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 int dbTableNum = 0;
                 int dbPartitionNum = 0;
@@ -141,7 +141,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbTabletNum = 0;
                 int dbReplicaNum = 0;
 
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
@@ -152,8 +152,8 @@ public class StatisticProcDir implements ProcDirInterface {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                         ++dbPartitionNum;
-                        for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
-                            for (MaterializedIndex materializedIndex : physicalParition
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex materializedIndex : physicalPartition
                                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                                 ++dbIndexNum;
                                 for (Tablet tablet : materializedIndex.getTablets()) {
@@ -170,7 +170,7 @@ public class StatisticProcDir implements ProcDirInterface {
                                     }
 
                                     Pair<TabletHealthStatus, Priority> res = TabletChecker.getTabletHealthStatusWithPriority(
-                                            localTablet, infoService, physicalParition.getVisibleVersion(),
+                                            localTablet, infoService, physicalPartition.getVisibleVersion(),
                                             replicationNum, aliveBeIdsInCluster, olapTable.getLocation());
 
                                     // here we treat REDUNDANT as HEALTHY, for user-friendly.
@@ -210,7 +210,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 totalTabletNum += dbTabletNum;
                 totalReplicaNum += dbReplicaNum;
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } // end for dbs
 
@@ -259,7 +259,7 @@ public class StatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
-        if (globalStateMgr.getDb(dbId) == null) {
+        if (globalStateMgr.getLocalMetastore().getDb(dbId) == null) {
             throw new AnalysisException("Invalid db id: " + dbIdStr);
         }
 

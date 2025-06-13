@@ -23,6 +23,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
@@ -33,16 +34,33 @@ namespace starrocks {
 class SegmentReplicateTask final : public Runnable {
 public:
     SegmentReplicateTask(ReplicateToken* replicate_token, std::unique_ptr<SegmentPB> segment, bool eos)
-            : _replicate_token(replicate_token), _segment(std::move(segment)), _eos(eos) {}
+            : _replicate_token(replicate_token),
+              _segment(std::move(segment)),
+              _eos(eos),
+              _create_time_ns(MonotonicNanos()) {}
 
     ~SegmentReplicateTask() override = default;
 
-    void run() override { _replicate_token->_sync_segment(std::move(_segment), _eos); }
+    void run() override {
+        auto& stat = _replicate_token->_stat;
+        stat.num_pending_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.pending_time_ns.fetch_add(MonotonicNanos() - _create_time_ns, std::memory_order_relaxed);
+        stat.num_running_tasks.fetch_add(1, std::memory_order_relaxed);
+        int64_t duration_ns = 0;
+        {
+            SCOPED_RAW_TIMER(&duration_ns);
+            _replicate_token->_sync_segment(std::move(_segment), _eos);
+        }
+        stat.num_running_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.num_finished_tasks.fetch_add(1, std::memory_order_relaxed);
+        stat.execute_time_ns.fetch_add(duration_ns, std::memory_order_relaxed);
+    }
 
 private:
     ReplicateToken* _replicate_token;
     std::unique_ptr<SegmentPB> _segment;
     bool _eos;
+    int64_t _create_time_ns;
 };
 
 ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id)
@@ -78,7 +96,8 @@ Status ReplicateChannel::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-    _mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
+    _mem_tracker = std::make_unique<MemTracker>(-1, "replicate: " + UniqueId(_opt->load_id).to_string(),
+                                                GlobalEnv::GetInstance()->load_mem_tracker());
     if (!_mem_tracker) {
         auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
         LOG(WARNING) << msg;
@@ -87,38 +106,20 @@ Status ReplicateChannel::_init() {
     return Status::OK();
 }
 
-Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
-    RETURN_IF_ERROR(_st);
-
-    // 1. init sync channel
-    _st = _init();
-    RETURN_IF_ERROR(_st);
-
-    // 2. send segment sync request
-    _send_request(segment, data, eos);
-
-    // 3. wait result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
-
-    VLOG(1) << "Sync tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
-            << " eos " << eos << " to [" << _host << ":" << _port << "] res " << _closure->result.DebugString();
-
-    return _st;
-}
-
 Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
-    RETURN_IF_ERROR(_st);
+    RETURN_IF_ERROR(get_status());
 
-    VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
+    VLOG(2) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
             << " eos " << eos << " to [" << _host << ":" << _port;
 
     // 1. init sync channel
-    _st = _init();
-    RETURN_IF_ERROR(_st);
+    Status status = _init();
+    if (!status.ok()) {
+        _set_status(status);
+        return status;
+    }
 
     // 2. wait pre request's result
     RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
@@ -127,15 +128,15 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     _send_request(segment, data, eos);
 
     // 4. wait if eos=true
-    if (eos || _mem_tracker->limit_exceeded()) {
+    if (eos || _mem_tracker->any_limit_exceeded()) {
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
-    VLOG(1) << "Asynced tablet " << _opt->tablet_id << " segment id "
+    VLOG(2) << "Asynced tablet " << _opt->tablet_id << " segment id "
             << (segment == nullptr ? -1 : segment->segment_id()) << " eos " << eos << " to [" << _host << ":" << _port
             << "] res " << _closure->result.DebugString();
 
-    return _st;
+    return get_status();
 }
 
 void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, bool eos) {
@@ -147,23 +148,26 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     request.set_index_id(_opt->index_id);
     request.set_sink_id(_opt->sink_id);
 
-    VLOG(1) << "Send segment to " << debug_string()
+    VLOG(2) << "Send segment to " << debug_string()
             << " segment_id=" << (segment == nullptr ? -1 : segment->segment_id()) << " eos=" << eos
             << " txn_id=" << _opt->txn_id << " index_id=" << _opt->index_id << " sink_id=" << _opt->sink_id;
 
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
-    _closure->cntl.ignore_eovercrowded();
+    SET_IGNORE_OVERCROWDED(_closure->cntl, load);
 
     if (segment != nullptr) {
         request.set_allocated_segment(segment);
         _closure->cntl.request_attachment().append(data);
     }
     _closure->request_size = _closure->cntl.request_attachment().size();
-    // brpc send buffer is also considered as part of the memory used by load
-    _mem_tracker->consume(_closure->request_size);
 
+    // brpc send buffer is also considered as part of the memory used by load
+    _mem_tracker->consume_without_root(_closure->request_size);
+
+    FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_segment,
+                               TABLET_WRITER_ADD_SEGMENT_FP_ACTION(_host, _closure, request));
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
     request.release_id();
@@ -175,16 +179,19 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                         std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     if (_closure->join()) {
-        _mem_tracker->release(_closure->request_size);
+        Status status;
+        _mem_tracker->release_without_root(_closure->request_size);
         if (_closure->cntl.Failed()) {
-            _st = Status::InternalError(_closure->cntl.ErrorText());
-            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;
-            return _st;
+            status = Status::InternalError(_closure->cntl.ErrorText());
+            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << status;
+            _set_status(status);
+            return status;
         }
-        _st = _closure->result.status();
-        if (!_st.ok()) {
-            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;
-            return _st;
+        status = _closure->result.status();
+        if (!status.ok()) {
+            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << status;
+            _set_status(status);
+            return status;
         }
 
         for (size_t i = 0; i < _closure->result.tablet_vec_size(); ++i) {
@@ -201,23 +208,21 @@ Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>
     return Status::OK();
 }
 
-void ReplicateChannel::cancel() {
-    if (!_init().ok()) {
-        return;
-    }
-
+void ReplicateChannel::cancel(const Status& status) {
     // cancel rpc request, accelerate the release of related resources
     // Cancel an already-cancelled call_id has no effect.
     _closure->cancel();
+    _set_status(status);
 }
 
 ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_token, const DeltaWriterOptions* opt)
         : _replicate_token(std::move(replicate_pool_token)), _status(), _opt(opt), _fs(new_fs_posix()) {
     // first replica is primary replica, skip it
     for (size_t i = 1; i < opt->replicas.size(); ++i) {
-        _replicate_channels.emplace_back(std::make_unique<ReplicateChannel>(
-                opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id()));
-        _replica_node_ids.emplace_back(opt->replicas[i].node_id());
+        auto node_id = opt->replicas[i].node_id();
+        _replicate_channels.emplace(node_id, std::make_unique<ReplicateChannel>(opt, opt->replicas[i].host(),
+                                                                                opt->replicas[i].port(), node_id));
+        _replica_node_ids.emplace_back(node_id);
     }
     if (opt->write_quorum == WriteQuorumTypePB::ONE) {
         _max_fail_replica_num = opt->replicas.size();
@@ -234,7 +239,11 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
         return Status::InternalError(fmt::format("{} segment=null eos=false", debug_string()));
     }
     auto task = std::make_shared<SegmentReplicateTask>(this, std::move(segment), eos);
-    return _replicate_token->submit(std::move(task));
+    Status st = _replicate_token->submit(std::move(task));
+    if (st.ok()) {
+        _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);
+    }
+    return st;
 }
 
 void ReplicateToken::cancel(const Status& st) {
@@ -249,6 +258,14 @@ Status ReplicateToken::wait() {
     _replicate_token->wait();
     std::lock_guard l(_status_lock);
     return _status;
+}
+
+Status ReplicateToken::get_replica_status(int64_t node_id) const {
+    auto channel = _replicate_channels.find(node_id);
+    if (channel == _replicate_channels.end()) {
+        return Status::NotFound("replica node id not found");
+    }
+    return channel->second->get_status();
 }
 
 std::string ReplicateToken::debug_string() {
@@ -314,16 +331,53 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                 return set_status(st);
             }
         }
+        if (!segment->seg_indexes().empty()) {
+            auto mutable_indexes = segment->mutable_seg_indexes();
+            size_t total_index_data_size = 0;
+            for (int i = 0; i < mutable_indexes->size(); i++) {
+                auto& index = mutable_indexes->at(i);
+                if (index.index_type() == VECTOR) {
+                    auto index_path = mutable_indexes->at(i).index_path();
+                    auto res = _fs->new_random_access_file(index_path);
+
+                    if (!res.ok()) {
+                        LOG(WARNING) << "Failed to open index file " << index_path << " by " << debug_string()
+                                     << " err " << res.status();
+                        return set_status(res.status());
+                    }
+
+                    auto file_size_res = _fs->get_file_size(index_path);
+                    if (!file_size_res.ok()) {
+                        LOG(WARNING) << "Failed to get index file size " << index_path << " err " << res.status();
+                        return set_status(res.status());
+                    }
+                    auto file_size = file_size_res.value();
+                    mutable_indexes->at(i).set_index_file_size(file_size);
+                    total_index_data_size += file_size;
+
+                    auto rfile = std::move(res.value());
+                    auto buf = new uint8[file_size];
+                    data.append_user_data(buf, file_size, [](void* buf) { delete[](uint8*) buf; });
+                    auto st = rfile->read_fully(buf, file_size);
+                    if (!st.ok()) {
+                        LOG(WARNING) << "Failed to read index file " << segment->DebugString() << " by "
+                                     << debug_string() << " err " << st;
+                        return set_status(st);
+                    }
+                }
+                segment->set_seg_index_data_size(total_index_data_size);
+            }
+        }
     }
 
     // 2. send segment to secondary replica
-    for (auto& channel : _replicate_channels) {
+    for (const auto& [_, channel] : _replicate_channels) {
         auto st = Status::OK();
         if (_failed_node_id.count(channel->node_id()) == 0) {
             st = channel->async_segment(segment.get(), data, eos, &_replicated_tablet_infos, &_failed_tablet_infos);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to sync segment " << channel->debug_string() << " err " << st;
-                channel->cancel();
+                channel->cancel(st);
                 _failed_node_id.insert(channel->node_id());
             }
         }
@@ -331,9 +385,9 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
         if (_failed_node_id.size() > _max_fail_replica_num) {
             LOG(WARNING) << "Failed to sync segment err " << st << " by " << debug_string() << " fail_num "
                          << _failed_node_id.size() << " max_fail_num " << _max_fail_replica_num;
-            for (auto& channel : _replicate_channels) {
+            for (const auto& [_, channel] : _replicate_channels) {
                 if (_failed_node_id.count(channel->node_id()) == 0) {
-                    channel->cancel();
+                    channel->cancel(Status::InternalError("failed replica num exceed max fail num"));
                 }
             }
             return set_status(st);

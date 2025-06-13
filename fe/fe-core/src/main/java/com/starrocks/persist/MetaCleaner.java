@@ -34,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.leader.MetaHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -67,13 +68,13 @@ public class MetaCleaner {
                 }
                 String filename = file.getName();
                 // Delete all image whose version is less than imageVersionDelete
-                if (type.equalsIgnoreCase(Storage.IMAGE)) {
-                    if (filename.endsWith(".part")) {
-                        filename = filename.substring(0, filename.length() - ".part".length());
+                if (type.equalsIgnoreCase(Storage.IMAGE) || type.equalsIgnoreCase(Storage.CHECKSUM)) {
+                    if (filename.endsWith(MetaHelper.PART_SUFFIX)) {
+                        filename = filename.substring(0, filename.length() - MetaHelper.PART_SUFFIX.length());
                     }
                     long version = Long.parseLong(filename.substring(filename.lastIndexOf('.') + 1));
 
-                    if (version < imageDeleteVersion) {
+                    if (version <= imageDeleteVersion) {
                         if (file.delete()) {
                             LOG.info(file.getAbsoluteFile() + " deleted.");
                         } else {
@@ -85,20 +86,23 @@ public class MetaCleaner {
         }
     }
 
-    private String fileType(File file) throws IOException {
+    private String fileType(File file) {
         String type = null;
         String filename = file.getName();
 
         if (filename.equals(Storage.IMAGE_NEW)) {
             type = Storage.IMAGE_NEW;
         } else {
-            if (filename.endsWith(".part")) {
-                filename = filename.substring(0, filename.length() - ".part".length());
+            if (filename.endsWith(MetaHelper.PART_SUFFIX)) {
+                filename = filename.substring(0, filename.length() - MetaHelper.PART_SUFFIX.length());
             }
 
             if (filename.contains(".")) {
                 if (filename.startsWith(Storage.IMAGE)) {
                     type = Storage.IMAGE;
+                }
+                if (filename.startsWith(Storage.CHECKSUM)) {
+                    type = Storage.CHECKSUM;
                 }
             }
         }

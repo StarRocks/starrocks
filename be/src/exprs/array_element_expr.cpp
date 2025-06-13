@@ -35,7 +35,8 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
-        DCHECK_EQ(_type, _children[0]->type().children[0]);
+        // After DLA's complex type prune, ArrayElement expr's type is different from children's type
+        // DCHECK_EQ(_type, _children[0]->type().children[0]);
         ASSIGN_OR_RETURN(ColumnPtr arg0, _children[0]->evaluate_checked(context, chunk));
         ASSIGN_OR_RETURN(ColumnPtr arg1, _children[1]->evaluate_checked(context, chunk));
         size_t num_rows = std::max(arg0->size(), arg1->size());
@@ -73,7 +74,7 @@ public:
             }
         }
 
-        std::vector<uint8_t> null_flags;
+        NullData null_flags;
         raw::make_room(&null_flags, num_rows);
 
         // Construct null flags.
@@ -124,7 +125,7 @@ public:
 
         // Construct the final result column;
         ColumnPtr result_data = array_elements_data->clone_empty();
-        NullColumnPtr result_null = NullColumn::create();
+        NullColumn::MutablePtr result_null = NullColumn::create();
         result_null->get_data().swap(null_flags);
 
         if (!array_elements_data->empty()) {

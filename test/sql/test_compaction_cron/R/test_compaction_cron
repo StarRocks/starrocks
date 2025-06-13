@@ -1,0 +1,125 @@
+-- name: test_disable_compaction @sequential
+create database test_disable_compaction;
+-- result:
+-- !result
+use test_disable_compaction;
+-- result:
+-- !result
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* * * * *');
+-- result:
+-- !result
+select sleep(10);
+-- result:
+1
+-- !result
+insert into t values(1,1),(2,2),(3,3),(4,4),(5,5);
+-- result:
+-- !result
+delete from t where k = 1;
+-- result:
+-- !result
+delete from t where k = 2;
+-- result:
+-- !result
+delete from t where k = 3;
+-- result:
+-- !result
+delete from t where k = 4;
+-- result:
+-- !result
+delete from t where k = 5;
+-- result:
+-- !result
+select sleep(3);
+-- result:
+1
+-- !result
+select min(NUM_VERSION) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='test_disable_compaction';
+-- result:
+7
+-- !result
+-- name: test_primary_key @sequential
+create table t(k int, v int) primary key(k)  properties('base_compaction_forbidden_time_ranges'='* * * * *');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Property base_compaction_forbidden_time_ranges not support primary keys table or cloud native table.')
+-- !result
+create table t(k int, v int) primary key(k);
+-- result:
+-- !result
+alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property base_compaction_forbidden_time_ranges not support primary keys table or cloud native table.')
+-- !result
+-- name: test_invalid_cron @sequential
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='5 8-18 * * *');
+-- result:
+E: (1064, "Invalid crontab format. The minute field must be '*'.")
+-- !result
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='-1 * * * *');
+-- result:
+E: (1064, "Invalid crontab format. The minute field must be '*'.")
+-- !result
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* * * * 0');
+-- result:
+E: (1064, 'Invalid crontab format. You can check through https://www.freeformatter.com/cron-expression-generator-quartz.html')
+-- !result
+-- name: test_create_alter_compaction_control @sequential
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* 8-18 * * *');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"base_compaction_forbidden_time_ranges" = "* 8-18 * * *",
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"base_compaction_forbidden_time_ranges" = "* 7-20 * * *",
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t set ('base_compaction_forbidden_time_ranges'='');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result

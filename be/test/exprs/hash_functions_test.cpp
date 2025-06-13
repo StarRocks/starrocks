@@ -31,7 +31,7 @@ TEST_F(HashFunctionsTest, hashTest) {
         auto tc1 = BinaryColumn::create();
         tc1->append("test1234567");
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns).value();
@@ -49,8 +49,8 @@ TEST_F(HashFunctionsTest, hashTest) {
         auto tc2 = BinaryColumn::create();
         tc2->append("asdf213");
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns).value();
@@ -70,9 +70,9 @@ TEST_F(HashFunctionsTest, hashTest) {
 
         auto tc3 = ColumnHelper::create_const_null_column(1);
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
-        columns.emplace_back(tc3);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns).value();
@@ -87,7 +87,7 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
         auto tc1 = BinaryColumn::create();
         tc1->append("hello");
         tc1->append("starrocks");
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::xx_hash3_64(ctx.get(), columns).value();
@@ -107,8 +107,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
         tc2->append("world");
         tc2->append("starrocks");
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::xx_hash3_64(ctx.get(), columns).value();
@@ -128,9 +128,9 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
         auto tc3 = BinaryColumn::create();
         tc3->append("world");
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
-        columns.emplace_back(tc3);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::xx_hash3_64(ctx.get(), columns).value();
@@ -147,7 +147,7 @@ TEST_F(HashFunctionsTest, test_xx_hash3_128) {
         auto tc1 = BinaryColumn::create();
         tc1->append("hello");
         tc1->append("starrocks");
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::xx_hash3_128(ctx.get(), columns).value();
@@ -167,8 +167,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_128) {
         tc2->append("world");
         tc2->append("starrocks");
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::xx_hash3_128(ctx.get(), columns).value();
@@ -188,9 +188,9 @@ TEST_F(HashFunctionsTest, test_xx_hash3_128) {
         auto tc3 = BinaryColumn::create();
         tc3->append("world");
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
-        columns.emplace_back(tc3);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = HashFunctions::xx_hash3_128(ctx.get(), columns).value();

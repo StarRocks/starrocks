@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.glue.converters.CatalogToHiveConverter;
 import org.apache.hadoop.hive.metastore.TableType;
+import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.glue.model.Column;
 import software.amazon.awssdk.services.glue.model.SerDeInfo;
@@ -28,6 +29,7 @@ import software.amazon.awssdk.services.glue.model.Table;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static com.starrocks.connector.hive.glue.util.ExpressionHelper.buildExpressionFromPartialSpecification;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_NAME;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_VALUE;
 import static java.lang.String.format;
@@ -135,6 +137,38 @@ public class GlueToHiveConverterTest {
 
         assertThrows(StarRocksConnectorException.class,
                 () -> CatalogToHiveConverter.convertTable(glueTable.build(), dbName));
+    }
+
+    @Test
+    public void testExpressionConversion() throws MetaException {
+        String dbName = "test-db";
+        String tableName = "test-tbl";
+        String owner = "owner";
+        String viewOriginalText = "originalText";
+        String viewExpandedText = "expandedText";
+        int retention = 100;
+
+        Column column1 = Column.builder().name("k1").type("varchar(65536)").build();
+        Column column2 = Column.builder().name("k2").type("int").build();
+
+        Table glueTable = Table.builder()
+                .databaseName(dbName)
+                .name(tableName)
+                .owner(owner)
+                .parameters(ImmutableMap.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE))
+                .partitionKeys(ImmutableList.of(column1, column2))
+                .storageDescriptor((StorageDescriptor) null)
+                .tableType(TableType.EXTERNAL_TABLE.name())
+                .viewOriginalText(viewOriginalText)
+                .viewExpandedText(viewExpandedText)
+                .retention(retention)
+                .build();
+
+        org.apache.hadoop.hive.metastore.api.Table hmsTable =
+                CatalogToHiveConverter.convertTable(glueTable, dbName);
+
+        String expression = buildExpressionFromPartialSpecification(hmsTable, ImmutableList.of("abc", "1"));
+        assertEquals(expression, "(k1='abc') AND (k2=1)");
     }
 
     private static void assertColumnList(List<org.apache.hadoop.hive.metastore.api.FieldSchema> actual,
