@@ -46,6 +46,8 @@ public:
     // Update the datacache memory quota.
     virtual Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) = 0;
 
+    virtual Status adjust_capacity(int64_t delta, size_t min_capacity) = 0;
+
     // Update the datacache disk space information, such as disk quota or disk path.
     virtual Status update_disk_spaces(const std::vector<DirSpace>& spaces) = 0;
 

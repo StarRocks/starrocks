@@ -80,6 +80,15 @@ class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
+class BlockCache;
+class ObjectCache;
+class LocalCache;
+class RemoteCache;
+class StoragePageCache;
+class PeerCacheWrapper;
+class Cache;
+class DiskSpaceMonitor;
+struct CacheOptions;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -237,6 +246,28 @@ private:
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
+};
+
+class CacheEnv {
+public:
+    Status init(const std::vector<StorePath>& store_paths);
+    void destroy();
+
+    Status adjust_capacity(int64_t delta, size_t min_capacity = 0);
+
+private:
+#if defined(WITH_STARCACHE)
+    StatusOr<CacheOptions> _init_cache_options();
+    Status _init_starcache(CacheOptions* cache_options);
+    Status _init_peer_cache(const CacheOptions& cache_options);
+    Status _init_object_cache(LocalCache* local_cache);
+#endif
+
+    Status _init_page_cache();
+
+    // object cache
+    std::shared_ptr<ObjectCache> _object_cache;
+    std::shared_ptr<StoragePageCache> _page_cache;
 };
 
 // Execution environment for queries/plan fragments.
