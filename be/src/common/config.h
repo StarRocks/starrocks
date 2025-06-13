@@ -1209,6 +1209,7 @@ CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 // Report exec rpc request is important for load job, if one fragment instance finish report failed,
 // the load job will be hang until timeout.
 CONF_mInt32(report_exec_rpc_request_retry_num, "10");
+CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
 
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
