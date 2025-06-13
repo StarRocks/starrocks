@@ -93,9 +93,10 @@ public class TabletStatisticsMgr {
                 if (tabletMeta != null) {
                     Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().
                             getDbIncludeRecycleBin(tabletMeta.getDbId());
-                    OlapTable olapTable = (OlapTable) db.getTable(tabletMeta.getTableId());
-                    PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(
-                            tabletMeta.getPhysicalPartitionId());
+                    OlapTable olapTable = (OlapTable)  GlobalStateMgr.getCurrentState().getLocalMetastore().
+                                getTableIncludeRecycleBin(db, tabletMeta.getTableId());
+                    PhysicalPartition physicalPartition = GlobalStateMgr.getCurrentState().getLocalMetastore().
+                                getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
                     infosList.add(new TabletStatistics(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getOriginName(), olapTable.getName(),
                             // getName() return partitionName_partitionId, remove _partitionId
