@@ -17,11 +17,6 @@
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "common/config.h"
-<<<<<<< HEAD
-#include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
-=======
->>>>>>> 249ee8a7b9 ([BugFix] Revert PR #59009 (#59815))
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"

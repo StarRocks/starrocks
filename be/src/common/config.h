@@ -1631,13 +1631,4 @@ CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
 CONF_mInt32(big_query_sec, "1");
-
-<<<<<<< HEAD
-CONF_mInt32(max_update_tablet_version_internal_ms, "5000");
-=======
-CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
-
-// when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
-CONF_mInt64(two_level_memory_threshold, "-1");
->>>>>>> 249ee8a7b9 ([BugFix] Revert PR #59009 (#59815))
 } // namespace starrocks::config
