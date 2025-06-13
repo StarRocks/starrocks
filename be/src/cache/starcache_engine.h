@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-class StarCacheEngine: public LocalCacheEngine {
+class StarCacheEngine : public LocalCacheEngine {
 public:
     StarCacheEngine() = default;
     ~StarCacheEngine() override = default;
