@@ -79,10 +79,12 @@ public class TabletStatisticsMgr {
 
         List<ScanNode> scanNodes = plan.getScanNodes();
         for (ScanNode sn : scanNodes) {
-            OlapScanNode osn = (OlapScanNode) sn;
-            for (long scanTabletId : osn.getScanTabletIds()) {
-                // during loading interval, to avoid produce many rows statistics data, here aggragate it.
-                infosMap.put(scanTabletId, infosMap.getOrDefault(scanTabletId, 0.0d) + 1);
+            if (sn instanceof OlapScanNode) {
+                OlapScanNode osn = (OlapScanNode) sn;
+                for (long scanTabletId : osn.getScanTabletIds()) {
+                    // during loading interval, to avoid produce many rows statistics data, here aggragate it.
+                    infosMap.put(scanTabletId, infosMap.getOrDefault(scanTabletId, 0.0d) + 1);
+                }
             }
         }
         if (infosMap.size() > CONVERT_BATCH_SIZE || lastLoadTime.plusSeconds(
