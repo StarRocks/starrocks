@@ -60,9 +60,9 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
     if (schema_table->schema_table_type() == TSchemaTableType::SCH_FE_TABLET_SCHEDULES) {
         for (auto* slot_desc : dest_slot_descs) {
             const auto& col_name = slot_desc->col_name();
-            if (slot_desc->type().type == TYPE_DOUBLE && (boost::iequals(col_name, "CREATE_TIME") || boost::iequals(col_name, "SCHEDULE_TIME") ||
-                 boost::iequals(col_name, "FINISH_TIME"))
-                ) {
+            if (slot_desc->type().type == TYPE_DOUBLE &&
+                (boost::iequals(col_name, "CREATE_TIME") || boost::iequals(col_name, "SCHEDULE_TIME") ||
+                 boost::iequals(col_name, "FINISH_TIME"))) {
                 slot_desc->type().type = TYPE_DATETIME;
             }
         }
