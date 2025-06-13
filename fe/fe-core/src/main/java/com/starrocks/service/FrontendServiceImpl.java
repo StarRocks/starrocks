@@ -333,8 +333,6 @@ import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
-import com.starrocks.thrift.TUpdateTabletVersionRequest;
-import com.starrocks.thrift.TUpdateTabletVersionResult;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.thrift.TWarehouseInfo;
@@ -3051,10 +3049,5 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetKeywordsResponse getKeywords(TGetKeywordsRequest request) throws TException {
         return InformationSchemaDataSource.generateKeywordsResponse(request);
-    }
-    
-    @Override
-    public TUpdateTabletVersionResult updateTabletVersion(TUpdateTabletVersionRequest request) {
-        return leaderImpl.updateTabletVersion(request);
     }
 }

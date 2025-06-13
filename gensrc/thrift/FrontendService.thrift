@@ -1979,16 +1979,6 @@ struct TGetApplicableRolesResponse {
     2: optional i64 next_table_id_offset;
 }
 
-struct TUpdateTabletVersionRequest {
-    1: optional Types.TBackend backend;
-    2: optional i64 signature;
-    3: optional list<MasterService.TTabletVersionPair> tablet_versions;
-}
-
-struct TUpdateTabletVersionResult {
-    1: optional Status.TStatus status;
-}
-
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2115,7 +2105,5 @@ service FrontendService {
     TGetApplicableRolesResponse getApplicableRoles(1: TGetApplicableRolesRequest request)
 
     TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
-
-    TUpdateTabletVersionResult updateTabletVersion(1: TUpdateTabletVersionRequest request)
 }
 
