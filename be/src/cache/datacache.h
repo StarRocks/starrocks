@@ -46,23 +46,24 @@ public:
     LocalCache* local_cache() { return _local_cache.get(); }
     BlockCache* block_cache() const { return _block_cache.get(); }
     void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
-    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
-    ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
     std::shared_ptr<StoragePageCache> page_cache_ptr() const { return _page_cache; }
     bool page_cache_available() const;
 
     StatusOr<int64_t> get_storage_page_cache_limit();
+    StatusOr<int64_t> get_current_mem_limit();
     int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
 
     bool adjust_mem_capacity(int64_t delta, size_t min_capacity);
     size_t get_mem_capacity() const;
 
 private:
-    StatusOr<CacheOptions> _init_cache_options();
-    Status _init_datacache();
-    Status _init_starcache_based_object_cache();
-    Status _init_lru_base_object_cache();
+#if defined(WITH_STARCACHE)
+    StatusOr<CacheOptions> _init_cache_options(size_t mem_limit);
+    Status _init_starcache(CacheOptions* cache_options);
+    Status _init_peer_cache(const CacheOptions& cache_options);
+#endif
+
     Status _init_page_cache();
 
     GlobalEnv* _global_env;
@@ -74,8 +75,7 @@ private:
     std::shared_ptr<Cache> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;
-    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
-    std::shared_ptr<ObjectCache> _lru_based_object_cache;
+    std::shared_ptr<ObjectCache> _object_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
 
     std::shared_ptr<DiskSpaceMonitor> _disk_space_monitor;
