@@ -289,15 +289,11 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
 
     SharedTabletMetadataPB shared_meta;
     auto& first_meta = tablet_metas.begin()->second;
-    const int64_t schema_id = first_meta.schema().id();
-    shared_meta.set_schema_id(schema_id);
     auto partition_location = tablet_metadata_root_location(tablet_metas.begin()->first);
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
     unique_schemas.emplace(first_meta.schema().id(), first_meta.schema());
     for (auto& [tablet_id, meta] : tablet_metas) {
-        if (schema_id != meta.schema().id()) {
-            return Status::InternalError("tablet schema not the same");
-        }
+        (*shared_meta.mutable_tablet_to_schema())[tablet_id] = schema_id;
         for (const auto& [ver, schema] : meta.historical_schemas()) {
             unique_schemas.emplace(ver, schema);
         }
@@ -534,7 +530,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         return Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
     }
 
-    auto schema_id = shared_metadata->schema_id();
+    auto schema_id = shared_metadata->tablet_to_schema().find(tablet_id);
     auto schema_it = shared_metadata->schemas().find(schema_id);
     if (schema_it == shared_metadata->schemas().end()) {
         return Status::Corruption(strings::Substitute("tablet $0 metadata can not find schema($1) in shared metadata",
