@@ -29,6 +29,8 @@ public:
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
+    Status TEST_start(RuntimeState* state, const std::vector<TTabletSchedule>& infos);
+
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
