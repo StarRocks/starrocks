@@ -90,17 +90,18 @@ public class TabletStatisticsMgr {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             for (long scanTabletId : infosMap.keySet()) {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(scanTabletId);
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().
-                        getDbIncludeRecycleBin(tabletMeta.getDbId());
-                OlapTable olapTable = (OlapTable)  GlobalStateMgr.getCurrentState().getLocalMetastore().
-                        getTableIncludeRecycleBin(db, tabletMeta.getTableId());
-                PhysicalPartition physicalPartition = GlobalStateMgr.getCurrentState().getLocalMetastore().
-                        getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
-                infosList.add(new TabletStatistics(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        db.getOriginName(), olapTable.getName(),
-                        // getName() return partitionName_partitionId, remove _partitionId
-                        physicalPartition.getName().replace("_" + tabletMeta.getPhysicalPartitionId(), ""),
-                        scanTabletId, infosMap.get(scanTabletId)));
+                if (tabletMeta != null) {
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().
+                            getDbIncludeRecycleBin(tabletMeta.getDbId());
+                    OlapTable olapTable = (OlapTable) db.getTable(tabletMeta.getTableId());
+                    PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(
+                            tabletMeta.getPhysicalPartitionId());
+                    infosList.add(new TabletStatistics(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.getOriginName(), olapTable.getName(),
+                            // getName() return partitionName_partitionId, remove _partitionId
+                            physicalPartition.getName().replace("_" + tabletMeta.getPhysicalPartitionId(), ""),
+                            scanTabletId, infosMap.get(scanTabletId)));
+                }
             }
             loadTabletStatistics(Lists.newArrayList(infosList));
             infosList.clear();
