@@ -16,8 +16,8 @@
 
 #include <atomic>
 
-#include "cache/local_cache.h"
-#include "cache/remote_cache.h"
+#include "cache/local_cache_engine.h"
+#include "cache/remote_cache_engine.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -33,8 +33,8 @@ public:
     ~BlockCache();
 
     // Init the block cache instance
-    Status init(const CacheOptions& options, std::shared_ptr<LocalCache> local_cache,
-                std::shared_ptr<RemoteCache> remote_cache);
+    Status init(const CacheOptions& options, std::shared_ptr<LocalCacheEngine> local_cache,
+                std::shared_ptr<RemoteCacheEngine> remote_cache);
 
     // Write data buffer to cache, the `offset` must be aligned by block size
     Status write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, WriteCacheOptions* options = nullptr);
@@ -75,14 +75,14 @@ public:
     bool available() const { return is_initialized() && _local_cache->available(); }
     bool mem_cache_available() const { return is_initialized() && _local_cache->mem_cache_available(); }
 
-    std::shared_ptr<LocalCache> local_cache() { return _local_cache; }
+    std::shared_ptr<LocalCacheEngine> local_cache() { return _local_cache; }
 
     static const size_t MAX_BLOCK_SIZE;
 
 private:
     size_t _block_size = 0;
-    std::shared_ptr<LocalCache> _local_cache;
-    std::shared_ptr<RemoteCache> _remote_cache;
+    std::shared_ptr<LocalCacheEngine> _local_cache;
+    std::shared_ptr<RemoteCacheEngine> _remote_cache;
     std::atomic<bool> _initialized = false;
 };
 

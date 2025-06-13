@@ -36,8 +36,8 @@ BlockCache::~BlockCache() {
     (void)shutdown();
 }
 
-Status BlockCache::init(const CacheOptions& options, std::shared_ptr<LocalCache> local_cache,
-                        std::shared_ptr<RemoteCache> remote_cache) {
+Status BlockCache::init(const CacheOptions& options, std::shared_ptr<LocalCacheEngine> local_cache,
+                        std::shared_ptr<RemoteCacheEngine> remote_cache) {
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
     _local_cache = std::move(local_cache);
     _remote_cache = std::move(remote_cache);

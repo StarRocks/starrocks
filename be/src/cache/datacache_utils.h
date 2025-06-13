@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "cache/dummy_types.h"
-#include "cache/local_cache.h"
+#include "cache/cache_metrics.h"
+#include "cache/local_cache_engine.h"
 #include "gen_cpp/DataCache_types.h"
 
 namespace starrocks {

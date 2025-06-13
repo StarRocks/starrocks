@@ -49,7 +49,7 @@
 #include "util/thrift_server.h"
 
 #ifdef WITH_STARCACHE
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #endif
 
 namespace brpc {
@@ -127,7 +127,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #ifdef USE_STAROS
     auto* local_cache = cache_env->local_cache();
     if (config::datacache_unified_instance_enable && local_cache->is_initialized()) {
-        auto* starcache = reinterpret_cast<StarCacheWrapper*>(local_cache);
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
         init_staros_worker(starcache->starcache_instance());
     } else {
         init_staros_worker(nullptr);

@@ -22,7 +22,7 @@
 #include "runtime/string_value.h"
 
 #ifdef WITH_STARCACHE
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #endif
 
 namespace starrocks {
@@ -68,7 +68,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     row.emplace_back(_be_id);
 
-    const auto* cache = reinterpret_cast<StarCacheWrapper*>(DataCache::GetInstance()->local_cache());
+    const auto* cache = reinterpret_cast<StarCacheEngine*>(DataCache::GetInstance()->local_cache());
     if (cache != nullptr && cache->is_initialized()) {
         // retrieve different priority's used bytes from level = 2 metrics
         metrics = cache->starcache_metrics(2);

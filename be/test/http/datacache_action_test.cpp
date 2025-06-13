@@ -21,7 +21,7 @@
 
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
 #include "cache/block_cache/test_cache_utils.h"
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
@@ -51,7 +51,7 @@ public:
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
 
         auto options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
-        _cache = std::make_shared<StarCacheWrapper>();
+        _cache = std::make_shared<StarCacheEngine>();
         ASSERT_OK(_cache->init(options));
     }
     void TearDown() override {
@@ -62,7 +62,7 @@ public:
 
 protected:
     evhttp_request* _evhttp_req = nullptr;
-    std::shared_ptr<LocalCache> _cache;
+    std::shared_ptr<LocalCacheEngine> _cache;
 };
 
 TEST_F(DataCacheActionTest, stat_success) {
@@ -123,7 +123,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
 }
 
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
-    auto cache = std::make_shared<StarCacheWrapper>();
+    auto cache = std::make_shared<StarCacheEngine>();
     DataCacheAction action(cache.get());
 
     HttpRequest request(_evhttp_req);

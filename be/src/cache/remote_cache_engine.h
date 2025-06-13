@@ -20,9 +20,9 @@
 
 namespace starrocks {
 
-class RemoteCache {
+class RemoteCacheEngine {
 public:
-    virtual ~RemoteCache() = default;
+    virtual ~RemoteCacheEngine() = default;
 
     // Init remote cache
     virtual Status init(const CacheOptions& options) = 0;

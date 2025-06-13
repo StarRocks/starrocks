@@ -31,9 +31,9 @@ set(CACHE_FILES
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")
-    list(APPEND CACHE_FILES starcache_wrapper.cpp)
+    list(APPEND CACHE_FILES starcache_engine.cpp)
     list(APPEND CACHE_FILES object_cache/starcache_module.cpp)
-    list(APPEND CACHE_FILES peer_cache_wrapper.cpp)
+    list(APPEND CACHE_FILES peer_cache_engine.cpp)
 endif()
 
 add_library(Cache STATIC
