@@ -15,7 +15,7 @@
 #pragma once
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/local_cache.h"
+#include "cache/local_cache_engine.h"
 #include "cache/object_cache/object_cache.h"
 #include "common/status.h"
 
@@ -23,7 +23,7 @@ namespace starrocks {
 
 class Status;
 class StorePath;
-class RemoteCache;
+class RemoteCacheEngine;
 class CacheOptions;
 class GlobalEnv;
 class DiskSpaceMonitor;
@@ -40,10 +40,10 @@ public:
 
     void try_release_resource_before_core_dump();
 
-    void set_local_cache(std::shared_ptr<LocalCache> local_cache) { _local_cache = std::move(local_cache); }
+    void set_local_cache(std::shared_ptr<LocalCacheEngine> local_cache) { _local_cache = std::move(local_cache); }
     void set_page_cache(std::shared_ptr<StoragePageCache> page_cache) { _page_cache = std::move(page_cache); }
 
-    LocalCache* local_cache() { return _local_cache.get(); }
+    LocalCacheEngine* local_cache() { return _local_cache.get(); }
     BlockCache* block_cache() const { return _block_cache.get(); }
     void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
     ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
@@ -69,8 +69,8 @@ private:
     std::vector<StorePath> _store_paths;
 
     // cache engine
-    std::shared_ptr<LocalCache> _local_cache;
-    std::shared_ptr<RemoteCache> _remote_cache;
+    std::shared_ptr<LocalCacheEngine> _local_cache;
+    std::shared_ptr<RemoteCacheEngine> _remote_cache;
     std::shared_ptr<Cache> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;

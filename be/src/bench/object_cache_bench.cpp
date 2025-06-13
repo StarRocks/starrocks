@@ -20,7 +20,7 @@
 #include "cache/cache_options.h"
 #include "cache/object_cache/lrucache_module.h"
 #include "cache/object_cache/starcache_module.h"
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -71,7 +71,7 @@ private:
     size_t _capacity = 100L * 1024 * 1024 * 1024;
     size_t _page_size = 1024;
 
-    std::shared_ptr<StarCacheWrapper> _local_cache;
+    std::shared_ptr<StarCacheEngine> _local_cache;
     std::shared_ptr<ShardedLRUCache> _shared_lru_cache;
     std::shared_ptr<LRUCacheModule> _lru_cache;
     std::shared_ptr<StarCacheModule> _star_cache;
@@ -132,7 +132,7 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
         opt.engine = "starcache";
         opt.eviction_policy = config::datacache_eviction_policy;
 
-        _local_cache = std::make_shared<StarCacheWrapper>();
+        _local_cache = std::make_shared<StarCacheEngine>();
         Status st = _local_cache->init(opt);
         if (!st.ok()) {
             LOG(FATAL) << "init star cache failed: " << st;

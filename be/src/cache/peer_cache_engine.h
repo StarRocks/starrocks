@@ -14,15 +14,15 @@
 
 #pragma once
 
-#include "cache/remote_cache.h"
+#include "cache/remote_cache_engine.h"
 #include "starcache/time_based_cache_adaptor.h"
 
 namespace starrocks {
 
-class PeerCacheWrapper : public RemoteCache {
+class PeerCacheEngine : public RemoteCacheEngine {
 public:
-    PeerCacheWrapper() = default;
-    ~PeerCacheWrapper() override = default;
+    PeerCacheEngine() = default;
+    ~PeerCacheEngine() override = default;
 
     Status init(const CacheOptions& options) override;
 

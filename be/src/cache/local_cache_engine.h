@@ -20,11 +20,11 @@
 
 namespace starrocks {
 
-enum class DataCacheEngineType { STARCACHE };
+enum class LocalCacheEngineType { STARCACHE };
 
-class LocalCache {
+class LocalCacheEngine {
 public:
-    virtual ~LocalCache() = default;
+    virtual ~LocalCacheEngine() = default;
 
     // Init KV cache
     virtual Status init(const CacheOptions& options) = 0;
@@ -57,7 +57,7 @@ public:
 
     virtual Status shutdown() = 0;
 
-    virtual DataCacheEngineType engine_type() = 0;
+    virtual LocalCacheEngineType engine_type() = 0;
 
     virtual bool available() const = 0;
     virtual bool mem_cache_available() const = 0;

@@ -27,8 +27,8 @@
 
 #ifdef WITH_STARCACHE
 #include "cache/object_cache/starcache_module.h"
-#include "cache/peer_cache_wrapper.h"
-#include "cache/starcache_wrapper.h"
+#include "cache/peer_cache_engine.h"
+#include "cache/starcache_engine.h"
 #endif
 
 namespace starrocks {
@@ -106,7 +106,7 @@ size_t DataCache::get_mem_capacity() const {
 Status DataCache::_init_starcache_based_object_cache() {
 #ifdef WITH_STARCACHE
     if (_local_cache != nullptr && _local_cache->is_initialized()) {
-        auto* starcache = reinterpret_cast<StarCacheWrapper*>(_local_cache.get());
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(_local_cache.get());
         _starcache_based_object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
     }
 #endif
@@ -138,14 +138,14 @@ Status DataCache::_init_datacache() {
         ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
 
         // init starcache & disk monitor
-        _local_cache = std::make_shared<StarCacheWrapper>();
+        _local_cache = std::make_shared<StarCacheEngine>();
         _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
         RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.dir_spaces));
         RETURN_IF_ERROR(_local_cache->init(cache_options));
         _disk_space_monitor->start();
 
         // init remote cache
-        _remote_cache = std::make_shared<PeerCacheWrapper>();
+        _remote_cache = std::make_shared<PeerCacheEngine>();
         RETURN_IF_ERROR(_remote_cache->init(cache_options));
 
         if (config::block_cache_enable) {

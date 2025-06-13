@@ -18,7 +18,7 @@
 
 #include "cache/block_cache/test_cache_utils.h"
 #include "cache/datacache.h"
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "testutil/assert.h"

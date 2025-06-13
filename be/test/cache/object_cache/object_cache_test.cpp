@@ -19,7 +19,7 @@
 #include "cache/block_cache/test_cache_utils.h"
 #include "cache/object_cache/lrucache_module.h"
 #include "cache/object_cache/starcache_module.h"
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 #include "util/lru_cache.h"
@@ -66,7 +66,7 @@ protected:
     ObjectCacheModuleType _mode;
     std::string _cache_dir = "./object_cache_test";
     int64_t _mem_quota = 0;
-    std::shared_ptr<StarCacheWrapper> _local_cache;
+    std::shared_ptr<StarCacheEngine> _local_cache;
     std::shared_ptr<Cache> _lru_cache;
     std::shared_ptr<ObjectCache> _cache;
     ObjectCacheWriteOptions _write_opt;
@@ -81,7 +81,7 @@ void ObjectCacheTest::_init_local_cache() {
     CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
     options.dir_spaces.push_back({.path = _cache_dir, .size = 50 * MB});
 
-    _local_cache = std::make_shared<StarCacheWrapper>();
+    _local_cache = std::make_shared<StarCacheEngine>();
     ASSERT_OK(_local_cache->init(options));
 }
 

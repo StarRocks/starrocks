@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/test_cache_utils.h"
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
@@ -62,7 +62,7 @@ protected:
     void insert_value(int i);
 
     std::string cache_dir = "./starcache_module_test";
-    std::shared_ptr<StarCacheWrapper> _local_cache;
+    std::shared_ptr<StarCacheEngine> _local_cache;
     std::shared_ptr<ObjectCache> _cache;
     ObjectCacheWriteOptions _write_opt;
     size_t _value_size = 256 * 1024;
@@ -73,7 +73,7 @@ void StarCacheModuleTest::_init_local_cache() {
     CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
     options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
 
-    _local_cache = std::make_shared<StarCacheWrapper>();
+    _local_cache = std::make_shared<StarCacheEngine>();
     ASSERT_OK(_local_cache->init(options));
 }
 
