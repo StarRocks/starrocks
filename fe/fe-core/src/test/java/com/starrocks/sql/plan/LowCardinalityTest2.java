@@ -2237,4 +2237,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
         Assert.assertFalse("table doesn't contain global dict, we can change its distribution",
                 execPlan.getOptExpression(1).isExistRequiredDistribution());
     }
+
+    @Test
+    public void testShortCircuitQuery() throws Exception {
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        String sql = "select * from low_card_t2 where d_date='20160404' and c_mr = '12'";
+        final String plan = getFragmentPlan(sql);
+        assertContains(plan, "Short Circuit Scan: true");
+    }
 }
