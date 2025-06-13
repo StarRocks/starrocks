@@ -2203,6 +2203,78 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: Azure Blob Storage のリクエストを承認するために使用される共有アクセス署名 (SAS)。
 - 導入バージョン: v3.1
 
+##### azure_adls2_endpoint
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 アカウントのエンドポイント、例えば `https://test.dfs.core.windows.net`。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_path
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 のデータ保存に使用するパス。ファイルシステム名とディレクトリ名で構成され、例えば `testfilesystem/starrocks` のようになる。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_shared_key
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される Shared Key。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_sas_token
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名（SAS）。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_oauth2_use_managed_identity
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。
+- 導入バージョン: v3.4.4
+
+##### azure_adls2_oauth2_tenant_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。
+- 導入バージョン: v3.4.4
+
+##### azure_adls2_oauth2_client_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。
+- 導入バージョン: v3.4.4
+
+##### azure_use_native_sdk
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Azure Blob Storage へのアクセスにネイティブ SDK を使用し、Managed Identity と Service Principal による認証を許可するかどうか。この項目を `false` に設定すると、Shared Key と SAS Token による認証のみが許可される。
+- 導入バージョン: v3.4.4
+
 ##### lake_compaction_score_selector_min_score
 
 - デフォルト: 10.0

@@ -231,6 +231,8 @@ From v3.4.0 onwards, expression partitioning supports any expressions that retur
 
 For example, you can define a Unix timestamp column, and use from_unixtime() directly against the column in the partition expression to define the partition key, instead of define a generated DATE or DATETIME column with the function. For more about the usage, see [Examples](#examples-2).
 
+From v3.4.4 onwards, partition pruning are supported for partitions based on most DATETIME-related functions.
+
 ### Examples
 
 Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day. You can use the timestamp column with the function from_unixtime() in the expression to define the timestamp as the partition column and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
