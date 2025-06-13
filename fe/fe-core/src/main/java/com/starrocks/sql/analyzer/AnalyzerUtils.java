@@ -151,13 +151,13 @@ public class AnalyzerUtils {
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by time_slice
     public static final Set<String> TIME_SLICE_SUPPORTED_PARTITION_FORMAT =
             ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by mv date_trunc
     public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "week", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "week", "month", "year");
 
     public static final String DEFAULT_PARTITION_NAME_PREFIX = "p";
 
