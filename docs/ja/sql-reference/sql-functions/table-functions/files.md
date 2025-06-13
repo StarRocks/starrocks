@@ -22,6 +22,7 @@ displayed_sidebar: docs
   - Parquet
   - ORC
   - CSV
+  - Avro (バージョン 3.4.4 以降にサポートされ、ローディングのみ)
 
 バージョン 3.2 以降、FILES() は基本データ型に加えて、ARRAY、JSON、MAP、STRUCT などの複雑なデータ型もサポートしています。
 
@@ -114,7 +115,7 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 #### data_format
 
-データファイルの形式です。有効な値: `parquet`, `orc`, `csv`。
+データファイルの形式です。有効な値: `parquet`, `orc`, `csv`, `avro` (バージョン 3.4.4 以降にサポートされ、ローディングのみ)。
 
 特定のデータファイル形式に対して詳細なオプションを設定する必要があります。
 
@@ -224,7 +225,9 @@ FILES() のスキーマ検出は完全に厳密ではありません。たとえ
 
 StarRocks がストレージシステムにアクセスするために使用する認証情報。
 
-StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS への IAM ユーザー認証、Azure Blob Storage への共有キー認証をサポートしています。
+StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS への IAM ユーザー認証、Azure Blob Storage への共有キー、SAS トークン、マネージドアイデンティティ、サービスプリンシパル認証をサポートしています。
+
+##### HDFS
 
 - HDFS にシンプル認証を使用してアクセスする:
 
@@ -240,6 +243,8 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | username                       | Yes          | HDFS クラスターの NameNode にアクセスするために使用するアカウントのユーザー名。 |
   | password                       | Yes          | HDFS クラスターの NameNode にアクセスするために使用するアカウントのパスワード。 |
 
+##### AWS S3
+
 - IAM ユーザー認証を使用して AWS S3 にアクセスする:
 
   ```SQL
@@ -253,6 +258,8 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | aws.s3.access_key | Yes          | Amazon S3 バケットにアクセスするために使用できるアクセスキー ID。 |
   | aws.s3.secret_key | Yes          | Amazon S3 バケットにアクセスするために使用できるシークレットアクセスキー。 |
   | aws.s3.region     | Yes          | AWS S3 バケットが存在するリージョン。例: `us-west-2`。 |
+
+##### GCS
 
 - IAM ユーザー認証を使用して GCS にアクセスする:
 
@@ -268,17 +275,63 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | fs.s3a.secret.key | Yes          | GCS バケットにアクセスするために使用できるシークレットアクセスキー。|
   | fs.s3a.endpoint   | Yes          | GCS バケットにアクセスするために使用できるエンドポイント。例: `storage.googleapis.com`。エンドポイントアドレスに `https` を指定しないでください。 |
 
+##### Azure
+
 - 共有キーを使用して Azure Blob Storage にアクセスする:
 
   ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
   "azure.blob.shared_key" = "<shared_key>"
   ```
 
   | **Key**                    | **Required** | **Description**                                              |
   | -------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.storage_account | Yes          | Azure Blob Storage アカウントの名前。                  |
   | azure.blob.shared_key      | Yes          | Azure Blob Storage アカウントにアクセスするために使用できる共有キー。 |
+
+- SAS トークンを使用して Azure Blob Storage にアクセスする:
+
+  ```SQL
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
+  ```
+
+  | **Key**                    | **Required** | **Description**                                              |
+  | -------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.sas_token       | Yes          | Azure Blob Storage アカウントにアクセスするために使用できる SAS トークン。 |
+
+- マネージドアイデンティティを使用して Azure Blob Storage にアクセスする (v3.4.4 以降でサポート):
+
+  :::note
+  - クライアント ID クレデンシャルを持つ User Assigned Managed Identity のみがサポートされる。
+  - FE ダイナミック設定 `azure_use_native_sdk` (デフォルト: `true`) は、Managed Identity と Service Principal を使用した認証をシステムに許可するかどうかを制御する。
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_use_managed_identity" = "true",
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_use_managed_identity | Yes          | Azure Blob Storage アカウントへのアクセスに Managed Identity を使用するかどうか。`true` に設定する。                  |
+  | azure.blob.oauth2_client_id            | Yes          | Azure Blob Storage アカウントへのアクセスに使用できるマネージド ID のクライアントID。                |
+
+- サービスプリンシパルを使用して Azure Blob Storage にアクセスする (v3.4.4 以降でサポート):
+
+  :::note
+  - Client Secret クレデンシャルのみがサポートされます。
+  - FE ダイナミック設定 `azure_use_native_sdk` (デフォルト: `true`) は、Managed Identity と Service Principal を使用した認証をシステムに許可するかどうかを制御する。
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>",
+  "azure.blob.oauth2_client_secret" = "<oauth2_client_secret>",
+  "azure.blob.oauth2_tenant_id" = "<oauth2_tenant_id>"
+  ```
+
+  | **Key**                                | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.oauth2_client_id            | Yes          | Azure Blob Storage アカウントへのアクセスに使用できるマネージド ID のクライアントID。                    |
+  | azure.blob.oauth2_client_secret        | Yes          | Azure Blob Storage アカウントへのアクセスに使用するサービスプリンシパルのクライアントシークレット。          |
+  | azure.blob.oauth2_tenant_id            | Yes          | Azure Blob Storage アカウントへのアクセスに使用するサービスプリンシパルのテナント ID。                |
 
 #### columns_from_path
 
@@ -906,4 +959,71 @@ INSERT INTO FILES(
     'format' = 'parquet'
 )
 SELECT * FROM sales_records;
+```
+
+#### Example 8: Avro ファイル
+
+Avro ファイルをロードします：
+
+```SQL
+INSERT INTO avro_tbl
+  SELECT * FROM FILES(
+    "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
+    "format" = "avro"
+);
+```
+
+Avro ファイルのデータをクエリーします：
+
+```SQL
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+*************************** 1. row ***************************
+record_field: {"id":1,"name":"avro"}
+  enum_field: HEARTS
+ array_field: ["one","two","three"]
+   map_field: {"a":1,"b":2}
+ union_field: 100
+ fixed_field: 0x61626162616261626162616261626162
+1 row in set (0.05 sec)
+```
+
+Avro ファイルのスキーマを表示します：
+
+```SQL
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
++------------------------+------------------+------+
+| Field                  | Type             | Null |
++------------------------+------------------+------+
+| decimal_bytes          | decimal(10,2)    | YES  |
+| decimal_fixed          | decimal(10,2)    | YES  |
+| uuid_string            | varchar(1048576) | YES  |
+| date                   | date             | YES  |
+| time_millis            | int              | YES  |
+| time_micros            | bigint           | YES  |
+| timestamp_millis       | datetime         | YES  |
+| timestamp_micros       | datetime         | YES  |
+| local_timestamp_millis | bigint           | YES  |
+| local_timestamp_micros | bigint           | YES  |
+| duration               | varbinary(12)    | YES  |
++------------------------+------------------+------+
+```
+
+#### Example 9: Managed Identity と Service Principal を使用して Azure Blob Storage にアクセスする
+
+```SQL
+-- Managed Identity
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_use_managed_identity" = "true",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-aaaaaaaaaaaa"
+);
+-- Service Principal
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
+    "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
+    "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
 ```
