@@ -14,17 +14,17 @@
 
 #pragma once
 
-#include "cache/local_cache.h"
+#include "cache/local_cache_engine.h"
 #include "common/status.h"
 #include "starcache/star_cache.h"
 #include "starcache/time_based_cache_adaptor.h"
 
 namespace starrocks {
 
-class StarCacheWrapper : public LocalCache {
+class StarCacheEngine : public LocalCacheEngine {
 public:
-    StarCacheWrapper() = default;
-    ~StarCacheWrapper() override = default;
+    StarCacheEngine() = default;
+    ~StarCacheEngine() override = default;
 
     Status init(const CacheOptions& options) override;
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
@@ -51,7 +51,7 @@ public:
 
     Status shutdown() override;
 
-    DataCacheEngineType engine_type() override { return DataCacheEngineType::STARCACHE; }
+    LocalCacheEngineType engine_type() override { return LocalCacheEngineType::STARCACHE; }
 
     std::shared_ptr<starcache::StarCache> starcache_instance() { return _cache; }
     bool has_mem_cache() const { return _mem_quota.load(std::memory_order_relaxed) > 0; }

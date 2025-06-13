@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/starcache_wrapper.h"
+#include "cache/starcache_engine.h"
 
 #include <filesystem>
 
+#include "cache/cache_metrics.h"
 #include "cache/disk_space_monitor.h"
-#include "cache/dummy_types.h"
 #include "cache/status.h"
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-Status StarCacheWrapper::init(const CacheOptions& options) {
+Status StarCacheEngine::init(const CacheOptions& options) {
     starcache::CacheOptions opt;
     opt.mem_quota_bytes = options.mem_space_size;
     for (auto& dir : options.dir_spaces) {
@@ -68,7 +68,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     return Status::OK();
 }
 
-Status StarCacheWrapper::write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
+Status StarCacheEngine::write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
     if (!options) {
         return to_status(_cache->set(key, buffer.const_raw_buf(), nullptr));
     }
@@ -102,8 +102,8 @@ Status StarCacheWrapper::write(const std::string& key, const IOBuffer& buffer, W
     return st;
 }
 
-Status StarCacheWrapper::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                              ReadCacheOptions* options) {
+Status StarCacheEngine::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                             ReadCacheOptions* options) {
     if (!options) {
         return to_status(_cache->read(key, off, size, &buffer->raw_buf(), nullptr));
     }
@@ -119,22 +119,22 @@ Status StarCacheWrapper::read(const std::string& key, size_t off, size_t size, I
     return st;
 }
 
-bool StarCacheWrapper::exist(const std::string& key) const {
+bool StarCacheEngine::exist(const std::string& key) const {
     return _cache->exist(key);
 }
 
-Status StarCacheWrapper::remove(const std::string& key) {
+Status StarCacheEngine::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
 }
 
-Status StarCacheWrapper::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
+Status StarCacheEngine::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
     Status st = to_status(_cache->update_mem_quota(quota_bytes, flush_to_disk));
     _refresh_quota();
     return st;
 }
 
-Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
+Status StarCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) {
     std::vector<starcache::DirSpace> disk_spaces;
     disk_spaces.reserve(spaces.size());
     for (auto& dir : spaces) {
@@ -145,11 +145,11 @@ Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces)
     return st;
 }
 
-const StarCacheMetrics StarCacheWrapper::starcache_metrics(int level) const {
+const StarCacheMetrics StarCacheEngine::starcache_metrics(int level) const {
     return _cache->metrics(level);
 }
 
-const DataCacheMetrics StarCacheWrapper::cache_metrics() const {
+const DataCacheMetrics StarCacheEngine::cache_metrics() const {
     auto starcache_metrics = _cache->metrics(0);
     DataCacheMetrics metrics = {.status = static_cast<DataCacheStatus>(starcache_metrics.status),
                                 .mem_quota_bytes = starcache_metrics.mem_quota_bytes,
@@ -160,30 +160,30 @@ const DataCacheMetrics StarCacheWrapper::cache_metrics() const {
     return metrics;
 }
 
-void StarCacheWrapper::record_read_remote(size_t size, int64_t latency_us) {
+void StarCacheEngine::record_read_remote(size_t size, int64_t latency_us) {
     if (_cache_adaptor) {
         return _cache_adaptor->record_read_remote(size, latency_us);
     }
 }
 
-void StarCacheWrapper::record_read_cache(size_t size, int64_t latency_us) {
+void StarCacheEngine::record_read_cache(size_t size, int64_t latency_us) {
     if (_cache_adaptor) {
         return _cache_adaptor->record_read_cache(size, latency_us);
     }
 }
 
-Status StarCacheWrapper::shutdown() {
+Status StarCacheEngine::shutdown() {
     // TODO: starcache implement shutdown to release memory
     return Status::OK();
 }
 
-void StarCacheWrapper::_refresh_quota() {
+void StarCacheEngine::_refresh_quota() {
     auto metrics = starcache_metrics(0);
     _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
     _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
 }
 
-void StarCacheWrapper::disk_spaces(std::vector<DirSpace>* spaces) const {
+void StarCacheEngine::disk_spaces(std::vector<DirSpace>* spaces) const {
     spaces->clear();
     auto metrics = starcache_metrics(0);
     for (auto& dir : metrics.disk_dir_spaces) {
