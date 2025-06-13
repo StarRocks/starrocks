@@ -27,4 +27,5 @@ add_library(Types STATIC
     timestamp_value.cpp
     checker/type_checker.cpp
     type_checker_manager.cpp
+    int256.cpp
 )
