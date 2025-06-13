@@ -21,6 +21,10 @@
 #include "runtime/exec_env.h"
 #include "runtime/string_value.h"
 
+#ifdef WITH_STARCACHE
+#include "cache/starcache_wrapper.h"
+#endif
+
 namespace starrocks {
 
 TypeDescriptor SchemaBeDataCacheMetricsScanner::_dir_spaces_type = TypeDescriptor::create_array_type(
@@ -60,25 +64,16 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     DatumArray row{};
     std::string status{};
-    DataCacheMetrics metrics{};
+    StarCacheMetrics metrics{};
 
     row.emplace_back(_be_id);
 
-    const LocalCache* cache = DataCache::GetInstance()->local_cache();
+    const auto* cache = reinterpret_cast<StarCacheWrapper*>(DataCache::GetInstance()->local_cache());
     if (cache != nullptr && cache->is_initialized()) {
         // retrieve different priority's used bytes from level = 2 metrics
-        metrics = cache->cache_metrics(2);
+        metrics = cache->starcache_metrics(2);
 
-        switch (metrics.status) {
-        case DataCacheStatus::NORMAL:
-            status = "Normal";
-            break;
-        case DataCacheStatus::UPDATING:
-            status = "Updating";
-            break;
-        default:
-            status = "Abnormal";
-        }
+        status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         row.emplace_back(Slice(status));
         row.emplace_back(metrics.disk_quota_bytes);

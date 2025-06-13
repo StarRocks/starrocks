@@ -41,7 +41,9 @@ public:
 
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
 
-    const DataCacheMetrics cache_metrics(int level) const override;
+    const StarCacheMetrics starcache_metrics(int level) const;
+
+    const DataCacheMetrics cache_metrics() const override;
 
     void record_read_remote(size_t size, int64_t latency_us) override;
 
