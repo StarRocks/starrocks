@@ -42,7 +42,8 @@ sidebar_label: 機能サポート
         <td>サポート予定</td>
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="3">サポート予定</td>
+        <td>Yes (v3.4.4+)</td>
+        <td colspan="2">サポート予定</td>
     </tr>
     <tr>
         <td>Broker Load</td>
