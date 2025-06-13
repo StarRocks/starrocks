@@ -25,7 +25,7 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 - 存储方式：数据以逐列的方式存储。
 
-  ![img](../_assets/table_design/hybrid_table.png)
+  ![img](../_assets/table_design/columnar_table.png)
 
 - 场景：复杂数据分析。<ul><li>对海量数据集进行复杂查询和分析，例如聚合分析和多表连接查询。</li><li>表由许多字段组成（如宽表），但对这些表的查询仅涉及少数列。</li></ul>
 
