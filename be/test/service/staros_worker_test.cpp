@@ -25,6 +25,40 @@
 
 namespace starrocks {
 
+// Simulated g_starlet object
+class MockStarlet {
+public:
+    static absl::StatusOr<staros::starlet::ShardInfo> get_shard_info(ShardId id) {
+        if (_shard_map.count(id)) {
+            return _shard_map[id];
+        }
+        return absl::NotFoundError("Shard not found");
+    }
+
+    static bool is_ready() { return true; }
+
+    static void add_shard(const staros::starlet::ShardInfo& info) { _shard_map[info.id] = info; }
+
+private:
+    static std::map<ShardId, staros::starlet::ShardInfo> _shard_map;
+};
+
+std::map<ShardId, staros::starlet::ShardInfo> MockStarlet::_shard_map;
+
+extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
+
+struct ScopedMockStarlet {
+    ScopedMockStarlet() {
+        original_starlet = std::move(g_starlet);
+        g_starlet = std::make_unique<MockStarlet>();
+    }
+
+    ~ScopedMockStarlet() { g_starlet = std::move(original_starlet); }
+
+private:
+    std::unique_ptr<staros::starlet::Starlet> original_starlet;
+};
+
 static void add_shard_listener(std::vector<StarOSWorker::ShardId>* shardIds, int* counter, StarOSWorker::ShardId id) {
     shardIds->push_back(id);
     ++*counter;
@@ -125,6 +159,107 @@ TEST(StarOSWorkerTest, test_build_scheme_from_shard_info) {
     auto scheme_or = StarOSWorker::build_scheme_from_shard_info(shard_info);
     EXPECT_TRUE(scheme_or.ok());
     EXPECT_EQ("gs://", scheme_or.value());
+}
+
+TEST(StarOSWorkerTest, test_shard_info_cache_hit) {
+    ScopedMockStarlet mock_starlet_scope;
+
+    config::starlet_shard_info_cache_capacity = 1000;
+    config::starlet_shard_info_cache_ttl_sec = 300;
+
+    auto worker = std::make_shared<StarOSWorker>();
+
+    // Prepare a shard info
+    staros::starlet::ShardInfo info;
+    info.id = 12345;
+    info.properties["tableId"] = "1001";
+    MockStarlet::add_shard(info);
+
+    // First call should trigger RPC
+    auto result1 = worker->_fetch_shard_info_from_remote(info.id);
+    ASSERT_TRUE(result1.ok());
+    EXPECT_EQ(result1->id, info.id);
+
+    // Second call should hit cache
+    auto result2 = worker->_fetch_shard_info_from_remote(info.id);
+    ASSERT_TRUE(result2.ok());
+    EXPECT_EQ(result2->id, info.id);
+}
+
+TEST(StarOSWorkerTest, test_shard_info_cache_miss) {
+    ScopedMockStarlet mock_starlet_scope;
+
+    config::starlet_shard_info_cache_capacity = 1000;
+    config::starlet_shard_info_cache_ttl_sec = 300;
+
+    auto worker = std::make_shared<StarOSWorker>();
+
+    ShardId id = 98765;
+
+    // This shard does not exist in mock, so it should return error
+    auto result = worker->_fetch_shard_info_from_remote(id);
+    EXPECT_FALSE(result.ok());
+    EXPECT_EQ(result.status().code(), absl::StatusCode::kNotFound);
+}
+
+TEST(StarOSWorkerTest, test_shard_info_passive_ttl_expiry) {
+    ScopedMockStarlet mock_starlet_scope;
+
+    config::starlet_shard_info_cache_capacity = 1000;
+    config::starlet_shard_info_cache_ttl_sec = 2; // short TTL
+
+    auto worker = std::make_shared<StarOSWorker>();
+
+    staros::starlet::ShardInfo info;
+    info.id = 54321;
+    info.properties["tableId"] = "1002";
+    MockStarlet::add_shard(info);
+
+    // First fetch: should work and populate cache
+    auto result1 = worker->_fetch_shard_info_from_remote(info.id);
+    ASSERT_TRUE(result1.ok());
+
+    // Wait longer than TTL
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    // Second fetch: should miss due to expiry and re-fetch
+    auto result2 = worker->_fetch_shard_info_from_remote(info.id);
+    ASSERT_TRUE(result2.ok());
+    EXPECT_EQ(result2->id, info.id);
+}
+
+TEST(StarOSWorkerTest, test_shard_info_active_ttl_cleanup) {
+    ScopedMockStarlet mock_starlet_scope;
+
+    config::starlet_shard_info_cache_capacity = 1000;
+    config::starlet_shard_info_cache_ttl_sec = 2;              // short TTL
+    config::starlet_shard_info_cache_cleanup_interval_sec = 1; // clean every second
+
+    auto worker = std::make_shared<StarOSWorker>();
+
+    staros::starlet::ShardInfo info;
+    info.id = 67890;
+    info.properties["tableId"] = "1003";
+    MockStarlet::add_shard(info);
+
+    // First fetch: should populate cache
+    auto result1 = worker->_fetch_shard_info_from_remote(info.id);
+    ASSERT_TRUE(result1.ok());
+
+    // Wait for active cleaner to run
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    // Check that cache no longer contains this entry
+    {
+        std::shared_lock l(worker->_mtx);
+        auto cached = worker->_shard_info_cache->get(info.id);
+        EXPECT_FALSE(cached.has_value());
+    }
+
+    // Fetch again: should trigger RPC again
+    auto result2 = worker->_fetch_shard_info_from_remote(info.id);
+    ASSERT_TRUE(result2.ok());
+    EXPECT_EQ(result2->id, info.id);
 }
 
 } // namespace starrocks

@@ -137,6 +137,17 @@ private:
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
+
+private:
+    // ShardInfo cache
+    std::unique_ptr<LRUCache<ShardId, CachedShardInfo>> _shard_info_cache;
+
+    std::unique_ptr<std::thread> _cache_cleaner_thread;
+    std::atomic<bool> _cache_cleaner_stop_flag{false};
+
+    void start_cache_cleaner();
+    void stop_cache_cleaner();
+    void cache_cleaner_thread();
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;

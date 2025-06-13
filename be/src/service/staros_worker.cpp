@@ -65,9 +65,54 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 namespace fslib = staros::starlet::fslib;
 
 StarOSWorker::StarOSWorker()
-        : _mtx(), _shards(), _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+        : _mtx(),
+          _shards(),
+          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)),
+          _shard_info_cache(new_lru_cache(config::starlet_shard_info_cache_capacity)) {}
 
-StarOSWorker::~StarOSWorker() = default;
+StarOSWorker::~StarOSWorker() {
+    stop_cache_cleaner();
+}
+
+void StarOSWorker::start_cache_cleaner() {
+    if (_cache_cleaner_thread == nullptr) {
+        _cache_cleaner_stop_flag = false;
+        _cache_cleaner_thread = std::make_unique<std::thread>(&StarOSWorker::cache_cleaner_thread, this);
+    }
+}
+
+void StarOSWorker::stop_cache_cleaner() {
+    if (_cache_cleaner_thread != nullptr) {
+        _cache_cleaner_stop_flag = true;
+        if (_cache_cleaner_thread->joinable()) {
+            _cache_cleaner_thread->join();
+        }
+        _cache_cleaner_thread.reset();
+    }
+}
+
+void StarOSWorker::cache_cleaner_thread() {
+    while (!_cache_cleaner_stop_flag.load()) {
+        int64_t now = MonotonicSeconds();
+        int32_t ttl = config::starlet_shard_info_cache_ttl_sec;
+        if (ttl <= 0) {
+            std::this_thread::sleep_for(std::chrono::minutes(1));
+            continue;
+        }
+        std::vector<ShardId> expired_keys;
+        std::shared_lock l(_mtx);
+        _shard_info_cache->for_each_entry([&](const ShardId& key, const CachedShardInfo* value) {
+            if (now - value->create_time > ttl) {
+                expired_keys.push_back(key);
+            }
+        });
+        for (const auto& key : expired_keys) {
+            _shard_info_cache->erase(key);
+            VLOG(9) << "Evicted expired shard info from cache: " << key;
+        }
+        std::this_thread::sleep_for(std::chrono::minutes(1));
+    }
+}
 
 static const uint64_t kUnknownTableId = UINT64_MAX;
 
@@ -239,6 +284,16 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 }
 
 absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_remote(ShardId id) {
+    int32_t ttl = config::starlet_shard_info_cache_ttl_sec;
+    {
+        std::shared_lock l(_mtx);
+        auto cached = _shard_info_cache->get(id);
+        if (cached && (ttl < 0 || MonotonicSeconds() - cached->create_time <= ttl)) {
+            VLOG(9) << "Hit shard info cache for id: " << id;
+            return cached->info;
+        }
+    }
+
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
@@ -249,7 +304,14 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    return g_starlet->get_shard_info(id);
+    auto result = g_starlet->get_shard_info(id);
+    if (result.ok()) {
+        std::unique_lock l(_mtx);
+        _shard_info_cache->put(id, CachedShardInfo(result.value()));
+        VLOG(9) << "Put shard info into cache for id: " << id;
+    }
+
+    return result;
 }
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
