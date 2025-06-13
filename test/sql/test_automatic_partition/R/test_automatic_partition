@@ -645,3 +645,15 @@ select count(*) from tt;
 -- result:
 1
 -- !result
+
+-- name: test_date_trunc_with_minute_granularity
+create table tt(k datetime) partition by date_trunc('minute', k);
+-- result:
+-- !result
+insert into tt values(now());
+-- result:
+-- !result
+select count(*) from tt;
+-- result:
+1
+-- !result
