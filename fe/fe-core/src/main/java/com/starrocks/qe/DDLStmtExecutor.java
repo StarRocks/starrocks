@@ -748,6 +748,14 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitDropSnapshotStatement(DropSnapshotStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getBackupHandler().dropSnapshot(stmt);
+            });
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitCreateRepositoryStatement(CreateRepositoryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getBackupHandler().createRepository(stmt);

@@ -936,6 +936,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitDropSnapshotStatement(DropSnapshotStmt statement, ConnectContext context) {
+            DropSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitCreateRepositoryStatement(CreateRepositoryStmt statement, ConnectContext context) {
             RepositoryAnalyzer.analyze(statement, context);
             return null;

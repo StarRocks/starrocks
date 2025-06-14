@@ -3860,6 +3860,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowSnapshotStmt(repoName, where, createPos(context));
     }
 
+    @Override
+    public ParseNode visitDropSnapshotStatement(StarRocksParser.DropSnapshotStatementContext context) {
+        StarRocksParser.ExpressionContext expression = context.expression();
+        Expr where = null;
+        if (expression != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        String repoName = ((Identifier) visit(context.repoName)).getValue();
+
+        return new DropSnapshotStmt(repoName, where, createPos(context));
+    }
+
     // ----------------------------------------------- Repository Statement --------------------------------------------
 
     @Override
