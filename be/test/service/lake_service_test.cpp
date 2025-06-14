@@ -2549,4 +2549,73 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version) {
     server.Join();
 }
 
+TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
+    class MockRunnable : public Runnable {
+    public:
+        MockRunnable() {}
+        virtual ~MockRunnable() {}
+        virtual void run() override {}
+    };
+
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
+        (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:replace_task");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        brpc::Controller cntl;
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1000);
+        _lake_service.publish_version(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*exit without execution*"));
+    }
+
+    {
+        auto txn_id = next_id();
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(10);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    }
+
+    {
+        ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+        DropTableRequest request;
+        DropTableResponse response;
+
+        brpc::Controller cntl;
+        request.set_tablet_id(_tablet_id);
+        _lake_service.drop_table(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*exit without execution*"));
+    }
+
+    {
+        DeleteDataRequest request;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(12345);
+        request.mutable_delete_predicate()->set_version(1);
+
+        DeleteDataResponse response;
+        _lake_service.delete_data(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    }
+}
+
 } // namespace starrocks
