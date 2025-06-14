@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
@@ -182,20 +183,43 @@ public class ResourceMgr implements Writable {
     public void dropResource(DropResourceStmt stmt) throws DdlException {
         this.writeLock();
         try {
+            // check if exists
             String name = stmt.getResourceName();
-            Resource resource = nameToResource.remove(name);
+            Resource resource = nameToResource.get(name);
             if (resource == null) {
-                throw new DdlException("Resource(" + name + ") does not exist");
+                if (!stmt.isSetIfExists()) {
+                    throw new DdlException("Resource(" + name + ") does not exist");
+                }
+                LOG.info("Resource(" + name + ") does not exist");
+                return;
             }
 
+            // check if used in spark load
+            if (resource instanceof SparkResource) {
+                // check if any spark load unfinished use this resource
+                SparkResource sparkResource = (SparkResource) resource;
+                long num = GlobalStateMgr.getCurrentState().getLoadMgr().getUnFinishedLoadJobNumByResource(sparkResource);
+                if (num > 0) {
+                    throw new DdlException("drop resource fail, " +
+                            "There are currently " + num + " sparkload tasks that use this resource [" + name + "] " +
+                            "and are not yet executed");
+                }
+                // drop spark repository
+                sparkResource.deleteArchive();
+            }
+
+            // check catalog and remove
             if (resource.needMappingCatalog()) {
                 String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
                 DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
                 GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
             }
+
             // log drop
             GlobalStateMgr.getCurrentState().getEditLog().logDropResource(new DropResourceOperationLog(name));
             LOG.info("drop resource success. resource name: {}", name);
+        } catch (LoadException e) {
+            throw new DdlException("drop resource fail, reason: " + e.getMessage());
         } finally {
             this.writeUnLock();
         }
