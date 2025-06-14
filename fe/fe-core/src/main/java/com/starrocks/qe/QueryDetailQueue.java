@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -50,6 +51,8 @@ import java.util.concurrent.atomic.AtomicLong;
 // It's used to collect queries for monitor.
 public class QueryDetailQueue {
     public static final ConcurrentLinkedDeque<QueryDetail> TOTAL_QUERIES = new ConcurrentLinkedDeque<>();
+    // Record the unique queryDetail of a query
+    private static final ConcurrentHashMap<String, QueryDetail> QUERY_ID_MAP = new ConcurrentHashMap<>();
     private static final ScheduledExecutorService SCHEDULED = Executors.newSingleThreadScheduledExecutor();
 
     private static final AtomicLong LATEST_MS = new AtomicLong();
@@ -62,13 +65,17 @@ public class QueryDetailQueue {
     public static void addQueryDetail(QueryDetail queryDetail) {
         queryDetail.setEventTime(getCurrentTimeNS());
         TOTAL_QUERIES.addLast(queryDetail);
+        QUERY_ID_MAP.put(queryDetail.getQueryId(), queryDetail);
     }
 
     private static void removeExpiredQueryDetails() {
         long deleteTime = getCurrentTimeNS() - Config.query_detail_cache_time_nanosecond;
 
         while (!TOTAL_QUERIES.isEmpty() && TOTAL_QUERIES.peekFirst().getEventTime() < deleteTime) {
-            TOTAL_QUERIES.pollFirst();
+            QueryDetail queryDetail = TOTAL_QUERIES.pollFirst();
+            if (queryDetail != null && queryDetail.getQueryId() != null) {
+                QUERY_ID_MAP.remove(queryDetail.getQueryId());
+            }
         }
     }
 
@@ -80,6 +87,10 @@ public class QueryDetailQueue {
             }
         }
         return results;
+    }
+
+    public static QueryDetail getQueryDetailsByQueryId(String queryId) {
+        return QUERY_ID_MAP.get(queryId);
     }
 
     public static long getTotalQueriesCount() {
