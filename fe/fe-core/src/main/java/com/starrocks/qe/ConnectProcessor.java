@@ -229,7 +229,8 @@ public class ConnectProcessor {
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
-                .setSessionId(ctx.getSessionId().toString());
+                .setSessionId(ctx.getSessionId().toString())
+                .setCustomSessionName(ctx.getCustomSessionName());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
