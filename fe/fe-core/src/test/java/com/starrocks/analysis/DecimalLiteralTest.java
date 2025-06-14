@@ -198,12 +198,17 @@ public class DecimalLiteralTest {
         Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
 
         decimalLiteral = new DecimalLiteral("123456789012345678901234567890.1234567890");
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 8));
-        Assert.assertEquals(decimalLiteral.getStringValue(), "123456789012345678901234567890.12345679");
+        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 40, 10));
+        Assert.assertEquals("123456789012345678901234567890.1234567890", decimalLiteral.getStringValue());
+
+        decimalLiteral = new DecimalLiteral("1234567890123456789012345678901234567890123456789012345678901234567890.1234567890");
+        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 6));
+        Assert.assertEquals("1234567890123456789012345678901234567890123456789012345678901234567890.123457",
+                decimalLiteral.getStringValue());
 
         decimalLiteral = new DecimalLiteral(new BigDecimal("12345678901234567890.12345678901234567890"));
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18));
-        Assert.assertEquals(decimalLiteral.getStringValue(), "12345678901234567890.123456789012345679");
+        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 40, 20));
+        Assert.assertEquals("12345678901234567890.12345678901234567890", decimalLiteral.getStringValue());
 
         type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
         decimalLiteral = new DecimalLiteral("12345678.90", type);
@@ -225,12 +230,12 @@ public class DecimalLiteralTest {
 
     @Test(expected = Throwable.class)
     public void testDealWithSingularDecimalLiteralAbnormal0() throws AnalysisException {
-        DecimalLiteral decimalLiteral = new DecimalLiteral(Strings.repeat("9", 39));
+        DecimalLiteral decimalLiteral = new DecimalLiteral(Strings.repeat("9", 77));
     }
 
     @Test(expected = Throwable.class)
     public void testDealWithSingularDecimalLiteralAbnormal1() {
-        BigDecimal decimal = new BigDecimal(Strings.repeat("9", 39));
+        BigDecimal decimal = new BigDecimal(Strings.repeat("9", 77));
         DecimalLiteral decimalLiteral = new DecimalLiteral(decimal);
     }
 

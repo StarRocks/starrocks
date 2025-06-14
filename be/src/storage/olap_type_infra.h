@@ -29,14 +29,16 @@ namespace starrocks {
     M(TYPE_SMALLINT)              \
     M(TYPE_BIGINT)                \
     M(TYPE_LARGEINT)              \
-    M(TYPE_INT)
+    M(TYPE_INT)                   \
+    M(TYPE_INT256)
 
 #define APPLY_FOR_TYPE_DECIMAL(M) \
     M(TYPE_DECIMAL)               \
     M(TYPE_DECIMALV2)             \
     M(TYPE_DECIMAL32)             \
     M(TYPE_DECIMAL64)             \
-    M(TYPE_DECIMAL128)
+    M(TYPE_DECIMAL128)            \
+    M(TYPE_DECIMAL256)
 
 #define APPLY_FOR_TYPE_TIME(M) \
     M(TYPE_DATE_V1)            \

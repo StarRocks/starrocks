@@ -576,6 +576,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private static final BigInteger LARGEINT_MAX_ABS =
             new BigInteger("170141183460469231731687303715884105728"); // 2^127
 
+    private static final BigInteger INT256_MAX_ABS =
+            new BigInteger("57896044618658097711785492504343953926634992332820282019728792003956564819968"); // 2^255
+
     private static final List<String> DATE_FUNCTIONS =
             Lists.newArrayList(FunctionSet.DATE_ADD,
                     FunctionSet.ADDDATE,
@@ -7724,6 +7727,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return new IntLiteral(intLiteral.longValue(), pos);
             } else if (intLiteral.compareTo(LARGEINT_MAX_ABS) <= 0) {
                 return new LargeIntLiteral(intLiteral.toString(), pos);
+            } else if (intLiteral.compareTo(INT256_MAX_ABS) <= 0) {
+                return new DecimalLiteral(intLiteral.toString(), pos);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.numOverflow(context.getText()), pos);
             }
