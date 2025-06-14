@@ -1393,6 +1393,12 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
+    public void testDropResourceGroupIfExists() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP IF EXISTS rg2");
+        assertResourceGroupNotExist("rg2");
+    }
+
+    @Test
     public void testSourceIP() throws Exception {
         String createSQL = "create resource group rg1\n" +
                 "to\n" +
@@ -1906,5 +1912,4 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         }
     }
-
 }
