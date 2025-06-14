@@ -19,6 +19,7 @@ package com.starrocks.load.loadv2.dpp;
 
 import com.starrocks.common.SparkDppException;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
+import com.starrocks.types.BitmapValue;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.log4j.LogManager;
@@ -289,7 +290,7 @@ class BitmapUnionAggregator extends SparkRDDAggregator<BitmapValue> {
             ((BitmapValue) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
-            LOG.warn(ioException);
+            LOG.warn(ioException.getMessage(), ioException);
             throw new RuntimeException(ioException);
         }
     }
@@ -333,7 +334,7 @@ class HllUnionAggregator extends SparkRDDAggregator<Hll> {
             ((Hll) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
-            LOG.warn(ioException);
+            LOG.warn(ioException.getMessage(), ioException);
             throw new RuntimeException(ioException);
         }
     }

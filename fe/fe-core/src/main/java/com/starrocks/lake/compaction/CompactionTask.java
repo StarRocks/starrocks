@@ -19,9 +19,12 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
+import com.starrocks.proto.CompactStat;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Objects;
@@ -35,57 +38,66 @@ import java.util.stream.Collectors;
  * node and may include compaction tasks for multiple tablets.
  */
 public class CompactionTask {
-    private final long nodeId;
-    private final LakeService rpcChannel;
+    private static final Logger LOG = LogManager.getLogger(CompactionTask.class);
+    protected final long nodeId;
+    protected final LakeService rpcChannel;
     private final CompactRequest request;
-    private Future<CompactResponse> responseFuture;
+    protected Future<CompactResponse> responseFuture;
+
+    // FOR TEST
+    public CompactionTask(long nodeId) {
+        this.nodeId = nodeId;
+        this.rpcChannel = null;
+        this.request = null;
+    }
 
     public CompactionTask(long nodeId, LakeService rpcChannel, CompactRequest request) {
         this.nodeId = nodeId;
         this.rpcChannel = Objects.requireNonNull(rpcChannel, "rpcChannel is null");
         this.request = Objects.requireNonNull(request, "request is null");
+        this.responseFuture = null;
+    }
+
+    public CompactionTask(long nodeId, LakeService rpcChannel) {
+        this.nodeId = nodeId;
+        this.rpcChannel = Objects.requireNonNull(rpcChannel, "rpcChannel is null");
+        this.request = null;
+        this.responseFuture = null;
+    }
+
+    enum TaskResult {
+      NOT_FINISHED,
+      NONE_SUCCESS,
+      PARTIAL_SUCCESS,
+      ALL_SUCCESS
     }
 
     public long getNodeId() {
         return nodeId;
     }
 
-    public Future<CompactResponse> getResponseFuture() {
-        return responseFuture;
-    }
-
     public boolean isDone() {
         return responseFuture != null && responseFuture.isDone();
     }
 
-    /**
-     * Checks if compaction was completed successfully for all tablets in the task.
-     *
-     * @return True if compaction completed successfully for all tablets in the task
-     *         False if compaction for any tablet failed or is still in progress
-     */
-    public boolean isCompleted() {
-        return isDone() && !isFailed();
-    }
-
-    /**
-     * Checks if compaction failed for any tablet in the task.
-     *
-     * @return True if compaction failed for any tablet in the task,
-     *         False if compaction succeeded for all tablets in the task or is still in progress
-     */
-    public boolean isFailed() {
+    public TaskResult getResult() {
         if (!isDone()) {
-            return false;
+            return TaskResult.NOT_FINISHED;
         }
         try {
             CompactResponse response = responseFuture.get();
-            return CollectionUtils.isNotEmpty(response.failedTablets);
+            if (CollectionUtils.isEmpty(response.failedTablets)) {
+                return TaskResult.ALL_SUCCESS;
+            } else if (response.failedTablets.size() == request.tabletIds.size()) {
+                return TaskResult.NONE_SUCCESS;
+            } else {
+                return TaskResult.PARTIAL_SUCCESS;
+            }
         } catch (ExecutionException e) {
-            return true;
+            return TaskResult.NONE_SUCCESS;
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
-            return true;
+            return TaskResult.NONE_SUCCESS;
         }
     }
 
@@ -112,12 +124,18 @@ public class CompactionTask {
     }
 
     public void abort() {
-        if (responseFuture == null || responseFuture.isDone()) { // No need to send abort request
-            return;
+        TaskResult taskResult = getResult();
+        if (taskResult == TaskResult.NOT_FINISHED || taskResult == TaskResult.NONE_SUCCESS) {
+            AbortCompactionRequest abortRequest = new AbortCompactionRequest();
+            abortRequest.txnId = request.txnId;
+            try {
+                Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
+                LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", request.txnId, nodeId);
+            } catch (Exception e) {
+                LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,
+                        nodeId, e.getMessage());
+            }
         }
-        AbortCompactionRequest abortRequest = new AbortCompactionRequest();
-        abortRequest.txnId = request.txnId;
-        Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
     }
 
     public List<TabletCommitInfo> buildTabletCommitInfo() {
@@ -126,5 +144,29 @@ public class CompactionTask {
 
     public int tabletCount() {
         return request.tabletIds.size();
+    }
+
+    public List<CompactStat> getCompactStats() {
+        if (!isDone()) {
+            return null;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return response.compactStats;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public long getSuccessCompactInputFileSize() {
+        if (!isDone()) {
+            return 0;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return response.successCompactionInputFileSize;
+        } catch (Exception e) {
+            return 0;
+        }        
     }
 }

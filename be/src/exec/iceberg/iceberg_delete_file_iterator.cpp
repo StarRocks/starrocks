@@ -21,7 +21,7 @@ Status IcebergDeleteFileIterator::init(FileSystem* fs, const std::string& timezo
                                        bool position_delete) {
     std::shared_ptr<RandomAccessFile> raw_file;
     ASSIGN_OR_RETURN(raw_file, fs->new_random_access_file(file_path));
-    auto parquet_file = std::make_shared<ParquetChunkFile>(raw_file, 0);
+    auto parquet_file = std::make_shared<ParquetChunkFile>(raw_file, 0, &_counter);
     int num_of_columns_from_file = -1;
     if (position_delete) {
         num_of_columns_from_file = 2;
@@ -39,14 +39,12 @@ Status IcebergDeleteFileIterator::init(FileSystem* fs, const std::string& timezo
     return Status::OK();
 }
 
-bool IcebergDeleteFileIterator::has_next() {
+Status IcebergDeleteFileIterator::has_next() {
     if (_file_reader) {
-        _file_reader->next_batch(&_batch);
-        if (_batch) {
-            return true;
-        }
+        RETURN_IF_ERROR(_file_reader->next_batch(&_batch));
+        return Status::OK();
     }
-    return false;
+    return Status::EndOfFile("");
 }
 
 std::shared_ptr<::arrow::RecordBatch> IcebergDeleteFileIterator::next() {

@@ -134,6 +134,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+    public R visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
     public R visitPhysicalHudiScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
@@ -143,6 +147,18 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalPaimonScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalOdpsScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalIcebergMetadataScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalKuduScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
 
@@ -271,6 +287,18 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalTableFunctionTableScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalSplitProducer(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalSplitConsumer(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalConcatenater(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

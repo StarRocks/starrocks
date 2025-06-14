@@ -23,10 +23,13 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
+import com.starrocks.sql.optimizer.base.EmptySortProperty;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -40,18 +43,23 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, ExpressionContext> {
     private final ColumnRefFactory columnRefFactory;
@@ -79,7 +87,8 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             for (PhysicalPropertySet propertySet : requiredProperties.get(0)) {
                 PhysicalPropertySet newProperty = propertySet.copy();
                 DistributionProperty oldDistribution = newProperty.getDistributionProperty();
-                newProperty.setDistributionProperty(new DistributionProperty(oldDistribution.getSpec(), true));
+                newProperty.setDistributionProperty(DistributionProperty.createProperty(
+                        oldDistribution.getSpec(), true));
                 Set<Integer> cteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
                 if (idx == 0) {
                     cteIds.retainAll(groupExpression.inputAt(0).getLogicalProperty().getUsedCTEs().getCteIds());
@@ -87,15 +96,15 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                     cteIds.retainAll(groupExpression.inputAt(1).getLogicalProperty().getUsedCTEs().getCteIds());
                     cteIds.add(operator.getCteId());
                 }
-                newProperty.setCteProperty(new CTEProperty(cteIds));
+                newProperty.setCteProperty(CTEProperty.createProperty(cteIds));
                 requiredProperties.get(0).set(idx++, newProperty);
             }
         } else if (operatorType == OperatorType.PHYSICAL_NO_CTE) {
             Set<Integer> cteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
-            CTEProperty cteProperty = new CTEProperty(cteIds);
+            CTEProperty cteProperty = CTEProperty.createProperty(cteIds);
             PhysicalPropertySet newProperty = requiredProperties.get(0).get(0).copy();
             DistributionProperty oldDistribution = newProperty.getDistributionProperty();
-            newProperty.setDistributionProperty(new DistributionProperty(oldDistribution.getSpec(), true));
+            newProperty.setDistributionProperty(DistributionProperty.createProperty(oldDistribution.getSpec(), true));
             newProperty.setCteProperty(cteProperty);
 
             requiredProperties.get(0).set(0, newProperty);
@@ -109,7 +118,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                     PhysicalPropertySet property = requiredProperty.get(i).copy();
                     Set<Integer> remainCteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
                     remainCteIds.retainAll(groupExpression.inputAt(i).getLogicalProperty().getUsedCTEs().getCteIds());
-                    CTEProperty cteProperty = new CTEProperty(remainCteIds);
+                    CTEProperty cteProperty = CTEProperty.createProperty(remainCteIds);
                     property.setCteProperty(cteProperty);
                     requiredProperty.set(i, property);
                 }
@@ -131,7 +140,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         // 1 For broadcast join
         PhysicalPropertySet rightBroadcastProperty =
-                new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+                new PhysicalPropertySet(DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
         requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
 
         JoinHelper joinHelper = JoinHelper.of(node, context.getChildOutputColumns(0), context.getChildOutputColumns(1));
@@ -174,13 +183,13 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                 .map(l -> new Ordering(columnRefFactory.getColumnRef(l.getColId()), true, true))
                 .collect(Collectors.toList());
 
-        SortProperty leftSortProperty = new SortProperty(new OrderSpec(leftOrderings));
-        SortProperty rightSortProperty = new SortProperty(new OrderSpec(rightOrderings));
+        SortProperty leftSortProperty = SortProperty.createProperty(leftOrderings);
+        SortProperty rightSortProperty = SortProperty.createProperty(rightOrderings);
 
         // 1 For broadcast join
         PhysicalPropertySet leftBroadcastProperty = new PhysicalPropertySet(leftSortProperty);
         PhysicalPropertySet rightBroadcastProperty =
-                new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()),
+                new PhysicalPropertySet(DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()),
                         rightSortProperty);
         requiredProperties.add(Lists.newArrayList(leftBroadcastProperty, rightBroadcastProperty));
 
@@ -209,12 +218,12 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             // Right join needs to maintain build_match_flag for right table, which could not be maintained on multiple nodes,
             // instead it should be gathered to one node
             PhysicalPropertySet gather =
-                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createGatherDistributionSpec()));
+                    new PhysicalPropertySet(DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec()));
             requiredProperties.add(Lists.newArrayList(gather, gather));
         } else {
             PhysicalPropertySet rightBroadcastProperty =
                     new PhysicalPropertySet(
-                            new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+                            DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
         }
         return null;
@@ -269,16 +278,15 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet
                 .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
-
-        SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
+        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy());
 
         DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {
-            distributionProperty = new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
+            distributionProperty = DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
             // If scan tablet sum less than 1, no distribution property is required
             if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
-                distributionProperty = DistributionProperty.EMPTY;
+                distributionProperty = EmptyDistributionProperty.INSTANCE;
             } else {
                 List<DistributionCol> distributionCols = partitionColumnRefSet.stream()
                         .map(e -> new DistributionCol(e, true)).collect(
@@ -311,12 +319,20 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     private void processSetOperationChildProperty(ExpressionContext context) {
         List<PhysicalPropertySet> childProperty = new ArrayList<>();
-        for (int i = 0; i < context.arity(); ++i) {
-            childProperty.add(PhysicalPropertySet.EMPTY);
+        PhysicalSetOperation setOp = context.getOp().cast();
+
+        // Union all use random distribution
+        if (setOp instanceof PhysicalUnionOperator && ((PhysicalUnionOperator) setOp).isUnionAll()) {
+            childProperty = IntStream.range(0, context.arity()).mapToObj(i -> new RoundRobinDistributionSpec())
+                    .map(DistributionProperty::createProperty)
+                    .map(PhysicalPropertySet::new)
+                    .collect(Collectors.toList());
+            requiredProperties.add(childProperty);
+            return;
         }
 
-        // Use Any to forbidden enforce some property, will add shuffle in FragmentBuilder
-        requiredProperties.add(childProperty);
+        // union distinct, intersect and except use hash distribution
+        requiredProperties.add(computeShuffleSetRequiredProperties(setOp));
     }
 
     @Override
@@ -330,7 +346,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // }
 
         // limit node in Memo means that the limit cannot be merged into other nodes.
-        requiredProperties.add(Lists.newArrayList(createLimitGatherProperty(node.getLimit())));
+        requiredProperties.add(Lists.newArrayList(createGatherPropertySet()));
         return null;
     }
 
@@ -342,7 +358,47 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(requirementsFromParent));
+        PhysicalPropertySet requiredPropertyToChild = new PhysicalPropertySet();
+        requiredPropertyToChild.setCteProperty(requirementsFromParent.getCteProperty());
+
+        SortProperty sortProperty = requirementsFromParent.getSortProperty();
+        DistributionProperty distributionProperty = requirementsFromParent.getDistributionProperty();
+
+        // check property can be passed to its child. If the required property for noCteOp refs a column
+        // generated by its projection, we cannot pass this property to its child.
+        if (node.getProjection() != null) {
+            Map<ColumnRefOperator, ScalarOperator> colMap = node.getProjection().getColumnRefMap();
+            Set<Integer> colIds = Sets.newHashSet();
+            colMap.entrySet().stream().forEach(e -> {
+                if (e.getKey().equals(e.getValue())) {
+                    colIds.add(e.getKey().getId());
+                }
+            });
+            List<Ordering> orderingList = requirementsFromParent.getSortProperty().getSpec().getOrderDescs();
+            for (Ordering ordering : orderingList) {
+                if (!colIds.contains(ordering.getColumnRef().getId())) {
+                    sortProperty = EmptySortProperty.INSTANCE;
+                    break;
+                }
+            }
+
+            if (distributionProperty.getSpec() instanceof HashDistributionSpec) {
+                HashDistributionSpec spec = (HashDistributionSpec) distributionProperty.getSpec();
+                for (DistributionCol distributionCol : spec.getShuffleColumns()) {
+                    if (!colIds.contains(distributionCol.getColId())) {
+                        distributionProperty = EmptyDistributionProperty.INSTANCE;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (distributionProperty.isGather()) {
+            requiredPropertyToChild.setSortProperty(sortProperty);
+        }
+
+        requiredPropertyToChild.setDistributionProperty(distributionProperty);
+        requiredProperties.add(Lists.newArrayList(requiredPropertyToChild));
         return null;
     }
 

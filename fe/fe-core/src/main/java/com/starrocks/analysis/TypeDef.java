@@ -42,6 +42,7 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -86,14 +87,14 @@ public class TypeDef implements ParseNode {
         analyze();
     }
 
-    public void analyze() throws AnalysisException {
+    public void analyze() {
         if (isAnalyzed) {
             return;
         }
         // Check the max nesting depth before calling the recursive analyze() to avoid
         // a stack overflow.
         if (parsedType.exceedsMaxNestingDepth()) {
-            throw new AnalysisException(String.format(
+            throw new SemanticException(String.format(
                     "Type exceeds the maximum nesting depth of %s:\n%s",
                     Type.MAX_NESTING_DEPTH, parsedType.toSql()));
         }
@@ -101,9 +102,9 @@ public class TypeDef implements ParseNode {
         isAnalyzed = true;
     }
 
-    private void analyze(Type type) throws AnalysisException {
+    private void analyze(Type type) {
         if (!type.isSupported()) {
-            throw new AnalysisException("Unsupported data type: " + type.toSql());
+            throw new SemanticException("Unsupported data type: " + type.toSql());
         }
         if (type.isScalarType()) {
             analyzeScalarType((ScalarType) type);
@@ -114,12 +115,11 @@ public class TypeDef implements ParseNode {
         } else if (type.isMapType()) {
             analyzeMapType((MapType) type);
         } else {
-            throw new AnalysisException("Unsupported data type: " + type.toSql());
+            throw new SemanticException("Unsupported data type: " + type.toSql());
         }
     }
 
-    private void analyzeScalarType(ScalarType scalarType)
-            throws AnalysisException {
+    private void analyzeScalarType(ScalarType scalarType) {
         PrimitiveType type = scalarType.getPrimitiveType();
         switch (type) {
             case CHAR:
@@ -128,7 +128,7 @@ public class TypeDef implements ParseNode {
                 int maxLen;
                 if (type == PrimitiveType.VARCHAR) {
                     name = "Varchar";
-                    maxLen = ScalarType.MAX_VARCHAR_LENGTH;
+                    maxLen = ScalarType.getOlapMaxVarcharLength();
                 } else {
                     name = "Char";
                     maxLen = ScalarType.MAX_CHAR_LENGTH;
@@ -137,21 +137,21 @@ public class TypeDef implements ParseNode {
                 // len is decided by child, when it is -1.
 
                 if (len <= 0) {
-                    throw new AnalysisException(name + " size must be > 0: " + len);
+                    throw new SemanticException(name + " size must be > 0: " + len);
                 }
                 if (scalarType.getLength() > maxLen) {
-                    throw new AnalysisException(
+                    throw new SemanticException(
                             name + " size must be <= " + maxLen + ": " + len);
                 }
                 break;
             }
             case VARBINARY: {
                 String name = "VARBINARY";
-                int maxLen = ScalarType.MAX_VARCHAR_LENGTH;
+                int maxLen = ScalarType.getOlapMaxVarcharLength();
                 int len = scalarType.getLength();
                 // len is decided by child, when it is -1.
                 if (scalarType.getLength() > maxLen) {
-                    throw new AnalysisException(
+                    throw new SemanticException(
                             name + " size must be <= " + maxLen + ": " + len);
                 }
                 break;
@@ -166,43 +166,43 @@ public class TypeDef implements ParseNode {
                 final int max_precision = PrimitiveType.getMaxPrecisionOfDecimal(scalarType.getPrimitiveType());
                 final int max_scale = type.isDecimalV2Type() ? Math.min(9, precision) : precision;
                 if (precision < 1 || precision > max_precision) {
-                    throw new AnalysisException(
+                    throw new SemanticException(
                             String.format("Precision of %s must between 1 and %d, precision was set to: %d.",
                                     name, max_precision, precision));
                 }
                 if (scale < 0 || scale > max_scale) {
-                    throw new AnalysisException(
+                    throw new SemanticException(
                             String.format("Scale of %s must between 0 and %d,  scale was set to: %d.",
                                     name, max_scale, scale));
                 }
                 break;
             }
             case INVALID_TYPE:
-                throw new AnalysisException("Invalid type.");
+                throw new SemanticException("Invalid type.");
             default:
                 break;
         }
     }
 
-    private void analyzeArrayType(ArrayType type) throws AnalysisException {
+    private void analyzeArrayType(ArrayType type) {
         Type baseType = Type.getInnermostType(type);
         analyze(baseType);
         if (baseType.isHllType() || baseType.isBitmapType() || baseType.isPseudoType() || baseType.isPercentile()) {
-            throw new AnalysisException("Invalid data type: " + type.toSql());
+            throw new SemanticException("Invalid data type: " + type.toSql());
         }
     }
 
-    private void analyzeStructType(StructType type) throws AnalysisException {
+    private void analyzeStructType(StructType type) {
         List<StructField> structFields = type.getFields();
         for (StructField structField: structFields) {
             analyze(structField.getType());
         }
     }
 
-    private void analyzeMapType(MapType type) throws AnalysisException {
+    private void analyzeMapType(MapType type) {
         Type keyType = type.getKeyType();
         if (!keyType.isValidMapKeyType()) {
-            throw new AnalysisException("Invalid map.key's type: " + keyType.toSql() +
+            throw new SemanticException("Invalid map.key's type: " + keyType.toSql() +
                     ", which should be base types");
         }
         analyze(keyType);

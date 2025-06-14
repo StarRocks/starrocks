@@ -53,7 +53,6 @@ public:
               _is_nullable(is_nullable),
               _type_info(std::move(type_info)),
               _schema_length(schema_length),
-
               _pool(),
               _num_rows(num_rows) {}
 
@@ -71,12 +70,15 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
+    ordinal_t num_rows() const override { return _num_rows; }
+
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override;
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation) override;
 
     bool all_page_dict_encoded() const override { return false; }
 
@@ -91,6 +93,11 @@ public:
     }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override {
+        return std::vector<std::pair<int64_t, int64_t>>();
+    }
 
 private:
     bool _has_default_value;

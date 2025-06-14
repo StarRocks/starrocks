@@ -40,10 +40,10 @@
 #include <memory>
 #include <string>
 
+#include "cache/object_cache/page_cache.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"
-#include "storage/page_cache.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -53,16 +53,13 @@ public:
     const std::string kTestDir = "/ordinal_page_index_test";
 
     void SetUp() override {
-        _mem_tracker = std::make_unique<MemTracker>();
-        StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
 
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
 };
 
@@ -88,11 +85,11 @@ TEST_F(OrdinalPageIndexTest, normal) {
     }
 
     IndexReadOptions opts;
-    opts.fs = _fs.get();
-    opts.file_name = filename;
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
+    opts.read_file = rfile.get();
     opts.use_page_cache = true;
-    opts.kept_in_memory = false;
-    opts.skip_fill_local_cache = false;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
     OrdinalIndexReader index;
     ASSIGN_OR_ABORT(auto r, index.load(opts, index_meta.ordinal_index(), 16 * 1024 * 4096 + 1));
     ASSERT_TRUE(r);
@@ -149,11 +146,10 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     }
 
     IndexReadOptions opts;
-    opts.fs = _fs.get();
-    opts.file_name = "";
+    opts.read_file = nullptr;
     opts.use_page_cache = true;
-    opts.kept_in_memory = false;
-    opts.skip_fill_local_cache = false;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
     OrdinalIndexReader index;
     ASSIGN_OR_ABORT(auto r, index.load(opts, index_meta.ordinal_index(), num_values));
     ASSERT_TRUE(r);

@@ -36,6 +36,7 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -48,7 +49,7 @@ public class ConsistencyCheckInfo implements Writable {
     @SerializedName("tb")
     private long tableId;
     @SerializedName("pt")
-    private long partitionId;
+    private long physicalPartitionId;
     @SerializedName("idx")
     private long indexId;
     @SerializedName("tt")
@@ -64,12 +65,12 @@ public class ConsistencyCheckInfo implements Writable {
         // for persist
     }
 
-    public ConsistencyCheckInfo(long dbId, long tableId, long partitionId, long indexId, long tabletId,
+    public ConsistencyCheckInfo(long dbId, long tableId, long physicalPartitionId, long indexId, long tabletId,
                                 long lastCheckTime, long checkedVersion,
                                 boolean isConsistent) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.indexId = indexId;
         this.tabletId = tabletId;
 
@@ -87,8 +88,8 @@ public class ConsistencyCheckInfo implements Writable {
         return tableId;
     }
 
-    public long getPartitionId() {
-        return partitionId;
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getIndexId() {
@@ -115,7 +116,7 @@ public class ConsistencyCheckInfo implements Writable {
     public void write(DataOutput out) throws IOException {
         out.writeLong(dbId);
         out.writeLong(tableId);
-        out.writeLong(partitionId);
+        out.writeLong(physicalPartitionId);
         out.writeLong(indexId);
         out.writeLong(tabletId);
 
@@ -129,7 +130,7 @@ public class ConsistencyCheckInfo implements Writable {
     public void readFields(DataInput in) throws IOException {
         dbId = in.readLong();
         tableId = in.readLong();
-        partitionId = in.readLong();
+        physicalPartitionId = in.readLong();
         indexId = in.readLong();
         tabletId = in.readLong();
 
@@ -144,5 +145,10 @@ public class ConsistencyCheckInfo implements Writable {
         ConsistencyCheckInfo info = new ConsistencyCheckInfo();
         info.readFields(in);
         return info;
+    }
+
+    @Override
+    public String toString() {
+        return GsonUtils.GSON.toJson(this);
     }
 }

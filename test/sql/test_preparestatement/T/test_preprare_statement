@@ -1,0 +1,78 @@
+-- name: test_prepare_statement
+CREATE TABLE IF NOT EXISTS prepare_stmt (
+    k1 INT,
+    k2 TINYINT Default '20',
+    k3 BIGINT,
+    k4 SMALLINT  Default '4',
+    k5 varchar(10) Default 'k5',
+    v6 BOOLEAN,
+    v7 DATE Default '2000-02-02',
+    v8 VARCHAR(2048) Default 'row',
+    v9 DATETIME Default '2000-02-02 00:00:12',
+    v10 STRING NULL,
+    v11 Decimal(10,2) NULL)
+    PRIMARY KEY (k1, k2, k3, k4, k5)
+    DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
+
+insert into prepare_stmt values (1, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
+insert into prepare_stmt values (3, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
+PREPARE stmt1 FROM select * from prepare_stmt where k1 = ? and k2 = ?;
+PREPARE stmt2 FROM 'select * from prepare_stmt order by k1';
+PREPARE stmt3 FROM select * from prepare_stmt order by k1;
+PREPARE cte_stmt_1 FROM with cte as (select * from prepare_stmt where k1 = ?) select * from cte where v9 = ?;
+PREPARE cte_stmt_2 FROM  select *, ? from (with cte as (select * from prepare_stmt where k1 = ?) select * from cte) t where v9 = ?;
+
+set @i = 1;
+set @i2 = 2;
+set @i3 = 3;
+set @v = '1';
+set @v2 = '2';
+set @b = true;
+set @t = '2021-02-01 00:00:12';
+
+
+execute stmt1 using @i, @i2;
+execute stmt1 using @i3, @i2;
+
+execute stmt2;
+
+execute cte_stmt_1 using @i, @t;
+execute cte_stmt_2 using @i3, @i, @t;
+
+drop prepare stmt1;
+deallocate prepare stmt2; -- deallocate is alias
+drop prepare stmt3;
+drop prepare cte_stmt_1;
+drop prepare cte_stmt_2;
+
+DROP TABLE prepare_stmt FORCE;
+
+
+CREATE TABLE IF NOT EXISTS `customer_row` (
+  `customer_key` bigint(20) NOT NULL COMMENT "",
+  `customer_row_value_0` varchar(65533) NULL COMMENT "",
+  `customer_row_value_1` varchar(65533) NULL COMMENT "",
+  `customer_row_value_2` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`customer_key`)
+DISTRIBUTED BY HASH(`customer_key`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into customer_row values(1, 'a','a','a');
+insert into customer_row values(2, 'b','b','b');
+
+PREPARE select_customer_stmt FROM 'SELECT customer_key, customer_row_value_0, customer_row_value_1, customer_row_value_2 FROM customer_row WHERE customer_key = ?';
+
+SET @customer_key = 1;
+EXECUTE select_customer_stmt USING @customer_key;
+SET @customer_key = 2;
+EXECUTE select_customer_stmt USING @customer_key;
+
+DROP PREPARE select_customer_stmt;
+DROP TABLE customer_row FORCE;

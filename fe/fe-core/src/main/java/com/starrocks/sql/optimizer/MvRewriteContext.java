@@ -17,12 +17,14 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.List;
 
@@ -37,18 +39,20 @@ public class MvRewriteContext {
     private final ReplaceColumnRefRewriter queryColumnRefRewriter;
     private final PredicateSplit queryPredicateSplit;
 
-    private List<ScalarOperator> queryJoinOnPredicates;
-
-    private List<ScalarOperator> mvJoinOnPredicates;
-
     // mv's partition and distribution related conjunct predicate,
     // used to prune partitions and buckets of scan mv operator after rewrite
     private ScalarOperator mvPruneConjunct;
 
     private final List<ScalarOperator> onPredicates;
     private final Rule rule;
+    private List<ColumnRefOperator> enforcedNonExistedColumns;
 
     private List<JoinDeriveContext> joinDeriveContexts;
+
+    private List<TableScanDesc> queryTableScanDescs;
+    private List<TableScanDesc> mvTableScanDescs;
+
+    private AggregatePushDownContext aggregatePushDownContext;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -56,7 +60,8 @@ public class MvRewriteContext {
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates, Rule rule) {
+            List<ScalarOperator> onPredicates,
+            Rule rule) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
@@ -65,6 +70,10 @@ public class MvRewriteContext {
         this.onPredicates = onPredicates;
         this.rule = rule;
         this.joinDeriveContexts = Lists.newArrayList();
+    }
+
+    public String getMVName() {
+        return materializationContext.getMv().getName();
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -91,21 +100,6 @@ public class MvRewriteContext {
         return mvPruneConjunct;
     }
 
-    public List<ScalarOperator> getQueryJoinOnPredicates() {
-        if (queryJoinOnPredicates == null) {
-            queryJoinOnPredicates = MvUtils.getJoinOnPredicates(queryExpression);
-        }
-        return queryJoinOnPredicates;
-    }
-
-    public List<ScalarOperator> getMvJoinOnPredicates() {
-        if (mvJoinOnPredicates == null) {
-            mvJoinOnPredicates = MvUtils.getJoinOnPredicates(materializationContext.getMvExpression());
-
-        }
-        return mvJoinOnPredicates;
-    }
-
     public void setMvPruneConjunct(ScalarOperator mvPruneConjunct) {
         this.mvPruneConjunct = mvPruneConjunct;
     }
@@ -124,5 +118,45 @@ public class MvRewriteContext {
 
     public List<JoinDeriveContext> getJoinDeriveContexts() {
         return joinDeriveContexts;
+    }
+
+    public void clearJoinDeriveContexts() {
+        joinDeriveContexts.clear();
+    }
+
+    public List<ColumnRefOperator> getEnforcedNonExistedColumns() {
+        return enforcedNonExistedColumns;
+    }
+
+    public void setEnforcedNonExistedColumns(List<ColumnRefOperator> enforcedNonExistedColumns) {
+        this.enforcedNonExistedColumns = enforcedNonExistedColumns;
+    }
+
+    public List<TableScanDesc> getQueryTableScanDescs() {
+        return queryTableScanDescs;
+    }
+
+    public void setQueryTableScanDescs(List<TableScanDesc> queryTableScanDescs) {
+        this.queryTableScanDescs = queryTableScanDescs;
+    }
+
+    public List<TableScanDesc> getMvTableScanDescs() {
+        return mvTableScanDescs;
+    }
+
+    public void setMvTableScanDescs(List<TableScanDesc> mvTableScanDescs) {
+        this.mvTableScanDescs = mvTableScanDescs;
+    }
+
+    public boolean isInAggregatePushDown() {
+        return aggregatePushDownContext != null;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
     }
 }

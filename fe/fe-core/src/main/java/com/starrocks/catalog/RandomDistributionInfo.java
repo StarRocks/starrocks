@@ -36,19 +36,22 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Random partition.
  */
 public class RandomDistributionInfo extends DistributionInfo {
 
+    @SerializedName("b")
     private int bucketNum;
 
     public RandomDistributionInfo() {
@@ -61,9 +64,13 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
-    public DistributionDesc toDistributionDesc() {
-        DistributionDesc distributionDesc = new RandomDistributionDesc(bucketNum);
-        return distributionDesc;
+    public DistributionDesc toDistributionDesc(Map<ColumnId, Column> schema) {
+        return new RandomDistributionDesc(bucketNum);
+    }
+
+    @Override
+    public boolean supportColocate() {
+        return false;
     }
 
     @Override
@@ -82,7 +89,7 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
-    public String toSql() {
+    public String toSql(Map<ColumnId, Column> schema) {
         StringBuilder builder = new StringBuilder();
         builder.append("DISTRIBUTED BY RANDOM");
         if (bucketNum > 0) {
@@ -96,15 +103,9 @@ public class RandomDistributionInfo extends DistributionInfo {
         out.writeInt(bucketNum);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        bucketNum = in.readInt();
-    }
-
-    public static DistributionInfo read(DataInput in) throws IOException {
-        DistributionInfo distributionInfo = new RandomDistributionInfo();
-        distributionInfo.readFields(in);
-        return distributionInfo;
+    @Override
+    public List<ColumnId> getDistributionColumns() {
+        return Collections.emptyList();
     }
 
     @Override

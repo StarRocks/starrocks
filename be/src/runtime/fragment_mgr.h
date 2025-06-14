@@ -59,7 +59,7 @@ class TUniqueId;
 class PlanFragmentExecutor;
 class ThreadPool;
 
-class JoinRuntimeFilter;
+class RuntimeFilter;
 std::string to_load_error_http_path(const std::string& file_name);
 
 // This class used to manage all the fragment execute in this instance
@@ -80,6 +80,8 @@ public:
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
                               const FinishCallback& cb);
 
+    void close();
+
     Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
     }
@@ -87,7 +89,7 @@ public:
     Status cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason);
 
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
-                                const std::shared_ptr<const JoinRuntimeFilter>& shared_rf);
+                                const std::shared_ptr<const RuntimeFilter>& shared_rf);
 
     void cancel_worker();
 
@@ -128,6 +130,7 @@ private:
     std::thread _cancel_thread;
     // every job is a pool
     std::unique_ptr<ThreadPool> _thread_pool;
+    bool _closed = false;
 };
 
 } // namespace starrocks

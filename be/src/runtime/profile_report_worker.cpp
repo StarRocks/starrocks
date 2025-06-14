@@ -16,11 +16,11 @@
 
 #include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"
+#include "util/misc.h"
 
 namespace starrocks {
 
 Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "register_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     if (_non_pipeline_report_tasks.find(fragment_instance_id) != _non_pipeline_report_tasks.end()) {
         std::stringstream msg;
@@ -28,20 +28,19 @@ Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment
         LOG(WARNING) << msg.str();
         return Status::InternalError(msg.str());
     }
+
+    VLOG(3) << "register_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     _non_pipeline_report_tasks.emplace(fragment_instance_id, NonPipelineReportTask(UnixMillis(), TQueryType::LOAD));
     return Status::OK();
 }
 
-Status ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+void ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
+    VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     _non_pipeline_report_tasks.erase(fragment_instance_id);
-    return Status::OK();
 }
 
 Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "register_pipeline_load query_id=" << print_id(query_id)
-              << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     PipeLineReportTaskKey key(query_id, fragment_instance_id);
     if (_pipeline_report_tasks.find(key) != _pipeline_report_tasks.end()) {
@@ -51,16 +50,17 @@ Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, co
         LOG(WARNING) << msg.str();
         return Status::InternalError(msg.str());
     }
+    VLOG(3) << "register_pipeline_load query_id=" << print_id(query_id)
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
     _pipeline_report_tasks.emplace(std::move(key), PipelineReportTask(UnixMillis(), TQueryType::LOAD));
     return Status::OK();
 }
 
-Status ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_pipeline_load query_id=" << print_id(query_id)
-              << ", fragment_instance_id=" << print_id(fragment_instance_id);
+void ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+    VLOG(3) << "unregister_pipeline_load query_id=" << print_id(query_id)
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
-    return Status::OK();
 }
 
 void ProfileReportWorker::_start_report_profile() {
@@ -110,20 +110,17 @@ void ProfileReportWorker::_start_report_profile() {
 void ProfileReportWorker::execute() {
     LOG(INFO) << "ProfileReportWorker start working.";
 
-    int32_t interval = config::profile_report_interval;
-
     while (!_stop.load(std::memory_order_consume)) {
         _start_report_profile();
 
+        // interval can be changed by config dynamically
+        int32_t interval = config::profile_report_interval;
         if (interval <= 0) {
             LOG(WARNING) << "profile_report_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
-        int32_t left_seconds = interval;
-        while (!_stop.load(std::memory_order_consume) && left_seconds > 0) {
-            sleep(1);
-            --left_seconds;
-        }
+
+        nap_sleep(interval, [this] { return _stop.load(std::memory_order_consume); });
     }
     LOG(INFO) << "ProfileReportWorker going to exit.";
 }
@@ -132,7 +129,7 @@ ProfileReportWorker::ProfileReportWorker(ExecEnv* env) : _thread([this] { execut
     Thread::set_thread_name(_thread, "profile_report");
 }
 
-ProfileReportWorker::~ProfileReportWorker() {
+void ProfileReportWorker::close() {
     _stop.store(true, std::memory_order_release);
     _thread.join();
 }

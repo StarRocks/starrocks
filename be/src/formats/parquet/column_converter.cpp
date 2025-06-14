@@ -14,23 +14,38 @@
 
 #include "formats/parquet/column_converter.h"
 
-#include <memory>
-#include <utility>
+#include <cctz/time_zone.h>
+#include <glog/logging.h>
 
-#include "column/array_column.h"
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <sstream>
+#include <utility>
+#include <vector>
+
 #include "column/binary_column.h"
+#include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "formats/parquet/schema.h"
-#include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/types.h"
 #include "gutil/casts.h"
+#include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/decimalv2_value.h"
+#include "runtime/time_types.h"
+#include "runtime/types.h"
+#include "storage/olap_common.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "util/bit_util.h"
-#include "util/logging.h"
-#include "util/runtime_profile.h"
+#include "util/decimal_types.h"
+#include "util/int96.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::parquet {
@@ -40,7 +55,7 @@ namespace starrocks::parquet {
 // to match destination scale.
 enum class DecimalScaleType { kNoScale, kScaleUp, kScaleDown };
 
-class Int32ToDateConverter : public ColumnConverter {
+class Int32ToDateConverter final : public ColumnConverter {
 public:
     Int32ToDateConverter() = default;
     ~Int32ToDateConverter() override = default;
@@ -48,7 +63,31 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 };
 
-class Int96ToDateTimeConverter : public ColumnConverter {
+class Int32ToTimeConverter final : public ColumnConverter {
+public:
+    Int32ToTimeConverter() = default;
+    ~Int32ToTimeConverter() override = default;
+
+    Status convert(const ColumnPtr& src, Column* dst) override;
+};
+
+class Int32ToDateTimeConverter final : public ColumnConverter {
+public:
+    Int32ToDateTimeConverter() = default;
+    ~Int32ToDateTimeConverter() override = default;
+
+    Status convert(const ColumnPtr& src, Column* dst) override;
+};
+
+class Int64ToTimeConverter final : public ColumnConverter {
+public:
+    Int64ToTimeConverter() = default;
+    ~Int64ToTimeConverter() override = default;
+
+    Status convert(const ColumnPtr& src, Column* dst) override;
+};
+
+class Int96ToDateTimeConverter final : public ColumnConverter {
 public:
     Int96ToDateTimeConverter() = default;
     ~Int96ToDateTimeConverter() override = default;
@@ -58,18 +97,11 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 
 private:
-    // When Hive stores a timestamp value into Parquet format, it converts local time
-    // into UTC time, and when it reads data out, it should be converted to the time
-    // according to session variable "time_zone".
-    [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
-        return timestamp::add<TimeUnit::SECOND>(timestamp, _offset);
-    }
-
-private:
     int _offset = 0;
+    cctz::time_zone _ctz;
 };
 
-class Int64ToDateTimeConverter : public ColumnConverter {
+class Int64ToDateTimeConverter final : public ColumnConverter {
 public:
     Int64ToDateTimeConverter() = default;
     ~Int64ToDateTimeConverter() override = default;
@@ -79,6 +111,7 @@ public:
 
 private:
     bool _is_adjusted_to_utc = false;
+    int _offset = 0;
     cctz::time_zone _ctz;
     int64_t _second_mask = 0;
     int64_t _scale_to_nano_factor = 0;
@@ -91,11 +124,12 @@ void convert_int_to_int(SourceType* __restrict__ src, DestType* __restrict__ dst
     }
 }
 
+// Support int => int and float => double
 template <typename SourceType, typename DestType>
-class IntToIntConverter : public ColumnConverter {
+class NumericToNumericConverter final : public ColumnConverter {
 public:
-    IntToIntConverter() = default;
-    ~IntToIntConverter() override = default;
+    NumericToNumericConverter() = default;
+    ~NumericToNumericConverter() override = default;
 
     Status convert(const ColumnPtr& src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
@@ -122,7 +156,7 @@ public:
 };
 
 template <typename SourceType, LogicalType DestType>
-class PrimitiveToDecimalConverter : public ColumnConverter {
+class PrimitiveToDecimalConverter final : public ColumnConverter {
 public:
     using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
     using DestColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
@@ -183,7 +217,7 @@ private:
 // and for fixed length binary in parquet, string data is contiguous,
 // and that's why we can do memcpy 8 bytes without accessing invalid address.
 template <LogicalType DestType>
-class BinaryToDecimalConverter : public ColumnConverter {
+class BinaryToDecimalConverter final : public ColumnConverter {
 public:
     using DecimalType = typename RunTimeTypeTraits<DestType>::CppType;
     using ColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
@@ -346,16 +380,25 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         }
         switch (col_type) {
         case LogicalType::TYPE_TINYINT:
-            *converter = std::make_unique<IntToIntConverter<int32_t, int8_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, int8_t>>();
             break;
         case LogicalType::TYPE_SMALLINT:
-            *converter = std::make_unique<IntToIntConverter<int32_t, int16_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, int16_t>>();
             break;
         case LogicalType::TYPE_BIGINT:
-            *converter = std::make_unique<IntToIntConverter<int32_t, int64_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, int64_t>>();
+            break;
+        case LogicalType::TYPE_DOUBLE:
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, double>>();
+            break;
+        case LogicalType::TYPE_TIME:
+            *converter = std::make_unique<Int32ToTimeConverter>();
             break;
         case LogicalType::TYPE_DATE:
             *converter = std::make_unique<Int32ToDateConverter>();
+            break;
+        case LogicalType::TYPE_DATETIME:
+            *converter = std::make_unique<Int32ToDateTimeConverter>();
             break;
             // when decimal precision is greater than 27, precision may be lost in the following
             // process. However to handle most enviroment, we also make progress other than
@@ -387,13 +430,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         }
         switch (col_type) {
         case LogicalType::TYPE_TINYINT:
-            *converter = std::make_unique<IntToIntConverter<int64_t, int8_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int64_t, int8_t>>();
             break;
         case LogicalType::TYPE_SMALLINT:
-            *converter = std::make_unique<IntToIntConverter<int64_t, int16_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int64_t, int16_t>>();
             break;
         case LogicalType::TYPE_INT:
-            *converter = std::make_unique<IntToIntConverter<int64_t, int32_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int64_t, int32_t>>();
             break;
             // when decimal precision is greater than 27, precision may be lost in the following
             // process. However to handle most enviroment, we also make progress other than
@@ -418,6 +461,11 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         case LogicalType::TYPE_DATETIME: {
             auto _converter = std::make_unique<Int64ToDateTimeConverter>();
             RETURN_IF_ERROR(_converter->init(timezone, schema_element));
+            *converter = std::move(_converter);
+            break;
+        }
+        case LogicalType::TYPE_TIME: {
+            auto _converter = std::make_unique<Int64ToTimeConverter>();
             *converter = std::move(_converter);
             break;
         }
@@ -473,6 +521,11 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     case tparquet::Type::FLOAT: {
         if (col_type != LogicalType::TYPE_FLOAT) {
             need_convert = true;
+        }
+        if (col_type == LogicalType::TYPE_DOUBLE) {
+            auto _converter = std::make_unique<NumericToNumericConverter<float, double>>();
+            *converter = std::move(_converter);
+            break;
         }
         break;
     }
@@ -553,16 +606,69 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     return Status::OK();
 }
 
+Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+    // hive only support null column
+    // TODO: support not null
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+
+    auto& src_data = src_column->get_data();
+    auto& dst_data = dst_column->get_data();
+    auto& src_null_data = src_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+    size_t size = src_column->size();
+
+    for (size_t i = 0; i < size; i++) {
+        dst_null_data[i] = src_null_data[i];
+        if (!src_null_data[i]) {
+            dst_data.data()[i] = src_data.data()[i] / 1000;
+        }
+    }
+    dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
+Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+    // hive only support null column
+    // TODO: support not null
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
+
+    auto& src_data = src_column->get_data();
+    auto& dst_data = dst_column->get_data();
+    auto& src_null_data = src_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+    size_t size = src_column->size();
+    for (size_t i = 0; i < size; i++) {
+        dst_null_data[i] = src_null_data[i];
+        if (!src_null_data[i]) {
+            int64_t day = src_data[i];
+            TimestampValue ep;
+            ep.from_unix_second(day * 24 * 60 * 60, 0);
+            dst_data[i].set_timestamp(ep.timestamp());
+        }
+    }
+    dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
 Status Int96ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
-
     const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
+    const cctz::time_zone::absolute_lookup al = _ctz.lookup(tp);
     _offset = al.offset;
-
     return Status::OK();
 }
 
@@ -582,12 +688,27 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
     size_t size = src_column->size();
-    for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
-            dst_data[i].set_timestamp(_utc_to_local(timestamp));
+
+    auto fill_dst_fn = [&]<bool FAST_TZ>() {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (!src_null_data[i]) {
+                Timestamp timestamp =
+                        (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                int offset = _offset;
+                if constexpr (!FAST_TZ) {
+                    offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);
+                }
+                dst_data[i].set_timestamp(timestamp::add<TimeUnit::SECOND>(timestamp, offset));
+            }
         }
+    };
+    // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
+    // or when it's UTC timezone.
+    if (config::parquet_fast_timezone_conversion || _offset == 0) {
+        fill_dst_fn.operator()<true>();
+    } else {
+        fill_dst_fn.operator()<false>();
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -644,6 +765,9 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
         if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
             return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
         }
+        const auto tp = std::chrono::system_clock::now();
+        const cctz::time_zone::absolute_lookup al = _ctz.lookup(tp);
+        _offset = al.offset;
     }
 
     return Status::OK();
@@ -665,14 +789,63 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
     size_t size = src_column->size();
+    auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (!src_null_data[i]) {
+                int64_t seconds = src_data[i] / _second_mask;
+                int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+
+                if constexpr (UTC_TO_TZ) {
+                    int offset = _offset;
+                    if constexpr (!FAST_TZ) {
+                        offset = timestamp::get_timezone_offset_by_epoch_seconds(seconds, _ctz);
+                    }
+                    seconds += offset;
+                }
+
+                dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
+            }
+        }
+    };
+
+    if (_is_adjusted_to_utc) {
+        // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
+        // or when it's UTC timezone.
+        if (config::parquet_fast_timezone_conversion || _offset == 0) {
+            fill_dst_fn.operator()<true, true>();
+        } else {
+            fill_dst_fn.operator()<true, false>();
+        }
+    } else {
+        fill_dst_fn.operator()<false, true>();
+    }
+
+    dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
+Status Int64ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+    // hive only support null column
+    // TODO: support not null
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+
+    auto& src_data = src_column->get_data();
+    auto& dst_data = dst_column->get_data();
+    auto& src_null_data = src_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+    size_t size = src_column->size();
+
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            int64_t seconds = src_data[i] / _second_mask;
-            int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
-            TimestampValue ep;
-            ep.from_unixtime(seconds, nanoseconds / 1000, _ctz);
-            dst_data[i].set_timestamp(ep.timestamp());
+            dst_data.data()[i] = src_data.data()[i] / 1000000;
         }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());

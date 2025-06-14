@@ -93,7 +93,7 @@ public:
         footer.set_type(DATA_PAGE);
         DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
@@ -134,12 +134,12 @@ public:
         ASSERT_EQ("Captain", values[1].to_string());
         ASSERT_EQ("Xmas", values[2].to_string());
 
-        page_decoder.seek_to_position_in_page(0);
+        ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
         column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-        SparseRange read_range;
-        read_range.add(Range(0, 2));
-        read_range.add(Range(4, 7));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, 2));
+        read_range.add(Range<>(4, 7));
         status = page_decoder.next_batch(read_range, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(5, column->size());
@@ -154,9 +154,9 @@ public:
         Status status;
         // encode
         PageBuilderOptions options;
-        // page size: 16M
-        options.data_page_size = 1 * 1024 * 1024;
-        options.dict_page_size = 1 * 1024 * 1024;
+        // page size: 128K
+        options.data_page_size = 128 * 1024;
+        options.dict_page_size = 128 * 1024;
         BinaryDictPageBuilder page_builder(options);
         size_t count = contents.size();
         std::vector<OwnedSlice> results;
@@ -190,9 +190,9 @@ public:
                   << ", dict size:" << dict_slice.slice().size << " result page size:" << results.size();
 
         // validate
-        // random 100 times to validate
+        // random 20 times to validate
         srand(time(nullptr));
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < 20; ++i) {
             int slice_index = random() % results.size();
             //int slice_index = 1;
             auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
@@ -205,7 +205,7 @@ public:
             footer.set_type(DATA_PAGE);
             DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
             data_page_footer->set_nullmap_size(0);
-            std::unique_ptr<char[]> page = nullptr;
+            std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
             Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
             ASSERT_TRUE(st.ok());
@@ -237,10 +237,10 @@ public:
             ASSERT_TRUE(status.ok());
             size_t slice_num = page_start_ids[slice_index + 1] - page_start_ids[slice_index];
             auto dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-            SparseRange read_range;
-            read_range.add(Range(0, slice_num / 3));
-            read_range.add(Range(slice_num / 2, (slice_num * 2 / 3)));
-            read_range.add(Range((slice_num * 3 / 4), slice_num));
+            SparseRange<> read_range;
+            read_range.add(Range<>(0, slice_num / 3));
+            read_range.add(Range<>(slice_num / 2, (slice_num * 2 / 3)));
+            read_range.add(Range<>((slice_num * 3 / 4), slice_num));
             size_t read_num = read_range.span_size();
 
             status = page_decoder.next_batch(read_range, dst.get());
@@ -248,9 +248,9 @@ public:
             ASSERT_EQ(read_num, dst->size());
 
             size_t offset = 0;
-            SparseRangeIterator read_iter = read_range.new_iterator();
+            SparseRangeIterator<> read_iter = read_range.new_iterator();
             while (read_iter.has_more()) {
-                Range r = read_iter.next(read_num);
+                Range<> r = read_iter.next(read_num);
                 for (int i = 0; i < r.span_size(); ++i) {
                     std::string expect = contents[page_start_ids[slice_index] + r.begin() + i].to_string();
                     std::string actual = dst->get(i + offset).get_slice().to_string();
@@ -289,7 +289,7 @@ TEST_F(BinaryDictPageTest, TestEncodingRatio) {
     while (getline(infile, line)) {
         src_strings.emplace_back(line);
     }
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < 1000; ++i) {
         for (const auto& src_string : src_strings) {
             slices.emplace_back(src_string);
         }

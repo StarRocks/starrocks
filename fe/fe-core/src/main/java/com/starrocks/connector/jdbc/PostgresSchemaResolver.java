@@ -23,11 +23,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.SchemaConstants;
+import com.starrocks.common.util.TimeUtils;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -59,7 +62,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 columnName = "\"" + columnName + "\"";
             }
             fullSchema.add(new Column(columnName, type,
-                    columnSet.getString("IS_NULLABLE").equals("YES")));
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
         }
         return fullSchema;
     }
@@ -67,7 +70,17 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     @Override
     public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
                           Map<String, String> properties) throws DdlException {
-        return new JDBCTable(id, "\"" + dbName + "\"" + "." + "\"" + name + "\"", schema, "", catalogName, properties);
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "\"" + dbName + "\"" + "." + "\"" + name + "\"");
+        return new JDBCTable(id, name, schema, dbName, catalogName, newProp);
+    }
+
+    @Override
+    public Table getTable(long id, String name, List<Column> schema, List<Column> partitionColumns, String dbName,
+                          String catalogName, Map<String, String> properties) throws DdlException {
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "\"" + dbName + "\"" + "." + "\"" + name + "\"");
+        return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, newProp);
     }
 
     @Override
@@ -101,7 +114,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 if (typeName.equalsIgnoreCase("varchar")) {
                     return ScalarType.createVarcharType(columnSize);
                 } else if (typeName.equalsIgnoreCase("text")) {
-                    return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+                    return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -123,10 +136,14 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
-                return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+                return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
             }
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
         }
+    }
+
+    public List<Partition> getPartitions(Connection connection, Table table) {
+        return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
     }
 
 }

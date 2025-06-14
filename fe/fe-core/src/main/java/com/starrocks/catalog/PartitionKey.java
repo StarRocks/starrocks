@@ -43,6 +43,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -59,11 +60,16 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Objects;
 
 public class PartitionKey implements Comparable<PartitionKey>, Writable {
     private static final Logger LOG = LogManager.getLogger(PartitionKey.class);
     private List<LiteralExpr> keys;
     private List<PrimitiveType> types;
+    // Records the string corresponding to partition value when the partition value is null
+    // for hive, it's __HIVE_DEFAULT_PARTITION__
+    // for hudi， it's __HIVE_DEFAULT_PARTITION__ or default
+    private String nullPartitionValue = "";
 
     private static final DateLiteral SHADOW_DATE_LITERAL = new DateLiteral(0, 0, 0);
     private static final DateLiteral SHADOW_DATETIME_LITERAL = new DateLiteral(0, 0, 0, 0, 0, 0, 0);
@@ -80,6 +86,14 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         types = keyType;
     }
 
+    public void setNullPartitionValue(String nullPartitionValue) {
+        this.nullPartitionValue = nullPartitionValue;
+    }
+
+    public String getNullPartitionValue() {
+        return nullPartitionValue;
+    }
+
     // Factory methods
     public static PartitionKey createInfinityPartitionKey(List<Column> columns, boolean isMax)
             throws AnalysisException {
@@ -87,6 +101,16 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         for (Column column : columns) {
             partitionKey.keys.add(LiteralExpr.createInfinity(Type.fromPrimitiveType(column.getPrimitiveType()), isMax));
             partitionKey.types.add(column.getPrimitiveType());
+        }
+        return partitionKey;
+    }
+
+    public static PartitionKey createInfinityPartitionKeyWithType(List<PrimitiveType> types, boolean isMax)
+            throws AnalysisException {
+        PartitionKey partitionKey = new PartitionKey();
+        for (PrimitiveType type : types) {
+            partitionKey.keys.add(LiteralExpr.createInfinity(Type.fromPrimitiveType(type), isMax));
+            partitionKey.types.add(type);
         }
         return partitionKey;
     }
@@ -146,6 +170,13 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         PartitionKey partitionKey = new PartitionKey();
         partitionKey.keys.add(new DateLiteral(LocalDateTime.of(date, LocalTime.MIN), Type.DATE));
         partitionKey.types.add(PrimitiveType.DATE);
+        return partitionKey;
+    }
+
+    public static PartitionKey ofString(String str) {
+        PartitionKey partitionKey = new PartitionKey();
+        partitionKey.keys.add(new StringLiteral(str));
+        partitionKey.types.add(PrimitiveType.VARCHAR);
         return partitionKey;
     }
 
@@ -282,6 +313,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 key.pushColumn(dateLiteral, type);
                 return key;
             }
+            case CHAR:
+            case VARCHAR: {
+                StringLiteral stringLiteral = (StringLiteral) literal;
+                key.pushColumn(new StringLiteral(stringLiteral.getStringValue()), type);
+                return key;
+            }
             default:
                 Preconditions.checkArgument(false, "Never reach here");
                 return null;
@@ -345,6 +382,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                     dateLiteral = new DateLiteral(year, mon, day, hour, min, sec, 0);
                 }
                 key.pushColumn(dateLiteral, type);
+                return key;
+            }
+            case CHAR:
+            case VARCHAR: {
+                StringLiteral stringLiteral = (StringLiteral) literal;
+                key.pushColumn(new StringLiteral(stringLiteral.getStringValue()), type);
                 return key;
             }
             default:
@@ -480,6 +523,10 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                     case DATETIME:
                         literal = DateLiteral.read(in);
                         break;
+                    case CHAR:
+                    case VARCHAR:
+                        literal =  StringLiteral.read(in);
+                        break;
                     default:
                         throw new IOException("type[" + type.name() + "] not supported: ");
                 }
@@ -496,48 +543,23 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
-        if (!(obj instanceof PartitionKey)) {
+        if (o == null || getClass() != o.getClass()) {
             return false;
         }
-
-        PartitionKey partitionKey = (PartitionKey) obj;
-
-        // Check keys
-        if (keys != partitionKey.keys) {
-            if (keys.size() != partitionKey.keys.size()) {
-                return false;
-            }
-            for (int i = 0; i < keys.size(); i++) {
-                if (!keys.get(i).equals(partitionKey.keys.get(i))) {
-                    return false;
-                }
-            }
-        }
-
-        // Check types
-        if (types != partitionKey.types) {
-            if (types.size() != partitionKey.types.size()) {
-                return false;
-            }
-            for (int i = 0; i < types.size(); i++) {
-                if (!types.get(i).equals(partitionKey.types.get(i))) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        PartitionKey that = (PartitionKey) o;
+        assert Objects.equals(types, that.types);
+        return Objects.equals(keys, that.keys) && Objects.equals(types, that.types);
     }
 
     @Override
     public int hashCode() {
-        int code = 0;
-        for (LiteralExpr expr : keys) {
-            code += code * 31 + expr.hashCode();
+        int code = Objects.hash(keys);
+        for (PrimitiveType type : types) {
+            code += code * 31 + Objects.hash(type.getDescription());
         }
         return code;
     }

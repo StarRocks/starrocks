@@ -95,6 +95,12 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
+        for (int i = 0; i < size; i++) {
+            CppType index_value;
+            page_decoder.at_index(i, &index_value);
+            ASSERT_EQ(src[i], index_value);
+        }
+
         ASSERT_EQ(0, page_decoder.current_index());
 
         auto column = ChunkHelper::column_from_field_type(Type, false);
@@ -108,22 +114,22 @@ public:
         }
 
         auto column1 = ChunkHelper::column_from_field_type(Type, false);
-        page_decoder.seek_to_position_in_page(0);
+        ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
 
-        SparseRange read_range;
-        read_range.add(Range(0, size / 3));
-        read_range.add(Range(size / 2, (size * 2 / 3)));
-        read_range.add(Range((size * 3 / 4), size));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, size / 3));
+        read_range.add(Range<>(size / 2, (size * 2 / 3)));
+        read_range.add(Range<>((size * 3 / 4), size));
         size_t read_num = read_range.span_size();
         status = page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
 
         const auto* decoded_data = reinterpret_cast<const CppType*>(column1->raw_data());
-        SparseRangeIterator read_iter = read_range.new_iterator();
+        SparseRangeIterator<> read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {
-            Range r = read_iter.next(read_num);
+            Range<> r = read_iter.next(read_num);
             for (uint i = 0; i < r.span_size(); ++i) {
                 if (src[r.begin() + i] != decoded_data[i + offset]) {
                     FAIL() << "Fail at index " << i + offset << " inserted=" << src[r.begin() + i]
@@ -136,7 +142,7 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
-            page_decoder.seek_to_position_in_page(seek_off);
+            ASSERT_TRUE(page_decoder.seek_to_position_in_page(seek_off).ok());
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);
@@ -283,7 +289,7 @@ TEST_F(PlainPageTest, TestPlainFloatBlockEncoderRandom) {
 
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = random() + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_FLOAT, PlainPageBuilder<TYPE_FLOAT>, PlainPageDecoder<TYPE_FLOAT>>(
@@ -294,7 +300,7 @@ TEST_F(PlainPageTest, TestDoublePageEncoderRandom) {
     const uint32_t size = 10000;
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = random() + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
     test_encode_decode_page_template<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>, PlainPageDecoder<TYPE_DOUBLE>>(
             doubles.get(), size);
@@ -407,7 +413,7 @@ TEST_F(PlainPageTest, TestFloatMultiplePages) {
     std::unique_ptr<float[]> floats = std::make_unique<float[]>(size);
 
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / INT_MAX;
+        floats.get()[i] = random() + random() / static_cast<float>(INT_MAX);
     }
 
     test_multi_pages<TYPE_FLOAT, PlainPageBuilder<TYPE_FLOAT>>(floats.get(), size);
@@ -418,7 +424,7 @@ TEST_F(PlainPageTest, TestDoubleMultiplePages) {
     std::unique_ptr<double[]> doubles = std::make_unique<double[]>(size);
 
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / INT_MAX;
+        doubles.get()[i] = random() + random() / static_cast<double>(INT_MAX);
     }
 
     test_multi_pages<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>>(doubles.get(), size);

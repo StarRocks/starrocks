@@ -16,6 +16,7 @@
 
 #include "common/config.h"
 #include "storage/row_source_mask.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -42,17 +43,17 @@ int32_t CompactionUtils::get_read_chunk_size(int64_t mem_limit, int32_t config_c
         int64_t avg_row_size = (total_mem_footprint + 1) / (total_num_rows + 1);
         // The result of the division operation be zero, so added one
         chunk_size = 1 + mem_limit / (source_num * avg_row_size + 1);
-    }
-
-    if (chunk_size > config_chunk_size) {
-        chunk_size = config_chunk_size;
+        if (chunk_size > config_chunk_size) {
+            chunk_size = config_chunk_size;
+        }
     }
     return (uint32_t)chunk_size;
 }
 
 Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
-                                                       CompactionAlgorithm algorithm, Version version,
-                                                       std::unique_ptr<RowsetWriter>* output_rowset_writer) {
+                                                       CompactionAlgorithm algorithm, Version version, int64_t gtid,
+                                                       std::unique_ptr<RowsetWriter>* output_rowset_writer,
+                                                       const TabletSchemaCSPtr& tablet_schema) {
     RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = tablet->tablet_uid();
@@ -60,13 +61,16 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.partition_id = tablet->partition_id();
     context.tablet_schema_hash = tablet->schema_hash();
     context.rowset_path_prefix = tablet->schema_hash_path();
-    context.tablet_schema = &tablet->tablet_schema();
+    context.tablet_schema = (tablet_schema == nullptr) ? tablet->tablet_schema() : tablet_schema;
+    context.flat_json_config = tablet->flat_json_config();
     context.rowset_state = VISIBLE;
     context.version = version;
     context.segments_overlap = NONOVERLAPPING;
     context.max_rows_per_segment = max_rows_per_segment;
     context.writer_type =
             (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
+    context.gtid = gtid;
+    context.is_compaction = true;
     Status st = RowsetFactory::create_rowset_writer(context, output_rowset_writer);
     if (!st.ok()) {
         std::stringstream ss;
@@ -97,8 +101,10 @@ void CompactionUtils::split_column_into_groups(size_t num_columns, const std::ve
     for (ColumnId i = 0; i < num_columns; ++i) {
         all_columns.push_back(i);
     }
+    std::vector<ColumnId> tmp_sort_key_idxes(sort_key_idxes.begin(), sort_key_idxes.end());
+    std::sort(tmp_sort_key_idxes.begin(), tmp_sort_key_idxes.end());
     std::vector<ColumnId> non_sort_columns;
-    std::set_difference(all_columns.begin(), all_columns.end(), sort_key_idxes.begin(), sort_key_idxes.end(),
+    std::set_difference(all_columns.begin(), all_columns.end(), tmp_sort_key_idxes.begin(), tmp_sort_key_idxes.end(),
                         std::back_inserter(non_sort_columns));
     for (auto i = 0; i < non_sort_columns.size(); ++i) {
         if (i % max_columns_per_group == 0) {
@@ -123,6 +129,18 @@ CompactionAlgorithm CompactionUtils::choose_compaction_algorithm(size_t num_colu
     }
 
     return VERTICAL_COMPACTION;
+}
+
+RowsetSharedPtr& CompactionUtils::rowset_with_max_schema_version(std::vector<RowsetSharedPtr>& rowsets) {
+    return *std::max_element(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& a, const RowsetSharedPtr& b) {
+        if (a->schema()->schema_version() < b->schema()->schema_version()) {
+            return true;
+        } else if (a->schema()->schema_version() == b->schema()->schema_version()) {
+            return a->version() < b->version();
+        } else {
+            return false;
+        }
+    });
 }
 
 } // namespace starrocks

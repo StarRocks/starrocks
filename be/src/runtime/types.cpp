@@ -42,6 +42,7 @@
 #include "storage/types.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
+#include "util/decimal_types.h"
 
 namespace starrocks {
 
@@ -72,6 +73,12 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
+            if (struct_field.__isset.id && struct_field.id != -1) {
+                field_ids.emplace_back(struct_field.id);
+            }
+            if (struct_field.__isset.physical_name && !struct_field.physical_name.empty()) {
+                field_physical_names.emplace_back(struct_field.physical_name);
+            }
         }
         DCHECK_EQ(field_names.size(), children.size());
         break;
@@ -123,9 +130,7 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         curr_node.__set_scalar_type(TScalarType());
         TScalarType& scalar_type = curr_node.scalar_type;
         scalar_type.__set_type(starrocks::to_thrift(type));
-        if (len != -1) {
-            scalar_type.__set_len(len);
-        }
+        scalar_type.__set_len(len);
         if (scale != -1) {
             scalar_type.__set_scale(scale);
         }
@@ -149,8 +154,8 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
         DCHECK_EQ(field_names.size(), children.size());
-        for (size_t i = 0; i < field_names.size(); i++) {
-            node->add_struct_fields()->set_name(field_names[i]);
+        for (const auto& field_name : field_names) {
+            node->add_struct_fields()->set_name(field_name);
         }
         for (const TypeDescriptor& child : children) {
             child.to_protobuf(proto_type);
@@ -159,9 +164,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         node->set_type(TTypeNodeType::SCALAR);
         PScalarType* scalar_type = node->mutable_scalar_type();
         scalar_type->set_type(starrocks::to_thrift(type));
-        if (len != -1) {
-            scalar_type->set_len(len);
-        }
+        scalar_type->set_len(len);
         if (scale != -1) {
             scalar_type->set_scale(scale);
         }
@@ -261,16 +264,25 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
+    }
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
 bool TypeDescriptor::support_orderby() const {
+    if (type == TYPE_ARRAY) {
+        return children[0].support_orderby();
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
            type != TYPE_MAP && type != TYPE_STRUCT;
 }
 
 bool TypeDescriptor::support_groupby() const {
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(),
+                           [](const TypeDescriptor& t) { return t.support_groupby(); });
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
@@ -372,6 +384,21 @@ int TypeDescriptor::get_slot_size() const {
     return -1;
 }
 
+size_t TypeDescriptor::get_flat_size() const {
+    if (is_unknown_type()) {
+        return 0;
+    }
+    if (!is_complex_type()) {
+        return 1;
+    } else {
+        int size = 0;
+        for (const auto& type : children) {
+            size += type.get_flat_size();
+        }
+        return size;
+    }
+}
+
 size_t TypeDescriptor::get_array_depth_limit() const {
     int depth = 1;
     const TypeDescriptor* type = this;
@@ -380,6 +407,58 @@ size_t TypeDescriptor::get_array_depth_limit() const {
         depth++;
     }
     return depth;
+}
+
+TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2) {
+    DCHECK(type1 != type2);
+    if (type1.is_integer_type() && type2.is_integer_type()) {
+        // promote integer type. Larger enum values mean larger value ranges.
+        auto tp = type1.type > type2.type ? type1.type : type2.type;
+        return TypeDescriptor::from_logical_type(tp);
+    } else if (type1.is_float_type() && type2.is_float_type()) {
+        // promote all float to double.
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if ((type1.is_float_type() && type2.is_integer_type()) ||
+               (type1.is_integer_type() && type2.is_float_type())) {
+        // if one is float and other is integer, promote to double
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if (type1.is_decimal_type() && type2.is_decimal_type()) {
+        auto precision1 = type1.precision;
+        auto scale1 = type1.scale;
+        auto precision2 = type2.precision;
+        auto scale2 = type2.scale;
+        int final_scale = std::max(scale1, scale2);
+        int max_int_length = std::max(precision1 - scale1, precision2 - scale2);
+        int final_precision = max_int_length + final_scale;
+        return promote_decimal_type(final_precision, final_scale);
+    } else if (type1.type == TYPE_VARCHAR && type2.type == TYPE_VARCHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varchar_type(len);
+    } else if (type1.type == TYPE_CHAR && type2.type == TYPE_CHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_char_type(len);
+    } else if (type1.type == TYPE_VARBINARY && type2.type == TYPE_VARBINARY) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varbinary_type(len);
+    }
+    // treat other conflicted types as varchar.
+    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+}
+
+TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
+    // decimal v3 only
+    if (precision <= 0 || precision > decimal_precision_limit<int128_t>) {
+        // if precision is invalid, use varchar
+        LOG(WARNING) << "failed to promote decimal type, use varchar. precision: " << precision;
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    } else if (precision <= decimal_precision_limit<int32_t>) {
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
+    } else if (precision <= decimal_precision_limit<int64_t>) {
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
+    } else {
+        DCHECK_LE(precision, decimal_precision_limit<int128_t>);
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
+    }
 }
 
 } // namespace starrocks

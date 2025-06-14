@@ -81,13 +81,13 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
             if (i == last_index) { // size should not be 0
                 return false;
             }
-            keys.push_back(Slice(s.data + last_index, i - last_index));
+            keys.emplace_back(s.data + last_index, i - last_index);
             last_index = i + 1;
         } else if (!in_quote && map_nest_level == 0 && c == _map_delimiter) {
             if (i == last_index) {
                 return false;
             }
-            values.push_back(Slice(s.data + last_index, i - last_index));
+            values.emplace_back(s.data + last_index, i - last_index);
             last_index = i + 1;
         }
     }
@@ -95,7 +95,7 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
         if (i == last_index) {
             return false;
         }
-        values.push_back(Slice(s.data + last_index, i - last_index));
+        values.emplace_back(s.data + last_index, i - last_index);
     }
     if (map_nest_level != 0 || in_quote || values.size() != keys.size()) {
         return false;
@@ -103,7 +103,7 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
     return true;
 }
 
-bool MapConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool MapConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     if (!validate(s)) {
         return false;
     }
@@ -149,7 +149,7 @@ bool MapConverter::read_string(Column* column, Slice s, const Options& options) 
     return true;
 }
 
-bool MapConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool MapConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 

@@ -18,19 +18,96 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ConstantExpressionTest extends PlanTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+    }
+
     private void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains(": " + result));
+        Assert.assertTrue(explainString, explainString.contains(": " + result));
     }
 
     private void testFragmentPlanContains(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains(result));
+        Assert.assertTrue(explainString, explainString.contains(result));
+    }
+
+    @Test
+    public void testInspectMvMetaFunctions() throws Exception {
+        String db = starRocksAssert.getCtx().getDatabase();
+        starRocksAssert.withTable(
+                "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+        starRocksAssert.withView("create view mv_base_table_9527_view_1 " +
+                "as " +
+                "select id, count(1) as cnt " +
+                "from mv_base_table_9527 " +
+                "group by id;");
+        starRocksAssert.withMaterializedView("create materialized view mv1 " +
+                "distributed by hash(id) " +
+                "refresh async " +
+                "properties('replication_num'='1') " +
+                "as select * from mv_base_table_9527");
+        testFragmentPlanContains("select inspect_mv_meta('mv1');", "MaterializedView");
+        String fullName = db + ".mv1";
+        testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "MaterializedView");
+
+        testFragmentPlanContains("select inspect_mv_plan('mv1', true);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1', false);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1');", "LogicalOlapScanOperator {table=");
+
+        // wrong arguments
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('snowflake');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('mv_base_table_9527');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('a.b.c.d');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('db_notexists.mv1');"));
+
+        // inspect_related_mv
+        testFragmentPlanContains("select inspect_related_mv('mv_base_table_9527')", "name\":\"mv1\"");
+        starRocksAssert.withMaterializedView("create materialized view mv_from_view_1 " +
+                "distributed by hash(id) " +
+                "refresh async " +
+                "properties('replication_num'='1') " +
+                "as select * from mv_base_table_9527_view_1");
+
+        {
+            String explainString = getFragmentPlan("select inspect_mv_plan('mv_from_view_1');");
+            Assert.assertTrue(explainString,
+                    explainString.contains("1:Project\n" +
+                            "  |  <slot 2> : 'plan 0: \n" +
+                            "LogicalAggregation {type=GLOBAL ,aggrega...'"));
+        }
+
+        starRocksAssert.dropView("mv_base_table_9527_view_1");
+        starRocksAssert.dropMaterializedView("mv_from_view_1");
+    }
+
+    @Test
+    public void testInspectHivePartitionInfo() throws Exception {
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> testFragmentPlanContains("select inspect_hive_part_info('not_exist_catalog.no_db.no_table')",
+                        ""));
+        testFragmentPlanContains("select inspect_hive_part_info('hive0.partitioned_db.lineitem_par')", "Project");
+    }
+
+    @Test
+    public void testInspect_inspect_mv_relationships() throws Exception {
+        testFragmentPlanContains("select inspect_mv_relationships()", "Project");
     }
 
     @Test
@@ -363,7 +440,7 @@ public class ConstantExpressionTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 2> : 2: percentile_approx\n" +
-                    "  |  <slot 3> : 2: percentile_approx\n" +
+                    "  |  <slot 3> : clone(2: percentile_approx)\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: percentile_approx(2.25, 0.0)\n" +
@@ -374,12 +451,12 @@ public class ConstantExpressionTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 2> : 2: count\n" +
-                    "  |  <slot 3> : 2: count\n" +
-                    "  |  <slot 4> : 4: count\n" +
-                    "  |  <slot 5> : 2: count\n" +
+                    "  |  <slot 3> : clone(2: count)\n" +
+                    "  |  <slot 4> : clone(2: count)\n" +
+                    "  |  <slot 5> : clone(2: count)\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: count(1), count(if(CAST(1.0 AS BOOLEAN), 1, NULL))\n" +
+                    "  |  output: count(1)\n" +
                     "  |  group by: ");
 
             sql = "SELECT 1, TRUE, 0, FALSE, 1.1, 1, 1.1, TRUE, FALSE, 0";
@@ -403,5 +480,103 @@ public class ConstantExpressionTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setSqlMode(prevSqlMode);
         }
+    }
+
+    @Test
+    public void testGetQueryDump() throws Exception {
+        DumpInfo prevDumpInfo = connectContext.getDumpInfo();
+
+        try {
+            connectContext.setDumpInfo(null);
+
+            // Non-constant arguments.
+            {
+                String sql = "SELECT get_query_dump(rtrim('select count(v1) from t0')) from t0";
+                Assert.assertThrows("Meta function get_query_dump does not support non-constant arguments",
+                        SemanticException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases.
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', false) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', true) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"SELECT count(tbl_mock_001.mock_002)...");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0') from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            // Failed cases.
+            {
+                String sql = "SELECT get_query_dump('') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: query is empty",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+            {
+                String sql = "SELECT get_query_dump('not-a-query') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: execute query failed.",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases after failed cases.
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+        } finally {
+            connectContext.setDumpInfo(prevDumpInfo);
+        }
+
+    }
+
+    @Test
+    public void testReplace() throws Exception {
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', '', '1234')");
+            assertContains(plan, "<slot 2> : 'abc def ghi abc'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : '1234 def ghi 1234'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : ''");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE(NULL, 'abc', '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', NULL, '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', NULL)");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
     }
 }

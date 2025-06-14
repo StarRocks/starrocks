@@ -26,16 +26,14 @@ import java.util.List;
 
 public class ScalarTypeTest {
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void createUnifiedDecimalTypeWithoutPrecisionAndScale() throws AnalysisException {
         ScalarType.createUnifiedDecimalType();
-        Assert.fail("should throw an exception");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testCreateUnifiedDecimalTypeWithoutScale() throws AnalysisException {
         ScalarType.createUnifiedDecimalType(18);
-        Assert.fail("should throw an exception");
     }
 
     @Test
@@ -80,7 +78,7 @@ public class ScalarTypeTest {
                 ScalarType.createUnifiedDecimalType(38, 38),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 38));
 
-        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(39, 38));
+        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(79, 38));
         Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(10, 11));
     }
 

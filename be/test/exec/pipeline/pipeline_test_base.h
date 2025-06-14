@@ -17,6 +17,9 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
@@ -36,6 +39,7 @@ public:
     virtual void TearDown() final;
 
 protected:
+    int32_t _vector_chunk_size = 4096;
     ExecEnv* _exec_env = nullptr;
     QueryContext* _query_ctx = nullptr;
     FragmentContext* _fragment_ctx = nullptr;
@@ -59,7 +63,9 @@ protected:
 
     // lambda used to init _pipelines
     std::function<void(RuntimeState*)> _pipeline_builder;
+
     Pipelines _pipelines;
+    ExecutionGroupPtr exec_group;
 
 private:
     // Prepare execution context of pipeline

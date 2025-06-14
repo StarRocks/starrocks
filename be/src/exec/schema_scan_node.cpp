@@ -17,8 +17,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
-#include "exec/pipeline/scan/olap_schema_scan_context.h"
-#include "exec/pipeline/scan/olap_schema_scan_operator.h"
+#include "exec/pipeline/scan/schema_scan_context.h"
+#include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -182,7 +182,7 @@ Status SchemaScanNode::open(RuntimeState* state) {
 }
 
 Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    VLOG(1) << "SchemaScanNode::GetNext";
+    VLOG(2) << "SchemaScanNode::GetNext";
 
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     DCHECK(_is_init);
@@ -211,7 +211,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         DCHECK(dest_slot_descs[i]->is_materialized());
         int j = _index_map[i];
         SlotDescriptor* src_slot = src_slot_descs[j];
-        ColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
         column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), src_slot->id());
     }
@@ -223,7 +223,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     }
 
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 
@@ -274,14 +274,14 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     return Status::OK();
 }
 
-Status SchemaScanNode::close(RuntimeState* state) {
+void SchemaScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
-    return ScanNode::close(state);
+    ScanNode::close(state);
 }
 
 void SchemaScanNode::debug_string(int indentation_level, std::stringstream* out) const {
@@ -300,15 +300,16 @@ Status SchemaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
-    // the dop of SchemaScanOperator should always be 1.
-    size_t dop = 1;
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
+    size_t dop = context->dop_of_source_operator(_id);
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             buffer_capacity, buffer_capacity, _mem_limit, runtime_state()->chunk_size());
 
-    auto scan_op = std::make_shared<pipeline::OlapSchemaScanOperatorFactory>(context->next_operator_id(), this, dop,
-                                                                             _tnode, std::move(buffer_limiter));
+    auto scan_op = std::make_shared<pipeline::SchemaScanOperatorFactory>(context->next_operator_id(), this, dop, _tnode,
+                                                                         std::move(buffer_limiter));
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 

@@ -18,6 +18,7 @@ import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
+import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
 import org.apache.paimon.types.DateType;
@@ -25,10 +26,14 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
+import org.apache.paimon.types.TimeType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.stream.Collectors;
@@ -45,6 +50,10 @@ public class PaimonTypeUtils {
 
         private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
 
+        public String visit(CharType charType) {
+            return "string";
+        }
+
         public String visit(VarCharType varCharType) {
             return "string";
         }
@@ -57,8 +66,16 @@ public class PaimonTypeUtils {
             return "binary";
         }
 
+        public String visit(VarBinaryType varBinaryType) {
+            return "binary";
+        }
+
         public String visit(DecimalType decimalType) {
             return String.format("decimal(%d,%d)", decimalType.getPrecision(), decimalType.getScale());
+        }
+
+        public String visit(TinyIntType tinyIntType) {
+            return "tinyint";
         }
 
         public String visit(SmallIntType smallIntType) {
@@ -85,7 +102,15 @@ public class PaimonTypeUtils {
             return "date";
         }
 
+        public String visit(TimeType timeType) {
+            return "time";
+        }
+
         public String visit(TimestampType timestampType) {
+            return "timestamp-millis";
+        }
+
+        public String visit(LocalZonedTimestampType timestampType) {
             return "timestamp-millis";
         }
 
@@ -100,14 +125,14 @@ public class PaimonTypeUtils {
         }
 
         public String visit(RowType rowType) {
-            String type = rowType.getFields().stream().map(f -> f.type().accept(this) + ",")
+            String type = rowType.getFields().stream().map(f -> f.name() + ":" + f.type().accept(this))
                     .collect(Collectors.joining(","));
-            return String.format("struct<%s>", type.substring(0, type.length() - 1));
+            return String.format("struct<%s>", type);
         }
 
         @Override
         protected String defaultMethod(DataType dataType) {
-            return "unsupported_type";
+            return dataType.getTypeRoot().name();
         }
     }
 }

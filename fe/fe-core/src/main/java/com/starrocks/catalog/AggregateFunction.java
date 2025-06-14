@@ -51,6 +51,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
@@ -117,6 +118,12 @@ public class AggregateFunction extends Function {
     // True if "NULLS FIRST", false if "NULLS LAST", null if not specified.
     private List<Boolean> nullsFirst;
 
+    private boolean isDistinct = false;
+
+    public void setIsDistinct(boolean isDistinct) {
+        this.isDistinct = isDistinct;
+    }
+
     // only used for serialization
     protected AggregateFunction() {
     }
@@ -132,9 +139,9 @@ public class AggregateFunction extends Function {
         this.intermediateType =
                 (intermediateType != null && intermediateType.equals(retType)) ? null : intermediateType;
         this.isAnalyticFn = isAnalyticFn;
-        ignoresDistinct = false;
-        isAggregateFn = true;
-        returnsNonNullOnEmpty = false;
+        this.ignoresDistinct = false;
+        this.isAggregateFn = true;
+        this.returnsNonNullOnEmpty = false;
     }
 
     public static AggregateFunction createBuiltin(String name,
@@ -145,6 +152,7 @@ public class AggregateFunction extends Function {
         return createBuiltin(name, argTypes, retType, intermediateType, false, ignoresDistinct, isAnalyticFn,
                 returnsNonNullOnEmpty);
     }
+
 
     public static AggregateFunction createBuiltin(String name,
                                                   List<Type> argTypes, Type retType, Type intermediateType,
@@ -200,6 +208,26 @@ public class AggregateFunction extends Function {
         isAggregateFn = other.isAggregateFn;
         returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
         symbolName = other.symbolName;
+        isAscOrder = other.isAscOrder;
+        nullsFirst = other.nullsFirst;
+        isDistinct = other.isDistinct;
+    }
+
+    /**
+     * Returns a new instance of this aggregate function with new argument types and return type which is used for
+     * original function's argument types are psedo types.
+     */
+    public AggregateFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        AggregateFunction newFn = new AggregateFunction(this.getFunctionName(), newArgTypes, newRetType,
+                this.getIntermediateType(), this.hasVarArgs());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        return newFn;
     }
 
     public String getSymbolName() {
@@ -280,6 +308,10 @@ public class AggregateFunction extends Function {
         }
     }
 
+    public boolean isAggregateFn() {
+        return isAggregateFn;
+    }
+
     public boolean isAnalyticFn() {
         return isAnalyticFn;
     }
@@ -304,6 +336,10 @@ public class AggregateFunction extends Function {
         intermediateType = t;
     }
 
+    public Type getIntermediateTypeOrReturnType() {
+        return intermediateType == null ? getReturnType() : intermediateType;
+    }
+
     @Override
     public String toSql(boolean ifNotExists) {
         StringBuilder sb = new StringBuilder("CREATE AGGREGATE FUNCTION ");
@@ -322,6 +358,20 @@ public class AggregateFunction extends Function {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof AggregateFunction)) {
+            return false;
+        }
+        AggregateFunction agg = (AggregateFunction) obj;
+
+        return Objects.equals(intermediateType, agg.intermediateType) && ignoresDistinct == agg.ignoresDistinct &&
+                isAnalyticFn == agg.isAnalyticFn && isAggregateFn == agg.isAggregateFn &&
+                returnsNonNullOnEmpty == agg.returnsNonNullOnEmpty && Objects.equals(symbolName, agg.symbolName)
+                && isDistinct == agg.isDistinct && Objects.equals(nullsFirst, agg.getNullsFirst()) &&
+                Objects.equals(isAscOrder, agg.getIsAscOrder()) && super.equals(obj);
+    }
+
+    @Override
     public TFunction toThrift() {
         TFunction fn = super.toThrift();
         TAggregateFunction aggFn = new TAggregateFunction();
@@ -337,6 +387,8 @@ public class AggregateFunction extends Function {
         if (nullsFirst != null && !nullsFirst.isEmpty()) {
             aggFn.setNulls_first(nullsFirst);
         }
+        aggFn.setIs_distinct(isDistinct);
+
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;

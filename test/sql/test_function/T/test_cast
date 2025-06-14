@@ -1,0 +1,83 @@
+-- name: test_cast_string_to_varbinary
+
+create table t1(c1 int, c2 string, c3 string);
+create table t2(c1 int, c2 binary, c3 varbinary);
+
+insert into t1 values (1, "1,2,3,4,5", "6,7,8,9");
+insert into t1 values (2, null, null);
+insert into t2 select * from t1;
+
+select * from t2 order by c1;
+select c1, cast(c2 as binary), cast(c2 as varbinary) from t1 order by c1;
+select cast("1,2,3,4,5" as binary), cast("6,7,8,9.10" as varbinary);
+
+-- name: test_cast_varbinary_to_string
+create table t1(c1 int, c2 binary, c3 varbinary);
+create table t2(c1 int, c2 string, c3 string);
+
+insert into t1 values (1, "1,2,3,4,5", "6,7,8,9");
+insert into t1 values (2, null, null);
+insert into t2 select * from t1;
+
+select * from t2 order by c1;
+select c1, cast(c2 as string), cast(c3 as string) from t1 order by c1;
+
+
+-- name: test_cast_floating_to_intergal
+
+create table t1(k1 int, d1 double, f1 float) PROPERTIES (
+    "replication_num" = "1"
+);
+insert into t1
+values 
+    (1, 9223372036854775000.0, 2147483000.0),
+    (2, 9223372036854775807.0, 2147483647.0),
+    (3, 9223372036854775807.3, 2147483647.3),
+    (4, 9223372036854775808.0, 2147483648.0),
+    (5, 9223372036854775809.0, 2147483649.0),
+
+    (6, -9223372036854675807.0, -2147473647.0),
+    (7, -9223372036854775807.0, -2147483647.0),
+    (8, -9223372036854775808.0, -2147483648.0),
+    (9, -9223372036854775809.0, -2147483649.0),
+    (10, -9223372036854778808.0, -2147494649.0),
+
+    (11, 32767, 32767),
+    (12, 32768, 32768),
+    (13, 32769, 32769),
+    (14, -32765, -32765),
+    (15, -32767, -32767),
+    (16, -32768, -32768),
+    (17, -32770, -32770),
+
+    (18, 127, 127),
+    (19, 128, 128),
+    (20, 129, 129),
+    (21, -127, -127),
+    (22, -128, -128),
+    (23, -129, -129),
+
+    (24, 0.1, 0.1),
+    (25, 0.9, 0.9),
+    (26, -0.1, -0.1),
+    (27, -0.9, -0.9),
+    (28, 0.0, 0.0),
+    (29, -0.0, -0.0);
+
+select k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 order by k1;
+
+select k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 order by k1;
+
+select k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 order by k1;
+
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 order by k1;
+
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 where k1 >= 11 order by k1;
+
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 where k1 >= 18 order by k1;
+
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 where k1 in (1, 6, 7, 8, 9) order by k1;
+
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 where k1 in (11, 14, 15, 16) order by k1;
+
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 where k1 in (18, 21, 22) order by k1;

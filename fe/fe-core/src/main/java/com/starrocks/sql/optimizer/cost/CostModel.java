@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -30,12 +31,15 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -52,20 +56,27 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
 
 public class CostModel {
 
     private static final Logger LOG = LogManager.getLogger(CostModel.class);
+    public static final Double MAX_COST = Double.MAX_VALUE / 2;
 
     public static double calculateCost(GroupExpression expression) {
         ExpressionContext expressionContext = new ExpressionContext(expression);
@@ -73,8 +84,7 @@ public class CostModel {
     }
 
     private static double calculateCost(ExpressionContext expressionContext) {
-        CostEstimator costEstimator = new CostEstimator(ImmutableList.of());
-        CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
+        CostEstimate costEstimate = getCostEstimate(ImmutableList.of(), expressionContext);
         double realCost = getRealCost(costEstimate);
         LOG.debug("operator: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
                 expressionContext.getOp(),
@@ -85,15 +95,19 @@ public class CostModel {
     }
 
     public static CostEstimate calculateCostEstimate(ExpressionContext expressionContext) {
-        CostEstimator costEstimator = new CostEstimator(ImmutableList.of());
+        return getCostEstimate(ImmutableList.of(), expressionContext);
+    }
+
+    private static CostEstimate getCostEstimate(List<PhysicalPropertySet> childrenOutputProperties,
+                                                ExpressionContext expressionContext) {
+        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties);
         return expressionContext.getOp().accept(costEstimator, expressionContext);
     }
 
     public static double calculateCostWithChildrenOutProperty(GroupExpression expression,
                                                               List<PhysicalPropertySet> childrenOutputProperties) {
         ExpressionContext expressionContext = new ExpressionContext(expression);
-        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties);
-        CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
+        CostEstimate costEstimate = getCostEstimate(childrenOutputProperties, expressionContext);
         double realCost = getRealCost(costEstimate);
 
         LOG.debug("operator: {}, group id: {}, child group id: {}, " +
@@ -161,21 +175,9 @@ public class CostModel {
                         anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
                         noneMatch(ColumnStatistic::isUnknown)) {
                     return adjustCostForMV(context);
-                } else {
-                    ColumnRefSet usedColumns = statistics.getUsedColumns();
-                    Projection projection = node.getProjection();
-                    if (projection != null) {
-                        // we will add a projection on top of rewritten mv plan to keep the output columns the same as
-                        // original query.
-                        // excludes this projection keys when costing mv,
-                        // or the cost of mv may be larger than origal query,
-                        // which will lead to mismatch of mv
-                        usedColumns.except(projection.getColumnRefMap().keySet());
-                    }
-                    // use the used columns to calculate the cost of mv
-                    return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
                 }
             }
+
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -212,76 +214,30 @@ public class CostModel {
                     inputStatistics.getComputeSize());
         }
 
-        boolean canGenerateOneStageAggNode(ExpressionContext context) {
-            // 1. Must do two stage aggregate if child operator is LogicalRepeatOperator
-            //   If the repeat node is used as the input node of the Exchange node.
-            //   Will cause the node to be unable to confirm whether it is const during serialization
-            //   (BE does this for efficiency reasons).
-            //   Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
-            //   on top of the repeat node.
-            if (context.getChildOperator(0).getOpType().equals(OperatorType.LOGICAL_REPEAT)) {
-                return false;
-            }
-
-            // 2. Must do multi stage aggregate when aggregate distinct function has array type
-            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
-                if (operator.getAggregations().values().stream().anyMatch(callOperator
-                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
-                        callOperator.isDistinct())) {
-                    return false;
-                }
-            }
-
-            // 3. agg distinct function with multi columns can not generate one stage aggregate
-            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
-                if (operator.getAggregations().values().stream().anyMatch(callOperator -> callOperator.isDistinct() &&
-                        callOperator.getChildren().size() > 1)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        boolean mustGenerateOneStageAggNode(ExpressionContext context) {
-            // Must do one stage aggregate If the child contains limit,
-            // the aggregation must be a single node to ensure correctness.
-            // eg. select count(*) from (select * table limit 2) t
-            if (context.getChildOperator(0).hasLimit()) {
-                return true;
-            }
-            return false;
-        }
-
-        // Note: This method logic must consistent with SplitAggregateRule::needGenerateMultiStageAggregate
-        boolean needGenerateOneStageAggNode(ExpressionContext context) {
-            if (!canGenerateOneStageAggNode(context)) {
-                return false;
-            }
-            if (mustGenerateOneStageAggNode(context)) {
-                return true;
-            }
-            // respect user hint
-            int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-            return aggStage == 1 || aggStage == 0;
-        }
-
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!needGenerateOneStageAggNode(context) && node.getDistinctColumnDataSkew() == null && !node.isSplit() &&
-                    node.getType().isGlobal()) {
-                return CostEstimate.infinite();
+            Optional<CostEstimate> cost;
+            cost = invalidOneStageAggCost(node, context);
+            if (cost.isPresent()) {
+                return cost.get();
+            }
+
+            cost = redundantTwoStageAggCost(node, context);
+            if (cost.isPresent()) {
+                return cost.get();
             }
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
-            double penalty = 1.0;
+            double factor = 1.0;
+
             if (node.getDistinctColumnDataSkew() != null) {
-                penalty = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+                factor = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+            } else if (node.isSplit() && node.getType().isLocal()) {
+                factor = 0.1;
             }
 
-            return CostEstimate.of(inputStatistics.getComputeSize() * penalty, statistics.getComputeSize() * penalty,
+            return CostEstimate.of(inputStatistics.getComputeSize() * factor, statistics.getComputeSize() * factor,
                     0);
         }
 
@@ -345,15 +301,7 @@ public class CostModel {
             SessionVariable sessionVariable = ctx.getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             double outputSize = statistics.getOutputSize(outputColumns);
-            double penalty = 1.0;
-            Operator childOp = context.getChildOperator(0);
-            if (childOp instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator childAggOp = (PhysicalHashAggregateOperator) childOp;
-                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null && skewInfo.getStage() == 3) {
-                    penalty = skewInfo.getPenaltyFactor();
-                }
-            }
+            double factor = setExchangeCostFactor(context.getChildOperator(0));
             // set network start cost 1 at least
             // avoid choose network plan when the cost is same as colocate plans
             switch (distributionSpec.getType()) {
@@ -380,14 +328,17 @@ public class CostModel {
                     // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
                     boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
                             && sessionVariable.isEnablePipelineEngine()
-                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                            && GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode();
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
-                    result = CostEstimate.of(outputSize * penalty, 0, networkCost * penalty);
+                    result = CostEstimate.of(outputSize * factor, 0, networkCost * factor);
                     break;
                 case GATHER:
                     result = CostEstimate.of(outputSize, 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
+                    break;
+                case ROUND_ROBIN:
+                    result = CostEstimate.of(outputSize * factor, 0, outputSize * factor);
                     break;
                 default:
                     throw new StarRocksPlannerException(
@@ -435,7 +386,7 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D, 0);
+                                * EXECUTE_COST_PENALTY * 100D, 0);
             } else {
                 return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
@@ -451,18 +402,24 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
-                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY);
-            double memCost = StatisticUtils.multiplyOutputSize(rightSize,
-                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D);
 
+            long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
+
+            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
+                    EXECUTE_COST_PENALTY);
+            double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
+
+
+            if (join.getJoinType().isCrossJoin()) {
+                cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
+            }
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
                 // Add more punishment when right size is 10x greater than left size.
                 if (rightSize > 10 * leftSize) {
-                    cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                    cpuCost *= EXECUTE_COST_PENALTY;
                 } else {
-                    cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                    cpuCost += EXECUTE_COST_PENALTY;
                 }
                 memCost += rightSize;
             }
@@ -509,6 +466,94 @@ public class CostModel {
         @Override
         public CostEstimate visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
             return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitLogicalExcept(LogicalExceptOperator node, ExpressionContext context) {
+            double computeSize = context.getChildrenStatistics().stream().mapToDouble(Statistics::getComputeSize).sum();
+            double memoryCost = context.getChildStatistics(0).getComputeSize();
+            return CostEstimate.of(computeSize, memoryCost, 0);
+        }
+
+        @Override
+        public CostEstimate visitLogicalIntersect(LogicalIntersectOperator node, ExpressionContext context) {
+            double computeSize = context.getChildrenStatistics().stream().mapToDouble(Statistics::getComputeSize).sum();
+            double memoryCost = context.getChildStatistics(0).getComputeSize();
+            return CostEstimate.of(computeSize, memoryCost, 0);
+        }
+
+        // if there exists a skew hint factor use it
+        // if this is an enforcer above a local agg set 0.1 to reduce this exchange cost.
+        // The reason is as below:
+        // In most scenes, local agg -> exchange -> global agg is better than exchange -> global agg
+        // but when we estimated a very high cardinality of group by key but actually its cardinality is small,
+        // the local agg cost is same as the global agg cost and the planner choose the second one which
+        // is relatively slow when exchange a large amount of data.
+        private double setExchangeCostFactor(Operator childOp) {
+            double factor = 1.0;
+            if (childOp instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator childAggOp = childOp.cast();
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
+                }
+            } else if (childOp instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator childAggOp = childOp.cast();
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
+                }
+            }
+            return factor;
+        }
+
+        // use cost to eliminate invalid one phase agg plan
+        private Optional<CostEstimate> invalidOneStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
+            boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
+            if (mustMultiStageAgg && !node.isSplit() && node.getType().isGlobal()) {
+                return Optional.of(CostEstimate.infinite());
+            }
+            return Optional.empty();
+        }
+
+        // If we already have a one stage agg best plan like input -> global agg, use cost to
+        // eliminate plan like input -> local agg -> global agg plan to remove this unnecessary local agg step.
+        private Optional<CostEstimate> redundantTwoStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
+            if (node.isSplit() && node.getType().isGlobal()
+                    && CollectionUtils.isNotEmpty(inputProperties)
+                    && inputProperties.get(0).getDistributionProperty().isShuffle()
+                    && context.getGroupExpression() != null) {
+                HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
+                HashDistributionDesc desc = spec.getHashDistributionDesc();
+                Group group = context.getGroupExpression().getGroup();
+                boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
+                if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+                    // Don't limited to multi-stage aggregate node, refs: invalidOneStageAggCost
+                    // split aggregate node lose distinct flag, check the group's origin
+                    // aggregate
+                    LogicalAggregationOperator originAgg = group.getFirstLogicalExpression().getOp().cast();
+                    for (CallOperator callOperator : originAgg.getAggregations().values()) {
+                        if (callOperator.isDistinct()) {
+                            String fnName = callOperator.getFnName();
+                            List<ScalarOperator> children = callOperator.getChildren();
+                            if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())
+                                    || FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)
+                                    || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+                                return Optional.empty();
+                            } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && (children.size() > 1
+                                    || children.get(0).getType().isDecimalOfAnyVersion())) {
+                                return Optional.empty();
+                            }
+                        }
+                    }
+                    return Optional.of(CostEstimate.infinite());
+                }
+            }
+            return Optional.empty();
         }
     }
 }

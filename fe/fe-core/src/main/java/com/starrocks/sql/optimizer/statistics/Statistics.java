@@ -14,14 +14,19 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import static java.lang.Double.NaN;
 
@@ -32,11 +37,16 @@ public class Statistics {
     // Table row count in FE depends on BE reporting，but FE may not get report from BE which just started，
     // this causes the table row count stored in FE to be inaccurate.
     private final boolean tableRowCountMayInaccurate;
+    private final Collection<ColumnRefOperator> shadowColumns;
+
+    private final Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
         this.columnStatistics = builder.columnStatistics;
         this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
+        this.shadowColumns = builder.shadowColumns;
+        this.multiColumnCombinedStats = builder.multiColumnCombinedStats;
     }
 
     public double getOutputRowCount() {
@@ -47,8 +57,15 @@ public class Statistics {
         double totalSize = 0;
         boolean nonEmpty = false;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (shadowColumns.contains(entry.getKey())) {
+                continue;
+            }
             if (outputColumns.contains(entry.getKey().getId())) {
-                totalSize += entry.getValue().getAverageRowSize();
+                if (!entry.getValue().isUnknown()) {
+                    totalSize += entry.getValue().getAverageRowSize();
+                } else {
+                    totalSize += entry.getKey().getType().getTypeSize();
+                }
                 nonEmpty = true;
             }
         }
@@ -59,19 +76,41 @@ public class Statistics {
     }
 
     public double getComputeSize() {
+        return getAvgRowSize() * outputRowCount;
+    }
+
+    public double getAvgRowSize() {
         // Make it at least 1 byte, otherwise the cost model would propagate estimate error
-        return Math.max(1.0, this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
-                reduce(0.0, Double::sum)) * outputRowCount;
+        double totalSize = 0;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (shadowColumns.contains(entry.getKey())) {
+                continue;
+            }
+            if (!entry.getValue().isUnknown()) {
+                totalSize += entry.getValue().getAverageRowSize();
+            } else {
+                totalSize += entry.getKey().getType().getTypeSize();
+            }
+        }
+        return Math.max(totalSize, 1.0);
     }
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
-        ColumnStatistic result = columnStatistics.get(column);
-        Preconditions.checkState(result != null, "cannot find statistics of col: %s", column);
-        return result;
+        if (columnStatistics.get(column) == null) {
+            throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
+                    "only found column statistics: %s, but missing statistic of col: %s.",
+                    ColumnRefOperator.toString(columnStatistics.keySet()), column);
+        } else {
+            return columnStatistics.get(column);
+        }
     }
 
     public Map<ColumnRefOperator, ColumnStatistic> getColumnStatistics() {
         return columnStatistics;
+    }
+
+    public Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> getMultiColumnCombinedStats() {
+        return multiColumnCombinedStats;
     }
 
     public Map<ColumnRefOperator, ColumnStatistic> getOutputColumnsStatistics(ColumnRefSet outputColumns) {
@@ -96,6 +135,43 @@ public class Statistics {
         return usedColumns;
     }
 
+    /**
+     * Gets the largest subset of the target columns that has multi-column statistics
+     * @param targetColumns The target column set
+     * @return The largest subset and its corresponding statistics, or null if no match found
+     */
+    public Pair<Set<ColumnRefOperator>, MultiColumnCombinedStats> getLargestSubsetMCStats(Set<ColumnRefOperator> targetColumns) {
+        if (multiColumnCombinedStats.isEmpty() || targetColumns.size() <= 1) {
+            return null;
+        }
+
+        Set<ColumnRefOperator> maxColumns = null;
+        MultiColumnCombinedStats maxStats = null;
+        int maxSize = 0;
+        int targetSize = targetColumns.size();
+
+        for (Map.Entry<Set<ColumnRefOperator>, MultiColumnCombinedStats> entry : multiColumnCombinedStats.entrySet()) {
+            Set<ColumnRefOperator> keySet = entry.getKey();
+            int keySize = keySet.size();
+
+            if (keySize <= maxSize) {
+                continue;
+            }
+
+            if (targetColumns.containsAll(keySet)) {
+                maxColumns = keySet;
+                maxStats = entry.getValue();
+                maxSize = keySize;
+
+                if (maxSize == targetSize) {
+                    return new Pair<>(maxColumns, maxStats);
+                }
+            }
+        }
+
+        return maxColumns != null ? Pair.create(maxColumns, maxStats) : null;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -116,7 +192,12 @@ public class Statistics {
     }
 
     public static Builder buildFrom(Statistics other) {
-        return new Builder(other.getOutputRowCount(), other.columnStatistics, other.tableRowCountMayInaccurate);
+        return new Builder(
+                other.getOutputRowCount(),
+                other.columnStatistics,
+                other.tableRowCountMayInaccurate,
+                other.shadowColumns,
+                other.multiColumnCombinedStats);
     }
 
     public static Builder builder() {
@@ -127,16 +208,34 @@ public class Statistics {
         private double outputRowCount;
         private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
         private boolean tableRowCountMayInaccurate;
+        // columns not used to compute costs
+        // which is used by mv rewrite to make the cost accurate
+        private Collection<ColumnRefOperator> shadowColumns;
+        private final Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
+
 
         public Builder() {
             this(NaN, new HashMap<>(), false);
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
-                        boolean tableRowCountMayInaccurate) {
+                        boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns) {
+            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, shadowColumns, new HashMap<>());
+        }
+
+        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                        boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns,
+                        Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats) {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
+            this.shadowColumns = shadowColumns;
+            this.multiColumnCombinedStats = new HashMap<>(multiColumnCombinedStats);
+        }
+
+        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                        boolean tableRowCountMayInaccurate) {
+            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList());
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
@@ -153,9 +252,17 @@ public class Statistics {
             return this;
         }
 
+        public double getOutputRowCount() {
+            return outputRowCount;
+        }
+
         public Builder setTableRowCountMayInaccurate(boolean tableRowCountMayInaccurate) {
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
             return this;
+        }
+
+        public boolean getTableRowCountMayInaccurate() {
+            return tableRowCountMayInaccurate;
         }
 
         public Builder addColumnStatistic(ColumnRefOperator column, ColumnStatistic statistic) {
@@ -168,16 +275,32 @@ public class Statistics {
             return this;
         }
 
+        public Builder addMultiColumnStatistics(Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> mcStats) {
+            this.multiColumnCombinedStats.putAll(mcStats);
+            return this;
+        }
+
+        public Builder addMultiColumnStatistics(Set<ColumnRefOperator> columns, MultiColumnCombinedStats mcStats) {
+            this.multiColumnCombinedStats.put(columns, mcStats);
+            return this;
+        }
+
         public ColumnStatistic getColumnStatistics(ColumnRefOperator columnRefOperator) {
             return this.columnStatistics.get(columnRefOperator);
         }
 
-        public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs) {
+        public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs, boolean withHist) {
             statistics.getColumnStatistics().forEach((k, v) -> {
                 if (hintRefs.contains(k.getId())) {
-                    this.columnStatistics.put(k, v);
+                    this.columnStatistics.put(k, withHist ? v : ColumnStatistic.buildFrom(v).setHistogram(null).build());
                 }
             });
+            return this;
+        }
+
+
+        public Builder setShadowColumns(Collection<ColumnRefOperator> shadowColumns) {
+            this.shadowColumns = shadowColumns;
             return this;
         }
 

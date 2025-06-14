@@ -35,7 +35,6 @@
 #include "agent/task_worker_pool.h"
 
 #include <atomic>
-#include <boost/lexical_cast.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <ctime>
@@ -47,13 +46,15 @@
 #include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
+#include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
+#include "cache/datacache.h"
+#include "cache/datacache_utils.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
-#include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/FrontendService.h"
+#include "gen_cpp/DataCache_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
@@ -61,20 +62,42 @@
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
+#include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
-#include "storage/task/engine_alter_tablet_task.h"
 #include "storage/task/engine_batch_load_task.h"
-#include "storage/task/engine_checksum_task.h"
 #include "storage/task/engine_clone_task.h"
-#include "storage/task/engine_storage_migration_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
 #include "util/thread.h"
 
 namespace starrocks {
+
+namespace {
+static void wait_for_disk_report_notify(const std::function<bool()>& stop_waiting) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(config::report_disk_state_interval_seconds);
+    bool notified = false;
+    do {
+        // take 1 second per step
+        notified = StorageEngine::instance()->wait_for_report_notify(1, false);
+    } while (!notified && std::chrono::steady_clock::now() < deadline && !stop_waiting());
+}
+
+static void wait_for_tablet_report_notify(const std::function<bool()>& stop_waiting) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(config::report_tablet_interval_seconds);
+    bool notified = false;
+    do {
+        // take 1 second per step
+        notified = StorageEngine::instance()->wait_for_report_notify(1, true);
+    } while (!notified
+             // if the regular report is stopped, there will be no deadline
+             && (ReportOlapTableTaskWorkerPool::is_regular_report_stopped() ||
+                 std::chrono::steady_clock::now() < deadline) &&
+             !stop_waiting());
+}
+} // namespace
 
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
@@ -101,6 +124,11 @@ TaskWorkerPool<AgentTaskRequest>::TaskWorkerPool(ExecEnv* env, int worker_count)
 template <class AgentTaskRequest>
 TaskWorkerPool<AgentTaskRequest>::~TaskWorkerPool() {
     stop();
+    for (uint32_t i = 0; i < _worker_count; ++i) {
+        if (_worker_threads[i].joinable()) {
+            _worker_threads[i].join();
+        }
+    }
     delete _worker_thread_condition_variable;
 }
 
@@ -113,16 +141,8 @@ void TaskWorkerPool<AgentTaskRequest>::start() {
 
 template <class AgentTaskRequest>
 void TaskWorkerPool<AgentTaskRequest>::stop() {
-    if (_stopped) {
-        return;
-    }
     _stopped = true;
     _worker_thread_condition_variable->notify_all();
-    for (uint32_t i = 0; i < _worker_count; ++i) {
-        if (_worker_threads[i].joinable()) {
-            _worker_threads[i].join();
-        }
-    }
 }
 
 template <class AgentTaskRequest>
@@ -172,12 +192,13 @@ void TaskWorkerPool<AgentTaskRequest>::submit_task(const TAgentTaskRequest& task
     std::string type_str;
     EnumToString(TTaskType, task_type, type_str);
 
-    if (register_task_info(task_type, signature)) {
+    std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);
+    if (register_pair.first) {
         // Set the receiving time of task so that we can determine whether it is timed out later
         auto new_task = _convert_task(task, time(nullptr));
         size_t task_count = _push_task(std::move(new_task));
-        LOG(INFO) << "Submit task success. type=" << type_str << ", signature=" << signature
-                  << ", task_count_in_queue=" << task_count;
+        VLOG(1) << "Submit task success. type=" << type_str << ", signature=" << signature
+                << ", task_count_in_queue=" << task_count;
     } else {
         LOG(INFO) << "Submit task failed, already exists type=" << type_str << ", signature=" << signature;
     }
@@ -303,8 +324,9 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> tablet_infos;
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
-                                        ExecEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+                                        GlobalEnv::GetInstance()->load_mem_tracker());
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -416,10 +438,10 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         LOG(INFO) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
-
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
-                                        ExecEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+                                        GlobalEnv::GetInstance()->load_mem_tracker());
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -513,8 +535,12 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         const auto& publish_version_task = *priority_tasks.top();
-        LOG(INFO) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
-                  << " priority queue size: " << priority_tasks.size();
+        VLOG(1) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
+                << " priority queue size: " << priority_tasks.size();
+        bool enable_sync_publish = publish_version_task.task_req.enable_sync_publish;
+        if (enable_sync_publish) {
+            wait_time = 0;
+        }
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         auto& finish_task_request = finish_task_requests.emplace_back();
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
@@ -528,23 +554,40 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
-        if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
-            batch_publish_latency > config::max_batch_publish_latency_ms) {
-            int64_t t0 = MonotonicMillis();
-            StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
-            int64_t t1 = MonotonicMillis();
-            // notify FE when all tasks of group have been finished.
-            for (auto& finish_task_request : finish_task_requests) {
-                finish_task(finish_task_request);
-                remove_task_info(finish_task_request.task_type, finish_task_request.signature);
+        if (!enable_sync_publish) {
+            if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
+                batch_publish_latency > config::max_batch_publish_latency_ms) {
+                int64_t t0 = MonotonicMillis();
+                StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
+                int64_t t1 = MonotonicMillis();
+                // notify FE when all tasks of group have been finished.
+                for (auto& finish_task_request : finish_task_requests) {
+                    finish_task(finish_task_request);
+                    remove_task_info(finish_task_request.task_type, finish_task_request.signature);
+                }
+                int64_t t2 = MonotonicMillis();
+                VLOG(1) << "batch flush " << finish_task_requests.size()
+                        << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
+                        << "ms finish_task_rpc:" << t2 - t1 << "ms";
+                finish_task_requests.clear();
+                affected_dirs.clear();
+                batch_publish_latency = 0;
             }
-            int64_t t2 = MonotonicMillis();
-            LOG(INFO) << "batch flush " << finish_task_requests.size()
-                      << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
-                      << "ms finish_task_rpc:" << t2 - t1 << "ms";
-            finish_task_requests.clear();
-            affected_dirs.clear();
-            batch_publish_latency = 0;
+        } else {
+            if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
+                batch_publish_latency > config::max_batch_publish_latency_ms) {
+                int64_t finish_task_size = finish_task_requests.size();
+                int64_t t0 = MonotonicMillis();
+                StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
+                int64_t t1 = MonotonicMillis();
+                StorageEngine::instance()->publish_version_manager()->wait_publish_task_apply_finish(
+                        std::move(finish_task_requests));
+                StorageEngine::instance()->wake_finish_publish_vesion_thread();
+                affected_dirs.clear();
+                batch_publish_latency = 0;
+                VLOG(1) << "batch submit " << finish_task_size << " finish publish version task "
+                        << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
+            }
         }
     }
     return nullptr;
@@ -577,7 +620,8 @@ void* ReportTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
 
-        sleep(config::report_task_interval_seconds);
+        nap_sleep(config::report_task_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -633,7 +677,7 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         // wait for notifying until timeout
-        StorageEngine::instance()->wait_for_report_notify(config::report_disk_state_interval_seconds, false);
+        wait_for_disk_report_notify([&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -656,12 +700,13 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         request.tablets.clear();
 
-        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+        int64_t report_version = g_report_version.load(std::memory_order_relaxed);
+        request.__set_report_version(report_version);
         Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&request.tablets);
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
             // wait for notifying until timeout
-            StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
+            wait_for_tablet_report_notify([&] { return worker_pool_this->_stopped.load(); });
             continue;
         }
         int64_t max_compaction_score =
@@ -677,14 +722,18 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report olap table state to " << master_address.hostname << ":"
                          << master_address.port << ", err=" << status;
+        } else {
+            VLOG(1) << "Report tablets successfully, report version: " << report_version;
         }
 
         // wait for notifying until timeout
-        StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
+        wait_for_tablet_report_notify([&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
 }
+
+std::atomic<bool> ReportOlapTableTaskWorkerPool::_regular_report_stopped(false);
 
 void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     auto* worker_pool_this = (ReportWorkgroupTaskWorkerPool*)arg_this;
@@ -703,7 +752,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
-        auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
+        auto workgroups = ExecEnv::GetInstance()->workgroup_manager()->list_workgroups();
         request.__set_active_workgroups(workgroups);
         request.__set_backend(BackendOptions::get_localBackend());
         TMasterResult result;
@@ -715,9 +764,10 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
         if (result.__isset.workgroup_ops) {
-            workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
+            ExecEnv::GetInstance()->workgroup_manager()->apply(result.workgroup_ops);
         }
-        sleep(config::report_workgroup_interval_seconds);
+        nap_sleep(config::report_workgroup_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -728,6 +778,8 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
     TReportRequest request;
     AgentStatus status = STARROCKS_SUCCESS;
+
+    ResourceGroupUsageRecorder group_usage_recorder;
 
     while ((!worker_pool_this->_stopped)) {
         auto master_address = get_master_address();
@@ -744,12 +796,14 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
         TResourceUsage resource_usage;
         resource_usage.__set_num_running_queries(ExecEnv::GetInstance()->query_context_mgr()->size());
-        resource_usage.__set_mem_used_bytes(ExecEnv::GetInstance()->process_mem_tracker()->consumption());
-        resource_usage.__set_mem_limit_bytes(ExecEnv::GetInstance()->process_mem_tracker()->limit());
+        resource_usage.__set_mem_used_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->consumption());
+        resource_usage.__set_mem_limit_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->limit());
         worker_pool_this->_cpu_usage_recorder.update_interval();
         resource_usage.__set_cpu_used_permille(worker_pool_this->_cpu_usage_recorder.cpu_used_permille());
-        request.__set_resource_usage(std::move(resource_usage));
 
+        resource_usage.__set_group_usages(group_usage_recorder.get_resource_group_usages());
+
+        request.__set_resource_usage(std::move(resource_usage));
         TMasterResult result;
         status = report_task(request, &result);
 
@@ -760,6 +814,51 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(config::report_resource_usage_interval_ms));
+    }
+
+    return nullptr;
+}
+
+void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    const auto* worker_pool_this = static_cast<ReportDataCacheMetricsTaskWorkerPool*>(arg_this);
+
+    TReportRequest request;
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    while ((!worker_pool_this->_stopped)) {
+        auto master_address = get_master_address();
+        if (master_address.port == 0) {
+            // port == 0 means not received heartbeat yet
+            // sleep a short time and try again
+            sleep(config::sleep_one_second);
+            continue;
+        }
+
+        StarRocksMetrics::instance()->report_datacache_metrics_requests_total.increment(1);
+        request.__set_backend(BackendOptions::get_localBackend());
+        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+
+        TDataCacheMetrics t_metrics{};
+        const LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+        if (cache != nullptr && cache->is_initialized()) {
+            const auto metrics = cache->cache_metrics();
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
+        } else {
+            t_metrics.__set_status(TDataCacheStatus::DISABLED);
+        }
+
+        request.__set_datacache_metrics(t_metrics);
+
+        TMasterResult result;
+        status = report_task(request, &result);
+
+        if (status != STARROCKS_SUCCESS) {
+            StarRocksMetrics::instance()->report_datacache_metrics_requests_failed.increment(1);
+            LOG(WARNING) << "Fail to report resource_usage to " << master_address.hostname << ":" << master_address.port
+                         << ", err=" << status;
+        }
+        size_t sleep_secs = config::report_datacache_metrics_interval_ms / 1000;
+        nap_sleep(sleep_secs, [&]() { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;

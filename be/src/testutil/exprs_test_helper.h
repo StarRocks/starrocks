@@ -14,7 +14,12 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include "column/chunk.h"
+#include "column/column_helper.h"
+#include "common/object_pool.h"
+#include "common/status.h"
 #include "exprs/array_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -24,25 +29,76 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
 class ExprsTestHelper {
 public:
-    static TTypeDesc create_scalar_type_desc(const TPrimitiveType::type t_type) {
-        TTypeDesc type;
-
-        {
-            TTypeNode node;
-            node.__set_type(TTypeNodeType::SCALAR);
-            TScalarType scalar_type;
-            scalar_type.__set_type(t_type);
-            node.__set_scalar_type(scalar_type);
-            type.types.push_back(node);
-        }
-
-        return type;
+    template <LogicalType Type>
+    static TExpr create_column_ref_t_expr(SlotId slot_id, bool is_nullable) {
+        TExpr expr;
+        expr.nodes.emplace_back(TExprNode());
+        expr.nodes[0].__set_type(TypeDescriptor(Type).to_thrift());
+        expr.nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
+        expr.nodes[0].__set_is_nullable(is_nullable);
+        expr.nodes[0].__set_slot_ref(TSlotRef());
+        expr.nodes[0].slot_ref.__set_slot_id(slot_id);
+        return expr;
     }
+
+    static TTypeDesc create_decimal_type_desc(const TPrimitiveType::type type, int32_t precision, int32_t scale) {
+        TScalarType scalar_type;
+        scalar_type.__set_type(type);
+        scalar_type.__set_precision(precision);
+        scalar_type.__set_scale(scale);
+
+        TTypeNode type_node;
+        type_node.__set_type(TTypeNodeType::SCALAR);
+        type_node.__set_scalar_type(scalar_type);
+
+        TTypeDesc type_desc;
+        type_desc.types.push_back(type_node);
+        return type_desc;
+    }
+
+    static TTypeDesc create_varchar_type_desc(int32_t length) {
+        TScalarType scalar_type;
+        scalar_type.__set_type(TPrimitiveType::VARCHAR);
+        scalar_type.len = length;
+
+        TTypeNode type_node;
+        type_node.__set_type(TTypeNodeType::SCALAR);
+        type_node.__set_scalar_type(scalar_type);
+
+        TTypeDesc type_desc;
+        type_desc.types.push_back(type_node);
+
+        return type_desc;
+    }
+
+    static TTypeDesc create_scalar_type_desc(const TPrimitiveType::type t_type) {
+        TScalarType scalar_type;
+        scalar_type.__set_type(t_type);
+
+        TTypeNode type_node;
+        type_node.__set_type(TTypeNodeType::SCALAR);
+        type_node.__set_scalar_type(scalar_type);
+
+        TTypeDesc type_desc;
+        type_desc.types.push_back(type_node);
+
+        return type_desc;
+    }
+
+    static const TTypeDesc SmallIntTTypeDesc;
+    static const TTypeDesc IntTTypeDesc;
+    static const TTypeDesc BigIntTTypeDesc;
+    static const TTypeDesc DateTTypeDesc;
+    static const TTypeDesc DateTimeTTypeDesc;
+    // precision=27, scale=9
+    static const TTypeDesc Decimal128TTypeDesc;
+    static const TTypeDesc VarcharTTypeDesc;
 
     static TSlotDescriptor create_slot_desc(const TTypeDesc& type, TupleId tuple_id, SlotId slot_id,
                                             const std::string& col_name) {
@@ -110,16 +166,206 @@ public:
         return std::unique_ptr<Expr>(expr);
     }
 
-    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc t_type, bool is_nullable) {
+    static TExprNode create_binary_pred_node(TPrimitiveType::type type, TExprOpcode::type opcode) {
+        TExprNode node;
+        node.node_type = TExprNodeType::BINARY_PRED;
+        node.num_children = 2;
+        node.__set_opcode(opcode);
+        node.__set_child_type(type);
+        node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+
+        return node;
+    }
+
+    template <LogicalType LType>
+    static TTypeDesc get_ttype_desc() {
+        if constexpr (LType == TYPE_SMALLINT) {
+            return SmallIntTTypeDesc;
+        } else if constexpr (LType == TYPE_INT) {
+            return IntTTypeDesc;
+        } else if constexpr (LType == TYPE_BIGINT) {
+            return BigIntTTypeDesc;
+        } else if constexpr (LType == TYPE_DATE) {
+            return DateTTypeDesc;
+        } else if constexpr (LType == TYPE_DATETIME) {
+            return DateTimeTTypeDesc;
+        } else if constexpr (LType == TYPE_VARCHAR) {
+            return VarcharTTypeDesc;
+        } else if constexpr (LType == TYPE_DECIMAL128) {
+            return Decimal128TTypeDesc;
+        } else {
+            // not implement
+            CHECK(false);
+        }
+    }
+
+    template <LogicalType LType>
+    static TExprNode create_in_pred_node(size_t size) {
+        TExprNode node;
+
+        node.node_type = TExprNodeType::IN_PRED;
+        node.num_children = size;
+        node.type = get_ttype_desc<LType>();
+
+        node.__set_opcode(TExprOpcode::FILTER_IN);
+        node.__set_child_type(to_thrift(LType));
+
+        return node;
+    }
+
+    template <LogicalType LType>
+    static TExprNode create_not_in_pred_node(size_t size) {
+        TExprNode node;
+        TInPredicate in_pred;
+        in_pred.__set_is_not_in(true);
+
+        node.node_type = TExprNodeType::IN_PRED;
+        node.num_children = size;
+        node.type = get_ttype_desc<LType>();
+
+        node.__set_in_predicate(in_pred);
+        node.__set_opcode(TExprOpcode::FILTER_NOT_IN);
+        node.__set_child_type(to_thrift(LType));
+
+        return node;
+    }
+
+    template <LogicalType LType, typename ValueType>
+    static TExpr create_in_pred_texpr(SlotId slot_id, const std::vector<ValueType>& values, bool has_null) {
+        std::vector<TExprNode> nodes;
+
+        nodes.emplace_back(create_in_pred_node<LType>(values.size() + 1 + has_null));
+        nodes.emplace_back(create_slot_expr_node_t<LType>(0, slot_id, true));
+        for (auto value : values) {
+            nodes.emplace_back(create_literal<LType, ValueType>(value, false));
+        }
+        if (has_null) {
+            nodes.emplace_back(create_null_literal<LType>());
+        }
+
+        TExpr t_expr;
+        t_expr.nodes = nodes;
+        return t_expr;
+    }
+
+    template <LogicalType LType, typename ValueType>
+    static TExpr create_not_in_pred_texpr(SlotId slot_id, const std::vector<ValueType>& values, bool has_null) {
+        std::vector<TExprNode> nodes;
+
+        nodes.emplace_back(create_not_in_pred_node<LType>(values.size() + 1 + has_null));
+        nodes.emplace_back(create_slot_expr_node_t<LType>(0, slot_id, true));
+        for (auto value : values) {
+            nodes.emplace_back(create_literal<LType, ValueType>(value, false));
+        }
+        if (has_null) {
+            nodes.emplace_back(create_null_literal<LType>());
+        }
+
+        TExpr t_expr;
+        t_expr.nodes = nodes;
+        return t_expr;
+    }
+
+    template <LogicalType LType, typename ValueType>
+    static TExpr create_binary_pred_texpr(SlotId slot_id, ValueType value) {
+        TExprNode pred_node = create_binary_pred_node(to_thrift(LType), TExprOpcode::GT);
+        TExprNode col_ref = create_slot_expr_node_t<LType>(0, slot_id, true);
+        TExprNode literal = create_literal<LType, ValueType>(value, false);
+
+        TExpr texpr;
+        texpr.nodes.emplace_back(pred_node);
+        texpr.nodes.emplace_back(col_ref);
+        texpr.nodes.emplace_back(literal);
+
+        return texpr;
+    }
+
+    static Status create_and_open_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime_state,
+                                                std::vector<TExpr>* tExprs, std::vector<ExprContext*>* conjunct_ctxs) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
+        RETURN_IF_ERROR(Expr::prepare(*conjunct_ctxs, runtime_state));
+        return Expr::open(*conjunct_ctxs, runtime_state);
+    }
+
+    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc ttype, bool is_nullable) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
-        slot_ref.type = t_type;
+        slot_ref.type = ttype;
         slot_ref.num_children = 0;
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = slot_id;
         slot_ref.slot_ref.tuple_id = tuple_id;
         slot_ref.__set_is_nullable(is_nullable);
         return slot_ref;
+    }
+
+    template <LogicalType LType>
+    static TExprNode create_slot_expr_node_t(TupleId tuple_id, SlotId slot_id, bool is_nullable) {
+        return create_slot_expr_node(tuple_id, slot_id, get_ttype_desc<LType>(), is_nullable);
+    }
+
+    template <LogicalType LType, typename ValueType>
+    static TExprNode create_literal(ValueType value, bool is_nullable) {
+        TExprNode node;
+        node.num_children = 0;
+        node.is_nullable = is_nullable;
+
+        if constexpr (LType == TYPE_SMALLINT) {
+            node.type = SmallIntTTypeDesc;
+            TIntLiteral int_literal;
+            int_literal.value = value;
+            node.__set_int_literal(int_literal);
+            node.node_type = TExprNodeType::INT_LITERAL;
+        } else if constexpr (LType == TYPE_INT) {
+            node.type = IntTTypeDesc;
+            TIntLiteral int_literal;
+            int_literal.value = value;
+            node.__set_int_literal(int_literal);
+            node.node_type = TExprNodeType::INT_LITERAL;
+        } else if constexpr (LType == TYPE_BIGINT) {
+            node.type = BigIntTTypeDesc;
+            TIntLiteral int_literal;
+            int_literal.value = value;
+            node.__set_int_literal(int_literal);
+            node.node_type = TExprNodeType::INT_LITERAL;
+        } else if constexpr (LType == TYPE_DATE) {
+            node.type = DateTTypeDesc;
+            TDateLiteral date_literal;
+            date_literal.value = value;
+            node.__set_date_literal(date_literal);
+            node.node_type = TExprNodeType::DATE_LITERAL;
+        } else if constexpr (LType == TYPE_DATETIME) {
+            node.type = DateTimeTTypeDesc;
+            TDateLiteral date_literal;
+            date_literal.value = value;
+            node.__set_date_literal(date_literal);
+            node.node_type = TExprNodeType::DATE_LITERAL;
+        } else if constexpr (LType == TYPE_VARCHAR) {
+            node.type = VarcharTTypeDesc;
+            TStringLiteral string_literal;
+            string_literal.value = value;
+            node.__set_string_literal(string_literal);
+            node.node_type = TExprNodeType::STRING_LITERAL;
+        } else if constexpr (LType == TYPE_DECIMAL128) {
+            node.type = Decimal128TTypeDesc;
+            TDecimalLiteral decimal_literal;
+            decimal_literal.value = value;
+            node.__set_decimal_literal(decimal_literal);
+            node.node_type = TExprNodeType::DECIMAL_LITERAL;
+        } else {
+            // not implement
+            CHECK(false);
+        }
+
+        return node;
+    }
+
+    template <LogicalType LType>
+    static TExprNode create_null_literal() {
+        TExprNode node;
+        node.node_type = TExprNodeType::NULL_LITERAL;
+        node.type = get_ttype_desc<LType>();
+        return node;
     }
 
     static TExpr create_slot_expr(TExprNode slot_ref) {

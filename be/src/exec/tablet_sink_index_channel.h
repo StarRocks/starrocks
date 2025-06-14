@@ -23,17 +23,15 @@
 #include <utility>
 #include <vector>
 
-#include "common/object_pool.h"
 #include "common/status.h"
-#include "common/tracer.h"
-#include "exec/data_sink.h"
+#include "common/tracer_fwd.h"
+#include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
-#include "util/bitmap.h"
 #include "util/compression/block_compression.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
@@ -41,18 +39,15 @@
 
 namespace starrocks {
 
-class Bitmap;
 class MemTracker;
-class RuntimeProfile;
-class RowDescriptor;
 class TupleDescriptor;
-class ExprContext;
-class TExpr;
-
-namespace stream_load {
+class TxnLogPB;
 
 class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
+
+template <typename T>
+void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf);
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -101,11 +96,15 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_rpc_timer = nullptr;
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
+    RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
 };
+
+// map index_id to TabletBEMap(map tablet_id to backend id)
+using IndexIdToTabletBEMap = std::unordered_map<int64_t, std::unordered_map<int64_t, std::vector<int64_t>>>;
 
 class NodeChannel {
 public:
-    NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental);
+    NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause = nullptr);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
@@ -140,11 +139,14 @@ public:
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close(bool wait_all_sender_close = false);
+    Status try_close();
     bool is_close_done();
     Status close_wait(RuntimeState* state);
 
+    Status try_finish();
+    bool is_finished();
     void cancel(const Status& err_st);
+    void cancel();
 
     void time_report(std::unordered_map<int64_t, AddBatchCounter>* add_batch_counter_map, int64_t* serialize_batch_ns,
                      int64_t* actual_consume_ns) {
@@ -158,13 +160,22 @@ public:
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
+    std::vector<TxnLogPB>& txn_logs() { return _txn_logs; }
 
     bool is_incremental() const { return _is_incremental; }
+
+    std::set<int64_t> immutable_partition_ids() { return _immutable_partition_ids; }
+    bool has_immutable_partition() { return !_immutable_partition_ids.empty(); }
+    void reset_immutable_partition_ids() { _immutable_partition_ids.clear(); }
+
+    bool has_primary_replica() const { return _has_primary_replica; }
+    void set_has_primary_replica(bool has_primary_replica) { _has_primary_replica = has_primary_replica; }
 
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
     Status _wait_one_prev_request();
+    Status _try_send_eos_and_process_all_response();
     bool _check_prev_request_done();
     bool _check_all_prev_request_done();
     Status _serialize_chunk(const Chunk* src, ChunkPB* dst);
@@ -173,6 +184,17 @@ private:
     Status _open_wait(RefCountClosure<PTabletWriterOpenResult>* open_closure);
     Status _send_request(bool eos, bool wait_all_sender_close = false);
     void _cancel(int64_t index_id, const Status& err_st);
+    Status _filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
+                                           std::vector<uint32_t>& filtered_indexes);
+
+    void _reset_cur_chunk(Chunk* input);
+    void _append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+
+    void _try_diagnose(const std::string& error_text);
+    bool _is_diagnose_done();
+    void _wait_diagnose(RuntimeState* state);
+    bool _process_diagnose_profile(RuntimeState* state, PLoadDiagnoseResult& result);
+    void _release_diagnose_closure();
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
@@ -194,13 +216,18 @@ private:
 
     // user cancel or get some errors
     bool _cancelled{false};
+    bool _cancel_finished{false};
 
-    // send finished means the consumer thread which send the rpc can exit
-    bool _send_finished{false};
+    // channel is closed
+    bool _closed{false};
+    bool _all_response_processed{false};
+
+    // data sending is finished
+    bool _finished{false};
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    doris::PBackendService_Stub* _stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
@@ -208,6 +235,11 @@ private:
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
+    std::vector<TxnLogPB> _txn_logs;
+    struct {
+        std::unordered_set<std::string> invalid_dict_cache_column_set;
+        std::unordered_map<std::string, int64_t> valid_dict_cache_column_set;
+    } _valid_dict_cache_info;
 
     AddBatchCounter _add_batch_counter;
     int64_t _serialize_batch_ns = 0;
@@ -215,6 +247,7 @@ private:
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
     std::unique_ptr<Chunk> _cur_chunk;
+    int64_t _cur_chunk_mem_usage = 0;
 
     PTabletWriterAddChunksRequest _rpc_request;
     using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
@@ -234,11 +267,19 @@ private:
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 
     bool _is_incremental;
+
+    std::set<int64_t> _immutable_partition_ids;
+
+    ExprContext* _where_clause = nullptr;
+
+    bool _has_primary_replica = false;
+    RefCountClosure<PLoadDiagnoseResult>* _diagnose_closure = nullptr;
 };
 
 class IndexChannel {
 public:
-    IndexChannel(OlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
+    IndexChannel(OlapTableSink* parent, int64_t index_id, ExprContext* where_clause)
+            : _parent(parent), _index_id(index_id), _where_clause(where_clause) {}
     ~IndexChannel();
 
     Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
@@ -265,13 +306,15 @@ public:
         }
     }
 
-    void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+    void mark_as_failed(const NodeChannel* ch);
 
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
     bool has_intolerable_failure();
 
     bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
+
+    int64_t index_id() const { return _index_id; }
 
 private:
     friend class OlapTableSink;
@@ -281,8 +324,6 @@ private:
 
     // BeId -> channel
     std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
-    // map tablet_id to backend id
-    std::unordered_map<int64_t, std::vector<int64_t>> _tablet_to_be;
     // map be_id to tablet num
     std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
     // BeId
@@ -291,7 +332,9 @@ private:
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 
     bool _has_incremental_node_channel = false;
+    ExprContext* _where_clause = nullptr;
+
+    bool _has_intolerable_failure = false;
 };
 
-} // namespace stream_load
 } // namespace starrocks

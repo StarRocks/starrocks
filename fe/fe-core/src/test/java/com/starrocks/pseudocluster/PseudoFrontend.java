@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
@@ -72,6 +71,7 @@ public class PseudoFrontend {
         MIN_FE_CONF.put("query_port", "9030");
         MIN_FE_CONF.put("edit_log_port", "9010");
         MIN_FE_CONF.put("priority_networks", "127.0.0.1/24");
+        MIN_FE_CONF.put("frontend_address", "127.0.0.1");
 
         LoggerContext context = (LoggerContext) LogManager.getContext(false);
         context.start();
@@ -176,18 +176,14 @@ public class PseudoFrontend {
             try {
                 // init config
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
-
-                // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
-                if (!JdkUtils.checkJavaVersion()) {
-                    throw new IllegalArgumentException("Java version doesn't match");
-                }
+                Config.statistic_collect_query_timeout = 60;
 
                 Log4jConfig.initLogging();
 
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init(null);
                 ExecuteEnv.setup();
 
                 if (frontend.fakeJournal) {
@@ -200,10 +196,8 @@ public class PseudoFrontend {
                     };
                 }
 
-                GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().initialize(null);
                 GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
-                StateChangeExecutor.getInstance().setMetaContext(
-                        GlobalStateMgr.getCurrentState().getMetaContext());
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());
                 StateChangeExecutor.getInstance().start();
@@ -212,8 +206,7 @@ public class PseudoFrontend {
 
                 GlobalStateMgr.getCurrentState().waitForReady();
 
-                QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
-                        ExecuteEnv.getInstance().getScheduler());
+                QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
                 qeService.start();
 
                 ThreadPoolManager.registerAllThreadPoolMetric();

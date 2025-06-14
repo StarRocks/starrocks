@@ -27,7 +27,7 @@ namespace starrocks {
 class RowsetWriter;
 class TabletReader;
 class RowSourceMaskBuffer;
-class RowSourceMask;
+struct RowSourceMask;
 
 // need a factory of compaction task
 class VerticalCompactionTask : public CompactionTask {

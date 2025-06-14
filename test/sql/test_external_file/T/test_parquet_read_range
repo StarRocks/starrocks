@@ -1,0 +1,104 @@
+-- name: testParquetReadRange
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/read_range_test.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/page_index_big_page.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/page_index_big_page.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/repeated_value.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/repeated_value.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE read_range_test (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 array<int>
+)
+ENGINE=file
+PROPERTIES (
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/read_range_test.parquet",
+    "format" = "parquet"
+);
+
+CREATE EXTERNAL TABLE read_range_big_page_test (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 array<int>
+)
+ENGINE=file
+PROPERTIES (
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/page_index_big_page.parquet",
+    "format" = "parquet"
+);
+
+CREATE EXTERNAL TABLE repeated_value (
+    c0 int,
+    c1 int,
+    c2 array<int>
+)
+ENGINE=file
+PROPERTIES (
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/repeated_value.parquet",
+    "format" = "parquet"
+);
+
+-- no skip -> read
+select * from read_range_test where c0 >= 900 and c0 < 902;
+
+select * from read_range_test where c0 >= 1190 and c0 < 1192;
+
+select * from read_range_test where c0 >= 4000 and c0 < 4002;
+
+-- skip -> read
+select * from read_range_test where c0 > 4200 and c0 < 4202;
+
+select * from read_range_test where c0 > 6000 and c0 < 6002;
+
+select * from read_range_test where c0 > 8100 and c0 < 8102;
+
+-- read -> read
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 4097 and c0 < 4099);
+
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 6000 and c0 < 6002);
+
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 8100 and c0 < 8102);
+
+-- read -> skip -> read
+select * from read_range_test where (c0 > 1190 and c0 < 1192) or (c0 > 8200 and c0 < 8202);
+
+select * from read_range_test where (c0 > 1190 and c0 < 1192) or (c0 > 9000 and c0 < 9002);
+
+-- next RowGroup
+select * from read_range_test where c0 >= 10900 and c0 < 10902;
+
+-- two RowGroup
+select * from read_range_test where (c0 >= 900 and c0 < 902) or (c0 >= 10900 and c0 < 10902);
+
+-- last page
+select * from read_range_test where c0 < 3 or c0 > 19998;
+
+-- repeated column skip, read and read in same page
+select * from read_range_big_page_test where c0 in (8193, 12289);
+
+-- repeated column with page_index need clear level cache when skip to specific page
+select * from repeated_value where c0 = 1;
+
+-- test lazy decode
+select * from read_range_test where c0 in (1, 4000);
+
+-- test conjunct rewrite
+select count(*) from read_range_test where c2 = '1';
+select count(*) from read_range_test where c2 = '1' or c2 is null;
+
+-- test runtime in filter string type
+select count(*) from read_range_test a join[broadcast] read_range_big_page_test b on a.c2 = b.c2 where b.c0 < 5;
+
+-- test enable_shared_scan
+set enable_shared_scan = true;
+select count(distinct c2) from read_range_big_page_test;
+
+-- page data cache
+update default_catalog.information_schema.be_configs set value = "1G" where name = "datacache_mem_size";
+select count(*) from read_range_test where (c0 >= 900 and c0 < 902) or (c0 >= 10900 and c0 < 10902);
+select count(*) from read_range_test where (c0 >= 900 and c0 < 902);
+update default_catalog.information_schema.be_configs set value = "0G" where name = "datacache_mem_size";
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

@@ -44,6 +44,8 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 
 import java.util.ArrayList;
@@ -78,7 +80,8 @@ public class EsPartitionsProcDir implements ProcDirInterface {
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Joiner joiner = Joiner.on(", ");
             Map<String, EsShardPartitions> unPartitionedIndices =
@@ -104,7 +107,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 for (EsShardPartitions esShardPartitions : partitionedIndices.values()) {
                     List<Comparable> partitionInfo = new ArrayList<Comparable>();
                     partitionInfo.add(esShardPartitions.getIndexName());
-                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(esTable.getIdToColumn());
                     List<String> colNames = new ArrayList<String>();
                     for (Column column : partitionColumns) {
                         colNames.add(column.getName());
@@ -118,7 +121,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // set result
@@ -143,11 +146,12 @@ public class EsPartitionsProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String indexName) throws AnalysisException {
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             return new EsShardProcDir(db, esTable, indexName);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

@@ -40,6 +40,8 @@
 #include <atomic>
 #include <functional>
 #include <iostream>
+#include <mutex>
+#include <optional>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -73,10 +75,20 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
 #define ADD_TIMER(profile, name) \
     (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) \
+    (profile)->add_counter(                                \
+            name, TUnit::TIME_NS,                          \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold))
+#define ADD_PEAK_COUNTER(profile, name, type) \
+    (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
 #define ADD_CHILD_COUNTER(profile, name, type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
+    (profile)->add_child_counter(                                                                                      \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
+            parent)
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
     (profile)->add_child_counter(                                  \
             name, TUnit::TIME_NS,                                  \
@@ -119,23 +131,29 @@ class ObjectPool;
 // Thread-safe.
 class RuntimeProfile {
 public:
+    inline static const std::string MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    inline static const std::string MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+
     class Counter {
     public:
-        static TCounterStrategy create_strategy(TCounterAggregateType::type aggregate_type,
-                                                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
-                                                int64_t display_threshold = 0) {
+        static TCounterStrategy create_strategy(
+                TCounterAggregateType::type aggregate_type,
+                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             TCounterStrategy strategy;
             strategy.aggregate_type = aggregate_type;
             strategy.merge_type = merge_type;
             strategy.display_threshold = display_threshold;
+            strategy.min_max_type = min_max_type;
             return strategy;
         }
 
-        static TCounterStrategy create_strategy(TUnit::type type,
-                                                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
-                                                int64_t display_threshold = 0) {
+        static TCounterStrategy create_strategy(
+                TUnit::type type, TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
+                int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
-            return create_strategy(aggregate_type, merge_type, display_threshold);
+            return create_strategy(aggregate_type, merge_type, display_threshold, min_max_type);
         }
 
         explicit Counter(TUnit::type type, int64_t value = 0)
@@ -164,19 +182,36 @@ public:
 
         virtual double double_value() const { return bit_cast<double>(_value.load(std::memory_order_relaxed)); }
 
+        virtual void set_min(int64_t min) { _min_value.emplace(min); }
+        virtual void set_max(int64_t max) { _max_value.emplace(max); }
+        virtual std::optional<int64_t> min_value() const { return _min_value; }
+        virtual std::optional<int64_t> max_value() const { return _max_value; }
+
         TUnit::type type() const { return _type; }
 
         const TCounterStrategy& strategy() const { return _strategy; }
 
-        bool is_sum() const { return _strategy.aggregate_type == TCounterAggregateType::SUM; }
-        bool is_avg() const { return _strategy.aggregate_type == TCounterAggregateType::AVG; }
+        bool is_sum() const {
+            return _strategy.aggregate_type == TCounterAggregateType::SUM ||
+                   _strategy.aggregate_type == TCounterAggregateType::SUM_AVG;
+        }
+        bool is_avg() const {
+            return _strategy.aggregate_type == TCounterAggregateType::AVG ||
+                   _strategy.aggregate_type == TCounterAggregateType::AVG_SUM;
+        }
 
         bool skip_merge() const {
             return _strategy.merge_type == TCounterMergeType::SKIP_ALL ||
                    _strategy.merge_type == TCounterMergeType::SKIP_FIRST_MERGE;
         }
 
+        bool skip_min_max() const { return _strategy.min_max_type == TCounterMinMaxType::SKIP_ALL; }
+
         int64_t display_threshold() const { return _strategy.display_threshold; }
+        bool should_display() const {
+            int64_t threshold = _strategy.display_threshold;
+            return threshold == 0 || value() > threshold;
+        }
 
     private:
         friend class RuntimeProfile;
@@ -184,27 +219,31 @@ public:
         std::atomic<int64_t> _value;
         const TUnit::type _type;
         const TCounterStrategy _strategy;
+        std::optional<int64_t> _min_value;
+        std::optional<int64_t> _max_value;
     };
 
     class ConcurrentTimerCounter;
     class DerivedCounter;
     class EventSequence;
-    class HighWaterMarkCounter;
     class SummaryStatsCounter;
     class ThreadCounters;
     class TimeSeriesCounter;
 
-    /// A counter that keeps track of the highest value seen (reporting that
+    /// A counter that keeps track of the highest/lowest value seen (reporting that
     /// as value()) and the current value.
-    class HighWaterMarkCounter : public Counter {
+    template <bool is_high>
+    class WaterMarkCounter : public Counter {
     public:
-        explicit HighWaterMarkCounter(TUnit::type type, int64_t value = 0) : Counter(type, value) {}
-        explicit HighWaterMarkCounter(TUnit::type type, const TCounterStrategy& strategy, int64_t value = 0)
-                : Counter(type, strategy, value) {}
+        explicit WaterMarkCounter(TUnit::type type, int64_t value = 0) : Counter(type, value) { _set_init_value(); }
+        explicit WaterMarkCounter(TUnit::type type, const TCounterStrategy& strategy, int64_t value = 0)
+                : Counter(type, strategy, value) {
+            _set_init_value();
+        }
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
-            UpdateMax(new_val);
+            Update(new_val);
         }
 
         /// Tries to increase the current value by delta. If current_value() + delta
@@ -215,7 +254,7 @@ public:
                 int64_t new_val = old_val + delta;
                 if (UNLIKELY(new_val > max)) return false;
                 if (LIKELY(current_value_.compare_exchange_strong(old_val, new_val, std::memory_order_relaxed))) {
-                    UpdateMax(new_val);
+                    Update(new_val);
                     return true;
                 }
             }
@@ -223,27 +262,46 @@ public:
 
         void set(int64_t v) override {
             current_value_.store(v, std::memory_order_relaxed);
-            UpdateMax(v);
+            Update(v);
         }
 
         int64_t current_value() const { return current_value_.load(std::memory_order_relaxed); }
 
     private:
-        /// Set '_value' to 'v' if 'v' is larger than '_value'. The entire operation is
+        void _set_init_value() {
+            if constexpr (is_high) {
+                _value.store(0, std::memory_order_relaxed);
+                current_value_.store(0, std::memory_order_relaxed);
+            } else {
+                _value.store(MAX_INT64, std::memory_order_relaxed);
+                current_value_.store(MAX_INT64, std::memory_order_relaxed);
+            }
+        }
+
+        /// Set '_value' to 'v' if 'v' is larger/lower than '_value'. The entire operation is
         /// atomic.
-        void UpdateMax(int64_t v) {
+        void Update(int64_t v) {
             while (true) {
-                int64_t old_max = _value.load(std::memory_order_relaxed);
-                int64_t new_max = std::max(old_max, v);
-                if (new_max == old_max) break; // Avoid atomic update.
-                if (LIKELY(_value.compare_exchange_strong(old_max, new_max, std::memory_order_relaxed))) break;
+                int64_t old_value = _value.load(std::memory_order_relaxed);
+                int64_t new_value;
+                if constexpr (is_high) {
+                    new_value = std::max(old_value, v);
+                } else {
+                    new_value = std::min(old_value, v);
+                }
+                if (new_value == old_value) break; // Avoid atomic update.
+                if (LIKELY(_value.compare_exchange_strong(old_value, new_value, std::memory_order_relaxed))) break;
             }
         }
 
         /// The current value of the counter. _value in the super class represents
         /// the high water mark.
-        std::atomic<int64_t> current_value_{0};
+        std::atomic<int64_t> current_value_;
+        static const int64_t MAX_INT64 = 9223372036854775807ll;
     };
+
+    using HighWaterMarkCounter = WaterMarkCounter<true>;
+    using LowWaterMarkCounter = WaterMarkCounter<false>;
 
     typedef std::function<int64_t()> DerivedCounterFunction;
 
@@ -381,6 +439,9 @@ public:
         return add_child_counter(name, type, strategy, ROOT_COUNTER);
     }
 
+    template <class Visitor>
+    void foreach_children(Visitor&& callback);
+
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
     // If parent_name is a non-empty string, the counter is added as a child of
@@ -395,6 +456,10 @@ public:
 
     // Gets the counter object with 'name'.  Returns NULL if there is no counter with
     // that name.
+    std::pair<Counter*, std::string> get_counter_pair(const std::string& name);
+
+    // Gets the counter object with 'name'.  Returns NULL if there is no counter with
+    // that name.
     Counter* get_counter(const std::string& name);
 
     // Adds all counters with 'name' that are registered either in this or
@@ -402,7 +467,7 @@ public:
     void get_counters(const std::string& name, std::vector<Counter*>* counters);
 
     // Copy all but the bucket counters from src profile
-    void copy_all_counters_from(RuntimeProfile* src_profile);
+    void copy_all_counters_from(RuntimeProfile* src_profile, const std::string& attached_counter_name = ROOT_COUNTER);
 
     // Remove the counter object with 'name', and it will remove all the child counters recursively
     void remove_counter(const std::string& name);
@@ -415,7 +480,7 @@ public:
 
     // Adds a string to the runtime profile.  If a value already exists for 'key',
     // the value will be updated.
-    void add_info_string(const std::string& key, const std::string& value);
+    void add_info_string(const std::string& key, const std::string& value = "");
 
     // Creates and returns a new EventSequence (owned by the runtime
     // profile) - unless a timer with the same 'key' already exists, in
@@ -445,7 +510,10 @@ public:
     // Divides all counters by n
     void divide(int n);
 
-    size_t num_children() const { return _child_map.size(); }
+    size_t num_children() const {
+        std::lock_guard guard(_children_lock);
+        return _child_map.size();
+    }
 
     // Get child of given name
     RuntimeProfile* get_child(const std::string& name);
@@ -488,10 +556,23 @@ public:
                                                   const TCounterStrategy& strategy,
                                                   const std::string& parent_name = "");
 
+    LowWaterMarkCounter* AddLowWaterMarkCounter(const std::string& name, TUnit::type unit,
+                                                const TCounterStrategy& strategy, const std::string& parent_name = "");
+
     // Recursively compute the fraction of the 'total_time' spent in this profile and
     // its children.
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
+
+    void inc_version() {
+        std::lock_guard<std::mutex> l(_version_lock);
+        _version += 1;
+    }
+
+    int64_t get_version() const {
+        std::lock_guard<std::mutex> l(_version_lock);
+        return _version;
+    }
 
 public:
     // The root counter name for all top level counters.
@@ -505,14 +586,13 @@ private:
     Counter* add_counter_unlock(const std::string& name, TUnit::type type, const TCounterStrategy& strategy,
                                 const std::string& parent_name);
 
+    RuntimeProfile* get_child_unlock(const std::string& name);
+
     RuntimeProfile* _parent;
 
     // Pool for allocated counters. Usually owned by the creator of this
     // object, but occasionally allocated in the constructor.
     std::unique_ptr<ObjectPool> _pool;
-
-    // True if we have to delete the _pool on destruction.
-    bool _own_pool;
 
     // Name for this runtime profile.
     std::string _name;
@@ -568,9 +648,18 @@ private:
     // of the total time in the entire profile tree.
     double _local_time_percent;
 
-    // update a subtree of profiles from nodes, rooted at *idx.
+    // Protects _version
+    mutable std::mutex _version_lock;
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    int64_t _version{0};
+
+    // update a subtree of profiles from nodes, rooted at *idx. If the version
+    // of the parent node, or the version of root node for this subtree is older,
+    // skip to update the subtree, but still traverse the nodes of subtree to
+    // get the node immediately following this subtree.
     // On return, *idx points to the node immediately following this subtree.
-    void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx);
+    void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx, bool is_parent_node_old);
 
     // Helper function to compute compute the fraction of the total time spent in
     // this profile and its children.
@@ -586,7 +675,8 @@ public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
-    static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
+    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
+                                                     bool require_identical = true);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
@@ -653,6 +743,8 @@ public:
     void stop() { _sw.stop(); }
 
     void start() { _sw.start(); }
+
+    int64_t elapsed_time() { return _sw.elapsed_time(); }
 
     bool is_cancelled() { return _is_cancelled != nullptr && *_is_cancelled; }
 

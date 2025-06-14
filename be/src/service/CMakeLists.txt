@@ -18,7 +18,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/service")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service")
 
 add_subdirectory(service_be)
-add_subdirectory(service_cn)
 
 set(EXEC_FILES
     backend_options.cpp
@@ -26,7 +25,6 @@ set(EXEC_FILES
     internal_service.cpp
     staros_worker.cpp
     mem_hook.cpp
-    service.cpp
 )
 
 add_library(Service
@@ -34,7 +32,7 @@ add_library(Service
 )
 
 # only build starrocks_be when TEST is off
-if (NOT ${MAKE_TEST} STREQUAL "ON")
+if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     add_executable(starrocks_be
         starrocks_main.cpp
         )

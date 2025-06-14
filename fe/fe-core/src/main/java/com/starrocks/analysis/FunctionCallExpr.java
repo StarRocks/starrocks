@@ -57,6 +57,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
+
 public class FunctionCallExpr extends Expr {
     private FunctionName fnName;
     // private BuiltinAggregateFunction.Operator aggOp;
@@ -214,19 +216,6 @@ public class FunctionCallExpr extends Expr {
         }
     }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
-            return false;
-        }
-        FunctionCallExpr o = (FunctionCallExpr) obj;
-        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
-                && fnParams.isDistinct() == o.fnParams.isDistinct()
-                && fnParams.isStar() == o.fnParams.isStar()
-                && nondeterministicId.equals(o.nondeterministicId)
-                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
-    }
-
     // TODO: process order by
     @Override
     public String toSqlImpl() {
@@ -240,14 +229,11 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("DISTINCT ");
         }
-        if (fnParams.getOrderByElements() == null) {
-            sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
-        } else {
-            sb.append(Joiner.on(", ").join(firstNChildrenToSql(
-                    children.size() - fnParams.getOrderByElements().size())));
+        sb.append(Joiner.on(", ").join(firstNChildrenToSql(children.size() - fnParams.getOrderByElemNum())));
+        if (fnParams.getOrderByElements() != null) {
             sb.append(fnParams.getOrderByStringToSql());
-            sb.append(')');
         }
+        sb.append(')');
         return sb.toString();
     }
 
@@ -326,25 +312,7 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean isDistinct() {
-        Preconditions.checkState(isAggregateFunction());
         return fnParams.isDistinct();
-    }
-
-    public boolean isCountStar() {
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.COUNT)) {
-            if (fnParams.isStar()) {
-                return true;
-            } else if (fnParams.exprs() == null || fnParams.exprs().isEmpty()) {
-                return true;
-            } else {
-                for (Expr expr : fnParams.exprs()) {
-                    if (expr.isConstant()) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
     }
 
     @Override
@@ -353,9 +321,7 @@ public class FunctionCallExpr extends Expr {
         // except in test cases that do it explicitly.
         if (isAggregate() || isAnalyticFnCall) {
             msg.node_type = TExprNodeType.AGG_EXPR;
-            if (!isAnalyticFnCall) {
-                msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
-            }
+            msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
         } else {
             msg.node_type = TExprNodeType.FUNCTION_CALL;
         }
@@ -375,10 +341,7 @@ public class FunctionCallExpr extends Expr {
         }
 
         // For BE code simply, handle the following window functions with nullable
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.LEAD) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAG) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.FIRST_VALUE) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAST_VALUE)) {
+        if (IGNORE_NULL_WINDOW_FUNCTION.contains(fnName)) {
             return true;
         }
 
@@ -475,8 +438,21 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public int hashCode() {
-        // fnParams contains all information of children Expr. No need to calculate super's hashcode again.
-        return Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
+        // @Note: fnParams is different with children Expr. use children plz.
+        return Objects.hash(super.hashCode(), type, opcode, fnName, nondeterministicId);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
+            return false;
+        }
+        FunctionCallExpr o = (FunctionCallExpr) obj;
+        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
+                && fnParams.isDistinct() == o.fnParams.isDistinct()
+                && fnParams.isStar() == o.fnParams.isStar()
+                && nondeterministicId.equals(o.nondeterministicId)
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
     }
 
     /**
@@ -509,5 +485,4 @@ public class FunctionCallExpr extends Expr {
             return this;
         }
     }
-
 }

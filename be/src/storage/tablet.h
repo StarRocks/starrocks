@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <boost/algorithm/string.hpp>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -56,6 +57,7 @@
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -65,11 +67,13 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
-class CompactionCandidate;
-class CompactionContext;
-class TabletBasicInfo;
+class BaseRowset;
+struct CompactionCandidate;
+struct CompactionContext;
+struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 
 class ChunkIterator;
 
@@ -90,6 +94,7 @@ public:
     ~Tablet() override;
 
     Status init();
+
     bool init_succeeded();
 
     bool is_used();
@@ -97,7 +102,7 @@ public:
     void register_tablet_into_dir();
     void deregister_tablet_from_dir();
 
-    void save_meta();
+    void save_meta(bool skip_tablet_schema = false);
     // Used in clone task, to update local meta when finishing a clone job
     Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
@@ -106,17 +111,20 @@ public:
     void set_cumulative_layer_point(int64_t new_point);
 
     size_t tablet_footprint(); // disk space occupied by tablet
-    size_t num_rows();
+    size_t num_rows() const override;
     size_t version_count() const;
     Version max_version() const;
 
+    bool belonged_to_cloud_native() const override { return false; }
+
     // propreties encapsulated in TabletSchema
     KeysType keys_type() const;
-    size_t num_columns() const;
-    size_t num_key_columns() const;
-    size_t num_rows_per_row_block() const;
+    size_t num_columns_with_max_version() const;
+    size_t num_key_columns_with_max_version() const;
+    size_t num_rows_per_row_block_with_max_version() const;
     size_t next_unique_id() const;
-    size_t field_index(const string& field_name) const;
+    size_t field_index_with_max_version(const string& field_name) const;
+    size_t field_index(const string& field_name, const string& extra_column_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
     bool enable_shortcut_compaction() const;
@@ -128,8 +136,8 @@ public:
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
-                        std::vector<RowsetSharedPtr>* to_replace);
+    void modify_rowsets_without_lock(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                                     std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -139,6 +147,7 @@ public:
     RowsetSharedPtr rowset_with_max_version() const;
 
     Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+    void overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
@@ -154,9 +163,12 @@ public:
     // REQUIRE: `obtain_header_rdlock()`ed
     Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
 
+    Status capture_consistent_rowsets(const int64_t gtid, vector<RowsetSharedPtr>* rowsets) const;
+
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
-    bool version_for_delete_predicate(const Version& version);
-    bool has_delete_predicates(const Version& version);
+    [[nodiscard]] bool version_for_delete_predicate(const Version& version);
+    [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
+    [[nodiscard]] StatusOr<bool> has_delete_predicates(const Version& version) override;
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -172,18 +184,20 @@ public:
     // base lock
     void obtain_base_compaction_lock() { _base_lock.lock(); }
     void release_base_compaction_lock() { _base_lock.unlock(); }
-    std::mutex& get_base_lock() { return _base_lock; }
+    std::shared_mutex& get_base_lock() { return _base_lock; }
 
     // cumulative lock
     void obtain_cumulative_lock() { _cumulative_lock.lock(); }
     void release_cumulative_lock() { _cumulative_lock.unlock(); }
-    std::mutex& get_cumulative_lock() { return _cumulative_lock; }
+    std::shared_mutex& get_cumulative_lock() { return _cumulative_lock; }
 
     std::shared_mutex& get_migration_lock() { return _migration_lock; }
     // should use with migration lock.
-    bool is_migrating() const { return _is_migrating; }
+    [[nodiscard]] bool is_migrating() const { return _is_migrating; }
     // should use with migration lock.
     void set_is_migrating(bool is_migrating) { _is_migrating = is_migrating; }
+
+    std::shared_mutex& get_meta_store_lock() { return _meta_store_lock; }
 
     // check tablet is migrating or has been migrated.
     // if tablet is migrating or has been migrated, return true.
@@ -200,12 +214,15 @@ public:
 
     // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
     int64_t max_continuous_version() const;
+    int64_t max_readable_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
 
-    TStatusCode::type last_cumu_compaction_failure_status() { return _last_cumu_compaction_failure_status; }
-    void set_last_cumu_compaction_failure_status(TStatusCode::type st) { _last_cumu_compaction_failure_status = st; }
+    TStatusCode::type last_cumu_compaction_failure_status() { return _last_cumu_compaction_failure_status.load(); }
+    void set_last_cumu_compaction_failure_status(TStatusCode::type st) {
+        _last_cumu_compaction_failure_status.store(st);
+    }
 
     int64_t last_base_compaction_failure_time() { return _last_base_compaction_failure_millis; }
     void set_last_base_compaction_failure_time(int64_t millis) { _last_base_compaction_failure_millis = millis; }
@@ -220,7 +237,7 @@ public:
 
     bool check_rowset_id(const RowsetId& rowset_id);
 
-    Status set_partition_id(int64_t partition_id);
+    void set_partition_id(int64_t partition_id);
 
     TabletInfo get_tablet_info() const;
 
@@ -245,7 +262,8 @@ public:
 
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0);
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
+                         bool is_version_overwrite = false, bool is_double_write = false);
 
     // if there is _compaction_task running
     // do not do compaction
@@ -258,17 +276,27 @@ public:
 
     void set_compaction_context(std::unique_ptr<CompactionContext>& context);
 
+#ifdef BE_TEST
+    virtual std::shared_ptr<CompactionTask> create_compaction_task();
+#else
     std::shared_ptr<CompactionTask> create_compaction_task();
+#endif
 
     bool has_compaction_task();
 
     void stop_compaction();
 
-    void reset_compaction();
+    void reset_compaction_status();
 
     bool enable_compaction();
 
-    bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
+    std::string get_storage_type() const { return _tablet_meta->get_storage_type(); }
+
+    const bool is_column_with_row_store() const {
+        return boost::algorithm::to_lower_copy(get_storage_type()) == "column_with_row";
+    }
+
+    [[nodiscard]] bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
@@ -286,8 +314,47 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
-protected:
+    const TabletSchemaCSPtr tablet_schema() const override;
+
+    const TabletSchema& unsafe_tablet_schema_ref() const override;
+
+    const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
+
+    void update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
+
+    int64_t data_size();
+
+    int64_t in_writing_data_size();
+
+    void add_in_writing_data_size(int64_t txn_id, int64_t delta);
+
+    void remove_in_writing_data_size(int64_t txn_id);
+
+    // verify all rowsets of current(max) version in this tablet
+    Status verify();
+
+    void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
+
+    void set_will_be_force_replaced() { _will_be_force_replaced = true; }
+
+    void remove_all_delta_column_group_cache() const;
+    void remove_all_delta_column_group_cache_unlocked() const;
+
+    [[nodiscard]] bool is_dropping() const { return _is_dropping; }
+    // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
+    void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
+
+    [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
+    void set_update_schema_running(bool is_running) { _update_schema_running.store(is_running); }
+    std::shared_mutex& get_schema_lock() { return _schema_lock; }
+    bool add_committed_rowset(const RowsetSharedPtr& rowset);
+    void erase_committed_rowset(const RowsetSharedPtr& rowset);
+    int64_t committed_rowset_size() { return _committed_rs_map.size(); }
+
     void on_shutdown() override;
+
+    // get average row size
+    int64_t get_average_row_size();
 
 private:
     int64_t _mem_usage() { return sizeof(Tablet); }
@@ -323,19 +390,26 @@ private:
     // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
+    void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
+    void _get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
 
     TimestampedVersionTracker _timestamped_version_tracker;
 
+    // Max schema_version schema from Rowset or FE
+    TabletSchemaCSPtr _max_version_schema;
+
     OnceFlag _init_once;
     // meta store lock is used for prevent 2 threads do checkpoint concurrently
     // it will be used in econ-mode in the future
+    // This lock will be also used for prevent SnapshotLoader::move and checkpoint
+    // concurrently for restoring the tablet.
     std::shared_mutex _meta_store_lock;
     std::mutex _ingest_lock;
-    std::mutex _base_lock;
-    std::mutex _cumulative_lock;
+    std::shared_mutex _base_lock;
+    std::shared_mutex _cumulative_lock;
 
     std::shared_mutex _migration_lock;
     // should use with migration lock.
@@ -343,6 +417,7 @@ private:
 
     // explain how these two locks work together.
     mutable std::shared_mutex _meta_lock;
+    mutable std::shared_mutex _schema_lock;
     // A new load job will produce a new rowset, which will be inserted into both _rs_version_map
     // and _inc_rs_version_map. Only the most recent rowsets are kept in _inc_rs_version_map to
     // reduce the amount of data that needs to be copied during the clone task.
@@ -360,15 +435,26 @@ private:
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
+    // Keep the rowsets committed but not publish which rowset meta without schema
+    phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
+                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5, std::mutex,
+                                  true>
+            _committed_rs_map;
+
+    // gtid -> version
+    std::map<int64_t, int64_t> _gtid_to_version_map;
+
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;
 
     // compaction related
     std::unique_ptr<CompactionContext> _compaction_context;
-    std::shared_ptr<CompactionTask> _compaction_task;
     bool _enable_compaction = true;
 
     std::mutex _compaction_task_lock;
+
+    // used for default base cumulative compaction strategy to control the
+    bool _has_running_compaction = false;
 
     // if this tablet is broken, set to true. default is false
     // timestamp of last cumu compaction failure
@@ -380,13 +466,23 @@ private:
     // timestamp of last base compaction success
     std::atomic<int64_t> _last_base_compaction_success_millis{0};
 
-    TStatusCode::type _last_cumu_compaction_failure_status = TStatusCode::OK;
+    std::atomic<TStatusCode::type> _last_cumu_compaction_failure_status = TStatusCode::OK;
 
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
 
     std::unique_ptr<BinlogManager> _binlog_manager;
+
+    std::unordered_map<int64_t, int64_t> _in_writing_txn_size;
+
+    // this variable indicate tablet will be replaced in TabletManger by
+    // another tablet with the same tablet id
+    // currently, it will be used in Restore process
+    bool _will_be_force_replaced = false;
+
+    std::atomic<bool> _is_dropping{false};
+    std::atomic<bool> _update_schema_running{false};
 };
 
 inline bool Tablet::init_succeeded() {
@@ -414,27 +510,31 @@ inline void Tablet::set_cumulative_layer_point(int64_t new_point) {
 }
 
 inline KeysType Tablet::keys_type() const {
-    return _tablet_meta->tablet_schema().keys_type();
+    return tablet_schema()->keys_type();
 }
 
-inline size_t Tablet::num_columns() const {
-    return _tablet_meta->tablet_schema().num_columns();
+inline size_t Tablet::num_columns_with_max_version() const {
+    return tablet_schema()->num_columns();
 }
 
-inline size_t Tablet::num_key_columns() const {
-    return _tablet_meta->tablet_schema().num_key_columns();
+inline size_t Tablet::num_key_columns_with_max_version() const {
+    return tablet_schema()->num_key_columns();
 }
 
-inline size_t Tablet::num_rows_per_row_block() const {
-    return _tablet_meta->tablet_schema().num_rows_per_row_block();
+inline size_t Tablet::num_rows_per_row_block_with_max_version() const {
+    return tablet_schema()->num_rows_per_row_block();
 }
 
 inline size_t Tablet::next_unique_id() const {
-    return _tablet_meta->tablet_schema().next_column_unique_id();
+    return tablet_schema()->next_column_unique_id();
 }
 
-inline size_t Tablet::field_index(const string& field_name) const {
-    return _tablet_meta->tablet_schema().field_index(field_name);
+inline size_t Tablet::field_index_with_max_version(const string& field_name) const {
+    return tablet_schema()->field_index(field_name);
+}
+
+inline size_t Tablet::field_index(const string& field_name, const string& extra_column_name) const {
+    return tablet_schema()->field_index(field_name, extra_column_name);
 }
 
 inline bool Tablet::enable_shortcut_compaction() const {

@@ -18,9 +18,14 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
 #include "types/constexpr.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -162,6 +167,32 @@ StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Ch
     }
     return column;
 }
+
+#ifdef STARROCKS_JIT_ENABLE
+
+bool VectorizedLiteral::is_compilable(RuntimeState* state) const {
+    return IRHelper::support_jit(_type.type);
+}
+
+JitScore VectorizedLiteral::compute_jit_score(RuntimeState* state) const {
+    return {0, 0};
+}
+
+std::string VectorizedLiteral::jit_func_name_impl(RuntimeState* state) const {
+    return "{" + type().debug_string() + "[" + _value->debug_string() + "]}";
+}
+
+StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
+    bool only_null = _value->only_null();
+    LLVMDatum datum(jit_ctx->builder, only_null);
+    if (only_null) {
+        ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(jit_ctx->builder, _type.type, 0));
+    } else {
+        ASSIGN_OR_RETURN(datum.value, IRHelper::load_ir_number(jit_ctx->builder, _type.type, _value->raw_data()));
+    }
+    return datum;
+}
+#endif
 
 std::string VectorizedLiteral::debug_string() const {
     std::stringstream out;

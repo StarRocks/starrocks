@@ -20,24 +20,36 @@
 
 #include "common/greplog.h"
 #include "common/logging.h"
+#include "common/prof/heap_prof.h"
+#include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
+#include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/del_vector.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
+#include "util/url_coding.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
 using std::string;
 
 namespace starrocks {
+
+extern std::vector<std::string> list_stack_trace_of_long_wait_mutex();
 
 #define REG_VAR(TYPE, NAME) cls.var<&TYPE::NAME>(#NAME)
 #define REG_METHOD(TYPE, NAME) cls.func<&TYPE::NAME>(#NAME)
@@ -75,8 +87,12 @@ static int tablet_tablet_state(Tablet& tablet) {
     return static_cast<int>(tablet.tablet_state());
 }
 
+static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
+    return tablet.set_tablet_state(static_cast<TabletState>(state)).to_string();
+}
+
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
-    return tablet.tablet_schema();
+    return tablet.unsafe_tablet_schema_ref();
 }
 
 static uint64_t tablet_tablet_id(Tablet& tablet) {
@@ -91,12 +107,12 @@ static DataDir* tablet_data_dir(Tablet& tablet) {
     return tablet.data_dir();
 }
 
-static uint64_t get_major(EditVersion& self) {
-    return self.major();
+static uint64_t get_major_number(EditVersion& self) {
+    return self.major_number();
 }
 
-static uint64_t get_minor(EditVersion& self) {
-    return self.minor();
+static uint64_t get_minor_number(EditVersion& self) {
+    return self.minor_number();
 }
 
 static void bind_common(ForeignModule& m) {
@@ -121,11 +137,11 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
-static std::string exec(const std::string& cmd) {
+std::string exec(const std::string& cmd) {
     std::string ret;
 
     FILE* fp = popen(cmd.c_str(), "r");
-    if (fp == NULL) {
+    if (fp == nullptr) {
         ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
         return ret;
     }
@@ -148,12 +164,20 @@ static std::string exec(const std::string& cmd) {
 }
 
 static std::string exec_whitelist(const std::string& cmd) {
-    static std::regex legal_cmd("(ls|cat|head|tail|grep|free|echo)[^<>\\|;`\\\\]*");
+    static std::regex legal_cmd(R"((ls|cat|head|tail|grep|free|echo)[^<>\|;`\\]*)");
     std::cmatch m;
     if (!std::regex_match(cmd.c_str(), m, legal_cmd)) {
         return "illegal cmd";
     }
     return exec(cmd);
+}
+
+static std::string io_profile_and_get_topn_stats(const std::string& mode, int seconds, size_t topn) {
+    return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
+}
+
+static std::string key_cache_info() {
+    return KeyCache::instance().to_string();
 }
 
 void bind_exec_env(ForeignModule& m) {
@@ -181,21 +205,69 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
         cls.funcStaticExt<&get_stack_trace_for_function>("get_stack_trace_for_function");
+        cls.funcStaticExt<&io_profile_and_get_topn_stats>("io_profile_and_get_topn_stats");
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
-        REG_METHOD(ExecEnv, process_mem_tracker);
-        REG_METHOD(ExecEnv, query_pool_mem_tracker);
-        REG_METHOD(ExecEnv, load_mem_tracker);
-        REG_METHOD(ExecEnv, metadata_mem_tracker);
-        REG_METHOD(ExecEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, segment_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, compaction_mem_tracker);
-        REG_METHOD(ExecEnv, update_mem_tracker);
-        REG_METHOD(ExecEnv, clone_mem_tracker);
+        cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+        cls.funcStaticExt<&key_cache_info>("key_cache_info");
+    }
+    {
+        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
+        REG_STATIC_METHOD(GlobalEnv, GetInstance);
+
+        // level 0
+        REG_METHOD(GlobalEnv, process_mem_tracker);
+
+        // level 1
+        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, load_mem_tracker);
+        REG_METHOD(GlobalEnv, metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, compaction_mem_tracker);
+        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
+        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, update_mem_tracker);
+        REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
+        REG_METHOD(GlobalEnv, passthrough_mem_tracker);
+        REG_METHOD(GlobalEnv, clone_mem_tracker);
+        REG_METHOD(GlobalEnv, consistency_mem_tracker);
+        REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, datacache_mem_tracker);
+
+        // level 2
+        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, column_metadata_mem_tracker);
+
+        // level 3
+        REG_METHOD(GlobalEnv, tablet_schema_mem_tracker);
+        REG_METHOD(GlobalEnv, column_zonemap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
+        REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
+    }
+    {
+        auto& cls = m.klass<HeapProf>("HeapProf");
+        REG_STATIC_METHOD(HeapProf, getInstance);
+        REG_METHOD(HeapProf, enable_prof);
+        REG_METHOD(HeapProf, disable_prof);
+        REG_METHOD(HeapProf, has_enable);
+        REG_METHOD(HeapProf, snapshot);
+        REG_METHOD(HeapProf, to_dot_format);
+        REG_METHOD(HeapProf, dump_dot_snapshot);
+    }
+    {
+        auto& cls = m.klass<VLogCntl>("VLogCntl");
+        REG_STATIC_METHOD(VLogCntl, getInstance);
+        REG_METHOD(VLogCntl, enable);
+        REG_METHOD(VLogCntl, disable);
+        REG_METHOD(VLogCntl, setLogLevel);
     }
 }
 
@@ -222,10 +294,26 @@ public:
         return ptr;
     }
 
+    static std::string get_lake_tablet_metadata_json(int64_t tablet_id, int64_t version) {
+        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        RETURN_IF(nullptr == tablet_manager, "");
+        auto meta_st = tablet_manager->get_tablet_metadata(tablet_id, version, false);
+        RETURN_IF(!meta_st.ok(), meta_st.status().to_string());
+        return proto_to_json(*meta_st.value());
+    }
+
+    static std::string decode_encryption_meta(const std::string& meta_base64) {
+        EncryptionMetaPB pb;
+        std::string meta_bytes;
+        RETURN_IF(!base64_decode(meta_base64, &meta_bytes), "bad base64 string");
+        RETURN_IF(!pb.ParseFromString(meta_bytes), "parse encryption meta failed");
+        return proto_to_json(pb);
+    }
+
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos);
+        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos, nullptr);
         if (tablet_infos.empty()) {
             return nullptr;
         } else {
@@ -236,7 +324,7 @@ public:
     static std::vector<TabletBasicInfo> get_tablet_infos(int64_t table_id, int64_t partition_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos);
+        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos, nullptr);
         return tablet_infos;
     }
 
@@ -251,6 +339,30 @@ public:
         return CompactionAction::do_compaction(tablet_id, type, "");
     }
 
+    static std::string set_error_state(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support set error state";
+        }
+        tablet->updates()->set_error("error by script");
+        return "set error state success";
+    }
+
+    static std::string recover_tablet(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support recover";
+        }
+        Status st = tablet->updates()->recover();
+        return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
+    }
+
     static std::string get_tablet_meta_json(int64_t tablet_id) {
         auto tablet = get_tablet(tablet_id);
         if (!tablet) {
@@ -263,6 +375,16 @@ public:
         } else {
             return ret;
         }
+    }
+
+    // this method is specifically used to recover "no delete vector found" error caused by corrupt pk tablet metadata
+    static std::string reset_delvec(int64_t tablet_id, int64_t segment_id, int64_t version) {
+        auto tablet = get_tablet(tablet_id);
+        RETURN_IF_UNLIKELY_NULL(tablet, "tablet not found");
+        DelVector dv;
+        dv.init(version, nullptr, 0);
+        auto st = TabletMetaManager::set_del_vector(tablet->data_dir()->get_meta(), tablet_id, segment_id, dv);
+        return st.to_string();
     }
 
     static size_t submit_manual_compaction_task_for_table(int64_t table_id, int64_t rowset_size_threshold) {
@@ -295,6 +417,24 @@ public:
             return "tablet not found";
         }
         return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
+    }
+
+    static std::string pk_dump(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "non-pk tablet no support set error";
+        }
+        PrimaryKeyDump pkd(tablet.get());
+        auto st = pkd.dump();
+        if (st.ok()) {
+            return "print primary key dump success";
+        } else {
+            LOG(ERROR) << "print primary key dump fail, " << st;
+            return "print primary key dump fail";
+        }
     }
 
     static void bind(ForeignModule& m) {
@@ -333,6 +473,7 @@ public:
             cls.funcExt<tablet_data_dir>("data_dir");
             cls.funcExt<tablet_keys_type_int>("keys_type_as_int");
             cls.funcExt<tablet_tablet_state>("tablet_state_as_int");
+            cls.funcExt<tablet_set_tablet_state>("set_tablet_state_as_int");
             REG_METHOD(Tablet, tablet_footprint);
             REG_METHOD(Tablet, num_rows);
             REG_METHOD(Tablet, version_count);
@@ -344,6 +485,7 @@ public:
             REG_METHOD(Tablet, support_binlog);
             REG_METHOD(Tablet, updates);
             REG_METHOD(Tablet, save_meta);
+            REG_METHOD(Tablet, verify);
         }
         {
             auto& cls = m.klass<EditVersionPB>("EditVersionPB");
@@ -366,8 +508,8 @@ public:
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
-            cls.funcExt<&get_major>("major");
-            cls.funcExt<&get_minor>("minor");
+            cls.funcExt<&get_major_number>("major_number");
+            cls.funcExt<&get_minor_number>("minor_number");
             cls.func<&EditVersion::to_string>("toString");
         }
         {
@@ -382,12 +524,13 @@ public:
             REG_VAR(EditVersionInfo, creation_time);
             REG_VAR(EditVersionInfo, rowsets);
             REG_VAR(EditVersionInfo, deltas);
+            REG_VAR(EditVersionInfo, gtid);
             REG_METHOD(EditVersionInfo, get_compaction);
         }
         {
             auto& cls = m.klass<Rowset>("Rowset");
             REG_METHOD(Rowset, rowset_id_str);
-            REG_METHOD(Rowset, schema);
+            REG_METHOD(Rowset, schema_ref);
             REG_METHOD(Rowset, start_version);
             REG_METHOD(Rowset, end_version);
             REG_METHOD(Rowset, creation_time);
@@ -441,6 +584,9 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_info);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_infos);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_meta_json);
+            REG_STATIC_METHOD(StorageEngineRef, get_lake_tablet_metadata_json);
+            REG_STATIC_METHOD(StorageEngineRef, decode_encryption_meta);
+            REG_STATIC_METHOD(StorageEngineRef, reset_delvec);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet);
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);
@@ -449,7 +595,10 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
+            REG_STATIC_METHOD(StorageEngineRef, pk_dump);
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
+            REG_STATIC_METHOD(StorageEngineRef, set_error_state);
+            REG_STATIC_METHOD(StorageEngineRef, recover_tablet);
         }
     }
 };
@@ -461,7 +610,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

@@ -44,8 +44,10 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,6 +62,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -86,6 +89,9 @@ public class BackupJobPrimaryKeyTest {
     private BackupJob job;
     private Database db;
 
+    private final String testDbName = "testDbPK";
+    private final String testTableName = "testTablePK";
+
     private long dbId = 11;
     private long tblId = 12;
     private long partId = 13;
@@ -96,6 +102,8 @@ public class BackupJobPrimaryKeyTest {
 
     private long repoId = 30000;
     private AtomicLong id = new AtomicLong(50000);
+
+    private static List<Path> pathsNeedToBeDeleted = Lists.newArrayList();
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -131,43 +139,48 @@ public class BackupJobPrimaryKeyTest {
     @Mocked
     private EditLog editLog;
 
-    private Repository repo = new Repository(repoId, "repo", false, "my_repo",
-            new BlobStorage("broker", Maps.newHashMap()));
+    private Repository repo = new Repository(repoId, "repo_pk", false, "my_repo_pk",
+                new BlobStorage("broker", Maps.newHashMap()));
 
     @BeforeClass
     public static void start() {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
-        backupDir.mkdirs();
+        if (!backupDir.exists()) {
+            backupDir.mkdirs();
+        }
 
         MetricRepo.init();
     }
 
     @AfterClass
     public static void end() throws IOException {
-        Config.tmp_dir = "./";
-        File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
-        if (backupDir.exists()) {
-            Files.walk(BackupHandler.TEST_BACKUP_ROOT_DIR,
-                            FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                    .forEach(File::delete);
+        for (Path path : pathsNeedToBeDeleted) {
+            File backupDir = new File(path.toString());
+            if (backupDir.exists()) {
+                Files.walk(path, FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                            .forEach(File::delete);
+            }
         }
     }
 
     @Before
     public void setUp() {
-
+        globalStateMgr = GlobalStateMgr.getCurrentState();
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
 
         // Thread is unmockable after Jmockit version 1.48, so use reflection to set field instead.
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
-        db = UnitTestUtil.createDb(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS);
+        db = UnitTestUtil.createDbByName(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS,
+                    testDbName, testTableName);
+
+        LockManager lockManager = new LockManager();
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -178,6 +191,22 @@ public class BackupJobPrimaryKeyTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+
+                globalStateMgr.getLocalMetastore().getTable(testDbName, testTableName);
+                minTimes = 0;
+                result = db.getTable(tblId);
+
+                globalStateMgr.getLocalMetastore().getTable(testDbName, "unknown_tbl");
+                minTimes = 0;
+                result = null;
             }
         };
 
@@ -214,8 +243,8 @@ public class BackupJobPrimaryKeyTest {
         };
 
         List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        tableRefs.add(new TableRef(new TableName(testDbName, testTableName), null));
+        job = new BackupJob("label_pk", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.setTestPrimaryKey();
     }
 
@@ -229,7 +258,7 @@ public class BackupJobPrimaryKeyTest {
 
         BackupMeta backupMeta = job.getBackupMeta();
         Assert.assertEquals(1, backupMeta.getTables().size());
-        OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.TABLE_NAME);
+        OlapTable backupTbl = (OlapTable) backupMeta.getTable(testTableName);
         List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
         Assert.assertNotNull(backupTbl);
         Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
@@ -252,7 +281,7 @@ public class BackupJobPrimaryKeyTest {
         TStatus taskStatus = new TStatus(TStatusCode.OK);
         TBackend tBackend = new TBackend("", 0, 1);
         TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                snapshotTask.getSignature(), taskStatus);
+                    snapshotTask.getSignature(), taskStatus);
         request.setSnapshot_files(snapshotFiles);
         request.setSnapshot_path(snapshotPath);
         Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
@@ -283,7 +312,7 @@ public class BackupJobPrimaryKeyTest {
         Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
         Map<Long, List<String>> tabletFileMap = Maps.newHashMap();
         request = new TFinishTaskRequest(tBackend, TTaskType.UPLOAD,
-                upTask.getSignature(), taskStatus);
+                    upTask.getSignature(), taskStatus);
         request.setTablet_files(tabletFileMap);
 
         Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
@@ -313,22 +342,21 @@ public class BackupJobPrimaryKeyTest {
         BackupMeta restoreMetaInfo = null;
         BackupJobInfo restoreJobInfo = null;
         try {
-            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), -1);
+            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), FeConstants.STARROCKS_META_VERSION);
             Assert.assertEquals(1, restoreMetaInfo.getTables().size());
             OlapTable olapTable = (OlapTable) restoreMetaInfo.getTable(tblId);
             Assert.assertNotNull(olapTable);
-            Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
+            Assert.assertNotNull(restoreMetaInfo.getTable(testTableName));
             List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
             Assert.assertEquals(((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
                     olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());
-            Assert.assertEquals(UnitTestUtil.DB_NAME, restoreJobInfo.dbName);
+            Assert.assertEquals(testDbName, restoreJobInfo.dbName);
             Assert.assertEquals(job.getLabel(), restoreJobInfo.name);
             Assert.assertEquals(1, restoreJobInfo.tables.size());
         } catch (IOException e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
 
         Assert.assertNull(job.getBackupMeta());
@@ -338,6 +366,10 @@ public class BackupJobPrimaryKeyTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(BackupJobState.FINISHED, job.getState());
+
+        if (job.getLocalJobDirPath() != null) {
+            pathsNeedToBeDeleted.add(job.getLocalJobDirPath());
+        }
     }
 
     @Test
@@ -346,10 +378,14 @@ public class BackupJobPrimaryKeyTest {
         AgentTaskQueue.clearAllTasks();
 
         List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        tableRefs.add(new TableRef(new TableName(testDbName, "unknown_tbl"), null));
+        job = new BackupJob("label", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());
+
+        if (job.getLocalJobDirPath() != null) {
+            pathsNeedToBeDeleted.add(job.getLocalJobDirPath());
+        }
     }
 }

@@ -1,0 +1,199 @@
+-- name: test_sink_nested_map
+shell: ossutil64 cp ./sql/test_across_engine/data/nested_maps.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet > /dev/null
+-- result:
+0
+
+-- !result
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
+    "file_format" = "parquet"
+)
+as select * from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+{"a":{1:1,2:0}}	1	1.0
+{"b":{1:1}}	1	1.0
+{"c":null}	1	1.0
+{"d":{}}	1	1.0
+{"e":{1:1}}	1	1.0
+{"f":{3:1,4:0,5:1}}	1	1.0
+-- !result
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+{"a":{1:true,2:false}}	1	1.0
+{"b":{1:true}}	1	1.0
+{"c":null}	1	1.0
+{"d":{}}	1	1.0
+{"e":{1:true}}	1	1.0
+{"f":{3:true,4:false,5:true}}	1	1.0
+-- !result
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+{"a":{1:true,2:false}}	1	1.0
+{"b":{1:true}}	1	1.0
+{"c":null}	1	1.0
+{"d":{}}	1	1.0
+{"e":{1:true}}	1	1.0
+{"f":{3:true,4:false,5:true}}	1	1.0
+-- !result
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+-- result:
+-- !result
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet > /dev/null
+-- result:
+0
+
+-- !result
+-- name: test_sink_nested_list
+shell: ossutil64 cp ./sql/test_across_engine/data/nested_lists.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet > /dev/null
+-- result:
+0
+
+-- !result
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
+    "file_format" = "parquet"
+)
+as select * from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+[[["a","b"],["c"]],[null,["d"]]]	1
+[[["a","b"],["c","d"]],[null,["e"]]]	1
+[[["a","b"],["c","d"],["e"]],[null,["f"]]]	1
+-- !result
+trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+[[['a', 'b'], ['c']], [None, ['d']]]	1
+[[['a', 'b'], ['c', 'd']], [None, ['e']]]	1
+[[['a', 'b'], ['c', 'd'], ['e']], [None, ['f']]]	1
+-- !result
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+[[["a","b"],["c"]],[null,["d"]]]	1
+[[["a","b"],["c","d"]],[null,["e"]]]	1
+[[["a","b"],["c","d"],["e"]],[null,["f"]]]	1
+-- !result
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+[[["a","b"],["c"]],[null,["d"]]]	1
+[[["a","b"],["c","d"]],[null,["e"]]]	1
+[[["a","b"],["c","d"],["e"]],[null,["f"]]]	1
+-- !result
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+-- result:
+-- !result
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet > /dev/null
+-- result:
+0
+
+-- !result
+-- name: test_sink_nested_struct
+shell: ossutil64 cp ./sql/test_across_engine/data/nested_structs.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet > /dev/null
+-- result:
+0
+
+-- !result
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
+    "file_format" = "parquet"
+)
+as select * from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+{"min":190406409000602,"max":190407175004000,"mean":190406671229999,"count":495,"sum":94251302258849568,"variance":0}	{"min":115,"max":742,"mean":416,"count":495,"sum":206195,"variance":10374}	{"min":737,"max":32150509,"mean":2401239,"count":495,"sum":1188613496,"variance":12977533288261}	{"min":1000,"max":35195000,"mean":3519838,"count":495,"sum":1742320297,"variance":24581100553044}	{"min":0,"max":0,"mean":0,"count":0,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":0,"sum":0,"variance":0}	{"min":0,"max":658.63,"mean":57.76452991452993,"count":351,"sum":20275.350000000006,"variance":6310.500499135526}	{"min":0,"max":312.16,"mean":49.40901785714286,"count":336,"sum":16601.43,"variance":3214.842695450431}	{"min":0,"max":74136,"mean":6162.133196721318,"count":366,"sum":2255340.7500000023,"variance":104255249.59826614}	{"min":0,"max":523800,"mean":19484.146706586827,"count":334,"sum":6507705,"variance":3563198650.906335}	{"min":2628,"max":16085,"mean":6698.8,"count":10,"sum":66988,"variance":28540252.400000002}	{"min":288,"max":1985,"mean":1285,"count":4,"sum":5140,"variance":509875.3333333333}	{"min":0,"max":523800,"mean":18907.566091954024,"count":348,"sum":6579833,"variance":3428378496.7881336}	{"min":0,"max":1,"mean":0,"count":495,"sum":452,"variance":0}	{"min":0,"max":64749.63000000001,"mean":4951.024888352274,"count":352,"sum":1742760.7607000005,"variance":81195383.98823886}	{"min":0,"max":2.8000000000000003,"mean":0.14237550619122732,"count":352,"sum":50.11617817931202,"variance":0.07516922114035923}	{"min":0,"max":658063,"mean":1991.3067846607655,"count":339,"sum":675052.9999999995,"variance":1277234044.0126908}	{"min":0,"max":300.7,"mean":65.32364985163204,"count":337,"sum":22014.069999999996,"variance":3904.805190507992}	{"min":0,"max":18169,"mean":1528.077097505669,"count":441,"sum":673882,"variance":6122348.621315204}	{"min":0,"max":121968,"mean":6201.877049689864,"count":352,"sum":2183060.721490832,"variance":142631612.6463931}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":100,"mean":1.2345679012345678,"count":81,"sum":100,"variance":123.45679012345684}	{"min":0,"max":4172.084000000002,"mean":42.29786138613863,"count":101,"sum":4272.084000000002,"variance":172355.84886194076}	{"min":0,"max":1,"mean":0,"count":495,"sum":208,"variance":0}	{"min":0,"max":1,"mean":0,"count":495,"sum":44,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":121968,"mean":8685.222814207653,"count":366,"sum":3178791.550000001,"variance":243347757.98270744}	{"min":0,"max":121968,"mean":8841.174394454862,"count":364,"sum":3218187.4795815693,"variance":244563632.41811454}	{"min":1,"max":1,"mean":1,"count":495,"sum":495,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}
+-- !result
+trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+(min: 190406409000602, max: 190407175004000, mean: 190406671229999, count: 495, sum: 94251302258849568, variance: 0)	(min: 115, max: 742, mean: 416, count: 495, sum: 206195, variance: 10374)	(min: 737, max: 32150509, mean: 2401239, count: 495, sum: 1188613496, variance: 12977533288261)	(min: 1000, max: 35195000, mean: 3519838, count: 495, sum: 1742320297, variance: 24581100553044)	(min: 0.0, max: 0.0, mean: 0.0, count: 0, sum: 0.0, variance: 0.0)	(min: 0.0, max: 0.0, mean: 0.0, count: 0, sum: 0.0, variance: 0.0)	(min: 0.0, max: 658.63, mean: 57.76452991452993, count: 351, sum: 20275.350000000006, variance: 6310.500499135526)	(min: 0.0, max: 312.16, mean: 49.40901785714286, count: 336, sum: 16601.43, variance: 3214.842695450431)	(min: 0.0, max: 74136.0, mean: 6162.133196721318, count: 366, sum: 2255340.7500000023, variance: 104255249.59826614)	(min: 0.0, max: 523800.0, mean: 19484.146706586827, count: 334, sum: 6507705.0, variance: 3563198650.906335)	(min: 2628.0, max: 16085.0, mean: 6698.8, count: 10, sum: 66988.0, variance: 28540252.400000002)	(min: 288.0, max: 1985.0, mean: 1285.0, count: 4, sum: 5140.0, variance: 509875.3333333333)	(min: 0.0, max: 523800.0, mean: 18907.566091954024, count: 348, sum: 6579833.0, variance: 3428378496.7881336)	(min: 0, max: 1, mean: 0, count: 495, sum: 452, variance: 0)	(min: 0.0, max: 64749.63000000001, mean: 4951.024888352274, count: 352, sum: 1742760.7607000005, variance: 81195383.98823886)	(min: 0.0, max: 2.8000000000000003, mean: 0.14237550619122732, count: 352, sum: 50.11617817931202, variance: 0.07516922114035923)	(min: 0.0, max: 658063.0, mean: 1991.3067846607655, count: 339, sum: 675052.9999999995, variance: 1277234044.0126908)	(min: 0.0, max: 300.7, mean: 65.32364985163204, count: 337, sum: 22014.069999999996, variance: 3904.805190507992)	(min: 0.0, max: 18169.0, mean: 1528.077097505669, count: 441, sum: 673882.0, variance: 6122348.621315204)	(min: 0.0, max: 121968.0, mean: 6201.877049689864, count: 352, sum: 2183060.721490832, variance: 142631612.6463931)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)	(min: 0.0, max: 100.0, mean: 1.2345679012345678, count: 81, sum: 100.0, variance: 123.45679012345684)	(min: 0.0, max: 4172.084000000002, mean: 42.29786138613863, count: 101, sum: 4272.084000000002, variance: 172355.84886194076)	(min: 0, max: 1, mean: 0, count: 495, sum: 208, variance: 0)	(min: 0, max: 1, mean: 0, count: 495, sum: 44, variance: 0)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)	(min: 0.0, max: 121968.0, mean: 8685.222814207653, count: 366, sum: 3178791.550000001, variance: 243347757.98270744)	(min: 0.0, max: 121968.0, mean: 8841.174394454862, count: 364, sum: 3218187.4795815693, variance: 244563632.41811454)	(min: 1, max: 1, mean: 1, count: 495, sum: 495, variance: 0)	(min: 0, max: 0, mean: 0, count: 495, sum: 0, variance: 0)
+-- !result
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+{"min":190406409000602,"max":190407175004000,"mean":190406671229999,"count":495,"sum":94251302258849568,"variance":0}	{"min":115,"max":742,"mean":416,"count":495,"sum":206195,"variance":10374}	{"min":737,"max":32150509,"mean":2401239,"count":495,"sum":1188613496,"variance":12977533288261}	{"min":1000,"max":35195000,"mean":3519838,"count":495,"sum":1742320297,"variance":24581100553044}	{"min":0.0,"max":0.0,"mean":0.0,"count":0,"sum":0.0,"variance":0.0}	{"min":0.0,"max":0.0,"mean":0.0,"count":0,"sum":0.0,"variance":0.0}	{"min":0.0,"max":658.63,"mean":57.76452991452993,"count":351,"sum":20275.350000000006,"variance":6310.500499135526}	{"min":0.0,"max":312.16,"mean":49.40901785714286,"count":336,"sum":16601.43,"variance":3214.842695450431}	{"min":0.0,"max":74136.0,"mean":6162.133196721318,"count":366,"sum":2255340.7500000023,"variance":1.0425524959826614E8}	{"min":0.0,"max":523800.0,"mean":19484.146706586827,"count":334,"sum":6507705.0,"variance":3.563198650906335E9}	{"min":2628.0,"max":16085.0,"mean":6698.8,"count":10,"sum":66988.0,"variance":2.8540252400000002E7}	{"min":288.0,"max":1985.0,"mean":1285.0,"count":4,"sum":5140.0,"variance":509875.3333333333}	{"min":0.0,"max":523800.0,"mean":18907.566091954024,"count":348,"sum":6579833.0,"variance":3.4283784967881336E9}	{"min":0,"max":1,"mean":0,"count":495,"sum":452,"variance":0}	{"min":0.0,"max":64749.63000000001,"mean":4951.024888352274,"count":352,"sum":1742760.7607000005,"variance":8.119538398823886E7}	{"min":0.0,"max":2.8000000000000003,"mean":0.14237550619122732,"count":352,"sum":50.11617817931202,"variance":0.07516922114035923}	{"min":0.0,"max":658063.0,"mean":1991.3067846607655,"count":339,"sum":675052.9999999995,"variance":1.2772340440126908E9}	{"min":0.0,"max":300.7,"mean":65.32364985163204,"count":337,"sum":22014.069999999996,"variance":3904.805190507992}	{"min":0.0,"max":18169.0,"mean":1528.077097505669,"count":441,"sum":673882.0,"variance":6122348.621315204}	{"min":0.0,"max":121968.0,"mean":6201.877049689864,"count":352,"sum":2183060.721490832,"variance":1.426316126463931E8}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0.0,"max":100.0,"mean":1.2345679012345678,"count":81,"sum":100.0,"variance":123.45679012345684}	{"min":0.0,"max":4172.084000000002,"mean":42.29786138613863,"count":101,"sum":4272.084000000002,"variance":172355.84886194076}	{"min":0,"max":1,"mean":0,"count":495,"sum":208,"variance":0}	{"min":0,"max":1,"mean":0,"count":495,"sum":44,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0.0,"max":121968.0,"mean":8685.222814207653,"count":366,"sum":3178791.550000001,"variance":2.4334775798270744E8}	{"min":0.0,"max":121968.0,"mean":8841.174394454862,"count":364,"sum":3218187.4795815693,"variance":2.4456363241811454E8}	{"min":1,"max":1,"mean":1,"count":495,"sum":495,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}
+-- !result
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+-- result:
+{"min":190406409000602,"max":190407175004000,"mean":190406671229999,"count":495,"sum":94251302258849568,"variance":0}	{"min":115,"max":742,"mean":416,"count":495,"sum":206195,"variance":10374}	{"min":737,"max":32150509,"mean":2401239,"count":495,"sum":1188613496,"variance":12977533288261}	{"min":1000,"max":35195000,"mean":3519838,"count":495,"sum":1742320297,"variance":24581100553044}	{"min":0.0,"max":0.0,"mean":0.0,"count":0,"sum":0.0,"variance":0.0}	{"min":0.0,"max":0.0,"mean":0.0,"count":0,"sum":0.0,"variance":0.0}	{"min":0.0,"max":658.63,"mean":57.76452991452993,"count":351,"sum":20275.350000000006,"variance":6310.500499135526}	{"min":0.0,"max":312.16,"mean":49.40901785714286,"count":336,"sum":16601.43,"variance":3214.842695450431}	{"min":0.0,"max":74136.0,"mean":6162.133196721318,"count":366,"sum":2255340.7500000023,"variance":1.0425524959826614E8}	{"min":0.0,"max":523800.0,"mean":19484.146706586827,"count":334,"sum":6507705.0,"variance":3.563198650906335E9}	{"min":2628.0,"max":16085.0,"mean":6698.8,"count":10,"sum":66988.0,"variance":2.8540252400000002E7}	{"min":288.0,"max":1985.0,"mean":1285.0,"count":4,"sum":5140.0,"variance":509875.3333333333}	{"min":0.0,"max":523800.0,"mean":18907.566091954024,"count":348,"sum":6579833.0,"variance":3.4283784967881336E9}	{"min":0,"max":1,"mean":0,"count":495,"sum":452,"variance":0}	{"min":0.0,"max":64749.63000000001,"mean":4951.024888352274,"count":352,"sum":1742760.7607000005,"variance":8.119538398823886E7}	{"min":0.0,"max":2.8000000000000003,"mean":0.14237550619122732,"count":352,"sum":50.11617817931202,"variance":0.07516922114035923}	{"min":0.0,"max":658063.0,"mean":1991.3067846607655,"count":339,"sum":675052.9999999995,"variance":1.2772340440126908E9}	{"min":0.0,"max":300.7,"mean":65.32364985163204,"count":337,"sum":22014.069999999996,"variance":3904.805190507992}	{"min":0.0,"max":18169.0,"mean":1528.077097505669,"count":441,"sum":673882.0,"variance":6122348.621315204}	{"min":0.0,"max":121968.0,"mean":6201.877049689864,"count":352,"sum":2183060.721490832,"variance":1.426316126463931E8}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0.0,"max":100.0,"mean":1.2345679012345678,"count":81,"sum":100.0,"variance":123.45679012345684}	{"min":0.0,"max":4172.084000000002,"mean":42.29786138613863,"count":101,"sum":4272.084000000002,"variance":172355.84886194076}	{"min":0,"max":1,"mean":0,"count":495,"sum":208,"variance":0}	{"min":0,"max":1,"mean":0,"count":495,"sum":44,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}	{"min":0.0,"max":121968.0,"mean":8685.222814207653,"count":366,"sum":3178791.550000001,"variance":2.4334775798270744E8}	{"min":0.0,"max":121968.0,"mean":8841.174394454862,"count":364,"sum":3218187.4795815693,"variance":2.4456363241811454E8}	{"min":1,"max":1,"mean":1,"count":495,"sum":495,"variance":0}	{"min":0,"max":0,"mean":0,"count":495,"sum":0,"variance":0}
+-- !result
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+-- result:
+-- !result
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet > /dev/null
+-- result:
+0
+
+-- !result

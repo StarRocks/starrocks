@@ -130,7 +130,7 @@ public class StructType extends Type {
             if (!fields.get(i).getType().matchesType(rhsType.fields.get(i).getType())) {
                 return false;
             }
-            if (!StringUtils.equals(fields.get(i).getName(), rhsType.fields.get(i).getName())) {
+            if (!StringUtils.equalsIgnoreCase(fields.get(i).getName(), rhsType.fields.get(i).getName())) {
                 return false;
             }
         }
@@ -169,15 +169,39 @@ public class StructType extends Type {
     }
 
     public StructField getField(String fieldName) {
-        return fieldMap.get(fieldName.toLowerCase());
+        return fieldMap.get(StringUtils.lowerCase(fieldName));
+    }
+
+    public boolean containsField(String fieldName) {
+        return fieldMap.containsKey(StringUtils.lowerCase(fieldName));
     }
 
     public int getFieldPos(String fieldName) {
-        return fieldMap.get(fieldName).getPosition();
+        return fieldMap.get(StringUtils.lowerCase(fieldName)).getPosition();
     }
 
     public StructField getField(int pos) {
         return fields.get(pos);
+    }
+
+    public void updateFields(List<StructField> structFields) {
+        Preconditions.checkNotNull(structFields);
+        Preconditions.checkArgument(structFields.size() > 0);
+        fields.clear();
+        fieldMap.clear();
+        for (StructField field : structFields) {
+            String lowerFieldName = field.getName().toLowerCase();
+            if (fieldMap.containsKey(lowerFieldName)) {
+                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
+            } else {
+                field.setPosition(fields.size());
+                fields.add(field);
+                // Store lowercase field name in fieldMap
+                fieldMap.put(lowerFieldName, field);
+            }
+        }
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
     }
 
     @Override
@@ -207,7 +231,7 @@ public class StructType extends Type {
             StructField structField = fields.get(pos);
             if (!selectedFields[pos]) {
                 fields.remove(pos);
-                fieldMap.remove(structField.getName());
+                fieldMap.remove(StringUtils.lowerCase(structField.getName()));
             }
         }
 
@@ -316,6 +340,36 @@ public class StructType extends Type {
             }
             return new StructType(structFields, isNamed);
         }
+    }
+
+    public String toMysqlDataTypeString() {
+        return "struct";
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
+    public String toMysqlColumnTypeString() {
+        return toSql();
+    }
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "struct<...>";
+        }
+        ArrayList<String> fieldsSql = Lists.newArrayList();
+        for (StructField f : fields) {
+            fieldsSql.add(f.toTypeString(depth + 1));
+        }
+        return String.format("struct<%s>", Joiner.on(", ").join(fieldsSql));
+    }
+
+    @Override
+    public int getMaxUniqueId() {
+        int maxUniqueId = -1;
+        for (StructField f : fields) {
+            maxUniqueId = Math.max(maxUniqueId, f.getMaxUniqueId());
+        }
+        return maxUniqueId;
     }
 }
 

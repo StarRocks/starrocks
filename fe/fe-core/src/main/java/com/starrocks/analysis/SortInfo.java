@@ -36,8 +36,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -49,7 +47,6 @@ import java.util.List;
  * particular input row (materialize all row slots)
  */
 public class SortInfo {
-    private static final Logger LOG = LogManager.getLogger(SortInfo.class);
     // All ordering exprs with cost greater than this will be materialized. Since we don't
     // currently have any information about actual function costs, this value is intended to
     // ensure that all expensive functions will be materialized while still leaving simple
@@ -74,6 +71,8 @@ public class SortInfo {
     // Input expressions materialized into sortTupleDesc_. One expr per slot in
     // sortTupleDesc_.
     private List<Expr> sortTupleSlotExprs_;
+
+    private TupleDescriptor preAggTupleDesc_;
 
     public SortInfo(List<Expr> partitionExprs, long partitionLimit, List<Expr> orderingExprs, List<Boolean> isAscOrder,
                     List<Boolean> nullsFirstParams) {
@@ -159,6 +158,14 @@ public class SortInfo {
 
     public void substituteOrderingExprs(ExprSubstitutionMap smap, Analyzer analyzer) {
         orderingExprs_ = Expr.substituteList(orderingExprs_, smap, analyzer, false);
+    }
+
+    public void setPreAggTupleDesc_(TupleDescriptor preAggTupleDesc_) {
+        this.preAggTupleDesc_ = preAggTupleDesc_;
+    }
+
+    public TupleDescriptor getPreAggTupleDesc_() {
+        return preAggTupleDesc_;
     }
 
     @Override

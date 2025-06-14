@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.common.DebugOperatorTracer;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -55,6 +57,17 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+
+    // the actual output property of this expression
+    private PhysicalPropertySet outputProperty;
+
+    private UKFKConstraints constraints;
+
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
+
+    private OptExpression() {
+    }
 
     public OptExpression(Operator op) {
         this.op = op;
@@ -130,10 +143,17 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
-    public void initRowOutputInfo() {
+    public DomainProperty getDomainProperty() {
+        return op.getDomainProperty(inputs);
+    }
+
+    public void clearStatsAndInitOutputInfo() {
         for (OptExpression optExpression : inputs) {
-            optExpression.initRowOutputInfo();
+            optExpression.clearStatsAndInitOutputInfo();
         }
+        // clear statistics cache and row output info cache
+        setStatistics(null);
+        op.clearRowOutputInfo();
         getRowOutputInfo();
     }
 
@@ -143,6 +163,22 @@ public class OptExpression {
 
     public List<PhysicalPropertySet> getRequiredProperties() {
         return this.requiredProperties;
+    }
+
+    public void setOutputProperty(PhysicalPropertySet requiredProperties) {
+        this.outputProperty = requiredProperties;
+    }
+
+    public PhysicalPropertySet getOutputProperty() {
+        return this.outputProperty;
+    }
+
+    public UKFKConstraints getConstraints() {
+        return constraints;
+    }
+
+    public void setConstraints(UKFKConstraints constraints) {
+        this.constraints = constraints;
     }
 
     // This function assume the child expr logical property has been derived
@@ -191,19 +227,93 @@ public class OptExpression {
         return op + " child size " + inputs.size();
     }
 
-    public String explain() {
-        return explain("", "");
+    public String debugString() {
+        return debugString("", "", Integer.MAX_VALUE);
     }
 
-    private String explain(String headlinePrefix, String detailPrefix) {
+    public String debugString(int limitLine) {
+        return debugString("", "", limitLine);
+    }
+
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
+    }
+
+    private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
         StringBuilder sb = new StringBuilder();
-        sb.append(headlinePrefix).
-                append(op.accept(new OptimizerTraceUtil.OperatorTracePrinter(), null)).append('\n');
+        sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
+        limitLine -= 1;
+        if (limitLine <= 0 || inputs.isEmpty()) {
+            return sb.toString();
+        }
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
-            sb.append(input.explain(childHeadlinePrefix, childDetailPrefix));
+            sb.append('\n');
+            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
         }
         return sb.toString();
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private OptExpression optExpression = new OptExpression();
+
+        public Builder with(OptExpression other) {
+            optExpression.op = other.op;
+            optExpression.inputs = other.inputs;
+            optExpression.property = other.property;
+            optExpression.statistics = other.statistics;
+            optExpression.cost = other.cost;
+            optExpression.planCount = other.planCount;
+            optExpression.groupExpression = other.groupExpression;
+            optExpression.requiredProperties = other.requiredProperties;
+            optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            optExpression.outputProperty = other.outputProperty;
+            return this;
+        }
+
+        public Builder setOp(Operator op) {
+            optExpression.op = op;
+            return this;
+        }
+
+        public Builder setInputs(List<OptExpression> inputs) {
+            optExpression.inputs = inputs;
+            return this;
+        }
+
+        public Builder setLogicalProperty(LogicalProperty property) {
+            optExpression.property = property;
+            return this;
+        }
+
+        public Builder setStatistics(Statistics statistics) {
+            optExpression.statistics = statistics;
+            return this;
+        }
+
+        public Builder setCost(double cost) {
+            optExpression.cost = cost;
+            return this;
+        }
+
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            optExpression.requiredProperties = requiredProperties;
+            return this;
+        }
+
+        public OptExpression build() {
+            OptExpression tmp = optExpression;
+            optExpression = null;
+            return tmp;
+        }
     }
 }

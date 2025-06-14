@@ -15,11 +15,11 @@
 
 package com.starrocks.connector.hive.glue.converters;
 
-import com.amazonaws.services.glue.model.ErrorDetail;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.connector.hive.glue.util.HiveTableValidator;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -41,15 +41,20 @@ import org.apache.hadoop.hive.metastore.api.TableMeta;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import software.amazon.awssdk.services.glue.model.ErrorDetail;
 
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.unified.UnifiedMetadata.isDeltaLakeTable;
+import static com.starrocks.connector.unified.UnifiedMetadata.isIcebergTable;
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 
 public class CatalogToHiveConverter {
@@ -99,7 +104,7 @@ public class CatalogToHiveConverter {
     }
 
     public static TException errorDetailToHiveException(ErrorDetail errorDetail) {
-        return getHiveException(errorDetail.getErrorCode(), errorDetail.getErrorMessage());
+        return getHiveException(errorDetail.errorCode(), errorDetail.errorMessage());
     }
 
     private static TException getHiveException(String errorName, String errorMsg) {
@@ -111,165 +116,178 @@ public class CatalogToHiveConverter {
         }
     }
 
-    public static Database convertDatabase(com.amazonaws.services.glue.model.Database catalogDatabase) {
+    public static Database convertDatabase(software.amazon.awssdk.services.glue.model.Database catalogDatabase) {
         Database hiveDatabase = new Database();
-        hiveDatabase.setName(catalogDatabase.getName());
-        hiveDatabase.setDescription(catalogDatabase.getDescription());
-        String location = catalogDatabase.getLocationUri();
+        hiveDatabase.setName(catalogDatabase.name());
+        hiveDatabase.setDescription(catalogDatabase.description());
+        String location = catalogDatabase.locationUri();
         hiveDatabase.setLocationUri(location == null ? "" : location);
-        hiveDatabase.setParameters(firstNonNull(catalogDatabase.getParameters(), Maps.<String, String>newHashMap()));
+        hiveDatabase.setParameters(firstNonNull(catalogDatabase.parameters(), Maps.<String, String>newHashMap()));
         return hiveDatabase;
     }
 
-    public static FieldSchema convertFieldSchema(com.amazonaws.services.glue.model.Column catalogFieldSchema) {
+    public static FieldSchema convertFieldSchema(software.amazon.awssdk.services.glue.model.Column catalogFieldSchema) {
         FieldSchema hiveFieldSchema = new FieldSchema();
-        hiveFieldSchema.setType(catalogFieldSchema.getType());
-        hiveFieldSchema.setName(catalogFieldSchema.getName());
-        hiveFieldSchema.setComment(catalogFieldSchema.getComment());
+        hiveFieldSchema.setType(catalogFieldSchema.type());
+        hiveFieldSchema.setName(catalogFieldSchema.name());
+        hiveFieldSchema.setComment(catalogFieldSchema.comment());
 
         return hiveFieldSchema;
     }
 
     public static List<FieldSchema> convertFieldSchemaList(
-            List<com.amazonaws.services.glue.model.Column> catalogFieldSchemaList) {
+            List<software.amazon.awssdk.services.glue.model.Column> catalogFieldSchemaList) {
         List<FieldSchema> hiveFieldSchemaList = new ArrayList<>();
         if (catalogFieldSchemaList == null) {
             return hiveFieldSchemaList;
         }
-        for (com.amazonaws.services.glue.model.Column catalogFieldSchema : catalogFieldSchemaList) {
+        for (software.amazon.awssdk.services.glue.model.Column catalogFieldSchema : catalogFieldSchemaList) {
             hiveFieldSchemaList.add(convertFieldSchema(catalogFieldSchema));
         }
 
         return hiveFieldSchemaList;
     }
 
-    public static Table convertTable(com.amazonaws.services.glue.model.Table catalogTable, String dbname) {
+    public static Table convertTable(software.amazon.awssdk.services.glue.model.Table catalogTable, String dbname) {
         Table hiveTable = new Table();
         hiveTable.setDbName(dbname);
-        hiveTable.setTableName(catalogTable.getName());
-        Date createTime = catalogTable.getCreateTime();
-        hiveTable.setCreateTime(createTime == null ? 0 : (int) (createTime.getTime() / 1000));
-        hiveTable.setOwner(catalogTable.getOwner());
-        Date lastAccessedTime = catalogTable.getLastAccessTime();
-        hiveTable.setLastAccessTime(lastAccessedTime == null ? 0 : (int) (lastAccessedTime.getTime() / 1000));
-        hiveTable.setRetention(catalogTable.getRetention());
-        // for iceberg table, don't need to set StorageDescriptor
-        // just use metadata location in parameters that checked in HiveTableValidator
-        // TODO(zombee0), check hudi deltalake
-        if (!HiveTableValidator.isIcebergTable(catalogTable)) {
-            hiveTable.setSd(convertStorageDescriptor(catalogTable.getStorageDescriptor()));
+        hiveTable.setTableName(catalogTable.name());
+        Instant createTime = catalogTable.createTime();
+        hiveTable.setCreateTime(createTime == null ? 0 : (int) (createTime.getEpochSecond()));
+        hiveTable.setOwner(catalogTable.owner());
+        Instant lastAccessedTime = catalogTable.lastAccessTime();
+        hiveTable.setLastAccessTime(lastAccessedTime == null ? 0 : (int) (lastAccessedTime.getEpochSecond()));
+        hiveTable.setRetention(catalogTable.retention());
+
+        Optional<StorageDescriptor> optionalStorageDescriptor = Optional.ofNullable(catalogTable.storageDescriptor())
+                .map(CatalogToHiveConverter::convertStorageDescriptor);
+        // Provide dummy storage descriptor for compatibility if not explicitly configured
+        if (!optionalStorageDescriptor.isPresent() && (isIcebergTable(catalogTable.parameters()) ||
+                isDeltaLakeTable(catalogTable.parameters()))) {
+            StorageDescriptor sd = new StorageDescriptor();
+            sd.setCols(ImmutableList.of());
+            sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
+            optionalStorageDescriptor = Optional.of(sd);
         }
-        hiveTable.setPartitionKeys(convertFieldSchemaList(catalogTable.getPartitionKeys()));
+
+        if (!optionalStorageDescriptor.isPresent()) {
+            throw new StarRocksConnectorException("Table StorageDescriptor is null for table " + catalogTable.name());
+        }
+        hiveTable.setSd(optionalStorageDescriptor.get());
+        hiveTable.setPartitionKeys(convertFieldSchemaList(catalogTable.partitionKeys()));
         // Hive may throw a NPE during dropTable if the parameter map is null.
-        Map<String, String> parameterMap = catalogTable.getParameters();
+        Map<String, String> parameterMap = catalogTable.parameters();
         if (parameterMap == null) {
             parameterMap = Maps.newHashMap();
         }
         hiveTable.setParameters(parameterMap);
-        hiveTable.setViewOriginalText(catalogTable.getViewOriginalText());
-        hiveTable.setViewExpandedText(catalogTable.getViewExpandedText());
-        hiveTable.setTableType(catalogTable.getTableType());
+        hiveTable.setViewOriginalText(catalogTable.viewOriginalText());
+        hiveTable.setViewExpandedText(catalogTable.viewExpandedText());
+        hiveTable.setTableType(catalogTable.tableType());
 
         return hiveTable;
     }
 
-    public static TableMeta convertTableMeta(com.amazonaws.services.glue.model.Table catalogTable, String dbName) {
+    public static TableMeta convertTableMeta(software.amazon.awssdk.services.glue.model.Table catalogTable,
+                                             String dbName) {
         TableMeta tableMeta = new TableMeta();
         tableMeta.setDbName(dbName);
-        tableMeta.setTableName(catalogTable.getName());
-        tableMeta.setTableType(catalogTable.getTableType());
-        if (catalogTable.getParameters().containsKey("comment")) {
-            tableMeta.setComments(catalogTable.getParameters().get("comment"));
+        tableMeta.setTableName(catalogTable.name());
+        tableMeta.setTableType(catalogTable.tableType());
+        if (catalogTable.parameters().containsKey("comment")) {
+            tableMeta.setComments(catalogTable.parameters().get("comment"));
         }
         return tableMeta;
     }
 
     public static StorageDescriptor convertStorageDescriptor(
-            com.amazonaws.services.glue.model.StorageDescriptor catalogSd) {
+            software.amazon.awssdk.services.glue.model.StorageDescriptor catalogSd) {
         StorageDescriptor hiveSd = new StorageDescriptor();
-        hiveSd.setCols(convertFieldSchemaList(catalogSd.getColumns()));
-        hiveSd.setLocation(catalogSd.getLocation());
-        hiveSd.setInputFormat(catalogSd.getInputFormat());
-        hiveSd.setOutputFormat(catalogSd.getOutputFormat());
-        hiveSd.setCompressed(catalogSd.getCompressed());
-        hiveSd.setNumBuckets(catalogSd.getNumberOfBuckets());
-        hiveSd.setSerdeInfo(catalogSd.getSerdeInfo() == null ? null : convertSerDeInfo(catalogSd.getSerdeInfo()));
-        hiveSd.setBucketCols(firstNonNull(catalogSd.getBucketColumns(), Lists.<String>newArrayList()));
-        hiveSd.setSortCols(convertOrderList(catalogSd.getSortColumns()));
-        hiveSd.setParameters(firstNonNull(catalogSd.getParameters(), Maps.<String, String>newHashMap()));
-        hiveSd.setSkewedInfo(catalogSd.getSkewedInfo() == null ? null : convertSkewedInfo(catalogSd.getSkewedInfo()));
-        hiveSd.setStoredAsSubDirectories(catalogSd.getStoredAsSubDirectories());
+        hiveSd.setCols(convertFieldSchemaList(catalogSd.columns()));
+        hiveSd.setLocation(catalogSd.location());
+        hiveSd.setInputFormat(catalogSd.inputFormat());
+        hiveSd.setOutputFormat(catalogSd.outputFormat());
+        hiveSd.setCompressed(catalogSd.compressed());
+        hiveSd.setNumBuckets(catalogSd.numberOfBuckets());
+        hiveSd.setSerdeInfo(catalogSd.serdeInfo() == null ? null : convertSerDeInfo(catalogSd.serdeInfo()));
+        hiveSd.setBucketCols(firstNonNull(catalogSd.bucketColumns(), Lists.<String>newArrayList()));
+        hiveSd.setSortCols(convertOrderList(catalogSd.sortColumns()));
+        hiveSd.setParameters(firstNonNull(catalogSd.parameters(), Maps.<String, String>newHashMap()));
+        hiveSd.setSkewedInfo(catalogSd.skewedInfo() == null ? null : convertSkewedInfo(catalogSd.skewedInfo()));
+        hiveSd.setStoredAsSubDirectories(catalogSd.storedAsSubDirectories());
 
         return hiveSd;
     }
 
-    public static Order convertOrder(com.amazonaws.services.glue.model.Order catalogOrder) {
+    public static Order convertOrder(software.amazon.awssdk.services.glue.model.Order catalogOrder) {
         Order hiveOrder = new Order();
-        hiveOrder.setCol(catalogOrder.getColumn());
-        hiveOrder.setOrder(catalogOrder.getSortOrder());
+        hiveOrder.setCol(catalogOrder.column());
+        hiveOrder.setOrder(catalogOrder.sortOrder());
 
         return hiveOrder;
     }
 
-    public static List<Order> convertOrderList(List<com.amazonaws.services.glue.model.Order> catalogOrderList) {
+    public static List<Order> convertOrderList(
+            List<software.amazon.awssdk.services.glue.model.Order> catalogOrderList) {
         List<Order> hiveOrderList = new ArrayList<>();
         if (catalogOrderList == null) {
             return hiveOrderList;
         }
-        for (com.amazonaws.services.glue.model.Order catalogOrder : catalogOrderList) {
+        for (software.amazon.awssdk.services.glue.model.Order catalogOrder : catalogOrderList) {
             hiveOrderList.add(convertOrder(catalogOrder));
         }
 
         return hiveOrderList;
     }
 
-    public static SerDeInfo convertSerDeInfo(com.amazonaws.services.glue.model.SerDeInfo catalogSerDeInfo) {
+    public static SerDeInfo convertSerDeInfo(software.amazon.awssdk.services.glue.model.SerDeInfo catalogSerDeInfo) {
         SerDeInfo hiveSerDeInfo = new SerDeInfo();
-        hiveSerDeInfo.setName(catalogSerDeInfo.getName());
-        hiveSerDeInfo.setParameters(firstNonNull(catalogSerDeInfo.getParameters(), Maps.<String, String>newHashMap()));
-        hiveSerDeInfo.setSerializationLib(catalogSerDeInfo.getSerializationLibrary());
+        hiveSerDeInfo.setName(catalogSerDeInfo.name());
+        hiveSerDeInfo.setParameters(firstNonNull(catalogSerDeInfo.parameters(), Maps.<String, String>newHashMap()));
+        hiveSerDeInfo.setSerializationLib(catalogSerDeInfo.serializationLibrary());
 
         return hiveSerDeInfo;
     }
 
-    public static SkewedInfo convertSkewedInfo(com.amazonaws.services.glue.model.SkewedInfo catalogSkewedInfo) {
+    public static SkewedInfo convertSkewedInfo(
+            software.amazon.awssdk.services.glue.model.SkewedInfo catalogSkewedInfo) {
         if (catalogSkewedInfo == null) {
             return null;
         }
 
         SkewedInfo hiveSkewedInfo = new SkewedInfo();
         hiveSkewedInfo.setSkewedColNames(
-                firstNonNull(catalogSkewedInfo.getSkewedColumnNames(), Lists.<String>newArrayList()));
-        hiveSkewedInfo.setSkewedColValues(convertSkewedValue(catalogSkewedInfo.getSkewedColumnValues()));
+                firstNonNull(catalogSkewedInfo.skewedColumnNames(), Lists.<String>newArrayList()));
+        hiveSkewedInfo.setSkewedColValues(convertSkewedValue(catalogSkewedInfo.skewedColumnValues()));
         hiveSkewedInfo
-                .setSkewedColValueLocationMaps(convertSkewedMap(catalogSkewedInfo.getSkewedColumnValueLocationMaps()));
+                .setSkewedColValueLocationMaps(convertSkewedMap(catalogSkewedInfo.skewedColumnValueLocationMaps()));
         return hiveSkewedInfo;
     }
 
-    public static Partition convertPartition(com.amazonaws.services.glue.model.Partition src) {
+    public static Partition convertPartition(software.amazon.awssdk.services.glue.model.Partition src) {
         Partition tgt = new Partition();
-        Date createTime = src.getCreationTime();
+        Instant createTime = src.creationTime();
         if (createTime != null) {
-            tgt.setCreateTime((int) (createTime.getTime() / 1000));
+            tgt.setCreateTime((int) (createTime.getEpochSecond()));
             tgt.setCreateTimeIsSet(true);
         } else {
             tgt.setCreateTimeIsSet(false);
         }
-        String dbName = src.getDatabaseName();
+        String dbName = src.databaseName();
         if (dbName != null) {
             tgt.setDbName(dbName);
             tgt.setDbNameIsSet(true);
         } else {
             tgt.setDbNameIsSet(false);
         }
-        Date lastAccessTime = src.getLastAccessTime();
+        Instant lastAccessTime = src.lastAccessTime();
         if (lastAccessTime != null) {
-            tgt.setLastAccessTime((int) (lastAccessTime.getTime() / 1000));
+            tgt.setLastAccessTime((int) (lastAccessTime.getEpochSecond()));
             tgt.setLastAccessTimeIsSet(true);
         } else {
             tgt.setLastAccessTimeIsSet(false);
         }
-        Map<String, String> params = src.getParameters();
+        Map<String, String> params = src.parameters();
 
         // A null parameter map causes Hive to throw a NPE
         // so ensure we do not return a Partition object with a null parameter map.
@@ -280,7 +298,7 @@ public class CatalogToHiveConverter {
         tgt.setParameters(params);
         tgt.setParametersIsSet(true);
 
-        String tableName = src.getTableName();
+        String tableName = src.tableName();
         if (tableName != null) {
             tgt.setTableName(tableName);
             tgt.setTableNameIsSet(true);
@@ -288,7 +306,7 @@ public class CatalogToHiveConverter {
             tgt.setTableNameIsSet(false);
         }
 
-        List<String> values = src.getValues();
+        List<String> values = src.values();
         if (values != null) {
             tgt.setValues(values);
             tgt.setValuesIsSet(true);
@@ -296,7 +314,7 @@ public class CatalogToHiveConverter {
             tgt.setValuesIsSet(false);
         }
 
-        com.amazonaws.services.glue.model.StorageDescriptor sd = src.getStorageDescriptor();
+        software.amazon.awssdk.services.glue.model.StorageDescriptor sd = src.storageDescriptor();
         if (sd != null) {
             StorageDescriptor hiveSd = convertStorageDescriptor(sd);
             tgt.setSd(hiveSd);
@@ -308,13 +326,13 @@ public class CatalogToHiveConverter {
         return tgt;
     }
 
-    public static List<Partition> convertPartitions(List<com.amazonaws.services.glue.model.Partition> src) {
+    public static List<Partition> convertPartitions(List<software.amazon.awssdk.services.glue.model.Partition> src) {
         if (src == null) {
             return null;
         }
 
         List<Partition> target = Lists.newArrayList();
-        for (com.amazonaws.services.glue.model.Partition partition : src) {
+        for (software.amazon.awssdk.services.glue.model.Partition partition : src) {
             target.add(convertPartition(partition));
         }
         return target;
@@ -368,50 +386,49 @@ public class CatalogToHiveConverter {
     }
 
     public static PrincipalType convertPrincipalType(
-            com.amazonaws.services.glue.model.PrincipalType catalogPrincipalType) {
+            software.amazon.awssdk.services.glue.model.PrincipalType catalogPrincipalType) {
         if (catalogPrincipalType == null) {
             return null;
         }
 
-        if (catalogPrincipalType == com.amazonaws.services.glue.model.PrincipalType.GROUP) {
+        if (catalogPrincipalType == software.amazon.awssdk.services.glue.model.PrincipalType.GROUP) {
             return PrincipalType.GROUP;
-        } else if (catalogPrincipalType == com.amazonaws.services.glue.model.PrincipalType.USER) {
+        } else if (catalogPrincipalType == software.amazon.awssdk.services.glue.model.PrincipalType.USER) {
             return PrincipalType.USER;
-        } else if (catalogPrincipalType == com.amazonaws.services.glue.model.PrincipalType.ROLE) {
+        } else if (catalogPrincipalType == software.amazon.awssdk.services.glue.model.PrincipalType.ROLE) {
             return PrincipalType.ROLE;
         }
         throw new RuntimeException("Unknown principal type:" + catalogPrincipalType.name());
     }
 
     public static Function convertFunction(final String dbName,
-                                           final com.amazonaws.services.glue.model.UserDefinedFunction catalogFunction) {
+                                           final software.amazon.awssdk.services.glue.model.UserDefinedFunction catalogFunction) {
         if (catalogFunction == null) {
             return null;
         }
         Function hiveFunction = new Function();
-        hiveFunction.setClassName(catalogFunction.getClassName());
-        hiveFunction.setCreateTime((int) (catalogFunction.getCreateTime().getTime() / 1000));
+        hiveFunction.setClassName(catalogFunction.className());
+        hiveFunction.setCreateTime((int) (catalogFunction.createTime().getEpochSecond()));
         hiveFunction.setDbName(dbName);
-        hiveFunction.setFunctionName(catalogFunction.getFunctionName());
+        hiveFunction.setFunctionName(catalogFunction.functionName());
         hiveFunction.setFunctionType(FunctionType.JAVA);
-        hiveFunction.setOwnerName(catalogFunction.getOwnerName());
-        hiveFunction.setOwnerType(convertPrincipalType(
-                com.amazonaws.services.glue.model.PrincipalType.fromValue(catalogFunction.getOwnerType())));
-        hiveFunction.setResourceUris(convertResourceUriList(catalogFunction.getResourceUris()));
+        hiveFunction.setOwnerName(catalogFunction.ownerName());
+        hiveFunction.setOwnerType(convertPrincipalType(catalogFunction.ownerType()));
+        hiveFunction.setResourceUris(convertResourceUriList(catalogFunction.resourceUris()));
         return hiveFunction;
     }
 
     public static List<ResourceUri> convertResourceUriList(
-            final List<com.amazonaws.services.glue.model.ResourceUri> catalogResourceUriList) {
+            final List<software.amazon.awssdk.services.glue.model.ResourceUri> catalogResourceUriList) {
         if (catalogResourceUriList == null) {
             return null;
         }
         List<ResourceUri> hiveResourceUriList = new ArrayList<>();
-        for (com.amazonaws.services.glue.model.ResourceUri catalogResourceUri : catalogResourceUriList) {
+        for (software.amazon.awssdk.services.glue.model.ResourceUri catalogResourceUri : catalogResourceUriList) {
             ResourceUri hiveResourceUri = new ResourceUri();
-            hiveResourceUri.setUri(catalogResourceUri.getUri());
-            if (catalogResourceUri.getResourceType() != null) {
-                hiveResourceUri.setResourceType(ResourceType.valueOf(catalogResourceUri.getResourceType()));
+            hiveResourceUri.setUri(catalogResourceUri.uri());
+            if (catalogResourceUri.resourceType() != null) {
+                hiveResourceUri.setResourceType(ResourceType.valueOf(catalogResourceUri.resourceType().toString()));
             }
             hiveResourceUriList.add(hiveResourceUri);
         }

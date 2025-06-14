@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
@@ -22,8 +21,8 @@ import java.util.List;
 
 // Alter table statement.
 public class AlterTableStmt extends DdlStmt {
-    private TableName tbl;
-    private final List<AlterClause> ops;
+    private final TableName tbl;
+    private final List<AlterClause> alterClauseList;
 
     public AlterTableStmt(TableName tbl, List<AlterClause> ops) {
         this(tbl, ops, NodePosition.ZERO);
@@ -32,19 +31,27 @@ public class AlterTableStmt extends DdlStmt {
     public AlterTableStmt(TableName tbl, List<AlterClause> ops, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
-        this.ops = ops;
-    }
-
-    public void setTableName(String newTableName) {
-        tbl = new TableName(tbl.getDb(), newTableName);
+        this.alterClauseList = ops;
     }
 
     public TableName getTbl() {
         return tbl;
     }
 
-    public List<AlterClause> getOps() {
-        return ops;
+    public List<AlterClause> getAlterClauseList() {
+        return alterClauseList;
+    }
+
+    public String getCatalogName() {
+        return tbl.getCatalog();
+    }
+
+    public String getDbName() {
+        return tbl.getDb();
+    }
+
+    public String getTableName() {
+        return tbl.getTbl();
     }
 
     @Override

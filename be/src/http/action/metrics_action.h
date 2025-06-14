@@ -34,13 +34,14 @@
 
 #pragma once
 
+#include <bvar/variable.h>
+
 #include <string>
 
 #include "http/http_handler.h"
 
 namespace starrocks {
 
-class Webserver;
 class ExecEnv;
 class HttpRequest;
 class MetricRegistry;
@@ -59,6 +60,7 @@ public:
 private:
     MetricRegistry* _metrics;
     MockFunc _mock_func;
+    bvar::DumpOptions _options;
 };
 
 } // namespace starrocks

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -25,7 +24,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalProjectNode;
@@ -39,6 +38,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
@@ -54,6 +54,14 @@ public class ProjectNode extends PlanNode {
         this.commonSlotMap = commonSlotMap;
     }
 
+    public Map<SlotId, Expr> getSlotMap() {
+        return slotMap;
+    }
+
+    public Map<SlotId, Expr> getCommonSlotMap() {
+        return commonSlotMap;
+    }
+
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.PROJECT_NODE;
@@ -63,15 +71,10 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         Preconditions.checkState(conjuncts.isEmpty());
         computeStats(analyzer);
         createDefaultSmap(analyzer);
-    }
-
-    @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
     }
 
     @Override
@@ -123,21 +126,27 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public boolean canUsePipeLine() {
-        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
 
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs, Function<Expr, Boolean> couldBound) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr, couldBound).isPresent())) {
+            // NOTE: This is necessary, when expr is partition_by_epxr because
+            // partition_by_exprs may exist in JoinNode below the ProjectNode.
+            return Optional.of(ImmutableList.of(exprs));
+        }
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr, couldBound).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
+    }
+
     @Override
-    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
         if (!(expr instanceof SlotRef)) {
             return Optional.empty();
         }
-        if (!expr.isBoundByTupleIds(getTupleIds())) {
+        if (!couldBound.apply(expr)) {
             return Optional.empty();
         }
         List<Expr> newExprs = Lists.newArrayList();
@@ -155,31 +164,25 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs) {
-        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr).isPresent())) {
-            // NOTE: This is necessary, when expr is partition_by_epxr because
-            // partition_by_exprs may exist in JoinNode below the ProjectNode.
-            return Optional.of(ImmutableList.of(exprs));
-        }
-        List<List<Expr>> candidatesOfSlotExprs =
-                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
-        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
-    }
-
-    @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+        if (!couldBound(probeExpr, description, descTbl)) {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                optProbeExprCandidates,
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
     // This functions is used by query cache to compute digest of fragments. for examples:
@@ -191,7 +194,9 @@ public class ProjectNode extends PlanNode {
     // digest from Q1, the ProjectNode is trivial, it just extract v1 from outputs of the
     // OlapScanNode, so we can ignore the trivial project when we compute digest of the fragment.
     public boolean isTrivial() {
-        return slotMap.values().stream().allMatch(e -> e instanceof SlotRef) && commonSlotMap.isEmpty();
+        return slotMap.entrySet().stream().allMatch(
+                e -> e.getValue() instanceof SlotRef && ((SlotRef) e.getValue()).getSlotId().equals(e.getKey())) &&
+                commonSlotMap.isEmpty();
     }
 
     @Override

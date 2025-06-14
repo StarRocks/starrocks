@@ -36,7 +36,8 @@
 
 #include <memory>
 
-#include "storage/rowset/bloom_filter.h"
+#include "util/bloom_filter.h"
+#include "util/slice.h"
 
 namespace starrocks {
 

@@ -14,93 +14,85 @@
 
 package com.starrocks.credential.hdfs;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.HDFSFileStoreInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
-import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.List;
 import java.util.Map;
 
 public class HDFSCloudCredential implements CloudCredential {
-    public static final String EMPTY = "empty";
-
-    private String authentication;
+    public static final String SIMPLE_AUTH = "simple";
+    public static final String KERBEROS_AUTH = "kerberos";
+    protected String authentication;
     private String userName;
     private String password;
-    private String principal;
-    private String keyTab;
-    private String keyContent;
-    private Map<String, String> haConfigurations;
+    private String krbPrincipal;
+    private String krbKeyTabFile;
+    private String krbKeyTabData;
+    private Map<String, String> hadoopConfiguration;
 
-    protected HDFSCloudCredential(String authentication, String userName, String password, String principal,
-                                  String keyTab, String keyContent, Map<String, String> haConfigurations) {
+    protected HDFSCloudCredential(String authentication, String username, String password, String krbPrincipal,
+                                  String krbKeyTabFile, String krbKeyTabData, Map<String, String> hadoopConfiguration) {
         Preconditions.checkNotNull(authentication);
-        Preconditions.checkNotNull(userName);
+        Preconditions.checkNotNull(username);
         Preconditions.checkNotNull(password);
-        Preconditions.checkNotNull(principal);
-        Preconditions.checkNotNull(keyTab);
-        Preconditions.checkNotNull(keyContent);
-        Preconditions.checkNotNull(haConfigurations);
+        Preconditions.checkNotNull(krbPrincipal);
+        Preconditions.checkNotNull(krbKeyTabFile);
+        Preconditions.checkNotNull(krbKeyTabData);
+        Preconditions.checkNotNull(hadoopConfiguration);
         this.authentication = authentication;
-        this.userName = userName;
+        this.userName = username;
         this.password = password;
-        this.principal = principal;
-        this.keyTab = keyTab;
-        this.keyContent = keyContent;
-        this.haConfigurations = haConfigurations;
+        this.krbPrincipal = krbPrincipal;
+        this.krbKeyTabFile = krbKeyTabFile;
+        this.krbKeyTabData = krbKeyTabData;
+        this.hadoopConfiguration = hadoopConfiguration;
     }
 
     public String getAuthentication() {
         return authentication;
     }
 
-    public Map<String, String> getHaConfigurations() {
-        return haConfigurations;
+    public Map<String, String> getHadoopConfiguration() {
+        return hadoopConfiguration;
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        // TODO
     }
 
     @Override
     public boolean validate() {
-        if (authentication.equals(EMPTY)) {
+        if (SIMPLE_AUTH.equals(authentication)) {
             return true;
         }
-
-        if (authentication.equals("simple")) {
-            return true;
-        }
-
-        if (authentication.equals("kerberos")) {
-            if (principal.isEmpty()) {
+        if (KERBEROS_AUTH.equals(authentication)) {
+            if (krbPrincipal.isEmpty()) {
                 return false;
             }
-            return !(keyContent.isEmpty() && keyTab.isEmpty());
+            return !(krbKeyTabFile.isEmpty() && krbKeyTabData.isEmpty());
         }
 
         return false;
     }
 
     @Override
-    public void toThrift(List<TCloudProperty> properties) {
-        // TODO
+    public void toThrift(Map<String, String> properties) {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "HDFSCloudCredential{" +
-                "authentication=" + authentication +
-                ", userName='" + userName + '\'' +
+                "authentication='" + authentication + '\'' +
+                ", username='" + userName + '\'' +
                 ", password='" + password + '\'' +
-                ", principal='" + principal + '\'' +
-                ", keyTab='" + keyTab + '\'' +
-                ", keyContent='" + keyContent + '\'' +
+                ", krbPrincipal='" + krbPrincipal + '\'' +
+                ", krbKeyTabFile='" + krbKeyTabFile + '\'' +
+                ", krbKeyTabData='" + krbKeyTabData + '\'' +
                 '}';
     }
 
@@ -109,6 +101,13 @@ public class HDFSCloudCredential implements CloudCredential {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.HDFS);
         HDFSFileStoreInfo.Builder hdfsFileStoreInfo = HDFSFileStoreInfo.newBuilder();
+        if (!authentication.isEmpty()) {
+            hdfsFileStoreInfo.putConfiguration(CloudConfigurationConstants.HDFS_AUTHENTICATION, authentication);
+            if (authentication.equals(SIMPLE_AUTH) && !userName.isEmpty()) {
+                hdfsFileStoreInfo.setUsername(userName);
+            }
+        }
+        hdfsFileStoreInfo.putAllConfiguration(hadoopConfiguration);
         fileStore.setHdfsFsInfo(hdfsFileStoreInfo.build());
         return fileStore.build();
     }

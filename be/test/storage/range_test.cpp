@@ -29,7 +29,7 @@ inline std::string to_bitmap_string(const uint8_t* bitmap, size_t n) {
 }
 
 TEST(SparseRangeTest, range_union) {
-    SparseRange range;
+    SparseRange<> range;
     ASSERT_TRUE(range.empty());
     EXPECT_EQ(0, range.span_size());
 
@@ -79,11 +79,11 @@ TEST(SparseRangeTest, range_union) {
 }
 
 TEST(SparseRangeTest, range_intersection) {
-    SparseRange r1({{1, 10}, {20, 40}, {50, 70}});
-    SparseRange r2{{0, 100}};
-    SparseRange r3{};
-    SparseRange r4{{2, 30}};
-    SparseRange r5{{1, 20}, {25, 26}, {30, 65}};
+    SparseRange<> r1({{1, 10}, {20, 40}, {50, 70}});
+    SparseRange<> r2{{0, 100}};
+    SparseRange<> r3{};
+    SparseRange<> r4{{2, 30}};
+    SparseRange<> r5{{1, 20}, {25, 26}, {30, 65}};
 
     auto r = r1.intersection(r1);
     EXPECT_EQ(r1, r);
@@ -102,8 +102,8 @@ TEST(SparseRangeTest, range_intersection) {
 }
 
 TEST(SparseRangeIteratorTest, covered_ranges) {
-    SparseRange r1({{0, 10}, {20, 40}, {50, 70}});
-    SparseRangeIterator iter = r1.new_iterator();
+    SparseRange<> r1({{0, 10}, {20, 40}, {50, 70}});
+    SparseRangeIterator<> iter = r1.new_iterator();
     EXPECT_EQ(0, iter.covered_ranges(0));
     for (int i = 1; i <= 20; i++) {
         EXPECT_EQ(1u, iter.covered_ranges(i)) << "i=" << i;
@@ -139,7 +139,7 @@ TEST(SparseRangeIteratorTest, covered_ranges) {
     }
 }
 
-std::string dump_range_iter(const SparseRangeIterator& iter) {
+std::string dump_range_iter(const SparseRangeIterator<>& iter) {
     std::stringstream ss;
     if (!iter.has_more()) {
         ss << "[]";
@@ -167,82 +167,41 @@ std::string dump_range_iter(const SparseRangeIterator& iter) {
 TEST(SparseRangeIteratorTest, intersect_test) {
     // test intersection
     {
-        SparseRange r1(0, 4096);
-        SparseRangeIterator iter = r1.new_iterator();
+        SparseRange<> r1(0, 4096);
+        SparseRangeIterator<> iter = r1.new_iterator();
         iter.skip(1000);
-        SparseRange r2({{0, 10}, {20, 40}, {50, 70}});
-        SparseRange r3;
+        SparseRange<> r2({{0, 10}, {20, 40}, {50, 70}});
+        SparseRange<> r3;
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[]");
     }
     {
-        SparseRange r1(0, 4096);
-        SparseRangeIterator iter = r1.new_iterator();
+        SparseRange<> r1(0, 4096);
+        SparseRangeIterator<> iter = r1.new_iterator();
         iter.skip(30);
-        SparseRange r2({{0, 10}, {20, 40}, {50, 7000}});
-        SparseRange r3;
+        SparseRange<> r2({{0, 10}, {20, 40}, {50, 7000}});
+        SparseRange<> r3;
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[30,40],[50,4096]");
     }
     {
-        SparseRange r1(0, 4096);
-        SparseRangeIterator iter = r1.new_iterator();
+        SparseRange<> r1(0, 4096);
+        SparseRangeIterator<> iter = r1.new_iterator();
         iter.skip(30);
-        SparseRange r2({{1000, 1500}, {2000, 25000}, {3000, 7000}});
-        SparseRange r3;
+        SparseRange<> r2({{1000, 1500}, {2000, 25000}, {3000, 7000}});
+        SparseRange<> r3;
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[1000,1500],[2000,4096]");
     }
     {
-        SparseRange r1(0, 100);
-        SparseRangeIterator iter = r1.new_iterator();
+        SparseRange<> r1(0, 100);
+        SparseRangeIterator<> iter = r1.new_iterator();
         iter.skip(30);
-        SparseRange r2({{10, 200}, {2000, 25000}, {3000, 7000}});
-        SparseRange r3;
+        SparseRange<> r2({{10, 200}, {2000, 25000}, {3000, 7000}});
+        SparseRange<> r3;
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[30,100]");
     }
-}
-
-TEST(SparseRangeIteratorTest, convert_to_bitmap) {
-    std::vector<uint8_t> bitmap(100, 0);
-    SparseRange r1({{1, 11}, {20, 22}, {24, 25}});
-    SparseRangeIterator iter = r1.new_iterator();
-
-    ASSERT_EQ(0u, iter.convert_to_bitmap(bitmap.data(), 0));
-
-    ASSERT_EQ(5u, iter.convert_to_bitmap(bitmap.data(), 5));
-    ASSERT_EQ("11111", to_bitmap_string(bitmap.data(), 5));
-
-    ASSERT_EQ(10u, iter.convert_to_bitmap(bitmap.data(), 10));
-    ASSERT_EQ("1111111111", to_bitmap_string(bitmap.data(), 10));
-
-    ASSERT_EQ(15u, iter.convert_to_bitmap(bitmap.data(), 15));
-    ASSERT_EQ("111111111100000", to_bitmap_string(bitmap.data(), 15));
-
-    ASSERT_EQ(19u, iter.convert_to_bitmap(bitmap.data(), 19));
-    ASSERT_EQ("1111111111000000000", to_bitmap_string(bitmap.data(), 19));
-
-    ASSERT_EQ(20u, iter.convert_to_bitmap(bitmap.data(), 20));
-    ASSERT_EQ("11111111110000000001", to_bitmap_string(bitmap.data(), 20));
-
-    ASSERT_EQ(21u, iter.convert_to_bitmap(bitmap.data(), 21));
-    ASSERT_EQ("111111111100000000011", to_bitmap_string(bitmap.data(), 21));
-
-    ASSERT_EQ(22u, iter.convert_to_bitmap(bitmap.data(), 22));
-    ASSERT_EQ("1111111111000000000110", to_bitmap_string(bitmap.data(), 22));
-
-    ASSERT_EQ(23u, iter.convert_to_bitmap(bitmap.data(), 23));
-    ASSERT_EQ("11111111110000000001100", to_bitmap_string(bitmap.data(), 23));
-
-    ASSERT_EQ(24u, iter.convert_to_bitmap(bitmap.data(), 24));
-    ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
-
-    ASSERT_EQ(24u, iter.convert_to_bitmap(bitmap.data(), 25));
-    ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
-
-    ASSERT_EQ(24u, iter.convert_to_bitmap(bitmap.data(), 26));
-    ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
 }
 
 } // namespace starrocks

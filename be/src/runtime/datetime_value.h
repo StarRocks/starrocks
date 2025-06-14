@@ -224,6 +224,9 @@ public:
     // Convert this datetime value to string by the format string
     bool to_format_string(const char* format, int len, char* to) const;
 
+    // Convert this datetime value to string by the joda format string
+    bool to_joda_format_string(const char* format, int len, char* to) const;
+
     // compute the length of data format pattern
     static int compute_format_len(const char* format, int len);
 
@@ -239,12 +242,14 @@ public:
 
     static uint8_t calc_weekday(uint64_t daynr, bool);
 
+    TimeType type() const { return (TimeType)_type; }
     int year() const { return _year; }
     int month() const { return _month; }
     int day() const { return _day; }
     int hour() const { return _hour; }
     int minute() const { return _minute; }
     int second() const { return _second; }
+    int microsecond() const { return _microsecond; }
 
     void cast_to_date() {
         _hour = 0;
@@ -313,6 +318,7 @@ public:
     bool from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, std::string_view timezone, cctz::time_zone& ctz);
     bool from_unixtime(int64_t, const std::string& timezone);
     bool from_unixtime(int64_t, const cctz::time_zone& ctz);
+    bool from_unixtime(int64_t, int64_t, const cctz::time_zone& ctz);
 
     bool operator==(const DateTimeValue& other) const {
         // NOTE: This is not same with MySQL.
@@ -393,7 +399,7 @@ public:
 
     void set_type(int type);
 
-private:
+protected:
     // Used to make sure sizeof DateTimeValue
     friend class UnusedClass;
 
@@ -502,7 +508,69 @@ std::ostream& operator<<(std::ostream& os, const DateTimeValue& value);
 
 std::size_t hash_value(DateTimeValue const& value);
 
+struct TeradataRuntimeState final : public DateTimeValue {
+    const char** valptr;
+
+protected:
+    friend class TeradataFormat;
+};
+class TeradataFormat {
+public:
+    TeradataFormat() {}
+    ~TeradataFormat() = default;
+
+    bool prepare(std::string_view format);
+    bool parse(std::string_view str, DateTimeValue* output);
+
+private:
+    // Token parsers
+    std::vector<std::function<bool(TeradataRuntimeState*, const char*)>> _token_parsers;
+};
+
 } // namespace starrocks
+
+namespace starrocks::joda {
+
+/**
+ * @brief Joda Runtime state for each input row.
+ */
+struct JodaRuntimeState final : public DateTimeValue {
+    const char** valptr;
+
+    bool date_part_used;
+    bool time_part_used;
+    bool frac_part_used;
+
+    int halfday;
+    int weekday;
+    int yearday;
+    int week_num;
+
+    cctz::time_zone ctz; // default UTC
+    bool has_timezone;
+
+protected:
+    friend class JodaFormat;
+};
+
+class JodaFormat {
+public:
+    JodaFormat() = default;
+    ~JodaFormat() = default;
+
+    bool prepare(std::string_view format);
+    bool parse(std::string_view str, DateTimeValue* output);
+
+private:
+    // Token parsers
+    std::vector<std::function<bool(JodaRuntimeState*, const char*)>> _token_parsers;
+    const bool strict_week_number = false;
+    const bool sunday_first = false;
+    const bool strict_week_number_year_type = false;
+    const int strict_week_number_year = -1;
+};
+
+} // namespace starrocks::joda
 
 namespace std {
 template <>

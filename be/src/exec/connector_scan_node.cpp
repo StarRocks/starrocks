@@ -24,14 +24,150 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
-static std::atomic<int32_t> connector_scan_node_open_limit;
-static constexpr double kChunkBufferMemRatio = 0.5;
-static constexpr int64_t ESTIMATED_MEMORY_USAGE_PER_FIELD = 4LL * 1024 * 1024;
-
 // ======================================================
+static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio;
+
+ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
+        : ScanNode(pool, tnode, descs) {
+    _name = "connector_scan";
+    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    _connector_type = c->connector_type();
+    _data_source_provider = c->create_data_source_provider(this, tnode);
+}
+
+ConnectorScanNode::~ConnectorScanNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
+
+Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ScanNode::init(tnode, state));
+    RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
+
+    const TQueryOptions& query_options = state->query_options();
+    double mem_ratio = config::connector_scan_use_query_mem_ratio;
+    if (query_options.__isset.connector_scan_use_query_mem_ratio) {
+        mem_ratio = query_options.connector_scan_use_query_mem_ratio;
+    }
+
+    if (runtime_state()->query_ctx() != nullptr) {
+        _mem_share_arb = runtime_state()->query_ctx()->connector_scan_operator_mem_share_arbitrator();
+    }
+    if (_mem_share_arb != nullptr) {
+        _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);
+
+        // we don't want scan mem limit to exceed global memory limit.
+        int64_t global_lowest = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
+        if (global_lowest > 0) {
+            _scan_mem_limit = std::min(_scan_mem_limit, global_lowest);
+        }
+    }
+
+    _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
+    if (query_options.__isset.connector_io_tasks_per_scan_operator) {
+        _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
+    }
+    _estimate_scan_row_bytes();
+
+    if (tnode.__isset.lake_scan_node) {
+        if (tnode.lake_scan_node.__isset.enable_topn_filter_back_pressure &&
+            tnode.lake_scan_node.enable_topn_filter_back_pressure) {
+            _enable_topn_filter_back_pressure = true;
+            _back_pressure_max_rounds = tnode.lake_scan_node.back_pressure_max_rounds;
+            _back_pressure_num_rows = tnode.lake_scan_node.back_pressure_num_rows;
+            _back_pressure_throttle_time = tnode.lake_scan_node.back_pressure_throttle_time;
+            _back_pressure_throttle_time_upper_bound = tnode.lake_scan_node.back_pressure_throttle_time_upper_bound;
+        }
+    }
+
+    return Status::OK();
+}
+
+void ConnectorScanNode::_estimate_scan_row_bytes() {
+    const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
+    const auto& slots = tuple_desc->slots();
+    _estimated_scan_row_bytes = 0;
+    for (const auto& slot : slots) {
+        size_t field_bytes = std::max<size_t>(slot->slot_size(), 0);
+        field_bytes += type_estimated_overhead_bytes(slot->type().type);
+        _estimated_scan_row_bytes += field_bytes;
+    }
+}
+
+void ConnectorScanNode::_estimate_data_source_mem_bytes() {
+    const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
+    const auto& slots = tuple_desc->slots();
+    int64_t estimated_size = slots.size() * _data_source_provider->PER_FIELD_MEM_BYTES;
+    int64_t min_value = 0, max_value = 0;
+    _data_source_provider->default_data_source_mem_bytes(&min_value, &max_value);
+    estimated_size = std::min(std::max(estimated_size, min_value), max_value);
+    _estimated_data_source_mem_bytes = estimated_size;
+}
+
+int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
+    // We temporarily assume that the memory tried in the storage layer
+    // is the same size as the chunk_size * _estimated_scan_row_bytes.
+    size_t row_mem_bytes = _estimated_scan_row_bytes;
+    size_t chunk_mem_bytes = row_mem_bytes * runtime_state()->chunk_size();
+    DCHECK_GT(chunk_mem_bytes, 0);
+    int capacity = std::max<int>(int(_scan_mem_limit * kChunkBufferMemRatio / chunk_mem_bytes), 1);
+    return capacity;
+}
+
+pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
+
+    size_t dop = context->dop_of_source_operator(id());
+    std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
+    bool stream_data_source = _data_source_provider->stream_data_source();
+    bool is_stream_pipeline = context->is_stream_pipeline();
+
+    // we do estimated here is because we have peeked all scang ranges and gather more infomration
+    // so only here we can make more accurate decision.
+    _estimate_data_source_mem_bytes();
+
+    // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
+    size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+    size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimate_max_concurrent_chunks());
+    pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+            max_buffer_capacity, default_buffer_capacity, int64_t(_scan_mem_limit * kChunkBufferMemRatio),
+            runtime_state()->chunk_size());
+
+    scan_op = !stream_data_source
+                      ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
+                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
+                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
+                                is_stream_pipeline);
+
+    // order matters. we will use scan mem limit to limit chunk source mem bytes.
+    scan_op->set_mem_share_arb(_mem_share_arb);
+    scan_op->set_scan_mem_limit(_scan_mem_limit);
+    scan_op->set_data_source_mem_bytes(_estimated_data_source_mem_bytes);
+    scan_op->set_chunk_source_mem_bytes(_estimated_data_source_mem_bytes +
+                                        _estimated_scan_row_bytes * runtime_state()->chunk_size());
+
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+
+    auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+
+    if (_data_source_provider->insert_local_exchange_operator()) {
+        operators = context->maybe_interpolate_local_passthrough_exchange(
+                context->fragment_context()->runtime_state(), id(), operators, context->degree_of_parallelism());
+    }
+    return operators;
+}
+
+// ========================== Start of Non Pipeline Code =====================
+static std::atomic<int32_t> connector_scan_node_open_limit;
+
 // if *lvalue == expect, swap(*lvalue,*rvalue)
 inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool expect) {
     bool res = lvalue->compare_exchange_strong(expect, *rvalue);
@@ -52,12 +188,18 @@ public:
         if (_opened) return Status::OK();
 
         _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+        ADD_TIMER(_runtime_profile, "IOTaskWaitTime");
+        ADD_TIMER(_runtime_profile, "IOTaskExecTime");
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
+        connector_scan_node_open_limit.fetch_add(1, std::memory_order_relaxed);
         return Status::OK();
     }
-    void close(RuntimeState* state) { _data_source->close(state); }
+    void close(RuntimeState* state) {
+        _data_source->close(state);
+        connector_scan_node_open_limit.fetch_sub(1, std::memory_order_relaxed);
+    }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
@@ -71,7 +213,6 @@ public:
     bool is_open() { return _opened; }
 
     RuntimeState* runtime_state() { return _runtime_state; }
-
     int32_t open_limit() { return connector_scan_node_open_limit.load(std::memory_order_relaxed); }
 
     bool acquire_pending_token(std::atomic_bool* token) {
@@ -104,117 +245,16 @@ private:
     RuntimeProfile::Counter* _scan_timer = nullptr;
 };
 
-// ======================================================
-
-ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs) {
-    _name = "connector_scan";
-    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
-    _connector_type = c->connector_type();
-    _data_source_provider = c->create_data_source_provider(this, tnode);
-}
-
-ConnectorScanNode::~ConnectorScanNode() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
-    }
-}
-
-Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    RETURN_IF_ERROR(ScanNode::init(tnode, state));
-    RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
-
-    const TQueryOptions& query_options = state->query_options();
-    double mem_ratio = config::connector_scan_use_query_mem_ratio;
-    if (query_options.__isset.connector_scan_use_query_mem_ratio) {
-        mem_ratio = query_options.connector_scan_use_query_mem_ratio;
-    }
-    _mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * mem_ratio;
-    _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
-    if (query_options.__isset.connector_io_tasks_per_scan_operator) {
-        _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
-    }
-
-    _estimate_scan_row_bytes();
-    _estimate_mem_usage_per_chunk_source();
-    return Status::OK();
-}
-
-void ConnectorScanNode::_estimate_scan_row_bytes() {
-    const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
-    const auto& slots = tuple_desc->slots();
-    _estimated_scan_row_bytes = 0;
-    for (const auto& slot : slots) {
-        size_t field_bytes = std::max<size_t>(slot->slot_size(), 0);
-        field_bytes += type_estimated_overhead_bytes(slot->type().type);
-        _estimated_scan_row_bytes += field_bytes;
-    }
-}
-
-void ConnectorScanNode::_estimate_mem_usage_per_chunk_source() {
-    const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
-    const auto& slots = tuple_desc->slots();
-    _estimated_mem_usage_per_chunk_source = slots.size() * ESTIMATED_MEMORY_USAGE_PER_FIELD;
-}
-
-int ConnectorScanNode::_estimated_max_concurrent_chunks() const {
-    // We temporarily assume that the memory tried in the storage layer
-    // is the same size as the chunk_size * _estimated_scan_row_bytes.
-    size_t row_mem_usage = _estimated_scan_row_bytes;
-    size_t chunk_mem_usage = row_mem_usage * runtime_state()->chunk_size();
-    DCHECK_GT(chunk_mem_usage, 0);
-    // give half of the memory to the chunk buffer
-    int concurrency = std::max<int>(int(_mem_limit * kChunkBufferMemRatio / chunk_mem_usage), 1);
-    return concurrency;
-}
-
-pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    size_t dop = context->dop_of_source_operator(id());
-    std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
-    bool stream_data_source = _data_source_provider->stream_data_source();
-    bool is_stream_pipeline = context->is_stream_pipeline();
-
-    // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
-    size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
-    size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimated_max_concurrent_chunks());
-
-    pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-            max_buffer_capacity, default_buffer_capacity, int64_t(_mem_limit * kChunkBufferMemRatio),
-            runtime_state()->chunk_size());
-    scan_op = !stream_data_source
-                      ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
-                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
-                                is_stream_pipeline);
-
-    scan_op->set_estimated_mem_usage_per_chunk_source(_estimated_mem_usage_per_chunk_source);
-    scan_op->set_scan_mem_limit(_mem_limit);
-
-    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
-
-    auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
-
-    if (!_data_source_provider->insert_local_exchange_operator()) {
-        operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
-                                                                          operators, context->degree_of_parallelism());
-    }
-    return operators;
-}
-
-// ==============================================================
-
 Status ConnectorScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::prepare(state));
     RETURN_IF_ERROR(_data_source_provider->prepare(state));
     _init_counter();
-    _runtime_state = state;
     return Status::OK();
 }
 
 Status ConnectorScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
+    DictOptimizeParser::disable_open_rewrite(&_conjunct_ctxs);
     RETURN_IF_ERROR(ScanNode::open(state));
     RETURN_IF_ERROR(_data_source_provider->open(state));
 
@@ -223,7 +263,7 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     for (TScanRangeParams& scan_range : _scan_ranges) {
-        _create_and_init_scanner(state, scan_range.scan_range);
+        RETURN_IF_ERROR(_create_and_init_scanner(state, scan_range.scan_range));
     }
     _num_scanners = _pending_scanners.size();
     if (_num_scanners == 0) {
@@ -234,7 +274,7 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     _pending_scanners.reverse();
     _chunks_per_scanner = config::scanner_row_num / state->chunk_size();
     _chunks_per_scanner += static_cast<int>(config::scanner_row_num % state->chunk_size() != 0);
-    int concurrency = std::min<int>(_estimated_max_concurrent_chunks(), _num_scanners);
+    int concurrency = std::min<int>(_estimate_max_concurrent_chunks(), _num_scanners);
     concurrency = std::min<int>(concurrency, config::max_hdfs_scanner_num);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
@@ -250,9 +290,6 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRange& scan_range) {
-    if (scan_range.__isset.broker_scan_range) {
-        scan_range.broker_scan_range.params.__set_non_blocking_read(false);
-    }
     connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range);
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
@@ -260,7 +297,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_profile(_runtime_profile.get());
     data_source->update_has_any_predicate();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
-    scanner->init(state);
+    RETURN_IF_ERROR(scanner->init(state));
     _push_pending_scanner(scanner);
     return Status::OK();
 }
@@ -358,7 +395,15 @@ static int compute_priority(int32_t num_submitted_tasks) {
 }
 
 bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockable) {
-    auto* thread_pool = _runtime_state->exec_env()->thread_pool();
+    // submit the streaming load scanner to the dedicated thread pool if needed
+    const TQueryOptions& query_options = runtime_state()->query_options();
+    if (query_options.query_type == TQueryType::LOAD && query_options.load_job_type == TLoadJobType::STREAM_LOAD &&
+        config::enable_streaming_load_thread_pool) {
+        VLOG(2) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
+        return _submit_streaming_load_scanner(scanner, blockable);
+    }
+
+    auto* thread_pool = runtime_state()->exec_env()->thread_pool();
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
 
@@ -378,6 +423,49 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
     LOG(WARNING) << "thread pool busy";
     _running_threads.fetch_sub(1, std::memory_order_release);
     _scanner_submit_count.fetch_sub(delta, std::memory_order_relaxed);
+    return false;
+}
+
+bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner, bool blockable) {
+#ifdef BE_TEST
+    _use_stream_load_thread_pool = true;
+#endif
+    ThreadPool* thread_pool = runtime_state()->exec_env()->streaming_load_thread_pool();
+    _running_threads.fetch_add(1, std::memory_order_release);
+    // Assume the thread pool is large enough, so there is no need to set the priority
+    Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
+    if (status.ok()) {
+        return true;
+    }
+
+    // Thread pool for streaming load is assumed to be infinite, and submit should not fail
+    // because of the pool is full. The possible failure reason is that the thread pool is
+    // shutdown. But we still implement a block logic like PriorityPool::offer used in
+    // _submit_scanner to handle unexpected cases.
+    if (blockable) {
+        Status block_status;
+        while (thread_pool->is_pool_status_ok()) {
+            sleep(1);
+            block_status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
+            if (block_status.ok()) {
+                // Should not reach here if thread pool is infinite and in normal status in general,
+                // and log the status if happened for debug
+                LOG(INFO) << "Success to submit scanner for streaming load after retry, "
+                          << "fragment: " << print_id(runtime_state()->fragment_instance_id())
+                          << ", first fail status: " << status;
+                return true;
+            }
+        }
+        VLOG(2) << "Failed to submit scanner for streaming load with block mode, "
+                << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", first status: " << status
+                << ", last status: " << block_status;
+        // always return true for blockable which is same as that in _submit_scanner
+        return true;
+    }
+
+    LOG(WARNING) << "Failed to submit scanner for streaming load with unblock mode, "
+                 << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", status: " << status;
+    _running_threads.fetch_sub(1, std::memory_order_release);
     return false;
 }
 
@@ -435,7 +523,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
         }
     }
 
-    Status status = scanner->open(_runtime_state);
+    Status status = scanner->open(runtime_state());
     scanner->set_keep_priority(false);
 
     bool resubmit = false;
@@ -461,7 +549,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
             chunk = _chunk_pool.pop();
         }
 
-        status = scanner->get_next(_runtime_state, &chunk);
+        status = scanner->get_next(runtime_state(), &chunk);
         if (!status.ok()) {
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(chunk);
@@ -495,7 +583,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
             DCHECK(scanner == nullptr);
         } else if (status.is_end_of_file()) {
             scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
+            scanner->close(runtime_state());
             _closed_scanners.fetch_add(1, std::memory_order_release);
             std::lock_guard<std::mutex> l(_mtx);
             auto nscanner = _pending_scanners.empty() ? nullptr : _pop_pending_scanner();
@@ -516,7 +604,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
 
 void ConnectorScanNode::_release_scanner(ConnectorScanner* scanner) {
     scanner->release_pending_token(&_pending_token);
-    scanner->close(_runtime_state);
+    scanner->close(runtime_state());
     _closed_scanners.fetch_add(1, std::memory_order_release);
     _close_pending_scanners();
 }
@@ -525,7 +613,7 @@ void ConnectorScanNode::_close_pending_scanners() {
     std::lock_guard<std::mutex> l(_mtx);
     while (!_pending_scanners.empty()) {
         auto* scanner = _pop_pending_scanner();
-        scanner->close(_runtime_state);
+        scanner->close(runtime_state());
         _closed_scanners.fetch_add(1, std::memory_order_release);
     }
 }
@@ -564,9 +652,9 @@ void ConnectorScanNode::_fill_chunk_pool(int count) {
     }
 }
 
-Status ConnectorScanNode::close(RuntimeState* state) {
+void ConnectorScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     _closed = true;
     _update_status(Status::Cancelled("closed"));
@@ -576,8 +664,7 @@ Status ConnectorScanNode::close(RuntimeState* state) {
     }
     _close_pending_scanners();
     _data_source_provider->close(state);
-    RETURN_IF_ERROR(ScanNode::close(state));
-    return Status::OK();
+    ScanNode::close(state);
 }
 
 Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
@@ -587,10 +674,12 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
         // it means data source provider does not support reading by scan ranges.
         // So here we insert a single placeholder, to force data source provider
         // to create at least one data source
-        _scan_ranges.emplace_back(TScanRangeParams());
+        _scan_ranges.emplace_back();
     }
     return Status::OK();
 }
+
+// ========================== End of Non Pipeline Code =====================
 
 bool ConnectorScanNode::accept_empty_scan_ranges() const {
     return _data_source_provider->accept_empty_scan_ranges();
@@ -603,6 +692,15 @@ void ConnectorScanNode::_init_counter() {
 
 bool ConnectorScanNode::always_shared_scan() const {
     return _data_source_provider->always_shared_scan();
+}
+
+StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_morsel_queue(
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+        size_t num_total_scan_ranges) {
+    return _data_source_provider->convert_scan_range_to_morsel_queue(
+            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            num_total_scan_ranges);
 }
 
 } // namespace starrocks

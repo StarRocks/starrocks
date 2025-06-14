@@ -80,9 +80,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
     _query_id = params.query_id;
 
-    LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
-              << " fragment_instance_id=" << print_id(params.fragment_instance_id)
-              << " backend_num=" << request.backend_num;
+    VLOG(1) << "Prepare(): query_id=" << print_id(_query_id)
+            << " fragment_instance_id=" << print_id(params.fragment_instance_id)
+            << " backend_num=" << request.backend_num;
 
     DCHECK(_runtime_state->chunk_size() > 0);
 
@@ -108,6 +108,10 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     if (request.fragment.__isset.query_global_dicts) {
         RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
+    }
+
+    if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
+        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
     }
 
     if (request.fragment.__isset.load_global_dicts) {
@@ -141,8 +145,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        scan_node->set_scan_ranges(scan_ranges);
-        VLOG(1) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
+        (void)scan_node->set_scan_ranges(scan_ranges);
+        VLOG(2) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
     }
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
@@ -185,7 +189,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 }
 
 Status PlanFragmentExecutor::open() {
-    LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
+    VLOG(1) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     tls_thread_status.set_query_id(_runtime_state->query_id());
 
     // Only register profile report worker for broker load and insert into here,
@@ -199,13 +203,9 @@ Status PlanFragmentExecutor::open() {
     }
 
     Status status = _open_internal_vectorized();
-    if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
+    if (!status.ok() && !status.is_cancelled()) {
         LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
                      << ", status=" << status;
-        // Log error message in addition to returning in Status. Queries that do not
-        // fetch results (e.g. insert) may not receive the message directly and can
-        // only retrieve the log.
-        _runtime_state->log_error(status.get_error_msg());
     }
 
     update_status(status);
@@ -283,7 +283,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
 void PlanFragmentExecutor::collect_query_statistics() {
     _query_statistics->clear();
-    _plan->collect_query_statistics(_query_statistics.get());
+    (void)_plan->collect_query_statistics(_query_statistics.get());
 }
 
 void PlanFragmentExecutor::send_report(bool done) {
@@ -320,7 +320,7 @@ void PlanFragmentExecutor::send_report(bool done) {
     // This will send a report even if we are cancelled.  If the query completed correctly
     // but fragments still need to be cancelled (e.g. limit reached), the coordinator will
     // be waiting for a final report and profile.
-    _report_status_cb(status, profile(), done || !status.ok());
+    _report_status_cb(status, profile(), _runtime_state->load_channel_profile(), done || !status.ok());
 }
 
 Status PlanFragmentExecutor::_get_next_internal_vectorized(ChunkPtr* chunk) {
@@ -352,7 +352,7 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
         // if current `_status` is ok, set it to `new_status` to record the error.
         if (_status.ok()) {
             if (new_status.is_mem_limit_exceeded()) {
-                _runtime_state->set_mem_limit_exceeded(new_status.get_error_msg());
+                (void)_runtime_state->set_mem_limit_exceeded(new_status.message());
             }
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
@@ -396,7 +396,7 @@ void PlanFragmentExecutor::cancel() {
         _stream_load_contexts.resize(0);
     }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
-    _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    (void)_runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
@@ -473,9 +473,9 @@ void PlanFragmentExecutor::close() {
                     std::lock_guard<std::mutex> l(_status_lock);
                     status = _status;
                 }
-                _sink->close(runtime_state(), status);
+                (void)_sink->close(runtime_state(), status);
             } else {
-                _sink->close(runtime_state(), Status::InternalError("prepare failed"));
+                (void)_sink->close(runtime_state(), Status::InternalError("prepare failed"));
             }
         }
 
@@ -511,30 +511,7 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
     if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
         return Status::OK();
     }
-    _channel_stream_load = true;
-    for (; iter != scan_range_map.end(); iter++) {
-        for (const auto& scan_range : iter->second) {
-            const TBrokerScanRange& broker_scan_range = scan_range.scan_range.broker_scan_range;
-            int channel_id = broker_scan_range.channel_id;
-            const string& label = broker_scan_range.params.label;
-            const string& db_name = broker_scan_range.params.db_name;
-            const string& table_name = broker_scan_range.params.table_name;
-            TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
-            TUniqueId load_id = broker_scan_range.ranges[0].load_id;
-            long txn_id = broker_scan_range.params.txn_id;
-            StreamLoadContext* ctx = nullptr;
-            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->create_channel_context(
-                    _exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
-            DeferOp op([&] {
-                if (ctx->unref()) {
-                    delete ctx;
-                }
-            });
-            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
-            _stream_load_contexts.push_back(ctx);
-        }
-    }
-    return Status::OK();
+    return Status::NotSupported("Non-pipeline engine does not support channel stream load");
 }
 
 } // namespace starrocks

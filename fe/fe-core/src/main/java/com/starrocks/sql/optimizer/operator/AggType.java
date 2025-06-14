@@ -42,6 +42,10 @@ public enum AggType {
         return this.equals(AggType.GLOBAL);
     }
 
+    public boolean isAnyGlobal() {
+        return this.equals(AggType.GLOBAL) || this.equals(AggType.DISTINCT_GLOBAL);
+    }
+
     public boolean isDistinctGlobal() {
         return this.equals(AggType.DISTINCT_GLOBAL);
     }

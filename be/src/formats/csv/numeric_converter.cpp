@@ -15,7 +15,6 @@
 #include "formats/csv/numeric_converter.h"
 
 #include "column/fixed_length_column.h"
-#include "common/logging.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks::csv {
@@ -38,7 +37,7 @@ Status NumericConverter<T>::write_quoted_string(OutputStream* os, const Column& 
 }
 
 template <typename T>
-bool NumericConverter<T>::read_string(Column* column, Slice s, const Options& options) const {
+bool NumericConverter<T>::read_string(Column* column, const Slice& s, const Options& options) const {
     StringParser::ParseResult r;
     auto v = StringParser::string_to_int<DataType>(s.data, s.size, &r);
     if (r == StringParser::PARSE_SUCCESS) {
@@ -79,7 +78,7 @@ bool NumericConverter<T>::read_string(Column* column, Slice s, const Options& op
 }
 
 template <typename T>
-bool NumericConverter<T>::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool NumericConverter<T>::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 

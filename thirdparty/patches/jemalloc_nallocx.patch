@@ -1,0 +1,13 @@
+diff --git src/jemalloc.c src/jemalloc.c
+index 7655de4..51acaa0 100644
+--- src/jemalloc.c
++++ src/jemalloc.c
+@@ -3960,7 +3960,7 @@ je_nallocx(size_t size, int flags) {
+ 	size_t usize;
+ 	tsdn_t *tsdn;
+ 
+-	assert(size != 0);
++	// assert(size != 0);
+ 
+ 	if (unlikely(malloc_init())) {
+ 		LOG("core.nallocx.exit", "result: %zu", ZU(0));

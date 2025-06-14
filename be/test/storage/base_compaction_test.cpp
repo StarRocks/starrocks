@@ -17,6 +17,8 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <cstddef>
+
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -24,12 +26,14 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
 #include "testutil/assert.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -51,12 +55,12 @@ public:
         rowset_writer_context->partition_id = 10;
         rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/0/12345/1111";
         rowset_writer_context->rowset_state = VISIBLE;
-        rowset_writer_context->tablet_schema = _tablet_schema.get();
+        rowset_writer_context->tablet_schema = _tablet_schema;
         rowset_writer_context->version.first = 0;
         rowset_writer_context->version.second = 1;
     }
 
-    void create_tablet_schema(KeysType keys_type) {
+    void create_tablet_schema(KeysType keys_type, bool test_gin = false) {
         TabletSchemaPB tablet_schema_pb;
         tablet_schema_pb.set_keys_type(keys_type);
         tablet_schema_pb.set_num_short_key_columns(2);
@@ -93,6 +97,26 @@ public:
         column_3->set_is_bf_column(false);
         column_3->set_aggregation("SUM");
 
+        ColumnPB* column_4 = tablet_schema_pb.add_column();
+        column_4->set_unique_id(4);
+        column_4->set_name("j1");
+        column_4->set_type("JSON");
+        column_4->set_length(65535);
+        column_4->set_is_key(false);
+        column_4->set_is_nullable(true);
+        column_4->set_is_bf_column(false);
+        column_4->set_aggregation("REPLACE");
+
+        if (test_gin) {
+            TabletIndexPB tablet_index_pb;
+            tablet_index_pb.set_index_id(100);
+            tablet_index_pb.set_index_name("test_gin_index");
+            tablet_index_pb.set_index_type(GIN);
+            tablet_index_pb.add_col_unique_id(2);
+            auto* tablet_index = tablet_schema_pb.add_table_indices();
+            *tablet_index = tablet_index_pb;
+        }
+
         _tablet_schema = std::make_unique<TabletSchema>(tablet_schema_pb);
     }
 
@@ -118,7 +142,7 @@ public:
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
-        auto schema = ChunkHelper::convert_schema(*_tablet_schema);
+        auto schema = ChunkHelper::convert_schema(_tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
@@ -127,8 +151,32 @@ public:
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
             cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+            JsonValue json = JsonValue::from_string(R"({"k1":)" + std::to_string(i) + R"("k2": )" +
+                                                    std::to_string(10000 + 1) + "}");
+            cols[3]->append_datum(Datum(&json));
         }
         CHECK_OK(writer->add_chunk(*chunk));
+    }
+
+    void do_compaction_failed_with_gin() {
+        create_tablet_schema(DUP_KEYS, true);
+
+        RowsetWriterContext rowset_writer_context;
+        rowset_writer_context.writer_type = kVertical;
+        create_rowset_writer_context(&rowset_writer_context);
+        std::unique_ptr<RowsetWriter> _rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
+
+        // create fake directory/file for index files and segment file
+        auto seg_path =
+                Rowset::segment_file_path(rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id, 0);
+        std::string index_path = IndexDescriptor::inverted_index_file_path(
+                rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id.to_string(), 0, 100);
+        (void)FileSystem::Default()->new_random_access_file(seg_path);
+        fs::create_directories(index_path).ok();
+        VerticalRowsetWriter* rowset_writer = (VerticalRowsetWriter*)(_rowset_writer.get());
+        rowset_writer->_num_segment = 1;
+        // test for the abnormal destory for rowset writer
     }
 
     void do_compaction() {
@@ -197,7 +245,7 @@ public:
 
         TabletSharedPtr tablet =
                 Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-        tablet->init();
+        ASSERT_OK(tablet->init());
         tablet->calculate_cumulative_point();
 
         BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
@@ -244,7 +292,7 @@ public:
 protected:
     StorageEngine* _engine = nullptr;
     StorageEngine* _origin_engine = nullptr;
-    std::unique_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
@@ -267,7 +315,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_LE_1) {
     tablet_meta->set_tablet_schema(schema);
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
 }
@@ -315,7 +363,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
     }
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     tablet->calculate_cumulative_point();
 
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
@@ -331,6 +379,11 @@ TEST_F(BaseCompactionTest, test_horizontal_compact_succeed) {
 TEST_F(BaseCompactionTest, test_vertical_compact_succeed) {
     config::vertical_compaction_max_columns_per_group = 1;
     do_compaction();
+}
+
+TEST_F(BaseCompactionTest, test_vertical_compact_failed_with_gin) {
+    config::vertical_compaction_max_columns_per_group = 1;
+    do_compaction_failed_with_gin();
 }
 
 } // namespace starrocks

@@ -22,6 +22,8 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/query_cache/cache_manager.h"
@@ -35,9 +37,13 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
 struct QueryCacheTest : public ::testing::Test {
     RuntimeState state;
+    std::unique_ptr<pipeline::QueryContext> query_ctx = std::make_unique<pipeline::QueryContext>();
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
+
+    void SetUp() override { state.set_query_ctx(query_ctx.get()); }
 };
 
 TEST_F(QueryCacheTest, testLaneArbiter) {
@@ -101,30 +107,34 @@ TEST_F(QueryCacheTest, testCacheManager) {
         auto col = Int8Column::create();
         auto payload = byte_size - sizeof(query_cache::CacheValue);
         col->resize(payload);
-        chk->append_column(col, 0);
+        chk->append_column(std::move(col), 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
+    size_t total_key_size = 0;
     for (auto i = 0; i < 10; ++i) {
+        std::string key = strings::Substitute("key_$0", i);
+        size_t key_size = sizeof(LRUHandle) - 1 + key.size();
+        total_key_size += key_size;
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
 
     for (auto i = 20; i < 30; ++i) {
-        auto status = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
     }
     ASSERT_LE(cache_mgr->memory_usage(), cache_mgr->capacity());
 
@@ -167,7 +177,7 @@ ChunkPtr create_test_chunk(query_cache::LaneOwnerType owner, long from, long to,
     for (auto i = from; i < to; ++i) {
         data[i - from] = double(i);
     }
-    chunk->append_column(column, SlotId(1));
+    chunk->append_column(std::move(column), SlotId(1));
     return chunk;
 }
 struct Task {
@@ -231,7 +241,7 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     Tasks tasks;
     tasks.resize(dop);
     for (auto i = 0; i < dop; ++i) {
-        pipeline::Pipeline pipeline(0, opFactories);
+        pipeline::Pipeline pipeline(0, opFactories, nullptr);
         auto upstream_operators = pipeline.create_operators(dop, i);
         auto downstream_operator = reduce_source->create(dop, i);
         tasks[i].upstream = std::move(upstream_operators);
@@ -259,10 +269,10 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         tasks[k].cache_operator->set_multilane_operators(std::move(multilane_operators));
 
         for (auto& i : upstream) {
-            i->prepare(state);
+            (void)i->prepare(state);
         }
 
-        tasks[k].downstream->prepare(state);
+        (void)tasks[k].downstream->prepare(state);
     }
     return tasks;
 }
@@ -275,7 +285,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
     int num_steps = 0;
     int first_unfinished_idx = 0;
     if (set_first_op_finished) {
-        first_op->set_finishing(state);
+        CHECK(first_op->set_finishing(state).ok());
     }
     for (; first_unfinished_idx < upstream.size() && upstream[first_unfinished_idx]->is_finished();
          ++first_unfinished_idx) {
@@ -285,7 +295,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
     }
 
     if (first_unfinished_idx > 0) {
-        upstream[first_unfinished_idx]->set_finishing(state);
+        CHECK(upstream[first_unfinished_idx]->set_finishing(state).ok());
     }
 
     while (true) {
@@ -294,7 +304,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
                                                 first_op->get_name(), input_chunk->num_rows(),
                                                 input_chunk->owner_info().owner_id(),
                                                 input_chunk->owner_info().is_last_chunk());
-            first_op->push_chunk(state, input_chunk);
+            CHECK(first_op->push_chunk(state, input_chunk).ok());
             pushed = true;
         }
         bool movable = false;
@@ -302,7 +312,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
             auto curr_op = upstream[i - 1];
             auto next_op = upstream[i];
             if (curr_op->is_finished()) {
-                next_op->set_finishing(state);
+                CHECK(next_op->set_finishing(state).ok());
                 movable = true;
                 first_unfinished_idx = i;
                 continue;
@@ -319,11 +329,11 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_c
                         "[EXEC] Transfer chunk: from_op=$0, to_op=$1, num_rows=$2, tablet_id=$3, eof=$4",
                         curr_op->get_name(), next_op->get_name(), chunk->num_rows(), chunk->owner_info().owner_id(),
                         chunk->owner_info().is_last_chunk());
-                next_op->push_chunk(state, chunk);
+                CHECK(next_op->push_chunk(state, chunk).ok());
                 num_steps += pushed;
                 if (curr_op->is_finished()) {
                     first_unfinished_idx = i;
-                    next_op->set_finishing(state);
+                    CHECK(next_op->set_finishing(state).ok());
                 }
             }
         }
@@ -447,7 +457,7 @@ void take_action(Task& task, const Action& action, RuntimeState* state) {
     if (ac_result == query_cache::AcquireResult::AR_PROBE) {
         auto probe_result = task.cache_operator->probe_cache(action.owner_id, action.version);
         ASSERT_EQ(probe_result, action.expect_probe_result);
-        task.cache_operator->reset_lane(state, action.owner_id);
+        ASSERT_TRUE(task.cache_operator->reset_lane(state, action.owner_id).ok());
         if (!probe_result) {
             exec_action(task, action, state);
             return;

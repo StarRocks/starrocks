@@ -20,8 +20,10 @@
 #include <queue>
 #include <unordered_map>
 
+#include "block_manager.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::spill {
 
@@ -45,25 +47,28 @@ using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
 // so theoretically, the number of containers being written at the same time will be equivalent to the number of io threads
 class LogBlockManager : public BlockManager {
 public:
-    LogBlockManager(TUniqueId query_id);
+    LogBlockManager(const TUniqueId& query_id, DirManager* dir_mgr);
     ~LogBlockManager() override;
 
     Status open() override;
     void close() override;
 
     StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
-    Status release_block(const BlockPtr& block) override;
+    Status release_block(BlockPtr block) override;
+    Status release_affinity_group(const BlockAffinityGroup affinity_group) override;
 
 #ifdef BE_TEST
     void set_dir_manager(DirManager* dir_mgr) { _dir_mgr = dir_mgr; }
 #endif
 
 private:
-    StatusOr<LogBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id,
-                                                           const std::string& plan_node_name);
+    StatusOr<LogBlockContainerPtr> get_or_create_container(const DirPtr& dir, const TUniqueId& fragment_instance_id,
+                                                           int32_t plan_node_id, const std::string& plan_node_name,
+                                                           bool direct_io, size_t block_size,
+                                                           BlockAffinityGroup affinity_group);
 
 private:
-    typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
+    typedef phmap::flat_hash_map<uint64_t, LogBlockContainerPtr> ContainerMap;
     typedef std::queue<LogBlockContainerPtr> ContainerQueue;
     typedef std::shared_ptr<ContainerQueue> ContainerQueuePtr;
 
@@ -73,16 +78,13 @@ private:
     std::atomic<uint64_t> _next_container_id = 0;
     std::mutex _mutex;
 
-    typedef std::unordered_map<int32_t, ContainerQueuePtr> PlanNodeContainerMap;
-    typedef std::unordered_map<TUniqueId, std::shared_ptr<PlanNodeContainerMap>> QueryContainerMap;
-    typedef std::unordered_map<std::string, std::shared_ptr<QueryContainerMap>> DirContainerMap;
+    typedef phmap::flat_hash_map<int32_t, ContainerQueuePtr> PlanNodeContainerMap;
+    typedef phmap::flat_hash_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> DirContainerMap;
 
-    std::unordered_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> _available_containers;
+    phmap::flat_hash_map<BlockAffinityGroup, std::shared_ptr<DirContainerMap>> _available_containers;
 
     std::vector<LogBlockContainerPtr> _full_containers;
-#ifdef BE_TEST
     DirManager* _dir_mgr = nullptr;
-#endif
     const static int64_t kDefaultMaxContainerBytes = 10L * 1024 * 1024 * 1024; // 10GB
 };
 } // namespace starrocks::spill

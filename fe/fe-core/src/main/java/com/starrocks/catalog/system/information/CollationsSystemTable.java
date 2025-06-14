@@ -23,9 +23,13 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class CollationsSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.COLLATIONS_ID,
-                "collations",
+    private static final String NAME = "collations";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.COLLATIONS_ID,
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("COLLATION_NAME", ScalarType.createVarchar(512))

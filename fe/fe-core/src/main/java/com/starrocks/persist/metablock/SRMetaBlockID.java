@@ -30,7 +30,6 @@ public class SRMetaBlockID {
         return id;
     }
 
-
     public static final SRMetaBlockID INVALID = new SRMetaBlockID(0);
 
     public static final SRMetaBlockID NODE_MGR = new SRMetaBlockID(1);
@@ -90,6 +89,25 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID STORAGE_VOLUME_MGR = new SRMetaBlockID(28);
 
+    public static final SRMetaBlockID DICTIONARY_MGR = new SRMetaBlockID(29);
+
+    public static final SRMetaBlockID REPLICATION_MGR = new SRMetaBlockID(30);
+
+    public static final SRMetaBlockID KEY_MGR = new SRMetaBlockID(31);
+
+    public static final SRMetaBlockID PIPE_MGR = new SRMetaBlockID(32);
+
+    public static final SRMetaBlockID CLUSTER_SNAPSHOT_MGR = new SRMetaBlockID(33);
+
+    public static final SRMetaBlockID BLACKLIST_MGR = new SRMetaBlockID(34);
+
+    public static final SRMetaBlockID HISTORICAL_NODE_MGR = new SRMetaBlockID(35);
+
+    /**
+     * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
+     */
+    public static final SRMetaBlockID WAREHOUSE_MGR = new SRMetaBlockID(20001);
+
     @Override
     public String toString() {
         return String.valueOf(id);
@@ -100,7 +118,8 @@ public class SRMetaBlockID {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!(o instanceof SRMetaBlockID)) {
             return false;
         }
         SRMetaBlockID that = (SRMetaBlockID) o;

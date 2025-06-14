@@ -45,7 +45,6 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -103,10 +102,24 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     @SerializedName(value = "rowCount")
     private long rowCount;
 
+    // Virtual buckets in order.
+    // There is a tablet id for each virtual bucket,
+    // which means this virtual bucket's data is stored in this tablet.
+    // We divide data into virtual buckets and then arrange these virtual buckets
+    // into physical buckets, which are tablets.
+    // Each virtual bucket is associated with a tablet. Multiple virtual buckets are
+    // allowed to be associated with the same tablet.
+    @SerializedName(value = "virtualBuckets")
+    private List<Long> virtualBuckets;
+
     private Map<Long, Tablet> idToTablets;
+
+    // Since virtual buckets keeps the order, this can be deprecated if idToTablets persists
     @SerializedName(value = "tablets")
-    // this is for keeping tablet order
     private List<Tablet> tablets;
+
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
 
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
@@ -114,7 +127,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     private long visibleTxnId;
 
     public MaterializedIndex() {
-        this(0, IndexState.NORMAL);
+        this(0, IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
     }
 
     public MaterializedIndex(long id) {
@@ -122,7 +135,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public MaterializedIndex(long id, @Nullable IndexState state) {
-        this(id, state, 0);
+        this(id, state, 0, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long shardGroupId) {
+        this(id, state, 0, shardGroupId);
     }
 
     /**
@@ -134,13 +151,15 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * @param state        the state of the index
      * @param visibleTxnId the minimum transaction id that can see this index.
      */
-    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
         this.id = id;
         this.state = state == null ? IndexState.NORMAL : state;
+        this.virtualBuckets = new ArrayList<>();
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
         this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
+        this.shardGroupId = shardGroupId;
     }
 
     /**
@@ -169,12 +188,26 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this.visibleTxnId = visibleTxnId;
     }
 
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
+    }
+
+    public long getShardGroupId() {
+        return shardGroupId;
+    }
+
+    // The virtual buckets are in order
+    public List<Long> getVirtualBuckets() {
+        return virtualBuckets;
+    }
+
     public List<Tablet> getTablets() {
         return tablets;
     }
 
-    public List<Long> getTabletIdsInOrder() {
-        List<Long> tabletIds = Lists.newArrayList();
+    // With virtual buckets, the order of tablets is irrelevant
+    public List<Long> getTabletIds() {
+        List<Long> tabletIds = Lists.newArrayListWithCapacity(tablets.size());
         for (Tablet tablet : tablets) {
             tabletIds.add(tablet.getId());
         }
@@ -186,6 +219,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public void clearTabletsForRestore() {
+        virtualBuckets.clear();
         idToTablets.clear();
         tablets.clear();
     }
@@ -195,10 +229,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean updateInvertedIndex) {
+        virtualBuckets.add(tablet.getId());
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
         if (updateInvertedIndex) {
-            GlobalStateMgr.getCurrentInvertedIndex().addTablet(tablet.getId(), tabletMeta);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tablet.getId(), tabletMeta);
         }
     }
 
@@ -227,11 +262,23 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public long getDataSize() {
+        return getDataSize(false);
+    }
+
+    public long getDataSize(boolean singleReplica) {
         long dataSize = 0;
         for (Tablet tablet : getTablets()) {
-            dataSize += tablet.getDataSize(false);
+            dataSize += tablet.getDataSize(singleReplica);
         }
         return dataSize;
+    }
+
+    public long getTabletMaxDataSize() {
+        long maxDataSize = 0;
+        for (Tablet tablet : getTablets()) {
+            maxDataSize = Math.max(maxDataSize, tablet.getDataSize(true));
+        }
+        return maxDataSize;
     }
 
     public long getReplicaCount() {
@@ -253,6 +300,19 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         }
     }
 
+    public List<Integer> getVirtualBucketsByTabletId(long tabletId) {
+        List<Integer> virtualBucketIndexes = new ArrayList<>();
+        for (int i = 0; i < virtualBuckets.size(); ++i) {
+            if (virtualBuckets.get(i).longValue() == tabletId) {
+                virtualBucketIndexes.add(i);
+            }
+        }
+        return virtualBucketIndexes;
+    }
+
+    // With virtual buckets, the order index of tablets is irrelevant.
+    // Keep this method only for colocate table in shared-nothing mode,
+    // in which we do not implement tablet split and merge and virtual buckets are the same with tabletIds.
     public int getTabletOrderIdx(long tabletId) {
         int idx = 0;
         for (Tablet tablet : tablets) {
@@ -283,35 +343,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         out.writeLong(-1L); // For rollback compatibility of field rollupFinishedVersion
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        id = in.readLong();
-
-        state = IndexState.valueOf(Text.readString(in));
-        rowCount = in.readLong();
-
-        int tabletCount = in.readInt();
-        for (int i = 0; i < tabletCount; ++i) {
-            // LakeTablet uses json serialization.
-            Tablet tablet = LocalTablet.read(in);
-            tablets.add(tablet);
-            idToTablets.put(tablet.getId(), tablet);
-        }
-
-        in.readLong(); // For backward compatibility of field rollupIndexId
-        in.readLong(); // For backward compatibility of field rollupFinishedVersion
-    }
-
-    public static MaterializedIndex read(DataInput in) throws IOException {
-        MaterializedIndex materializedIndex = new MaterializedIndex();
-        materializedIndex.readFields(in);
-        return materializedIndex;
-    }
-
     @Override
     public int hashCode() {
-        return Objects.hashCode(idToTablets);
+        return Objects.hashCode(virtualBuckets, idToTablets);
     }
 
     @Override
@@ -323,8 +357,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             return false;
         }
         MaterializedIndex other = (MaterializedIndex) obj;
-        return idToTablets.equals(other.idToTablets) && state.equals(other.state) && (rowCount == other.rowCount) &&
-                (visibleTxnId == other.visibleTxnId);
+        return virtualBuckets.equals(other.virtualBuckets) && idToTablets.equals(other.idToTablets)
+                && state.equals(other.state) && (rowCount == other.rowCount) && (visibleTxnId == other.visibleTxnId);
     }
 
     @Override
@@ -332,10 +366,12 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         StringBuilder buffer = new StringBuilder();
         buffer.append("index id: ").append(id).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
-
+        buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
-        buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");
+        buffer.append("virtual buckets size: ").append(virtualBuckets.size()).append("; ");
+        buffer.append("virtual buckets: ").append(virtualBuckets).append("; ");
+        buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("tablets: [");
         for (Tablet tablet : tablets) {
             buffer.append("tablet: ").append(tablet.toString()).append(", ");
@@ -350,6 +386,17 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         // build "idToTablets" from "tablets"
         for (Tablet tablet : tablets) {
             idToTablets.put(tablet.getId(), tablet);
+        }
+
+        // Build "virtualBuckets" from "tablets" when upgrading from old versions
+        // Before StarRocks didn't have virtual buckets, it would be empty when loading
+        // from the previous image.
+        // In this situation, the virtual bucket is equivalent to the physical tablet.
+        // So just fill the virtual buckets with the physical tablets.
+        if (virtualBuckets.isEmpty()) {
+            for (Tablet tablet : tablets) {
+                virtualBuckets.add(tablet.getId());
+            }
         }
     }
 }

@@ -16,15 +16,39 @@
 #include <stack>
 
 #include "column/array_column.h"
-#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/map_column.h"
+#include "exprs/function_context.h"
 #include "exprs/string_functions.h"
-#include "gutil/strings/split.h"
 #include "util/utf8.h"
 
 namespace starrocks {
+
+/**
+* @param: [string, delimiter, map_delimiter]
+* @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+* @return: MapColumn map<string,string>
+*/
+StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 3);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    // split first
+    Columns split_columns{columns[0], columns[1]};
+    ASSIGN_OR_RETURN(auto splited, StringFunctions::split(context, split_columns));
+
+    Columns splited_columns{splited, columns[2]};
+    return str_to_map_v1(context, splited_columns);
+}
+
+Status StringFunctions::str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return StringFunctions::split_prepare(context, scope);
+}
+
+Status StringFunctions::str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return StringFunctions::split_close(context, scope);
+}
 
 /**
 * @param: [array_string, delimiter]
@@ -39,7 +63,7 @@ namespace starrocks {
  TODO: split UTF8 chinese character according to its size, which would be greater than 1.
 */
 
-StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     // decompose array<string>
@@ -156,8 +180,8 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
     }
 
     auto map = MapColumn::create(keys_builder.build_nullable_column(), values_builder.build_nullable_column(),
-                                 res_offsets);
-    return NullableColumn::create(std::move(map), res_null);
+                                 std::move(res_offsets));
+    return NullableColumn::create(std::move(map), std::move(res_null));
 }
 
 } // namespace starrocks

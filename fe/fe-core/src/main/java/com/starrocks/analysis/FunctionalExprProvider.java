@@ -14,14 +14,15 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
-import org.apache.parquet.Strings;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Comparator;
 import java.util.List;
@@ -153,8 +154,7 @@ public abstract class FunctionalExprProvider<U> {
         analyzeLimit(limit);
     }
 
-    public void analyze(ConnectContext connCtx, Expr predicate, List<OrderByElement> orderByElements, LimitElement limit)
-            throws AnalysisException {
+    public void analyze(ConnectContext connCtx, Expr predicate, List<OrderByElement> orderByElements, LimitElement limit) {
         this.connCtx = connCtx;
         // analyze where clase
         predicateChain = null;
@@ -169,14 +169,14 @@ public abstract class FunctionalExprProvider<U> {
     /**
      * Generated and connected predicates that is used in `List.stream().filter()` to filter instances(`<U>`).
      */
-    private void analyzeWhere(Expr predicate) throws AnalysisException {
+    private void analyzeWhere(Expr predicate) {
         if (null == predicate) {
             return;
         }
         if (predicate instanceof CompoundPredicate) {
             CompoundPredicate cp = (CompoundPredicate) predicate;
             if (cp.getOp() != CompoundPredicate.Operator.AND) {
-                throw new AnalysisException("Only `AND` operator is allowed in compound predicates.");
+                throw new SemanticException("Only `AND` operator is allowed in compound predicates.");
             }
             analyzeWhere(cp.getChild(0));
             analyzeWhere(cp.getChild(1));
@@ -184,7 +184,7 @@ public abstract class FunctionalExprProvider<U> {
         }
 
         if (!(predicate.getChild(0) instanceof SlotRef)) {
-            throw new AnalysisException(
+            throw new SemanticException(
                     String.format("`%s` is not allowed in `where` clause.", predicate.getChild(0).toSql()));
         }
         String leftKey = ((SlotRef) predicate.getChild(0)).getColumnName();
@@ -192,7 +192,7 @@ public abstract class FunctionalExprProvider<U> {
                 delegateWhereSuppliers().parallelStream().filter(s -> s.getColumnName().equalsIgnoreCase(leftKey))
                         .findAny();
         if (!colValSupplier.isPresent()) {
-            throw new AnalysisException(String.format("Column `%s` is not allowed in `where` clause", leftKey));
+            throw new SemanticException(String.format("Column `%s` is not allowed in `where` clause", leftKey));
         }
         final String operatorNotSupported = "Operator `%s` is not allowed in `where` clause for column `%s`.";
         final String wontRValueType = "Wrong RValue's type in `where` clause for column `%s`";
@@ -215,7 +215,7 @@ public abstract class FunctionalExprProvider<U> {
                     // handle predicates like `where col = 'starrocks'`
                     if (binaryPredicate.getOp() != BinaryType.EQ &&
                             binaryPredicate.getOp() != BinaryType.NE) {
-                        throw new AnalysisException(
+                        throw new SemanticException(
                                 String.format(operatorNotSupported, binaryPredicate.getOp().toString(), leftKey));
                     }
                     connectPredicate(newFilterPredicate(colValSupplier.get(),
@@ -223,11 +223,11 @@ public abstract class FunctionalExprProvider<U> {
                             STRING_BI_FILTER_FUNC));
                     return;
                 }
-                throw new AnalysisException(String.format(wontRValueType, leftKey));
+                throw new SemanticException(String.format(wontRValueType, leftKey));
             }
             if (predicate.getChild(1) instanceof IntLiteral) {
                 if (PrimitiveType.BIGINT != colValSupplier.get().getColumnType()) {
-                    throw new AnalysisException(String.format(wontRValueType, leftKey));
+                    throw new SemanticException(String.format(wontRValueType, leftKey));
                 }
                 // handle predicates like `where col >= 2`
                 IntLiteral intLiteral = (IntLiteral) binaryPredicate.getChild(1);
@@ -236,13 +236,13 @@ public abstract class FunctionalExprProvider<U> {
                         LONG_BI_FILTER_FUNC));
                 return;
             }
-            throw new AnalysisException(
+            throw new SemanticException(
                     String.format("RValue should be `string` or `integer` in `where` clause for column `%s`", leftKey));
         }
         if (predicate instanceof LikePredicate) {
             LikePredicate likePredicate = (LikePredicate) predicate;
             if (likePredicate.getOp() != LikePredicate.Operator.LIKE) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         String.format(operatorNotSupported, likePredicate.getOp().toString(), leftKey));
             }
             // handle predicates like `where col like '%xx%'`
@@ -255,7 +255,7 @@ public abstract class FunctionalExprProvider<U> {
             List<StringLiteral> stringLiterals = Lists.newArrayList();
             for (int i = 1; i < inPredicate.getChildren().size(); ++i) {
                 if (!(inPredicate.getChildren().get(i) instanceof StringLiteral)) {
-                    throw new AnalysisException(String.format(
+                    throw new SemanticException(String.format(
                             "Only `string` values are allowed in the predicate `in()` or `not in()` for column `%s`",
                             leftKey));
                 }
@@ -266,7 +266,7 @@ public abstract class FunctionalExprProvider<U> {
                     inPredicate.isNotIn() ? STRING_NOT_IN_FILTER_FUNC : STRING_IN_FILTER_FUNC));
             return;
         }
-        throw new AnalysisException(
+        throw new SemanticException(
                 String.format("`%s` is not allowed in `where` clause for column `%s`.", predicate.toSql(), leftKey));
     }
 
@@ -274,22 +274,21 @@ public abstract class FunctionalExprProvider<U> {
      * Generated and connected comparators that is used in `List.stream().sorted()`
      * to order the instances(`<U>`) with a given List<OrderByElement>.
      */
-    public <T extends Comparable<? super T>> void analyzeOrder(List<OrderByElement> orderByElements)
-            throws AnalysisException {
+    public <T extends Comparable<? super T>> void analyzeOrder(List<OrderByElement> orderByElements) {
         if (null == orderByElements || orderByElements.isEmpty()) {
             return;
         }
         orderComparator = null;
         for (OrderByElement orderByElement : orderByElements) {
             if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         String.format("`%s` is not allowed in `order by` clause.", orderByElement.toSql()));
             }
             SlotRef slotRef = (SlotRef) orderByElement.getExpr();
             Optional<ColumnValueSupplier<U>> colValSupplier = delegateWhereSuppliers().parallelStream()
                     .filter(c -> c.getColumnName().equalsIgnoreCase(slotRef.getColumnName())).findAny();
             if (!colValSupplier.isPresent()) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         String.format("Column `%s` is not allowed in `order by` clause", slotRef.getColumnName()));
             }
             // build comparator chain

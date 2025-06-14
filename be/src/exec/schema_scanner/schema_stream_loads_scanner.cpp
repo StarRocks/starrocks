@@ -23,31 +23,31 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaStreamLoadsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"LABEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LOAD_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TXN_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"DB_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TRACKING_URL", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"CHANNEL_NUM", TYPE_BIGINT, sizeof(int64_t), true},
-        {"PREPARED_CHANNEL_NUM", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUM_ROWS_NORMAL", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUM_ROWS_AB_NORMAL", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUM_ROWS_UNSELECTED", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUM_LOAD_BYTES", TYPE_BIGINT, sizeof(int64_t), true},
-        {"TIMEOUT_SECOND", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CREATE_TIME_MS", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"BEFORE_LOAD_TIME_MS", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"START_LOADING_TIME_MS", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"START_PREPARING_TIME_MS", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"FINISH_PREPARING_TIME_MS", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"END_TIME_MS", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"CHANNEL_STATE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TRACKING_SQL", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TRACKING_URL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"CHANNEL_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"PREPARED_CHANNEL_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_ROWS_NORMAL", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_ROWS_AB_NORMAL", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_ROWS_UNSELECTED", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_LOAD_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"TIMEOUT_SECOND", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CREATE_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"BEFORE_LOAD_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"START_LOADING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"START_PREPARING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_PREPARING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"END_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"CHANNEL_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaStreamLoadsScanner::SchemaStreamLoadsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -67,13 +67,9 @@ Status SchemaStreamLoadsScanner::start(RuntimeState* state) {
         load_params.__set_job_id(_param->job_id);
     }
 
-    int32_t timeout = static_cast<int32_t>(std::min(state->query_options().query_timeout * 1000 / 2, INT_MAX));
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_stream_loads(*(_param->ip), _param->port, load_params, &_result, timeout));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
-
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_stream_loads(_ss_state, load_params, &_result));
     _cur_idx = 0;
     return Status::OK();
 }

@@ -22,10 +22,13 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
+#include "storage/persistent_index_compaction_manager.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/rowset_column_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
+#include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -37,7 +40,18 @@ Status LocalDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, Del
 }
 
 Status LocalDeltaColumnGroupLoader::load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) {
+    if (_meta == nullptr) {
+        return Status::OK();
+    }
     return StorageEngine::instance()->update_manager()->get_delta_column_group(_meta, tsid, version, pdcgs);
+}
+
+Status LocalDeltaColumnGroupLoader::load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
+                                         DeltaColumnGroupList* pdcgs) {
+    if (_meta == nullptr) {
+        return Status::OK();
+    }
+    return StorageEngine::instance()->get_delta_column_group(_meta, tablet_id, rowsetid, segment_id, INT64_MAX, pdcgs);
 }
 
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
@@ -45,7 +59,12 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
           _update_state_cache(std::numeric_limits<size_t>::max()),
           _update_column_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
-    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "rowset_update_state", mem_tracker);
+    int64_t preload_mem_limit = -1;
+    if (_update_mem_tracker != nullptr) {
+        preload_mem_limit = (int64_t)_update_mem_tracker->limit() *
+                            std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
+    }
+    _update_state_mem_tracker = std::make_unique<MemTracker>(preload_mem_limit, "rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "index_cache", mem_tracker);
     _del_vec_cache_mem_tracker = std::make_unique<MemTracker>(-1, "del_vec_cache", mem_tracker);
     _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state", mem_tracker);
@@ -54,22 +73,13 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent);
+    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
     _update_column_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 }
 
 UpdateManager::~UpdateManager() {
-    if (_apply_thread_pool != nullptr) {
-        // DynamicCache may be still used by apply thread.
-        // Before deconstrut the DynamicCache, apply thread
-        // should be shutdown.
-        _apply_thread_pool->shutdown();
-    }
-    if (_get_pindex_thread_pool) {
-        _get_pindex_thread_pool->shutdown();
-    }
     clear_cache();
     if (_compaction_state_mem_tracker) {
         _compaction_state_mem_tracker.reset();
@@ -93,14 +103,45 @@ Status UpdateManager::init() {
     if (config::transaction_apply_worker_count > 0) {
         max_thread_cnt = config::transaction_apply_worker_count;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("update_apply")
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::transaction_apply_worker_idle_time_ms))
+                    .set_min_threads(config::transaction_apply_thread_pool_num_min)
+                    .set_max_threads(max_thread_cnt)
+                    .build(&_apply_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(update_apply, _apply_thread_pool);
 
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
     RETURN_IF_ERROR(
             ThreadPoolBuilder("get_pindex").set_max_threads(max_get_thread_cnt).build(&_get_pindex_thread_pool));
 
+    _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
+    RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
+
+    _pindex_load_executor = std::make_unique<PersistentIndexLoadExecutor>();
+    RETURN_IF_ERROR(_pindex_load_executor->init());
     return Status::OK();
+}
+
+void UpdateManager::stop() {
+    if (_get_pindex_thread_pool) {
+        _get_pindex_thread_pool->shutdown();
+    }
+    if (_apply_thread_pool) {
+        _apply_thread_pool->shutdown();
+    }
+    if (_pindex_load_executor) {
+        _pindex_load_executor->shutdown();
+    }
+}
+
+int64_t UpdateManager::get_index_cache_expire_ms(const Tablet& tablet) const {
+    const int32_t tablet_index_cache_expire_sec = tablet.tablet_meta()->get_primary_index_cache_expire_sec();
+    if (tablet_index_cache_expire_sec > 0) {
+        return tablet_index_cache_expire_sec * 1000;
+    }
+    return _cache_expire_ms;
 }
 
 Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
@@ -113,26 +154,6 @@ Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& 
     return TabletMetaManager::set_del_vector(meta, tsid.tablet_id, tsid.segment_id, delvec);
 }
 
-// calc the total memory usage of delta column group list, can be optimazed later if need.
-static size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs) {
-    size_t res = 0;
-    for (const auto& dcg : dcgs) {
-        res += dcg->memory_usage();
-    }
-    return res;
-}
-
-// Search delta column group from `all_dcgs` which version isn't larger than `version`.
-// Using it because we record all version dcgs in cache
-static void search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
-                                                  DeltaColumnGroupList* dcgs) {
-    for (const auto& dcg : all_dcgs) {
-        if (dcg->version() <= version) {
-            dcgs->push_back(dcg);
-        }
-    }
-}
-
 Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                              DeltaColumnGroupList* dcgs) {
     StarRocksMetrics::instance()->delta_column_group_get_total.increment(1);
@@ -141,7 +162,7 @@ Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentI
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
-            search_delta_column_groups_by_version(itr->second, version, dcgs);
+            StorageEngine::instance()->search_delta_column_groups_by_version(itr->second, version, dcgs);
             StarRocksMetrics::instance()->delta_column_group_get_hit_cache.increment(1);
             return Status::OK();
         }
@@ -150,14 +171,15 @@ Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentI
     DeltaColumnGroupList new_dcgs;
     RETURN_IF_ERROR(
             TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, INT64_MAX, &new_dcgs));
-    search_delta_column_groups_by_version(new_dcgs, version, dcgs);
+    StorageEngine::instance()->search_delta_column_groups_by_version(new_dcgs, version, dcgs);
     {
         // fill delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         bool ok = _delta_column_group_cache.insert({tsid, new_dcgs}).second;
         if (ok) {
             // insert success
-            _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
+            _delta_column_group_cache_mem_tracker->consume(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(new_dcgs));
         }
     }
     return Status::OK();
@@ -227,6 +249,18 @@ void UpdateManager::clear_cache() {
     }
 }
 
+void UpdateManager::clear_cached_del_vec_by_tablet_id(int64_t tablet_id) {
+    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
+    for (auto iter = _del_vec_cache.begin(); iter != _del_vec_cache.end();) {
+        if (iter->first.tablet_id == tablet_id) {
+            _del_vec_cache_mem_tracker->release(iter->second->memory_usage());
+            iter = _del_vec_cache.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
+}
+
 void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids) {
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     for (const auto& tsid : tsids) {
@@ -238,9 +272,11 @@ void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsi
     }
 }
 
-StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore* meta, int64_t tablet_id,
+StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
+                                                                        int64_t tablet_id,
                                                                         int64_t min_readable_version) {
     std::vector<std::pair<TabletSegmentId, int64_t>> clear_dcgs;
+    std::vector<std::string> clear_filenames;
     const int64_t begin_ms = UnixMillis();
     auto is_timeout = [begin_ms]() {
         if (UnixMillis() > begin_ms + 10) { // only hold cache_clock for 10ms max.
@@ -254,7 +290,8 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto itr = _delta_column_group_cache.lower_bound(TabletSegmentId(tablet_id, 0));
         while (itr != _delta_column_group_cache.end() && !is_timeout() && itr->first.tablet_id == tablet_id) {
             // gc not required delta column group
-            DeltaColumnGroupListHelper::garbage_collection(itr->second, itr->first, min_readable_version, clear_dcgs);
+            DeltaColumnGroupListHelper::garbage_collection(itr->second, itr->first, min_readable_version, tablet_path,
+                                                           &clear_dcgs, &clear_filenames);
             itr++;
         }
     }
@@ -264,12 +301,28 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto st = TabletMetaManager::delete_delta_column_group(meta, &wb, dcg.first, dcg.second);
         if (!st.ok()) {
             // continue if error
-            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id
-                         << " st: " << st.get_error_msg();
+            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id << " st: " << st.message();
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_path));
+    for (const auto& filename : clear_filenames) {
+        WARN_IF_ERROR(fs->delete_file(filename), "delete file fail, filename: " + filename);
+    }
     return clear_dcgs.size();
+}
+
+void UpdateManager::clear_cached_delta_column_group_by_tablet_id(int64_t tablet_id) {
+    std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+    for (auto iter = _delta_column_group_cache.begin(); iter != _delta_column_group_cache.end();) {
+        if (iter->first.tablet_id == tablet_id) {
+            _delta_column_group_cache_mem_tracker->release(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(iter->second));
+            iter = _delta_column_group_cache.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
 }
 
 void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids) {
@@ -277,7 +330,8 @@ void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegm
     for (const auto& tsid : tsids) {
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
-            _delta_column_group_cache_mem_tracker->release(delta_column_group_list_memory_usage(itr->second));
+            _delta_column_group_cache_mem_tracker->release(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
             _delta_column_group_cache.erase(itr);
         }
     }
@@ -315,7 +369,7 @@ bool UpdateManager::get_cached_delta_column_group(const TabletSegmentId& tsid, i
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     auto itr = _delta_column_group_cache.find(tsid);
     if (itr != _delta_column_group_cache.end()) {
-        search_delta_column_groups_by_version(itr->second, version, dcgs);
+        StorageEngine::instance()->search_delta_column_groups_by_version(itr->second, version, dcgs);
         // hit cache
         return true;
     }
@@ -341,10 +395,12 @@ Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletS
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     auto itr = _delta_column_group_cache.find(tsid);
     if (itr != _delta_column_group_cache.end()) {
-        _delta_column_group_cache_mem_tracker->release(delta_column_group_list_memory_usage(itr->second));
+        _delta_column_group_cache_mem_tracker->release(
+                StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
     }
     _delta_column_group_cache[tsid] = new_dcgs;
-    _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
+    _delta_column_group_cache_mem_tracker->consume(
+            StorageEngine::instance()->delta_column_group_list_memory_usage(new_dcgs));
     return Status::OK();
 }
 
@@ -391,6 +447,7 @@ void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high
         int64_t target_memory = std::max((size * 9 / 10), memory_high);
         _index_cache.try_evict(target_memory);
     }
+    _keep_pindex_bf = _index_cache.size() > memory_high ? false : true;
     return;
 }
 
@@ -457,7 +514,7 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
 }
 
 Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelVectorPtr& delvec) {
-    VLOG(1) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
+    VLOG(2) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
             << " version:" << delvec->version() << " #del:" << delvec->cardinality();
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     auto itr = _del_vec_cache.find(tsid);
@@ -479,22 +536,32 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(on_rowset_finished_failed_due_to_mem);
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? mem_tracker() : nullptr);
     if (!rowset->has_data_files() || tablet->tablet_state() == TABLET_NOTREADY) {
         // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index
         return Status::OK();
     }
 
     string rowset_unique_id = rowset->rowset_id().to_string();
-    VLOG(1) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
+    VLOG(2) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     // Prepare apply required resources, load updatestate, primary index into cache,
     // so apply can run faster. Since those resources are in cache, they can get evicted
     // before used in apply process, in that case, these will be loaded again in apply
     // process.
 
-    Status st;
+    if (rowset->is_partial_update()) {
+        auto task_st = _pindex_load_executor->submit_task_and_wait_for(
+                std::static_pointer_cast<Tablet>(tablet->shared_from_this()), config::pindex_rebuild_load_wait_seconds);
+        if (!task_st.ok()) {
+            return Status::Uninitialized(task_st.message());
+        }
+    }
 
+    Status st;
     if (rowset->is_column_mode_partial_update()) {
         auto state_entry = _update_column_state_cache.get_or_create(
                 strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
@@ -504,7 +571,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         if (st.ok()) {
             _update_column_state_cache.release(state_entry);
         } else {
-            LOG(WARNING) << "load RowsetColumnUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            if (st.is_mem_limit_exceeded() || st.is_time_out()) {
+                VLOG(2) << "load RowsetColumnUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            } else {
+                LOG(WARNING) << "load RowsetColumnUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            }
             _update_column_state_cache.remove(state_entry);
         }
     } else {
@@ -516,31 +587,40 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         if (st.ok()) {
             _update_state_cache.release(state_entry);
         } else {
-            LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            if (st.is_mem_limit_exceeded() || st.is_time_out()) {
+                VLOG(2) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            } else {
+                LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            }
             _update_state_cache.remove(state_entry);
         }
     }
 
-    if (st.ok()) {
-        auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
-        st = index_entry->value().load(tablet);
-        index_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
-        _index_cache.update_object_size(index_entry, index_entry->value().memory_usage());
-        if (st.ok()) {
-            _index_cache.release(index_entry);
-        } else {
-            LOG(WARNING) << "load primary index error: " << st << " tablet: " << tablet->tablet_id();
-            _index_cache.remove(index_entry);
+    // tablet maybe dropped during ingestion, add some log
+    if (!st.ok()) {
+        if (tablet->tablet_state() == TABLET_SHUTDOWN) {
+            std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread",
+                                                  tablet->tablet_id());
+            LOG(WARNING) << msg;
         }
     }
-    VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
+
+    VLOG(2) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
+
+    FAIL_POINT_TRIGGER_EXECUTE(on_rowset_finished_failed_due_to_mem,
+                               { st = Status::MemoryLimitExceeded("on_rowset_finished failed"); });
+    // if failed due to memory limit or wait index lock timeout which is not a critical issue.
+    // we don't need to abort the ingestion and we can still commit the txn.
+    if (st.is_mem_limit_exceeded() || st.is_time_out()) {
+        return Status::OK();
+    }
     return st;
 }
 
 void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
     string rowset_unique_id = rowset->rowset_id().to_string();
-    VLOG(1) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
+    VLOG(2) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     if (rowset->is_column_mode_partial_update()) {
         auto column_state_entry =
@@ -554,6 +634,34 @@ void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
             _update_state_cache.remove(state_entry);
         }
     }
+}
+
+bool UpdateManager::TEST_update_state_exist(Tablet* tablet, Rowset* rowset) {
+    string rowset_unique_id = rowset->rowset_id().to_string();
+    if (rowset->is_column_mode_partial_update()) {
+        auto column_state_entry =
+                _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (column_state_entry != nullptr) {
+            _update_column_state_cache.release(column_state_entry);
+            return true;
+        }
+    } else {
+        auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (state_entry != nullptr) {
+            _update_state_cache.release(state_entry);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return expected_cnt == 0;
+    }
+    _index_cache.release(index_entry);
+    return index_entry->get_ref() == expected_cnt;
 }
 
 } // namespace starrocks

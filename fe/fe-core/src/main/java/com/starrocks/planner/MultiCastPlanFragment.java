@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -46,6 +45,7 @@ public class MultiCastPlanFragment extends PlanFragment {
         this.children.addAll(planFragment.getChildren());
         this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
+        this.setQueryGlobalDictExprs(planFragment.queryGlobalDictExprs);
     }
 
     public List<PlanFragment> getDestFragmentList() {
@@ -72,6 +72,7 @@ public class MultiCastPlanFragment extends PlanFragment {
             streamSink.setPartition(DataPartition.RANDOM);
             streamSink.setFragment(this);
             streamSink.setOutputColumnIds(f.getReceiveColumns());
+            streamSink.setLimit(f.getLimit());
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
         }
@@ -103,4 +104,9 @@ public class MultiCastPlanFragment extends PlanFragment {
         Preconditions.checkState(false);
     }
 
+    @Override
+    public void reset() {
+        MultiCastDataSink multiSink = (MultiCastDataSink) getSink();
+        multiSink.getDestinations().forEach(List::clear);
+    }
 }

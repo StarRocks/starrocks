@@ -14,6 +14,9 @@
 
 package com.starrocks.jni.connector;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ColumnValue {
@@ -29,8 +32,7 @@ public interface ColumnValue {
 
     double getDouble();
 
-    String getString();
-    String getTimestamp(ColumnType.TypeValue type);
+    String getString(ColumnType.TypeValue type);
     byte[] getBytes();
 
     void unpackArray(List<ColumnValue> values);
@@ -38,4 +40,12 @@ public interface ColumnValue {
     void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);
 
     void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values);
+
+    byte getByte();
+
+    BigDecimal getDecimal();
+
+    LocalDate getDate();
+
+    LocalDateTime getDateTime(ColumnType.TypeValue type);
 }

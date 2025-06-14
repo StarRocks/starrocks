@@ -47,21 +47,72 @@ import java.util.stream.Collectors;
  *
  */
 public class ColumnAccessPath {
+    public static final String PATH_PLACEHOLDER = "P";
     // The top one must be ROOT
-    private final TAccessPathType type;
+    private TAccessPathType type;
 
     private final String path;
 
     private final List<ColumnAccessPath> children;
 
-    public ColumnAccessPath(TAccessPathType type, String path) {
+    private boolean fromPredicate;
+
+    // flat json used, to mark the type of the leaf
+    private Type valueType;
+
+    public ColumnAccessPath(TAccessPathType type, String path, Type valueType) {
         this.type = type;
         this.path = path;
         this.children = Lists.newArrayList();
+        this.fromPredicate = false;
+        this.valueType = valueType;
+    }
+
+    public void setType(TAccessPathType type) {
+        this.type = type;
+    }
+
+    public TAccessPathType getType() {
+        return type;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public boolean onlyRoot() {
+        return type == TAccessPathType.ROOT && children.isEmpty();
+    }
+
+    public void setValueType(Type valueType) {
+        this.valueType = valueType;
+    }
+
+    public Type getValueType() {
+        return valueType;
+    }
+
+    public void setFromPredicate(boolean fromPredicate) {
+        this.fromPredicate = fromPredicate;
+    }
+
+    public boolean isFromPredicate() {
+        return fromPredicate;
     }
 
     public boolean hasChildPath(String path) {
         return children.stream().anyMatch(p -> p.path.equals(path));
+    }
+
+    public boolean hasOverlap(List<String> fieldNames) {
+        if (!hasChildPath() || fieldNames.isEmpty()) {
+            return true;
+        }
+
+        if (children.stream().noneMatch(p -> p.path.equals(fieldNames.get(0)))) {
+            return false;
+        }
+        return getChildPath(fieldNames.get(0)).hasOverlap(fieldNames.subList(1, fieldNames.size()));
     }
 
     public boolean hasChildPath() {
@@ -76,12 +127,27 @@ public class ColumnAccessPath {
         return children.stream().filter(p -> p.path.equals(path)).findFirst().orElse(null);
     }
 
+    public List<ColumnAccessPath> getChildren() {
+        return children;
+    }
+
     public void clearChildPath() {
         children.clear();
     }
 
+    public void clearUnusedValueType() {
+        // only save leaf's value type
+        if (!children.isEmpty()) {
+            this.valueType = Type.INVALID;
+            children.forEach(ColumnAccessPath::clearUnusedValueType);
+        }
+    }
+
     private void explainImpl(String parent, List<String> allPaths) {
-        String cur = parent + "/" + path;
+        boolean hasName = type == TAccessPathType.FIELD || type == TAccessPathType.ROOT;
+        boolean hasType = valueType != Type.INVALID;
+        String cur = parent + "/" + (hasName ? path : type.name())
+                + (hasType ? "(" + valueType.toSql() + ")" : "");
         if (children.isEmpty()) {
             allPaths.add(cur);
         }
@@ -93,6 +159,7 @@ public class ColumnAccessPath {
     public String explain() {
         List<String> allPaths = Lists.newArrayList();
         explainImpl("", allPaths);
+        allPaths.sort(String::compareTo);
         return String.join(", ", allPaths);
     }
 
@@ -106,6 +173,10 @@ public class ColumnAccessPath {
         tColumnAccessPath.setType(type);
         tColumnAccessPath.setPath(new StringLiteral(path).treeToThrift());
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
+        tColumnAccessPath.setFrom_predicate(fromPredicate);
+        if (valueType != null) {
+            tColumnAccessPath.setType_desc(valueType.toThrift());
+        }
         return tColumnAccessPath;
     }
 }

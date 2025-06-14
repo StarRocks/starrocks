@@ -50,7 +50,7 @@ public:
     LocalParallelMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                          int32_t driver_sequence, SortContext* sort_context, bool is_gathered,
                                          merge_path::MergePathCascadeMerger* merge_path_merger)
-            : SourceOperator(factory, id, "local_parallel_merge_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "local_parallel_merge_source", plan_node_id, false, driver_sequence),
               _sort_context(sort_context),
               _merger(merge_path_merger),
               _merge_parallel_id(is_gathered ? driver_sequence : 0) {}
@@ -87,17 +87,20 @@ public:
               _sort_context_factory(std::move(sort_context_factory)) {}
 
     ~LocalParallelMergeSortSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     void set_tuple_desc(const TupleDescriptor* tuple_desc) { _tuple_desc = tuple_desc; }
     void set_is_gathered(const bool is_gathered) { _is_gathered = is_gathered; }
+    void set_materialized_mode(TLateMaterializeMode::type mode) { _late_materialize_mode = mode; }
 
 private:
     const TupleDescriptor* _tuple_desc;
     bool _is_gathered = true;
     RuntimeState* _state;
+    TLateMaterializeMode::type _late_materialize_mode = TLateMaterializeMode::AUTO;
 
     // share data with multiple partition sort sink opeartor through _sort_context.
     std::shared_ptr<SortContextFactory> _sort_context_factory;

@@ -17,6 +17,7 @@
 #include "exec/partition/chunks_partitioner.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/operator.h"
+#include "util/race_detect.h"
 
 /**
  * HashPartition{Sink/Source}Operator pair is used to reorder the input sequence by
@@ -45,7 +46,7 @@ class HashPartitionSinkOperator final : public Operator {
 public:
     HashPartitionSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               HashPartitionContext* hash_partition_ctx)
-            : Operator(factory, id, "hash_partition_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "hash_partition_sink", plan_node_id, true, driver_sequence),
               _hash_partition_ctx(hash_partition_ctx) {}
 
     Status prepare(RuntimeState* state) override;
@@ -67,6 +68,7 @@ private:
     HashPartitionContext* _hash_partition_ctx;
 
     RuntimeProfile::Counter* _partition_num;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class HashPartitionSinkOperatorFactory final : public OperatorFactory {

@@ -26,30 +26,20 @@ class ChunkIterator;
 
 namespace starrocks::lake {
 
-class Rowset;
-class Tablet;
 class TabletWriter;
 
 class HorizontalCompactionTask : public CompactionTask {
 public:
-    explicit HorizontalCompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
-                                      std::vector<std::shared_ptr<Rowset>> input_rowsets)
-            : _txn_id(txn_id),
-              _version(version),
-              _tablet(std::move(tablet)),
-              _input_rowsets(std::move(input_rowsets)) {}
+    explicit HorizontalCompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                                      CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)
+            : CompactionTask(std::move(tablet), std::move(input_rowsets), context, std::move(tablet_schema)) {}
 
     ~HorizontalCompactionTask() override = default;
 
-    Status execute(Progress* progress, CancelFunc cancel_func) override;
+    Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
 
 private:
     StatusOr<int32_t> calculate_chunk_size();
-
-    int64_t _txn_id;
-    int64_t _version;
-    std::shared_ptr<Tablet> _tablet;
-    std::vector<std::shared_ptr<Rowset>> _input_rowsets;
 };
 
 } // namespace starrocks::lake

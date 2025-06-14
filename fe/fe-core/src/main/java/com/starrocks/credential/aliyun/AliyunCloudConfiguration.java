@@ -16,18 +16,16 @@ package com.starrocks.credential.aliyun;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.Map;
 
-public class AliyunCloudConfiguration implements CloudConfiguration {
+public class AliyunCloudConfiguration extends CloudConfiguration {
 
     private final AliyunCloudCredential aliyunCloudCredential;
 
@@ -36,19 +34,23 @@ public class AliyunCloudConfiguration implements CloudConfiguration {
         this.aliyunCloudCredential = aliyunCloudCredential;
     }
 
-    // reuse aws client logic of BE
+    public AliyunCloudCredential getAliyunCloudCredential() {
+        return aliyunCloudCredential;
+    }
+
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
+        // reuse aws client logic of BE
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
-
-        List<TCloudProperty> properties = new LinkedList<>();
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true)));
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
+        properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
         aliyunCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         aliyunCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -59,12 +61,12 @@ public class AliyunCloudConfiguration implements CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support oss credential
         return aliyunCloudCredential.toFileStoreInfo();
     }
 
     @Override
-    public String getCredentialString() {
-        return aliyunCloudCredential.getCredentialString();
+    public String toConfString() {
+        return String.format("AliyunCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                aliyunCloudCredential.toCredString());
     }
 }

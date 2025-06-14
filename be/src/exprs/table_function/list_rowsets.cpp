@@ -29,10 +29,6 @@
 
 namespace starrocks {
 
-using TabletMetadata = lake::TabletMetadata;
-using TabletMetadataPtr = lake::TabletMetadataPtr;
-using RowsetMetadataPB = lake::RowsetMetadataPB;
-
 static void append_bigint(ColumnPtr& col, int64_t value) {
     [[maybe_unused]] auto n = col->append_numbers(&value, sizeof(value));
     DCHECK_EQ(1, n);
@@ -78,11 +74,12 @@ static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
         opts.pretty_json = false;
         std::string json;
         (void)json2pb::ProtoMessageToJson(rowset.delete_predicate(), &json, opts);
-        (void)columns[5]->append_strings({json});
+        (void)columns[5]->append_strings(std::vector<Slice>{Slice{json}});
     }
 }
 
-std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(TableFunctionState* base_state) const {
+std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime_state,
+                                                           TableFunctionState* base_state) const {
     auto state = down_cast<MyState*>(base_state);
 
     if (UNLIKELY(state->get_columns().size() != 2)) {
@@ -92,7 +89,7 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(TableFunctionState* b
     }
 
     auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-    auto max_column_size = config::vector_chunk_size;
+    auto max_column_size = runtime_state->chunk_size();
     auto arg_tablet_id = ColumnViewer<TYPE_BIGINT>(state->get_columns()[0]);
     auto arg_tablet_version = ColumnViewer<TYPE_BIGINT>(state->get_columns()[1]);
     auto curr_row = state->processed_rows();

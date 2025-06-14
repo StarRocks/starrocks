@@ -45,6 +45,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -53,6 +54,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -61,13 +64,12 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.Load;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -103,6 +105,7 @@ public class CatalogMocker {
 
     public static final String TEST_SINGLE_PARTITION_NAME = TEST_TBL_NAME;
     public static final long TEST_SINGLE_PARTITION_ID = 40000;
+    public static final long TEST_SINGLE_PHYSICAL_PARTITION_ID = 40011;
     public static final long TEST_TABLET0_ID = 60000;
     public static final long TEST_REPLICA0_ID = 70000;
     public static final long TEST_REPLICA1_ID = 70001;
@@ -126,14 +129,31 @@ public class CatalogMocker {
     public static final String TEST_TBL3_NAME = "test_tbl3";
     public static final long TEST_TBL3_ID = 30003;
 
+    // partition olap table with multi physical partition
+    public static final String TEST_TBL4_NAME = "test_tbl4";
+    public static final long TEST_TBL4_ID = 30004;
+
+    // list partition olap table
+    public static final String TEST_TBL5_NAME = "test_tbl5";
+    public static final long TEST_TBL5_ID = 30005;
+
+    // logical view
+    public static final String TEST_TBL6_NAME = "test_tbl6";
+    public static final long TEST_TBL6_ID = 30006;
+
     public static final String TEST_PARTITION1_NAME = "p1";
     public static final long TEST_PARTITION1_ID = 40001;
+    public static final long TEST_PH_PARTITION1_ID = 40011;
     public static final String TEST_PARTITION2_NAME = "p2";
     public static final long TEST_PARTITION2_ID = 40002;
+    public static final long TEST_PH_PARTITION2_ID = 40012;
     public static final String TEST_PARTITION1_NAME_PK = "p1_pk";
     public static final long TEST_PARTITION1_PK_ID = 40003;
+    public static final long TEST_PH_PARTITION1_PK_ID = 40013;
     public static final String TEST_PARTITION2_NAME_PK = "p2_pk";
     public static final long TEST_PARTITION2_PK_ID = 40004;
+    public static final long TEST_PH_PARTITION2_PK_ID = 40014;
+    public static final long TEST_PARTITION3_ID = 40015;
 
     public static final long TEST_BASE_TABLET_P1_ID = 60001;
     public static final long TEST_REPLICA3_ID = 70003;
@@ -234,26 +254,6 @@ public class CatalogMocker {
         ROLLUP_SCHEMA_HASH = Util.schemaHash(0, TEST_ROLLUP_SCHEMA, null, 0);
     }
 
-    private static Auth fetchAdminAccess() {
-        Auth auth = new Auth();
-        new Expectations(auth) {
-            {
-                auth.checkGlobalPriv((ConnectContext) any, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-
-                auth.checkDbPriv((ConnectContext) any, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-            }
-        };
-        return auth;
-    }
-
     public static SystemInfoService fetchSystemInfoService() {
         SystemInfoService clusterInfo = new SystemInfoService();
         return clusterInfo;
@@ -267,7 +267,8 @@ public class CatalogMocker {
         MaterializedIndex baseIndex = new MaterializedIndex(TEST_TBL_ID, IndexState.NORMAL);
         DistributionInfo distributionInfo = new RandomDistributionInfo(32);
         Partition partition =
-                new Partition(TEST_SINGLE_PARTITION_ID, TEST_SINGLE_PARTITION_NAME, baseIndex, distributionInfo);
+                new Partition(TEST_SINGLE_PARTITION_ID, TEST_SINGLE_PHYSICAL_PARTITION_ID,
+                        TEST_SINGLE_PARTITION_NAME, baseIndex, distributionInfo);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(TEST_SINGLE_PARTITION_ID, (short) 3);
         partitionInfo.setIsInMemory(TEST_SINGLE_PARTITION_ID, false);
@@ -292,7 +293,7 @@ public class CatalogMocker {
         olapTable.setIndexMeta(TEST_TBL_ID, TEST_TBL_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         olapTable.addPartition(partition);
-        db.createTable(olapTable);
+        db.registerTableUnlocked(olapTable);
 
         // 2. mysql table
         Map<String, String> mysqlProp = Maps.newHashMap();
@@ -308,27 +309,29 @@ public class CatalogMocker {
         } catch (DdlException e) {
             e.printStackTrace();
         }
-        db.createTable(mysqlTable);
+        db.registerTableUnlocked(mysqlTable);
 
         // 3. range partition olap table
         MaterializedIndex baseIndexP1 = new MaterializedIndex(TEST_TBL2_ID, IndexState.NORMAL);
         MaterializedIndex baseIndexP2 = new MaterializedIndex(TEST_TBL2_ID, IndexState.NORMAL);
+        MaterializedIndex baseIndexP3 = new MaterializedIndex(TEST_TBL2_ID, IndexState.NORMAL);
         DistributionInfo distributionInfo2 =
                 new HashDistributionInfo(32, Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(1)));
         Partition partition1 =
-                new Partition(TEST_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo2);
+                new Partition(TEST_PARTITION1_ID, TEST_PH_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo2);
         Partition partition2 =
-                new Partition(TEST_PARTITION2_ID, TEST_PARTITION2_NAME, baseIndexP2, distributionInfo2);
+                new Partition(TEST_PARTITION2_ID, TEST_PH_PARTITION2_ID, TEST_PARTITION2_NAME, baseIndexP2, distributionInfo2);
         RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
-
+        DataProperty dataPropertyP1 = new DataProperty(TStorageMedium.HDD);
         PartitionKey rangeP1Lower =
                 PartitionKey.createInfinityPartitionKey(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)), false);
         PartitionKey rangeP1Upper =
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("10")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP1 = Range.closedOpen(rangeP1Lower, rangeP1Upper);
-        rangePartitionInfo.setRange(TEST_PARTITION1_ID, false, rangeP1);
+        rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
 
+        DataProperty dataPropertyP2 = new DataProperty(TStorageMedium.HDD);
         PartitionKey rangeP2Lower =
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("10")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
@@ -336,14 +339,7 @@ public class CatalogMocker {
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("20")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP2 = Range.closedOpen(rangeP2Lower, rangeP2Upper);
-        rangePartitionInfo.setRange(TEST_PARTITION2_ID, false, rangeP2);
-
-        rangePartitionInfo.setReplicationNum(TEST_PARTITION1_ID, (short) 3);
-        rangePartitionInfo.setReplicationNum(TEST_PARTITION2_ID, (short) 3);
-        DataProperty dataPropertyP1 = new DataProperty(TStorageMedium.HDD);
-        DataProperty dataPropertyP2 = new DataProperty(TStorageMedium.HDD);
-        rangePartitionInfo.setDataProperty(TEST_PARTITION1_ID, dataPropertyP1);
-        rangePartitionInfo.setDataProperty(TEST_PARTITION2_ID, dataPropertyP2);
+        rangePartitionInfo.addPartition(TEST_PARTITION2_ID, false, rangeP2, dataPropertyP2, (short) 3, false);
 
         OlapTable olapTable2 = new OlapTable(TEST_TBL2_ID, TEST_TBL2_NAME, TEST_TBL_BASE_SCHEMA,
                 KeysType.AGG_KEYS, rangePartitionInfo, distributionInfo2);
@@ -393,7 +389,7 @@ public class CatalogMocker {
         rollupTabletP1.addReplica(replica10);
         rollupTabletP1.addReplica(replica11);
 
-        partition1.createRollupIndex(rollupIndexP1);
+        partition1.getDefaultPhysicalPartition().createRollupIndex(rollupIndexP1);
 
         // rollup index p2
         MaterializedIndex rollupIndexP2 = new MaterializedIndex(TEST_ROLLUP_ID, IndexState.NORMAL);
@@ -409,11 +405,11 @@ public class CatalogMocker {
         rollupTabletP2.addReplica(replica13);
         rollupTabletP2.addReplica(replica14);
 
-        partition2.createRollupIndex(rollupIndexP2);
+        partition2.getDefaultPhysicalPartition().createRollupIndex(rollupIndexP2);
 
         olapTable2.setIndexMeta(TEST_ROLLUP_ID, TEST_ROLLUP_NAME, TEST_ROLLUP_SCHEMA, 0, ROLLUP_SCHEMA_HASH,
                 (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
-        db.createTable(olapTable2);
+        db.registerTableUnlocked(olapTable2);
 
         // 4. range partition primary key olap table
         MaterializedIndex baseIndexP1Pk = new MaterializedIndex(TEST_TBL3_ID, IndexState.NORMAL);
@@ -421,9 +417,11 @@ public class CatalogMocker {
         DistributionInfo distributionInfo3 =
                 new HashDistributionInfo(32, Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(1)));
         Partition partition1Pk =
-                new Partition(TEST_PARTITION1_PK_ID, TEST_PARTITION1_NAME_PK, baseIndexP1Pk, distributionInfo3);
+                new Partition(TEST_PARTITION1_PK_ID, TEST_PH_PARTITION1_ID,
+                        TEST_PARTITION1_NAME_PK, baseIndexP1Pk, distributionInfo3);
         Partition partition2Pk =
-                new Partition(TEST_PARTITION2_PK_ID, TEST_PARTITION2_NAME_PK, baseIndexP2Pk, distributionInfo3);
+                new Partition(TEST_PARTITION2_PK_ID, TEST_PH_PARTITION2_ID,
+                        TEST_PARTITION2_NAME_PK, baseIndexP2Pk, distributionInfo3);
         RangePartitionInfo rangePartitionInfoPk = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
 
         PartitionKey rangeP1LowerPk =
@@ -482,85 +480,156 @@ public class CatalogMocker {
                 TStorageType.COLUMN, KeysType.PRIMARY_KEYS);
         olapTable3.addPartition(partition1Pk);
         olapTable3.addPartition(partition2Pk);
-        db.createTable(olapTable3);
+        db.registerTableUnlocked(olapTable3);
 
+        // 5. range partition multi physical partition olap table
+        {
+            baseIndexP1 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
+            baseIndexP2 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
+            baseIndexP3 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
+            DistributionInfo distributionInfo4 = new RandomDistributionInfo(1);
+            partition1 =
+                    new Partition(TEST_PARTITION1_ID, TEST_PH_PARTITION1_ID,
+                            TEST_PARTITION1_NAME, baseIndexP1, distributionInfo4);
+
+            PhysicalPartition physicalPartition2 = new PhysicalPartition(
+                        TEST_PARTITION2_ID, "pp2", TEST_PARTITION1_ID, baseIndexP2);
+            PhysicalPartition physicalPartition3 = new PhysicalPartition(
+                        TEST_PARTITION3_ID, "pp3", TEST_PARTITION1_ID, baseIndexP3);
+            partition1.addSubPartition(physicalPartition2);
+            partition1.addSubPartition(physicalPartition3);
+
+            rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
+            rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
+
+            baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
+            tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION1_ID,
+                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
+            replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica5 = new Replica(TEST_REPLICA5_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP1.addReplica(replica3);
+            baseTabletP1.addReplica(replica4);
+            baseTabletP1.addReplica(replica5);
+
+            baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
+            tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION2_ID,
+                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
+            replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica8 = new Replica(TEST_REPLICA8_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP2.addReplica(replica6);
+            baseTabletP2.addReplica(replica7);
+            baseTabletP2.addReplica(replica8);
+
+            OlapTable olapTable4 = new OlapTable(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA,
+                    KeysType.DUP_KEYS, rangePartitionInfo, distributionInfo4);
+            Deencapsulation.setField(olapTable4, "baseIndexId", TEST_TBL4_ID);
+            olapTable4.setIndexMeta(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
+                            TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+            olapTable4.addPartition(partition1);
+
+            db.registerTableUnlocked(olapTable4);
+        }
+
+        // 6. list partition olap table
+        {
+            baseIndexP1 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
+            baseIndexP2 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
+            DistributionInfo distributionInfo5 = new RandomDistributionInfo(1);
+            partition1 = new Partition(TEST_PARTITION1_ID, TEST_PH_PARTITION1_ID,
+                    TEST_PARTITION1_NAME, baseIndexP1, distributionInfo5);
+
+            ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                    Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
+            listPartitionInfo.setValues(TEST_PARTITION1_ID, Lists.newArrayList("10"));
+            listPartitionInfo.setReplicationNum(TEST_PARTITION1_ID, (short) 3);
+            listPartitionInfo.setIsInMemory(TEST_PARTITION1_ID, false);
+            listPartitionInfo.setDataProperty(TEST_PARTITION1_ID, dataPropertyP1);
+
+            baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
+            tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL5_ID, TEST_PARTITION1_ID,
+                    TEST_TBL5_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
+            replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica5 = new Replica(TEST_REPLICA5_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP1.addReplica(replica3);
+            baseTabletP1.addReplica(replica4);
+            baseTabletP1.addReplica(replica5);
+
+            baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
+            tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL5_ID, TEST_PARTITION2_ID,
+                    TEST_TBL5_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
+            replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica8 = new Replica(TEST_REPLICA8_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP2.addReplica(replica6);
+            baseTabletP2.addReplica(replica7);
+            baseTabletP2.addReplica(replica8);
+
+            OlapTable olapTable5 = new OlapTable(TEST_TBL5_ID, TEST_TBL5_NAME, TEST_TBL_BASE_SCHEMA,
+                    KeysType.DUP_KEYS, listPartitionInfo, distributionInfo5);
+            Deencapsulation.setField(olapTable5, "baseIndexId", TEST_TBL5_ID);
+            olapTable5.setIndexMeta(TEST_TBL5_ID, TEST_TBL5_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
+                    TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+            olapTable5.addPartition(partition1);
+
+            db.registerTableUnlocked(olapTable5);
+
+            View view = new View(TEST_TBL6_ID, TEST_TBL6_NAME, TEST_TBL_BASE_SCHEMA);
+            db.registerTableUnlocked(view);
+        }
         return db;
     }
 
     public static GlobalStateMgr fetchAdminCatalog() {
-        try {
-            FakeEditLog fakeEditLog = new FakeEditLog();
+        FakeEditLog fakeEditLog = new FakeEditLog();
 
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-            Database db = new Database();
-            Auth auth = fetchAdminAccess();
+        Database db = new Database();
 
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
-
-                    globalStateMgr.getDb(TEST_DB_NAME);
-                    minTimes = 0;
-                    result = db;
-
-                    globalStateMgr.getDb(WRONG_DB);
-                    minTimes = 0;
-                    result = null;
-
-                    globalStateMgr.getDb(TEST_DB_ID);
-                    minTimes = 0;
-                    result = db;
-
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
-
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList(TEST_DB_NAME);
-
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
-
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = new EditLog(new ArrayBlockingQueue<>(100));
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, WRONG_DB);
-                    minTimes = 0;
-                    result = new DdlException("failed");
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
-                }
-            };
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
-    }
-
-    public static Auth fetchBlockAccess() {
-        Auth auth = new Auth();
-        new Expectations(auth) {
+        new Expectations(globalStateMgr) {
             {
-                auth.checkGlobalPriv((ConnectContext) any, (PrivPredicate) any);
+                globalStateMgr.getLocalMetastore().getDb(TEST_DB_NAME);
                 minTimes = 0;
-                result = false;
+                result = db;
 
-                auth.checkDbPriv((ConnectContext) any, anyString, (PrivPredicate) any);
+                globalStateMgr.getLocalMetastore().getDb(WRONG_DB);
                 minTimes = 0;
-                result = false;
+                result = null;
 
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
+                globalStateMgr.getLocalMetastore().getDb(TEST_DB_ID);
                 minTimes = 0;
-                result = false;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                minTimes = 0;
+                result = new Database();
+
+                globalStateMgr.getLocalMetastore().listDbNames((ConnectContext) any);
+                minTimes = 0;
+                result = Lists.newArrayList(TEST_DB_NAME);
+
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = new EditLog(new ArrayBlockingQueue<>(100));
             }
         };
-        return auth;
+        return globalStateMgr;
     }
 }

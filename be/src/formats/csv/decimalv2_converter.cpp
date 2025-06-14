@@ -32,7 +32,7 @@ Status DecimalV2Converter::write_quoted_string(OutputStream* os, const Column& c
     return write_string(os, column, row_num, options);
 }
 
-bool DecimalV2Converter::read_string(Column* column, Slice s, const Options& options) const {
+bool DecimalV2Converter::read_string(Column* column, const Slice& s, const Options& options) const {
     DecimalV2Value v;
     int err = v.parse_from_str(s.data, s.size);
     if (err == 0) {
@@ -41,7 +41,7 @@ bool DecimalV2Converter::read_string(Column* column, Slice s, const Options& opt
     return err == 0;
 }
 
-bool DecimalV2Converter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool DecimalV2Converter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 

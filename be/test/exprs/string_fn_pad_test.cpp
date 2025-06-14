@@ -60,7 +60,7 @@ Columns prepare_data(size_t num_rows) {
         len_column->append(65535);
         fill_column->append(std::string(1, 'y'));
     }
-    return {str_column, len_column, fill_column};
+    return {std::move(str_column), std::move(len_column), std::move(fill_column)};
 }
 
 void test_pad(int num_rows, TestCaseArray const& cases, NullColumnsType null_columns, PadState* state) {
@@ -71,7 +71,7 @@ void test_pad(int num_rows, TestCaseArray const& cases, NullColumnsType null_col
     auto str_column = down_cast<BinaryColumn*>(columns[0].get());
     auto len_column = down_cast<Int32Column*>(columns[1].get());
     auto fill_column = down_cast<BinaryColumn*>(columns[2].get());
-    auto result_nulls = NullColumn::create();
+    NullColumn::Ptr result_nulls = NullColumn::create();
     for (auto i = 0; i < prepare_size; ++i) {
         result_nulls->append(0);
     }
@@ -92,7 +92,7 @@ void test_pad(int num_rows, TestCaseArray const& cases, NullColumnsType null_col
         if (null_columns[i].get() == nullptr) {
             continue;
         }
-        columns[i] = (NullableColumn::create(columns[i], null_columns[i]));
+        columns[i] = NullableColumn::create(std::move(columns[i]), null_columns[i]);
         result_nulls = FunctionHelper::union_null_column(result_nulls, null_columns[i]);
     }
     std::shared_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -138,8 +138,8 @@ TEST_F(StringFunctionPadTest, padNotConstASCIITest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -183,8 +183,8 @@ TEST_F(StringFunctionPadTest, padNotConstUTF8Test) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -269,8 +269,8 @@ TEST_F(StringFunctionPadTest, padConstPadTest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -304,7 +304,6 @@ TEST_F(StringFunctionPadTest, padConstPadTest) {
     for (auto& c : cases) {
         test_const_pad(1, c);
         test_const_pad(20, c);
-        test_const_pad(200, c);
     }
 }
 
@@ -367,8 +366,8 @@ TEST_F(StringFunctionPadTest, padConstLenAndPadTest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -424,9 +423,9 @@ TEST_F(StringFunctionPadTest, lpadNullTest) {
     fill->append("123");
     null->append(true);
 
-    columns.emplace_back(str);
-    columns.emplace_back(len);
-    columns.emplace_back(NullableColumn::create(fill, null));
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(len));
+    columns.emplace_back(NullableColumn::create(std::move(fill), std::move(null)));
 
     ColumnPtr result = StringFunctions::lpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
@@ -455,9 +454,9 @@ TEST_F(StringFunctionPadTest, rpadTest) {
     len->append(0);
     fill->append("123");
 
-    columns.emplace_back(str);
-    columns.emplace_back(len);
-    columns.emplace_back(fill);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(len));
+    columns.emplace_back(std::move(fill));
 
     ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
@@ -483,9 +482,9 @@ TEST_F(StringFunctionPadTest, rpadChineseTest) {
     len->append(2);
     fill->append("不，我没有");
 
-    columns.emplace_back(str);
-    columns.emplace_back(len);
-    columns.emplace_back(fill);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(len));
+    columns.emplace_back(std::move(fill));
 
     ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
@@ -510,9 +509,9 @@ TEST_F(StringFunctionPadTest, rpadConstTest) {
     str->append("test");
     len->append(-1);
 
-    columns.emplace_back(str);
-    columns.emplace_back(len);
-    columns.emplace_back(ConstColumn::create(fill));
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(len));
+    columns.emplace_back(ConstColumn::create(std::move(fill)));
 
     ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
@@ -579,19 +578,19 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     len_data->append(c.len);
     fill_data->append(c.fill);
 
-    auto str = NullableColumn::create(str_data, str_null);
-    auto len = ConstColumn::create(len_data, num_rows);
-    auto fill = ConstColumn::create(fill_data, num_rows);
+    auto str = NullableColumn::create(std::move(str_data), std::move(str_null));
+    auto len = ConstColumn::create(std::move(len_data), num_rows);
+    auto fill = ConstColumn::create(std::move(fill_data), num_rows);
 
-    columns.emplace_back(str);
-    columns.emplace_back(len);
-    columns.emplace_back(fill);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(len));
+    columns.emplace_back(std::move(fill));
 
     // Check rpad result.
     ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(num_rows, rpad_result->size());
     ASSERT_EQ(c.rpad_expected_null, rpad_result->is_nullable());
-    std::shared_ptr<BinaryColumn> rpad_v;
+    BinaryColumn::Ptr rpad_v;
     if (c.rpad_expected_null) {
         rpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(
                 ColumnHelper::as_raw_column<NullableColumn>(rpad_result)->data_column());
@@ -609,7 +608,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     ASSERT_EQ(num_rows, lpad_result->size());
     ASSERT_EQ(c.lpad_expected_null, lpad_result->is_nullable());
-    std::shared_ptr<BinaryColumn> lpad_v;
+    BinaryColumn::Ptr lpad_v;
     if (c.lpad_expected_null) {
         lpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(
                 ColumnHelper::as_raw_column<NullableColumn>(lpad_result)->data_column());

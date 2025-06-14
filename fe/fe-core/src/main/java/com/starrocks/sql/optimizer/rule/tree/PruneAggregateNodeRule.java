@@ -90,7 +90,7 @@ public class PruneAggregateNodeRule implements TreeRewriteRule {
 
             if (parentOperator.getType().isDistinctGlobal() && childOperator instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator hashAggregateOperator = (PhysicalHashAggregateOperator) childOperator;
-                hashAggregateOperator.setUseStreamingPreAgg(false);
+                hashAggregateOperator.setMergedLocalAgg(true);
                 hashAggregateOperator.setProjection(parentOperator.getProjection());
                 return optExpression.inputAt(0);
             } else {

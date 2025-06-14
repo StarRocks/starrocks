@@ -19,6 +19,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -32,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -50,31 +53,28 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> partitionByColumns;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
 
-    // When generate plan fragment, we need this info.
-    // For select count(distinct id_bigint), sum(id_int) from test_basic;
-    // In the distinct local (update serialize) agg stage:
-    // |   5:AGGREGATE (update serialize)                                                      |
-    //|   |  output: count(<slot 13>), sum(<slot 16>)                                         |
-    //|   |  group by:                                                                        |
-    // count function is update function, but sum is merge function
-    // if singleDistinctFunctionPos is -1, means no single distinct function
-    private final int singleDistinctFunctionPos;
-
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
     private final boolean isSplit;
-    // flg for this aggregate operator could use streaming pre-aggregation
-    private boolean useStreamingPreAgg = true;
+
+    // TODO introduce builder mode to change these fields to final fields
+    // flag for this aggregate operator's parent had been pruned
+    private boolean mergedLocalAgg;
 
     private boolean useSortAgg = false;
 
+    private boolean usePerBucketOptmize = false;
+
+    private boolean withoutColocateRequirement = false;
+
     private DataSkewInfo distinctColumnDataSkew = null;
+
+    private boolean forcePreAggregation = false;
 
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
                                          Map<ColumnRefOperator, CallOperator> aggregations,
-                                         int singleDistinctFunctionPos,
                                          boolean isSplit,
                                          long limit,
                                          ScalarOperator predicate,
@@ -84,11 +84,26 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.groupBys = groupBys;
         this.partitionByColumns = partitionByColumns;
         this.aggregations = aggregations;
-        this.singleDistinctFunctionPos = singleDistinctFunctionPos;
         this.isSplit = isSplit;
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+    }
+
+    public PhysicalHashAggregateOperator(PhysicalHashAggregateOperator aggregateOperator) {
+        this(aggregateOperator.getType(),
+                aggregateOperator.getGroupBys(),
+                aggregateOperator.getPartitionByColumns(),
+                aggregateOperator.getAggregations(),
+                aggregateOperator.isSplit(),
+                aggregateOperator.getLimit(),
+                aggregateOperator.getPredicate(),
+                aggregateOperator.getProjection());
+        this.mergedLocalAgg = aggregateOperator.mergedLocalAgg;
+        this.useSortAgg = aggregateOperator.useSortAgg;
+        this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
+        this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
+        this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -109,33 +124,47 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     /**
      * Whether it is the first phase in three/four-phase agg whose second phase is pruned.
+     * Hence, the input data distribution has satisfied with the agg requirement. The local
+     * agg can directly do a global blocking agg job. Only local agg cannot use streaming agg
+     * means it's the result from PruneAggregateNodeRule.
      */
     public boolean isMergedLocalAgg() {
-        return type.isLocal() && !useStreamingPreAgg;
+        return mergedLocalAgg;
+    }
+
+    public void setMergedLocalAgg(boolean mergedLocalAgg) {
+        this.mergedLocalAgg = mergedLocalAgg;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
 
-    public boolean hasSingleDistinct() {
-        return singleDistinctFunctionPos > -1;
-    }
-
-    public int getSingleDistinctFunctionPos() {
-        return singleDistinctFunctionPos;
+    public boolean hasRemovedDistinctFunc() {
+        return aggregations.values().stream().anyMatch(CallOperator::isRemovedDistinct);
     }
 
     public boolean isSplit() {
         return isSplit;
     }
 
-    public void setUseStreamingPreAgg(boolean useStreamingPreAgg) {
-        this.useStreamingPreAgg = useStreamingPreAgg;
+    public boolean canUseStreamingPreAgg() {
+        if (type.isGlobal() || type.isDistinctGlobal()) {
+            return false;
+        } else if (type.isDistinctLocal()) {
+            return CollectionUtils.isNotEmpty(groupBys);
+        } else {
+            return isSplit && CollectionUtils.isNotEmpty(groupBys) && !mergedLocalAgg;
+        }
     }
 
-    public boolean isUseStreamingPreAgg() {
-        return this.useStreamingPreAgg;
+
+    public String getNeededPreaggregationMode() {
+        String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc() || forcePreAggregation)) {
+            mode = SessionVariableConstants.FORCE_PREAGGREGATION;
+        }
+        return mode;
     }
 
     public boolean isUseSortAgg() {
@@ -146,12 +175,32 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.useSortAgg = useSortAgg;
     }
 
+    public boolean isUsePerBucketOptmize() {
+        return usePerBucketOptmize;
+    }
+
+    public boolean isWithoutColocateRequirement() {
+        return withoutColocateRequirement;
+    }
+
+    public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
+        this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {
+        this.usePerBucketOptmize = usePerBucketOptmize;
+    }
+
     public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
         this.distinctColumnDataSkew = distinctColumnDataSkew;
     }
 
     public DataSkewInfo getDistinctColumnDataSkew() {
         return distinctColumnDataSkew;
+    }
+
+    public void setForcePreAggregation(boolean forcePreAggregation) {
+        this.forcePreAggregation = forcePreAggregation;
     }
 
     @Override

@@ -15,23 +15,32 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
 
 public class JoinDeriveContext {
-    private JoinOperator queryJoinType;
-    private JoinOperator mvJoinType;
+    private final JoinOperator queryJoinType;
+    private final JoinOperator mvJoinType;
     // join columns for left and right join tables
-    private List<List<ColumnRefOperator>> joinColumns;
+    private final List<List<ColumnRefOperator>> joinColumns;
+    // join columns for left and right join tables
+    private final List<List<ColumnRefOperator>> childOutputColumns;
+
+    private final List<Pair<ColumnRefOperator, ColumnRefOperator>> compensatedEquivalenceColumns;
 
     public JoinDeriveContext(
             JoinOperator queryJoinType,
             JoinOperator mvJoinType,
-            List<List<ColumnRefOperator>> joinColumns) {
+            List<List<ColumnRefOperator>> joinColumns,
+            List<Pair<ColumnRefOperator, ColumnRefOperator>> compensatedEquivalenceColumns,
+            List<List<ColumnRefOperator>> childOutputColumns) {
         this.queryJoinType = queryJoinType;
         this.mvJoinType = mvJoinType;
         this.joinColumns = joinColumns;
+        this.compensatedEquivalenceColumns = compensatedEquivalenceColumns;
+        this.childOutputColumns = childOutputColumns;
     }
 
     public JoinOperator getQueryJoinType() {
@@ -48,5 +57,17 @@ public class JoinDeriveContext {
 
     public List<ColumnRefOperator> getRightJoinColumns() {
         return joinColumns.get(1);
+    }
+
+    public List<Pair<ColumnRefOperator, ColumnRefOperator>> getCompensatedEquivalenceColumns() {
+        return compensatedEquivalenceColumns;
+    }
+
+    public List<ColumnRefOperator> getLeftChildOutputColumns() {
+        return childOutputColumns.get(0);
+    }
+
+    public List<ColumnRefOperator> getRightChildOutputColumns() {
+        return childOutputColumns.get(1);
     }
 }

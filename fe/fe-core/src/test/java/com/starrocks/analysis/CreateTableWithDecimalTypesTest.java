@@ -16,7 +16,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -35,11 +37,12 @@ public class CreateTableWithDecimalTypesTest {
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
     }
 
-    public void createTableFail(boolean enableDecimalV3, String columnType) throws Exception {
+    public void createTable(boolean enableDecimalV3, String columnType) throws Exception {
         if (enableDecimalV3) {
             Config.enable_decimal_v3 = true;
         } else {
@@ -61,58 +64,76 @@ public class CreateTableWithDecimalTypesTest {
         starRocksAssert.withTable(createTableSql);
     }
 
-    @Test(expected = Exception.class)
+    @Test
     public void createTableWithDecimalV3p39s12() throws Exception {
-        createTableFail(true, "DECIMAL(39, 12)");
-        Assert.fail("should throw an exception");
+        createTable(true, "DECIMAL(39, 12)");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV3p9s10() throws Exception {
-        createTableFail(true, "DECIMAL(9, 10)");
+        createTable(true, "DECIMAL(9, 10)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV3p0s1() throws Exception {
-        createTableFail(true, "DECIMAL(0, 1)");
+        createTable(true, "DECIMAL(0, 1)");
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = Exception.class)
+    @Test
     public void createTableWithDecimalV3ScaleAbsent() throws Exception {
-        createTableFail(true, "DECIMAL(9)");
-        Assert.fail("should throw an exception");
+        createTable(true, "DECIMAL(9)");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p28s9() throws Exception {
-        createTableFail(false, "DECIMAL(28, 9)");
+        createTable(false, "DECIMAL(28, 9)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p27s10() throws Exception {
-        createTableFail(false, "DECIMAL(27, 10)");
+        createTable(false, "DECIMAL(27, 10)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p9s10() throws Exception {
-        createTableFail(false, "DECIMAL(9, 10)");
+        createTable(false, "DECIMAL(9, 10)");
         Assert.fail("should throw an exception");
     }
 
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p0s1() throws Exception {
-        createTableFail(false, "DECIMAL(0, 1)");
+        createTable(false, "DECIMAL(0, 1)");
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = Exception.class)
+    @Test
     public void createTableWithDecimalV2ScaleAbsent() throws Exception {
-        createTableFail(false, "DECIMAL(9)");
-        Assert.fail("should throw an exception");
+        createTable(false, "DECIMAL(9)");
+    }
+
+    @Test
+    public void testCreateTableWithDecimal256Column() throws Exception {
+        starRocksAssert.dropTable("decimalv3_table");
+        createTable(true, "DECIMAL(50)");
+        String createTableSql = starRocksAssert.showCreateTable("show create table decimalv3_table;");
+        Assert.assertTrue(createTableSql.contains("`col_decimal` decimal(50, 0)"));
+        starRocksAssert.dropTable("decimalv3_table");
+
+        createTable(true, "DECIMAL(76, 75)");
+        createTableSql = starRocksAssert.showCreateTable("show create table decimalv3_table;");
+        Assert.assertTrue(createTableSql.contains("`col_decimal` decimal(76, 75)"));
+        starRocksAssert.dropTable("decimalv3_table");
+        ExceptionChecker.expectThrowsWithMsg(IllegalArgumentException.class,
+                "DECIMAL(P[,S]) type P must be greater than or equal to the value of S",
+                () -> starRocksAssert.withTable("create table test_decimal (col_decimal decimal(57, 58))"));
+
+        ExceptionChecker.expectThrowsWithMsg(IllegalArgumentException.class,
+                "DECIMAL's precision should range from 1 to 76",
+                () -> starRocksAssert.withTable("create table test_decimal (col_decimal decimal(77, 58))"));
     }
 }
 

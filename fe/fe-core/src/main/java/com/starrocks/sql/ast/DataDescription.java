@@ -28,21 +28,22 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CsvFormat;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.PrivilegeActions;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -642,19 +643,23 @@ public class DataDescription implements ParseNode {
             throw new AnalysisException("No table name in load statement.");
         }
 
-        if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
-                tableName, PrivilegeType.INSERT)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "INSERT",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(), tableName);
+        try {
+            Authorizer.checkTableAction(ConnectContext.get(), fullDbName, tableName, PrivilegeType.INSERT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(),
+                    PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName);
         }
-        // check hive table auth
+
         if (isLoadFromTable()) {
-            if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
-                    srcTableName, PrivilegeType.SELECT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(), srcTableName);
+            try {
+                Authorizer.checkTableAction(ConnectContext.get(), fullDbName, srcTableName, PrivilegeType.SELECT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(),
+                        PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), srcTableName);
             }
         }
     }
@@ -666,7 +671,11 @@ public class DataDescription implements ParseNode {
     }
 
     public void analyzeTable(String fullDbName) throws AnalysisException {
-        Table table = MetaUtils.getTable(ConnectContext.get(), new TableName(fullDbName, tableName));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(fullDbName, tableName);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +

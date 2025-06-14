@@ -25,7 +25,9 @@ public class CreateViewStmt extends DdlStmt {
     private final TableName tableName;
     private final List<ColWithComment> colWithComments;
     private final boolean ifNotExists;
+    private final boolean replace;
     private final String comment;
+    private final boolean security;
     protected QueryStatement queryStatement;
 
     //Resolved by Analyzer
@@ -33,16 +35,25 @@ public class CreateViewStmt extends DdlStmt {
     private String inlineViewDef;
 
     public CreateViewStmt(boolean ifNotExists,
-                          TableName tableName, List<ColWithComment> colWithComments,
+                          boolean replace,
+                          TableName tableName,
+                          List<ColWithComment> colWithComments,
                           String comment,
+                          boolean security,
                           QueryStatement queryStmt,
                           NodePosition pos) {
         super(pos);
         this.ifNotExists = ifNotExists;
+        this.replace = replace;
         this.tableName = tableName;
         this.colWithComments = colWithComments;
         this.comment = Strings.nullToEmpty(comment);
+        this.security = security;
         this.queryStatement = queryStmt;
+    }
+
+    public String getCatalog() {
+        return tableName.getCatalog();
     }
 
     public String getDbName() {
@@ -65,8 +76,16 @@ public class CreateViewStmt extends DdlStmt {
         return ifNotExists;
     }
 
+    public boolean isReplace() {
+        return replace;
+    }
+
     public String getComment() {
         return comment;
+    }
+
+    public boolean isSecurity() {
+        return security;
     }
 
     public QueryStatement getQueryStatement() {

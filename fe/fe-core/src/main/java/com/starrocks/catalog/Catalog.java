@@ -24,12 +24,25 @@ import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
 public class Catalog implements Writable {
     public static final String CATALOG_TYPE = "type";
+
+    // old external table uuid format: external_catalog_name.db_name.table_name.creation_time
+    // new external table uuid format: table_name
+    // internal table uuid format: table_id
+    public static String getCompatibleTableUUID(String uuid) {
+        return uuid.contains(".") ? uuid.split("\\.")[2] : uuid;
+    }
+
+    // old database uuid format: external_catalog_name.db_name
+    // new database uuid format: db_name
+    // internal database uuid format: db_id
+    public static String getCompatibleDbUUID(String uuid) {
+        return uuid.contains(".") ? uuid.split("\\.")[1] : uuid;
+    }
 
     // Reserved fields for later support operations such as rename
     @SerializedName("id")
@@ -54,6 +67,10 @@ public class Catalog implements Writable {
 
     public String getName() {
         return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getType() {
@@ -81,9 +98,5 @@ public class Catalog implements Writable {
         return GsonUtils.GSON.fromJson(json, Catalog.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 }

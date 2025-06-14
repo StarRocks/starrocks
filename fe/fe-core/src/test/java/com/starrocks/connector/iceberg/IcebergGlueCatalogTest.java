@@ -15,11 +15,18 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.aws.glue.GlueCatalog;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -28,21 +35,57 @@ import java.util.List;
 import java.util.Map;
 
 public class IcebergGlueCatalogTest {
+    public static ConnectContext connectContext;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
 
     @Test
-    public void testListAllDatabases(@Mocked IcebergGlueCatalog glueCatalog) {
+    public void testListAllDatabases(@Mocked GlueCatalog glueCatalog) {
         new Expectations() {
             {
-                glueCatalog.listAllDatabases();
-                result = Arrays.asList("db1", "db2");
-                minTimes = 0;
+                glueCatalog.listNamespaces();
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
+                times = 1;
             }
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
                 "glue_native_catalog", new Configuration(), icebergProperties);
-        List<String> dbs = icebergGlueCatalog.listAllDatabases();
+        List<String> dbs = icebergGlueCatalog.listAllDatabases(connectContext);
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+    }
+
+    @Test
+    public void testTableExists(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+        Assert.assertTrue(icebergGlueCatalog.tableExists(connectContext, "db1", "tbl1"));
+    }
+
+    @Test
+    public void testRenameTable(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+        icebergGlueCatalog.renameTable(connectContext, "db", "tb1", "tb2");
+        boolean exists = icebergGlueCatalog.tableExists(connectContext, "db", "tbl2");
+        Assert.assertTrue(exists);
     }
 }

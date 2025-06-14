@@ -18,13 +18,18 @@
 #include <arrow/status.h>
 #include <gutil/strings/substitute.h>
 
+#include <memory>
 #include <utility>
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
+#include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
+#include "util/byte_buffer.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -46,8 +51,6 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
           _read_size(read_size) {
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
-    _properties.enable_buffered_stream();
-    _properties.set_buffer_size(8 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
@@ -84,14 +87,38 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         */
         arrow_reader_properties.set_coerce_int96_timestamp_unit(arrow::TimeUnit::MICRO);
 
+        // arrow default batch size is 64K,
+        // the bigger batch size, the more memory it uses
+        arrow_reader_properties.set_batch_size(config::arrow_read_batch_size);
+
+        // io coalesce
+        // performance test 0: tpcds store_sales, 23 columns, 649M, 7218819 lines
+        //                  | file read time | file read count | memory
+        // io coalesce 8M   | 13s            |   80            | 587M
+        // buffer stream 8M | 15s            |   176           | 1313M
+        // buffer stream 1M | 29s            |   1145          | 1157M
+        //
+        // performance test 1: 1001 columns table, 147M, 50000 lines
+        //                  | file read time | file read count | memory
+        // io coalesce 8M   | 3s             |   20            | 1G
+        // buffer stream 8M | 15s            |   1003          | 10.1G
+        // buffer stream 1M | 15s            |   1003          | 3.3G
+        //
+        arrow_reader_properties.set_pre_buffer(true);
+        auto cache_options = arrow::io::CacheOptions::LazyDefaults();
+        cache_options.hole_size_limit = config::arrow_io_coalesce_read_max_distance_size;
+        cache_options.range_size_limit = config::arrow_io_coalesce_read_max_buffer_size;
+        arrow_reader_properties.set_cache_options(cache_options);
+
         // new file reader for parquet file
         auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
                                                    parquet::ParquetFileReader::Open(_parquet, _properties),
                                                    arrow_reader_properties, &_reader);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create parquet file reader. error: " << st.ToString()
-                         << ", filename: " << _filename;
-            return Status::InternalError(fmt::format("Failed to create file reader. filename: {}", _filename));
+            std::ostringstream oss;
+            oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
+            LOG(INFO) << oss.str();
+            return Status::InternalError(oss.str());
         }
 
         if (!_reader || !_reader->parquet_reader()) {
@@ -185,79 +212,9 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
         const auto& field = file_schema->group_node()->field(i);
         const auto& name = field->name();
 
-        if (!field->is_primitive()) {
-            // Now, we treat all nested types as VARCHAR.
-            schema->emplace_back(i, name, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
-            continue;
-        }
-
-        auto column = file_schema->Column(file_schema->ColumnIndex(*field));
-
-        auto physical_type = column->physical_type();
-        auto logical_type = column->logical_type();
-
-        // See detail in https://arrow.apache.org/docs/cpp/parquet.html
         TypeDescriptor tp;
-        switch (physical_type) {
-        case parquet::Type::BOOLEAN:
-            tp = TypeDescriptor(TYPE_BOOLEAN);
-            break;
-        case parquet::Type::FLOAT:
-            tp = TypeDescriptor(TYPE_FLOAT);
-            break;
-        case parquet::Type::DOUBLE:
-            tp = TypeDescriptor(TYPE_DOUBLE);
-            break;
-        case parquet::Type::INT32:
-            if (logical_type->is_int()) {
-                tp = TypeDescriptor(TYPE_INT);
-            } else if (logical_type->is_date()) {
-                tp = TypeDescriptor(TYPE_DATE);
-            } else if (logical_type->is_time()) {
-                tp = TypeDescriptor(TYPE_TIME);
-            } else if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
-            } else {
-                tp = TypeDescriptor(TYPE_INT);
-            }
-            break;
-        case parquet::Type::INT64:
-            if (logical_type->is_int()) {
-                tp = TypeDescriptor(TYPE_BIGINT);
-            } else if (logical_type->is_time()) {
-                tp = TypeDescriptor(TYPE_TIME);
-            } else if (logical_type->is_timestamp()) {
-                tp = TypeDescriptor(TYPE_DATETIME);
-            } else if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
-            } else {
-                tp = TypeDescriptor(TYPE_BIGINT);
-            }
-            break;
-        case parquet::Type::INT96:
-            tp = TypeDescriptor(TYPE_DATETIME);
-            break;
-        case parquet::Type::BYTE_ARRAY:
-            if (logical_type->is_string()) {
-                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            } else if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
-            } else {
-                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            }
-            break;
-        case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
-            if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
-            } else {
-                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            }
-            break;
-        }
-        default:
-            return Status::NotSupported(
-                    fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
-        }
+        RETURN_IF_ERROR(get_parquet_type(field, &tp));
+
         schema->emplace_back(i, name, tp);
     }
 
@@ -291,11 +248,11 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
             for (auto index : iter->second) {
                 _parquet_column_ids.emplace_back(index);
             }
-        } else {
+        } else if (!_invalid_as_null) {
             std::stringstream str_error;
-            str_error << "Invalid Column Name:" << slot_desc->col_name();
+            str_error << "Column: " << slot_desc->col_name() << " is not found in file: " << _filename;
             LOG(WARNING) << str_error.str();
-            return Status::InvalidArgument(str_error.str());
+            return Status::NotFound(str_error.str());
         }
     }
     return Status::OK();
@@ -416,8 +373,9 @@ using ArrowStatusCode = ::arrow::StatusCode;
 using StarRocksStatus = ::starrocks::Status;
 using ArrowStatus = ::arrow::Status;
 
-ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos)
-        : _file(std::move(file)), _pos(pos) {}
+ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos,
+                                   ScannerCounter* counter)
+        : _file(std::move(file)), _pos(pos), _counter(counter) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
     [[maybe_unused]] auto st = Close();
@@ -438,16 +396,19 @@ arrow::Result<int64_t> ParquetChunkFile::Read(int64_t nbytes, void* buffer) {
 
 arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, void* out) {
     _pos += nbytes;
+    ++_counter->file_read_count;
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
     auto status = _file->read_at_fully(position, out, nbytes);
-    return status.ok() ? nbytes
-                       : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, status.get_error_msg()));
+    return status.ok()
+                   ? nbytes
+                   : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, std::string(status.message())));
 }
 
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {
     const StatusOr<uint64_t> status_or = _file->get_size();
     return status_or.ok() ? status_or.value()
-                          : arrow::Result<int64_t>(
-                                    arrow::Status(arrow::StatusCode::IOError, status_or.status().get_error_msg()));
+                          : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError,
+                                                                 std::string(status_or.status().message())));
 }
 
 arrow::Status ParquetChunkFile::Seek(int64_t position) {
@@ -460,16 +421,22 @@ arrow::Result<int64_t> ParquetChunkFile::Tell() const {
 }
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nbytes) {
-    auto buffer_res = arrow::AllocateBuffer(nbytes, arrow::default_memory_pool());
-    ARROW_RETURN_NOT_OK(buffer_res);
-    std::shared_ptr<arrow::Buffer> read_buf = std::move(buffer_res.ValueOrDie());
-    arrow::Result<int64_t> bytes_read_res = ReadAt(_pos, nbytes, read_buf->mutable_data());
-    ARROW_RETURN_NOT_OK(bytes_read_res);
+    auto tracker = CurrentThread::mem_tracker();
+    if (tracker == nullptr) {
+        return arrow::Status::ExecutionError("current thread memory tracker Not Found when allocate arrow Buffer");
+    }
+    std::unique_ptr<arrow::Buffer> buffer_res;
+    ARROW_RETURN_NOT_OK(arrow::AllocateBuffer(nbytes, arrow::default_memory_pool()).Value(&buffer_res));
+    std::shared_ptr<arrow::Buffer> read_buf(buffer_res.release(), MemTrackerDeleter(tracker));
+    int64_t bytes_read_res = 0;
+    ARROW_RETURN_NOT_OK(ReadAt(_pos, nbytes, read_buf->mutable_data()).Value(&bytes_read_res));
     // If bytes_read is equal with read_buf's capacity, we just assign
-    if (bytes_read_res.ValueOrDie() == nbytes) {
+    if (bytes_read_res == nbytes) {
         return std::move(read_buf);
     } else {
-        return arrow::SliceBuffer(read_buf, 0, bytes_read_res.ValueOrDie());
+        std::shared_ptr<arrow::Buffer> slice_buf(new arrow::Buffer(read_buf, 0, bytes_read_res),
+                                                 MemTrackerDeleter(tracker));
+        return slice_buf;
     }
 }
 

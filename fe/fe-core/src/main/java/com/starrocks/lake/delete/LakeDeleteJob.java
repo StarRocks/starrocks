@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.delete;
 
 import com.google.common.base.Preconditions;
@@ -30,7 +29,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
@@ -49,9 +50,12 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -66,9 +70,12 @@ public class LakeDeleteJob extends DeleteJob {
 
     private Map<Long, List<Long>> beToTablets;
 
-    public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo) {
+    private final ComputeResource computeResource;
+
+    public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo, ComputeResource computeResource) {
         super(id, transactionId, label, deleteInfo);
         beToTablets = Maps.newHashMap();
+        this.computeResource = computeResource;
     }
 
     @Override
@@ -77,30 +84,31 @@ public class LakeDeleteJob extends DeleteJob {
             throws DdlException, QueryStateException {
         Preconditions.checkState(table.isCloudNativeTable());
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE);
+            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, computeResource);
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
-            if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         // create delete predicate
-        List<Predicate> conditions = stmt.getDeleteConditions();
+        List<Predicate> conditions = getDeleteConditions();
         DeletePredicatePB deletePredicate = createDeletePredicate(conditions);
 
         // send delete data request to BE
         try {
             List<Future<DeleteDataResponse>> responseList = Lists.newArrayListWithCapacity(
                     beToTablets.size());
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -182,7 +190,14 @@ public class LakeDeleteJob extends DeleteJob {
     }
 
     @Override
-    public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .commitAndPublishTransaction(db, getTransactionId(), getTabletCommitInfos(), getTabletFailInfos(),
+                        timeoutMs);
+    }
+
+    @Override
+    protected List<TabletCommitInfo> getTabletCommitInfos() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             long backendId = entry.getKey();
@@ -190,9 +205,11 @@ public class LakeDeleteJob extends DeleteJob {
                 tabletCommitInfos.add(new TabletCommitInfo(tabletId, backendId));
             }
         }
+        return tabletCommitInfos;
+    }
 
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Lists.newArrayList(),
-                        timeoutMs);
+    @Override
+    protected List<TabletFailInfo> getTabletFailInfos() {
+        return Collections.emptyList();
     }
 }

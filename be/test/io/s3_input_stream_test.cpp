@@ -26,17 +26,16 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_s3.h"
 #include "testutil/assert.h"
 
 namespace starrocks::io {
 
-static const char* kBucketName = "s3randomaccessfiletest";
-static const char* kObjectName = "test.txt";
+static const char* kObjectName = "starrocks_ut_s3_input_stream_test.txt";
+static const char* kObjectContent = "0123456789";
 static std::shared_ptr<Aws::S3::S3Client> g_s3client;
 
 static void init_s3client();
-static void init_bucket();
-static void destroy_bucket();
 static void destroy_s3client();
 
 class S3InputStreamTest : public testing::Test {
@@ -56,63 +55,48 @@ public:
     void TearDown() override {}
 
     std::unique_ptr<S3InputStream> new_random_access_file();
+
+    std::unique_ptr<S3InputStream> new_random_access_file_prefetch(int64_t read_ahead_size);
+
+protected:
+    inline static const char* s_bucket_name = nullptr;
 };
 
 void S3InputStreamTest::SetUpTestCase() {
     Aws::InitAPI(Aws::SDKOptions());
     init_s3client();
-    init_bucket();
-    put_object("0123456789");
+
+    s_bucket_name = config::object_storage_bucket.empty() ? getenv("STARROCKS_UT_S3_BUCKET")
+                                                          : config::object_storage_bucket.c_str();
+    if (s_bucket_name == nullptr) {
+        FAIL() << "s3 bucket name not set";
+    }
+    put_object(kObjectContent);
 }
 
 void S3InputStreamTest::TearDownTestCase() {
-    destroy_bucket();
     destroy_s3client();
     Aws::ShutdownAPI(Aws::SDKOptions());
 }
 
 void init_s3client() {
-    Aws::Client::ClientConfiguration config;
-    config.endpointOverride = config::object_storage_endpoint;
-    const char* ak = config::object_storage_access_key_id.c_str();
-    const char* sk = config::object_storage_secret_access_key.c_str();
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
+                                                                      : config::object_storage_endpoint;
+    const char* ak = config::object_storage_access_key_id.empty() ? getenv("STARROCKS_UT_S3_AK")
+                                                                  : config::object_storage_access_key_id.c_str();
+    const char* sk = config::object_storage_secret_access_key.empty()
+                             ? getenv("STARROCKS_UT_S3_SK")
+                             : config::object_storage_secret_access_key.c_str();
+    if (ak == nullptr) {
+        FAIL() << "s3 access key id not set";
+    }
+    if (sk == nullptr) {
+        FAIL() << "s3 secret access key not set";
+    }
     auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
     g_s3client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
-}
-
-void init_bucket() {
-    Aws::S3::Model::CreateBucketRequest request;
-    request.SetBucket(kBucketName);
-    Aws::S3::Model::CreateBucketOutcome outcome = g_s3client->CreateBucket(request);
-    LOG_IF(ERROR, !outcome.IsSuccess()) << outcome.GetError().GetMessage();
-}
-
-void destroy_bucket() {
-    // delete object first
-    {
-        Aws::S3::Model::DeleteObjectRequest request;
-        request.SetBucket(kBucketName);
-        request.SetKey(kObjectName);
-        Aws::S3::Model::DeleteObjectOutcome outcome = g_s3client->DeleteObject(request);
-        if (!outcome.IsSuccess()) {
-            std::cerr << "Fail to delete s3://" << kBucketName << "/" << kObjectName << ": "
-                      << outcome.GetError().GetMessage() << '\n';
-        } else {
-            std::cout << "Deleted object s3://" << kBucketName << "/" << kObjectName << '\n';
-        }
-    }
-    // delete bucket
-    {
-        Aws::S3::Model::DeleteBucketRequest request;
-        request.SetBucket(kBucketName);
-        Aws::S3::Model::DeleteBucketOutcome outcome = g_s3client->DeleteBucket(request);
-        if (outcome.IsSuccess()) {
-            std::cout << "Deleted bucket " << kBucketName << '\n';
-        } else {
-            std::cerr << "Fail to delete bucket " << kBucketName << ": " << outcome.GetError().GetMessage() << '\n';
-        }
-    }
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
 }
 
 void destroy_s3client() {
@@ -120,14 +104,18 @@ void destroy_s3client() {
 }
 
 std::unique_ptr<S3InputStream> S3InputStreamTest::new_random_access_file() {
-    return std::make_unique<S3InputStream>(g_s3client, kBucketName, kObjectName);
+    return std::make_unique<S3InputStream>(g_s3client, s_bucket_name, kObjectName);
+}
+
+std::unique_ptr<S3InputStream> S3InputStreamTest::new_random_access_file_prefetch(int64_t read_ahead_size) {
+    return std::make_unique<S3InputStream>(g_s3client, s_bucket_name, kObjectName, read_ahead_size);
 }
 
 void S3InputStreamTest::put_object(const std::string& object_content) {
     std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::StringStream>("", object_content);
 
     Aws::S3::Model::PutObjectRequest request;
-    request.SetBucket(kBucketName);
+    request.SetBucket(s_bucket_name);
     request.SetKey(kObjectName);
     request.SetBody(stream);
 
@@ -149,6 +137,15 @@ TEST_F(S3InputStreamTest, test_read) {
     ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
     ASSERT_EQ(0, r);
     ASSERT_EQ(10, *f->position());
+}
+
+TEST_F(S3InputStreamTest, test_not_found) {
+    auto f = std::make_unique<S3InputStream>(g_s3client, s_bucket_name, "key_not_found");
+    char buf[6];
+    auto r = f->read(buf, sizeof(buf));
+    EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
+    // ErrorCode 16 means RESOURCE_NOT_FOUND
+    EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
 }
 
 TEST_F(S3InputStreamTest, test_skip) {
@@ -208,4 +205,26 @@ TEST_F(S3InputStreamTest, test_read_at) {
     ASSERT_FALSE(f->read_at(-1, buf, sizeof(buf)).ok());
 }
 
+TEST_F(S3InputStreamTest, test_read_all) {
+    auto f = new_random_access_file();
+
+    ASSIGN_OR_ABORT(auto s, f->read_all());
+    EXPECT_EQ(kObjectContent, s);
+
+    char buf[6];
+    ASSIGN_OR_ABORT(auto r, f->read_at(3, buf, sizeof(buf)));
+    ASSERT_EQ("345678", std::string_view(buf, r));
+    ASSERT_EQ(9, *f->position());
+
+    ASSIGN_OR_ABORT(s, f->read_all());
+    EXPECT_EQ(kObjectContent, s);
+}
+
+TEST_F(S3InputStreamTest, test_prefetch) {
+    auto f = new_random_access_file_prefetch(2);
+    char buf[6];
+
+    ASSIGN_OR_ABORT(auto r, f->read(buf, sizeof(buf)));
+    ASSERT_EQ("012345", std::string_view(buf, r));
+}
 } // namespace starrocks::io

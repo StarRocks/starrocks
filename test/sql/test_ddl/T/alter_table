@@ -4,3 +4,50 @@ use db_${uuid0};
 CREATE TABLE t1 (id1 int) DUPLICATE KEY(id1) COMMENT "c1" DISTRIBUTED BY HASH(id1) BUCKETS 1 properties('replication_num' = '1');
 ALTER TABLE t1 COMMENT="c2";
 SHOW CREATE TABLE t1;
+
+CREATE TABLE `test_pk_tbl1` (
+`k1` DATE,
+`k2` DATETIME,
+`k3` VARCHAR(20),
+`k4` VARCHAR(20),
+`k5` BOOLEAN,
+`v1` TINYINT NULL,
+`v2` SMALLINT NULL,
+`v3` INT NULL,
+`v4` BIGINT NOT NULL,
+INDEX init_bitmap_index (k2) USING BITMAP
+) ENGINE=OLAP
+PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PARTITION BY RANGE (k1) (
+    START ("1970-01-01") END ("2030-01-01") EVERY (INTERVAL 30 YEAR)
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 50
+ORDER BY(`k2`, `v4`)
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_format" = "v2",
+    "enable_persistent_index" = "true",
+    "bloom_filter_columns" = "k1,k2"
+);
+insert into test_pk_tbl1 values ('2023-09-07', '2023-09-07 13:35:00', 'a', 'a', true, 1, 1, 1, 10),  ('2023-09-06', '2023-09-07 13:35:00', 'a', 'a', true, 1, 1, 1, 10);
+select count(1) from test_pk_tbl1;
+ALTER TABLE test_pk_tbl1 ORDER BY (k3);
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;
+
+ALTER TABLE test_pk_tbl1 ORDER BY (k3,v1,v3,k2);
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;
+
+ALTER TABLE test_pk_tbl1 add COLUMN v5 bitmap after v4;
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;
+
+ALTER TABLE test_pk_tbl1 add COLUMN (v6 bitmap not null, v7 bitmap);
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;
+
+ALTER TABLE test_pk_tbl1 modify COLUMN v6 bitmap null;
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;

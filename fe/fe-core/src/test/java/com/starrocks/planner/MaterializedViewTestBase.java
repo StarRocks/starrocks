@@ -14,24 +14,24 @@
 
 package com.starrocks.planner;
 
-import com.google.common.collect.Sets;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatsConstants;
-import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -40,170 +40,45 @@ import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.starrocks.utframe.UtFrameUtils.CREATE_STATISTICS_TABLE_STMT;
-
 public class MaterializedViewTestBase extends PlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
+    protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
+    protected static final String MATERIALIZED_VIEW_NAME = "mv0";
+
+    // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
+    private  String traceLogModule = "";
+
+    public void setTracLogModule(String module) {
+        this.traceLogModule = module;
+    }
+
+    public void resetTraceLogModule() {
+        this.traceLogModule = "";
+    }
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
 
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
-
-        new MockUp<MaterializedView>() {
-            @Mock
-            Set<String> getPartitionNamesToRefreshForMv() {
-                return Sets.newHashSet();
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
-
-        new MockUp<PlanTestBase>() {
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
         if (!starRocksAssert.databaseExist("_statistics_")) {
-            starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
-                    .useDatabase(StatsConstants.STATISTICS_DB_NAME);
-            starRocksAssert.withTable(CREATE_STATISTICS_TABLE_STMT);
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
         }
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
-
-        String deptsTable = "" +
-                "CREATE TABLE depts(    \n" +
-                "   deptno INT NOT NULL,\n" +
-                "   name VARCHAR(20)    \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`deptno`)\n" +
-                "DISTRIBUTED BY HASH(`deptno`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"unique_constraints\" = \"deptno\"\n," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String locationsTable = "" +
-                "CREATE TABLE locations(\n" +
-                "    locationid INT NOT NULL,\n" +
-                "    state CHAR(2), \n" +
-                "   name VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`locationid`)\n" +
-                "DISTRIBUTED BY HASH(`locationid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String ependentsTable = "" +
-                "CREATE TABLE dependents(\n" +
-                "   empid INT NOT NULL,\n" +
-                "   name VARCHAR(20)   \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String empsTable = "" +
-                "CREATE TABLE emps\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\"," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsTableWithoutConstraints = "" +
-                "CREATE TABLE emps_no_constraint\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsWithBigintTable = "" +
-                "CREATE TABLE emps_bigint\n" +
-                "(\n" +
-                "    empid      BIGINT        NOT NULL,\n" +
-                "    deptno     BIGINT         NOT NULL,\n" +
-                "    locationid BIGINT         NOT NULL,\n" +
-                "    commission BIGINT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String nullableEmps = "create table emps_null (\n" +
-                "empid int null,\n" +
-                "deptno int null,\n" +
-                "name varchar(25) null,\n" +
-                "salary double\n" +
-                ")\n" +
-                "distributed by hash(`empid`) buckets 10\n" +
-                "properties (\"replication_num\" = \"1\");";
-        String nullableDepts = "create table depts_null (\n" +
-                "deptno int null,\n" +
-                "name varchar(25) null\n" +
-                ")\n" +
-                "distributed by hash(`deptno`) buckets 10\n" +
-                "properties (\"replication_num\" = \"1\");";
-
-        starRocksAssert
-                .withTable(deptsTable)
-                .withTable(empsTable)
-                .withTable(locationsTable)
-                .withTable(ependentsTable)
-                .withTable(empsWithBigintTable)
-                .withTable(nullableEmps)
-                .withTable(nullableDepts)
-                .withTable(empsTableWithoutConstraints);
     }
 
     @AfterClass
@@ -216,21 +91,30 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected class MVRewriteChecker {
-        private String mv;
         private final String query;
+        private String mvDBName;
         private String rewritePlan;
+        private String mv;
         private Exception exception;
         private String properties;
+        private String traceLog;
+        private boolean isLogical;
 
         public MVRewriteChecker(String query) {
+            this(query, false);
+        }
+
+        public MVRewriteChecker(String query, boolean isLogical) {
             this.query = query;
+            this.isLogical = isLogical;
         }
 
         public MVRewriteChecker(String mv, String query) {
-            this(mv, query, null);
+            this(null, mv, query, null);
         }
 
-        public MVRewriteChecker(String mv, String query, String properties) {
+        public MVRewriteChecker(String mvDBName, String mv, String query, String properties) {
+            this.mvDBName = mvDBName;
             this.mv = mv;
             this.query = query;
             this.properties = properties;
@@ -245,31 +129,55 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 // create mv if needed
                 if (mv != null && !mv.isEmpty()) {
                     LOG.info("start to create mv:" + mv);
-                    ExecPlan mvPlan = getExecPlan(mv);
-                    List<String> outputNames = mvPlan.getColNames();
-                    String properties = this.properties != null ? "PROPERTIES (\n" +
-                            this.properties + ")" : "";
-                    String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                            "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
-                            properties + " AS " +
-                            mv;
+                    String properties = Strings.isNullOrEmpty(this.properties) ? "" : "PROPERTIES (\n" +
+                            this.properties + ")";
+                    String mvName = getMVName();
+                    String mvSQL = String.format("CREATE MATERIALIZED VIEW %s \n" +
+                            " REFRESH MANUAL \n%s AS %s", mvName, properties, mv);
+                    System.out.println(mvSQL);
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
-                this.rewritePlan = getFragmentPlan(query);
+                Pair<ExecPlan, String> planAndTrace =
+                        UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+                if (isLogical) {
+                    this.rewritePlan = planAndTrace.first.getExplainString(StatementBase.ExplainLevel.LOGICAL);
+                } else {
+                    this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+                }
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(this.rewritePlan);
+                }
+                this.traceLog = planAndTrace.second;
             } catch (Exception e) {
-                LOG.warn("test rewwrite failed:", e);
+                LOG.warn("test rewrite failed:", e);
                 this.exception = e;
             } finally {
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(traceLog);
+                }
                 if (mv != null && !mv.isEmpty()) {
                     try {
-                        starRocksAssert.dropMaterializedView("mv0");
+                        starRocksAssert.dropMaterializedView(getMVName());
                     } catch (Exception e) {
                         LOG.warn("drop materialized view failed:", e);
                     }
                 }
             }
             return this;
+        }
+
+        private String getMVName() {
+            return Strings.isNullOrEmpty(mvDBName) ? MATERIALIZED_VIEW_NAME
+                    : String.format("%s.%s", mvDBName, MATERIALIZED_VIEW_NAME);
+        }
+
+        public String getTraceLog() {
+            return this.traceLog;
+        }
+
+        Exception getException() {
+            return this.exception;
         }
 
         public MVRewriteChecker ok() {
@@ -282,24 +190,47 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
+        // there may be an exception
+        public MVRewriteChecker failed() {
+            return nonMatch("TABLE: mv0");
+        }
+
+        // check plan result without any exception
         public MVRewriteChecker nonMatch() {
+            Preconditions.checkState(exception == null);
             return nonMatch("TABLE: mv0");
         }
 
         public MVRewriteChecker nonMatch(String targetMV) {
             Assert.assertTrue(this.rewritePlan != null);
-            Assert.assertFalse(this.rewritePlan.contains(targetMV));
+            Assert.assertFalse(this.rewritePlan, this.rewritePlan.contains(targetMV));
             return this;
         }
 
         public MVRewriteChecker contains(String expect) {
             Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = this.rewritePlan.contains(expect);
+            String normalizedExpect = normalizeNormalPlan(expect);
+            String actual = normalizeNormalPlan(this.rewritePlan);
+            boolean contained = actual.contains(normalizedExpect);
+
             if (!contained) {
                 LOG.warn("rewritePlan: \n{}", rewritePlan);
                 LOG.warn("expect: \n{}", expect);
+                LOG.warn("normalized rewritePlan: \n{}", actual);
+                LOG.warn("normalized expect: \n{}", normalizedExpect);
             }
             Assert.assertTrue(contained);
+            return this;
+        }
+
+        public MVRewriteChecker notContain(String expect) {
+            Assert.assertTrue(this.rewritePlan != null);
+            boolean contained = this.rewritePlan.contains(expect);
+            if (contained) {
+                LOG.warn("rewritePlan: \n{}", rewritePlan);
+                LOG.warn("expect: \n{}", expect);
+            }
+            Assert.assertFalse(contained);
             return this;
         }
 
@@ -316,6 +247,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
             return this;
         }
+
+        public String getExecPlan() {
+            return this.rewritePlan;
+        }
     }
 
     protected MVRewriteChecker sql(String query) {
@@ -323,27 +258,54 @@ public class MaterializedViewTestBase extends PlanTestBase {
         return fixture.rewrite();
     }
 
+    protected MVRewriteChecker sql(String query, boolean isLogical) {
+        MVRewriteChecker fixture = new MVRewriteChecker(query, isLogical);
+        return fixture.rewrite();
+    }
+
     protected MVRewriteChecker testRewriteOK(String mv, String query) {
         return testRewriteOK(mv, query, null);
     }
 
-    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
-        return fixture.rewrite().ok();
+    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) throws RuntimeException {
+        return testRewriteOK(null, mv, query, properties);
+    }
+
+    protected MVRewriteChecker testRewriteOK(String mvDBName, String mv, String query, String properties) throws RuntimeException {
+        MVRewriteChecker fixture = new MVRewriteChecker(mvDBName, mv, query, properties);
+        MVRewriteChecker checker = fixture.rewrite();
+        if (checker.getException() != null) {
+            throw new RuntimeException(checker.getException());
+        }
+        return checker.ok();
     }
 
     protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
-        return fixture.rewrite().nonMatch();
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, properties);
+        return fixture.rewrite().failed();
     }
 
     protected MVRewriteChecker testRewriteFail(String mv, String query) {
         return testRewriteFail(mv, query, null);
     }
 
+    protected MVRewriteChecker testRewriteNonmatch(String mv, String query) {
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, null);
+        return fixture.rewrite().nonMatch();
+    }
+
+    protected MVRewriteChecker rewrite(String mv, String query, String properties) throws Exception {
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, properties);
+        MVRewriteChecker checker = fixture.rewrite();
+        if (checker.getException() != null) {
+            throw checker.getException();
+        }
+        return checker;
+    }
+
     protected static Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }
@@ -378,4 +340,28 @@ public class MaterializedViewTestBase extends PlanTestBase {
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
     }
+
+    public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
+        Map<Table, List<Column>> result = mv.getRefBaseTablePartitionColumns();
+        Assert.assertTrue(result.size() == 1);
+        Map.Entry<Table, List<Column>> e = result.entrySet().iterator().next();
+        Assert.assertEquals(1, e.getValue().size());
+        return Pair.create(e.getKey(), e.getValue().get(0));
+    }
+
+    public String getQueryPlan(String query) {
+        return getQueryPlan(query, TExplainLevel.NORMAL);
+    }
+
+    public String getQueryPlan(String query, TExplainLevel level) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(level);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
+    }
 }
+

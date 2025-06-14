@@ -48,6 +48,8 @@ import java.util.stream.Collectors;
  *    /    \                 /       \
  *   X      Y               X        Z
  */
+
+@Deprecated
 public class SemiReorderRule extends TransformationRule {
     public SemiReorderRule() {
         super(RuleType.TF_JOIN_SEMI_REORDER, Pattern.create(OperatorType.LOGICAL_JOIN)

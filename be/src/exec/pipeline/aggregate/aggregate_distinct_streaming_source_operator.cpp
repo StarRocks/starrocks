@@ -14,7 +14,17 @@
 
 #include "aggregate_distinct_streaming_source_operator.h"
 
+#include "common/status.h"
+#include "exec/pipeline/source_operator.h"
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
+
+Status AggregateDistinctStreamingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->attach_source_observer(state, this->_observer);
+    return Status::OK();
+}
 
 bool AggregateDistinctStreamingSourceOperator::has_output() const {
     // There are two cases where chunk buffer is not null
@@ -23,6 +33,10 @@ bool AggregateDistinctStreamingSourceOperator::has_output() const {
     //     case 2.1: very poor aggregation
     //     case 2.2: middle cases, first aggregate locally and output by stream
     if (!_aggregator->is_chunk_buffer_empty()) {
+        return true;
+    }
+
+    if (_aggregator->is_streaming_all_states()) {
         return true;
     }
 
@@ -42,6 +56,7 @@ bool AggregateDistinctStreamingSourceOperator::is_finished() const {
 }
 
 Status AggregateDistinctStreamingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
 }
 
@@ -56,13 +71,13 @@ StatusOr<ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_chunk(RuntimeS
     }
 
     ChunkPtr chunk = std::make_shared<Chunk>();
-    _output_chunk_from_hash_set(&chunk, state);
+    RETURN_IF_ERROR(_output_chunk_from_hash_set(&chunk, state));
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state) {
+Status AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_set_variant().visit(
                 [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
@@ -70,6 +85,15 @@ void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(Chunk
     }
 
     _aggregator->convert_hash_set_to_chunk(state->chunk_size(), chunk);
+
+    if (_aggregator->is_streaming_all_states() && _aggregator->is_ht_eos()) {
+        if (!_aggregator->is_sink_complete()) {
+            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
+        }
+        _aggregator->set_streaming_all_states(false);
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

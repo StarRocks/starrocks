@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.Lists;
@@ -21,6 +20,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -28,7 +29,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -38,7 +38,7 @@ import java.util.Map;
 
 public class PostgresSchemaResolverTest {
     @Mocked
-    DriverManager driverManager;
+    HikariDataSource dataSource;
 
     @Mocked
     Connection connection;
@@ -76,7 +76,7 @@ public class PostgresSchemaResolverTest {
     public void testListDatabaseNames() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -86,8 +86,8 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            List<String> result = jdbcMetadata.listDbNames();
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("postgres", "template1", "test");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -99,7 +99,7 @@ public class PostgresSchemaResolverTest {
     public void testGetDb() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -109,8 +109,8 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            Database db = jdbcMetadata.getDb("test");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
             Assert.fail();
@@ -121,7 +121,7 @@ public class PostgresSchemaResolverTest {
     public void testListTableNames() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -136,8 +136,8 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            List<String> result = jdbcMetadata.listTableNames("test");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -149,7 +149,7 @@ public class PostgresSchemaResolverTest {
     public void testGetTable() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -163,12 +163,26 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            Table table = jdbcMetadata.getTable("test", "tbl1");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
+            Assert.assertEquals("catalog.test.tbl1", table.getUUID());
+            Assert.assertEquals("tbl1", table.getName());
+            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assert.assertEquals(11, table.getColumns().size());
+            Assert.assertTrue(table.getColumn("h").getType().isStringType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testGetPartitions() {
+        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+        List<Partition> partitions = postgresSchemaResolver.getPartitions(null, new Table(1L, "tbl1",
+                Table.TableType.JDBC, Lists.newArrayList()));
+        Assert.assertEquals(partitions.size(), 1);
+        Assert.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
     }
 }

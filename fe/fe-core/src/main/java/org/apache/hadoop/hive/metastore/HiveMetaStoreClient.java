@@ -35,6 +35,7 @@
 package org.apache.hadoop.hive.metastore;
 
 import com.google.common.collect.Lists;
+import com.starrocks.connector.hadoop.HadoopExt;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
@@ -71,6 +72,7 @@ import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalRequest;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalResponse;
 import org.apache.hadoop.hive.metastore.api.GetTableRequest;
+import org.apache.hadoop.hive.metastore.api.HeartbeatRequest;
 import org.apache.hadoop.hive.metastore.api.HeartbeatTxnRangeResponse;
 import org.apache.hadoop.hive.metastore.api.HiveObjectPrivilege;
 import org.apache.hadoop.hive.metastore.api.HiveObjectRef;
@@ -156,13 +158,16 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
 
-import javax.security.auth.login.LoginException;
 import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.security.PrivilegedExceptionAction;
@@ -170,12 +175,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.security.auth.login.LoginException;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
 
@@ -236,6 +243,8 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         } else {
             this.conf = new Configuration(conf);
         }
+
+        HadoopExt.getInstance().rewriteConfiguration(this.conf);
 
         version = MetastoreConf.getBoolVar(conf, ConfVars.HIVE_IN_TEST) ? TEST_VERSION : VERSION;
 
@@ -354,7 +363,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                         JavaUtils.getClassLoader());
                 return (URIResolverHook) ReflectionUtils.newInstance(uriResolverClass, null);
             } catch (Exception e) {
-                LOG.error("Exception loading uri resolver hook" + e);
+                LOG.error("Exception loading uri resolver hook", e);
                 return null;
             }
         }
@@ -431,6 +440,14 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     }
 
     private void open() throws MetaException {
+        UserGroupInformation ugi = HadoopExt.getInstance().getHMSUGI(conf);
+        HadoopExt.getInstance().doAs(ugi, () -> {
+            openInternal();
+            return null;
+        });
+    }
+
+    private void openInternal() throws MetaException {
         isConnected = false;
         TTransportException tte = null;
         boolean useSSL = MetastoreConf.getBoolVar(conf, ConfVars.USE_SSL);
@@ -503,6 +520,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                         transport, MetaStoreUtils.getMetaStoreSaslProperties(conf, useSSL));
                             }
                         } catch (IOException ioe) {
+                            tte = new TTransportException(ioe);
                             LOG.error("Couldn't create client transport", ioe);
                             throw new MetaException(ioe.toString());
                         }
@@ -539,7 +557,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                     if (isConnected && !useSasl && MetastoreConf.getBoolVar(conf, ConfVars.EXECUTE_SET_UGI)) {
                         // Call set_ugi, only in unsecure mode.
                         try {
-                            UserGroupInformation ugi = SecurityUtils.getUGI();
+                            UserGroupInformation ugi = HadoopExt.getInstance().getHMSUGI(conf);
+                            if (ugi == null) {
+                                ugi = SecurityUtils.getUGI();
+                            }
                             client.set_ugi(ugi.getUserName(), Arrays.asList(ugi.getGroupNames()));
                         } catch (LoginException e) {
                             LOG.warn("Failed to do login. set_ugi() is not successful, " +
@@ -552,7 +573,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                     + "Continuing without it.", e);
                         }
                     }
-                } catch (MetaException e) {
+                } catch (MetaException | TTransportException e) {
+                    if (e instanceof TTransportException) {
+                        tte = (TTransportException) e;
+                    }
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }
@@ -617,6 +641,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             // Using get_table() first, if user's Hive forbidden this request,
             // then fail over to use get_table_req() instead.
             return client.get_table(dbName, tableName);
+        } catch (NoSuchObjectException e) {
+            // NoSuchObjectException need to be thrown when creating iceberg table.
+            LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
+            throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
             GetTableRequest req = new GetTableRequest(dbName, tableName);
@@ -742,6 +770,41 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public CurrentNotificationEventId getCurrentNotificationEventId() throws TException {
         return client.get_current_notificationEventId();
+    }
+
+    /**
+     * Creates a synchronized wrapper for any {@link IMetaStoreClient}.
+     * This may be used by multi-threaded applications until we have
+     * fixed all reentrancy bugs.
+     *
+     * @param client unsynchronized client
+     *
+     * @return synchronized client
+     */
+    public static IMetaStoreClient newSynchronizedClient(
+            IMetaStoreClient client) {
+        return (IMetaStoreClient) Proxy.newProxyInstance(
+                HiveMetaStoreClient.class.getClassLoader(),
+                new Class [] { IMetaStoreClient.class },
+                new SynchronizedHandler(client));
+    }
+
+    private static class SynchronizedHandler implements InvocationHandler {
+        private final IMetaStoreClient client;
+
+        SynchronizedHandler(IMetaStoreClient client) {
+            this.client = client;
+        }
+
+        @Override
+        public synchronized Object invoke(Object proxy, Method method, Object [] args)
+                throws Throwable {
+            try {
+                return method.invoke(client, args);
+            } catch (InvocationTargetException e) {
+                throw e.getTargetException();
+            }
+        }
     }
 
     public void setMetaConf(String key, String value) throws MetaException, TException {
@@ -987,14 +1050,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public boolean tableExists(String databaseName, String tableName)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        throws MetaException, TException, UnknownDBException {
+        try {
+            Table table = getTable(databaseName, tableName);
+            return table != null;
+        } catch (UnknownDBException | NoSuchObjectException e) {
+            return false;
+        } catch (TException e) {
+            LOG.warn("Failed to check table {}.{} existence", databaseName, tableName, e);
+            throw e;
+        }
     }
 
     @Override
     public boolean tableExists(String catName, String dbName, String tableName)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        throws MetaException, TException, UnknownDBException {
+        return tableExists(dbName, tableName);
     }
 
     @Override
@@ -1069,10 +1140,15 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         throw new TException("method not implemented");
     }
 
-    @Override
-    public int add_partitions(List<Partition> partitions)
-            throws InvalidObjectException, AlreadyExistsException, MetaException, TException {
-        throw new TException("method not implemented");
+    public int add_partitions(List<Partition> new_parts) throws TException {
+        if (new_parts != null && !new_parts.isEmpty() && !((Partition)new_parts.get(0)).isSetCatName()) {
+            String defaultCat = MetaStoreUtils.getDefaultCatalog(this.conf);
+            new_parts.forEach((p) -> {
+                p.setCatName(defaultCat);
+            });
+        }
+
+        return this.client.add_partitions(new_parts);
     }
 
     @Override
@@ -1341,30 +1417,21 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                 name, deleteData, envContext);
     }
 
-    @Override
-    public void alter_table(String databaseName, String tblName, Table table)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+    public void alter_table(String dbname, String tbl_name, Table new_tbl) throws TException {
+        this.alter_table_with_environmentContext(dbname, tbl_name, new_tbl, (EnvironmentContext)null);
     }
 
-    @Override
-    public void alter_table(String catName, String dbName, String tblName, Table newTable)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_table(String defaultDatabaseName, String tblName, Table table, boolean cascade) throws TException {
+        EnvironmentContext environmentContext = new EnvironmentContext();
+        if (cascade) {
+            environmentContext.putToProperties("CASCADE", "true");
+        }
 
+        this.alter_table_with_environmentContext(defaultDatabaseName, tblName, table, environmentContext);
     }
 
-    @Override
-    public void alter_table(String catName, String dbName, String tblName, Table newTable,
-                            EnvironmentContext envContext) throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-    }
-
-    @Override
-    public void alter_table(String defaultDatabaseName, String tblName, Table table, boolean cascade)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_table(String catName, String dbName, String tblName, Table newTable, EnvironmentContext envContext) throws TException {
+        this.client.alter_table_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, dbName, this.conf), tblName, newTable, envContext);
     }
 
     @Override
@@ -1463,28 +1530,67 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     }
 
-    @Override
-    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, boolean deleteData)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public boolean dropPartition(String dbName, String tableName, String partName, boolean deleteData) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tableName, partName, deleteData);
     }
 
-    @Override
-    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals,
-                                 boolean deleteData) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public boolean dropPartition(String catName, String db_name, String tbl_name, String name, boolean deleteData) throws TException {
+        return this.client.drop_partition_by_name_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, db_name, this.conf), tbl_name, name, deleteData, (EnvironmentContext)null);
     }
 
-    @Override
-    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    private static EnvironmentContext getEnvironmentContextWithIfPurgeSet() {
+        Map<String, String> warehouseOptions = new HashMap();
+        warehouseOptions.put("ifPurge", "TRUE");
+        return new EnvironmentContext(warehouseOptions);
     }
 
-    @Override
-    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals,
-                                 PartitionDropOptions options) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, EnvironmentContext env_context) throws TException {
+        return this.client.drop_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(db_name, this.conf), tbl_name, part_vals, true, env_context);
+    }
+
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String dbName, String tableName, String partName, boolean dropData, EnvironmentContext ec) throws TException {
+        return this.client.drop_partition_by_name_with_environment_context(MetaStoreUtils.prependCatalogToDbName(dbName, this.conf), tableName, partName, dropData, ec);
+    }
+
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String dbName, String tableName, List<String> partVals) throws TException {
+        return this.client.drop_partition(MetaStoreUtils.prependCatalogToDbName(dbName, this.conf), tableName, partVals, true);
+    }
+
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, boolean deleteData) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), db_name, tbl_name, part_vals, PartitionDropOptions.instance().deleteData(deleteData));
+    }
+
+    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals, boolean deleteData) throws TException {
+        return this.dropPartition(catName, db_name, tbl_name, part_vals, PartitionDropOptions.instance().deleteData(deleteData));
+    }
+
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), db_name, tbl_name, part_vals, options);
+    }
+
+    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options) throws TException {
+        if (options == null) {
+            options = PartitionDropOptions.instance();
+        }
+
+        if (part_vals != null) {
+            Iterator var6 = part_vals.iterator();
+
+            while(var6.hasNext()) {
+                String partVal = (String)var6.next();
+                if (partVal == null) {
+                    throw new MetaException("The partition value must not be null.");
+                }
+            }
+        }
+
+        return this.client.drop_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, db_name, this.conf), tbl_name, part_vals, options.deleteData, options.purgeData ? getEnvironmentContextWithIfPurgeSet() : null);
     }
 
     @Override
@@ -1530,47 +1636,17 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         throw new TException("method not implemented");
     }
 
-    @Override
-    public boolean dropPartition(String db_name, String tbl_name, String name, boolean deleteData)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_partition(String dbName, String tblName, Partition newPart) throws InvalidOperationException, MetaException, TException {
+        this.alter_partition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tblName, newPart, (EnvironmentContext)null);
     }
 
-    @Override
-    public boolean dropPartition(String catName, String db_name, String tbl_name, String name, boolean deleteData)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_partition(String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext) throws InvalidOperationException, MetaException, TException {
+        this.alter_partition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tblName, newPart, environmentContext);
     }
 
-    @Override
-    public void alter_partition(String dbName, String tblName, Partition newPart)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+    public void alter_partition(String catName, String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext) throws TException {
+        this.client.alter_partition_with_environment_context(dbName, tblName, newPart, environmentContext);
     }
-
-    @Override
-    public void alter_partition(String catName, String dbName, String tblName, Partition newPart)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void alter_partition(String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void alter_partition(String catName, String dbName, String tblName, Partition newPart,
-                                EnvironmentContext environmentContext)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
     @Override
     public void alter_partitions(String dbName, String tblName, List<Partition> newParts)
             throws InvalidOperationException, MetaException, TException {
@@ -1991,7 +2067,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void heartbeat(long txnid, long lockid)
             throws NoSuchLockException, NoSuchTxnException, TxnAbortedException, TException {
-        throw new TException("method not implemented");
+        HeartbeatRequest heartbeatRequest = new HeartbeatRequest();
+        heartbeatRequest.setTxnid(txnid);
+        heartbeatRequest.setLockid(lockid);
+        client.heartbeat(heartbeatRequest);
 
     }
 

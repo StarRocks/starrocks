@@ -229,7 +229,8 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                             List<ScalarOperator> arguments = callOperator.getArguments();
                             Preconditions.checkState(arguments.size() == 2);
                             // there is at least one constant in arguments
-                            if (arguments.get(0).isConstant() || arguments.get(1).isConstant()) {
+                            if (arguments.get(0) instanceof ConstantOperator ||
+                                    arguments.get(1) instanceof ConstantOperator) {
                                 // sometimes expr need to be cast before evaluating ADD/SUB operation.
                                 // for example, suppose the type of expr is SMALLINT,
                                 // sum(expr + 1) will translate to sum(add(cast(expr as INT), 1)),
@@ -237,6 +238,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                 // we can remove it and get sum(expr) + count() * 1
                                 ScalarOperator newArg0 = rewriteCastForAggExpr(arguments.get(0));
                                 ScalarOperator newArg1 = rewriteCastForAggExpr(arguments.get(1));
+                                // @TODO what if cast cannot evaul on FE
 
                                 ScalarOperator agg0 = createNewAggFunction(
                                         newArg0, newArg1, aggFunction.getType());
@@ -305,23 +307,20 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         }
 
         private ScalarOperator createNewAggFunction(ScalarOperator arg0, ScalarOperator arg1, Type returnType) {
-            if (arg0.isConstant()) {
-                // generate count() * arg0
+            if (arg0 instanceof ConstantOperator) {
+                // generate count(arg1) * arg0
+                List<ScalarOperator> countArguments = Lists.newArrayList(createColumnRefForAggArgument(arg1));
+                List<Type> argTypes = Lists.newArrayList(arg1.getType());
 
                 AggregateFunction countFunction = AggregateFunction.createBuiltin(
-                        FunctionSet.COUNT, Lists.newArrayList(arg1.getType()), Type.BIGINT, Type.BIGINT,
+                        FunctionSet.COUNT, argTypes, Type.BIGINT, Type.BIGINT,
                         false, true, true);
 
-                // if arg1 is nullable, we use count(arg1), otherwise use count()
-                List<ScalarOperator> countArguments = Lists.newArrayList();
-                if (arg1.isNullable()) {
-                    countArguments.add(createColumnRefForAggArgument(arg1));
-                }
                 CallOperator newAggFunction = new CallOperator(FunctionSet.COUNT,
                         Type.BIGINT, countArguments, countFunction);
 
                 ColumnRefOperator newAggRef = columnRefFactory.create(
-                        newAggFunction, newAggFunction.getType(), true);
+                        newAggFunction, newAggFunction.getType(), false);
                 newAggregations.put(newAggRef, newAggFunction);
 
                 // cast countOperator and constOperator to target type

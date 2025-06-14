@@ -22,8 +22,9 @@
 #include "runtime/tablets_channel.h"
 #include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
-#include "util/bthreads/shared_mutex.h"
+#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/countdown_latch.h"
+#include "util/reusable_closure.h"
 
 namespace brpc {
 class Controller;
@@ -35,7 +36,8 @@ class MemTracker;
 
 class LocalTabletsChannel : public TabletsChannel {
 public:
-    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker,
+                        RuntimeProfile* parent_profile);
     ~LocalTabletsChannel() override;
 
     LocalTabletsChannel(const LocalTabletsChannel&) = delete;
@@ -45,13 +47,13 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                bool is_incremental) override;
+    Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
-    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response) override;
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
 
-    Status incremental_open(const PTabletWriterOpenRequest& params,
+    Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -61,9 +63,18 @@ public:
 
     void abort() override;
 
-    void abort(const std::vector<int64_t>& tablet_ids) override;
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
+
+    void update_profile() override;
+
+    void get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response);
 
     MemTracker* mem_tracker() { return _mem_tracker; }
+
+    const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& TEST_delta_writers() const {
+        return _delta_writers;
+    }
 
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -120,6 +131,16 @@ private:
             _response->add_failed_tablet_vec()->Swap(tablet_info);
         }
 
+        void add_failed_replica_node_id(int64_t node_id, int64_t tablet_id) {
+            DCHECK(_response != nullptr);
+            std::lock_guard l(_response_lock);
+            (*_node_id_to_abort_tablets)[node_id].emplace_back(tablet_id);
+        }
+
+        void set_node_id_to_abort_tablets(std::unordered_map<int64_t, std::vector<int64_t>>* node_id_to_abort_tablets) {
+            _node_id_to_abort_tablets = node_id_to_abort_tablets;
+        }
+
         void set_count_down_latch(BThreadCountDownLatch* latch) { _latch = latch; }
 
     private:
@@ -132,6 +153,7 @@ private:
         Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
+        std::unordered_map<int64_t, std::vector<int64_t>>* _node_id_to_abort_tablets;
     };
 
     class WriteCallback : public AsyncDeltaWriterCallback {
@@ -160,13 +182,24 @@ private:
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
     void _commit_tablets(const PTabletWriterAddChunkRequest& request,
-                         std::shared_ptr<LocalTabletsChannel::WriteContext> context);
+                         const std::shared_ptr<LocalTabletsChannel::WriteContext>& context);
+
+    void _abort_replica_tablets(const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
+                                const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
+
+    void _flush_stale_memtables();
+
+    void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
 
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
 
     MemTracker* _mem_tracker;
+
+    RuntimeProfile* _profile;
 
     // initialized in open function
     int64_t _txn_id = -1;
@@ -198,9 +231,70 @@ private:
     // After the partition is created during data loading, there are some tablets of the new partitions on this node,
     // so a TabletsChannel needs to be created, such that _is_incremental_channel=true
     bool _is_incremental_channel = false;
+
+    std::map<string, string> _column_to_expr_value;
+
+    // Profile counters
+    // Number of times that update_profile() is called
+    RuntimeProfile::Counter* _profile_update_counter = nullptr;
+    // Accumulated time for update_profile()
+    RuntimeProfile::Counter* _profile_update_timer = nullptr;
+    // Number of times that open() is called
+    RuntimeProfile::Counter* _open_counter = nullptr;
+    // Accumulated time of open()
+    RuntimeProfile::Counter* _open_timer = nullptr;
+    // Number of times that add_chunk() is called
+    RuntimeProfile::Counter* _add_chunk_counter = nullptr;
+    // Accumulated time of add_chunk()
+    RuntimeProfile::Counter* _add_chunk_timer = nullptr;
+    // Number of rows added to this channel
+    RuntimeProfile::Counter* _add_row_num = nullptr;
+    // Accumulated time to wait for memtable flush in add_chunk()
+    RuntimeProfile::Counter* _wait_flush_timer = nullptr;
+    // Accumulated time to submit write task to delta writer thread pool in add_chunk()
+    RuntimeProfile::Counter* _submit_write_task_timer = nullptr;
+    // Accumulated time to submit commit task to delta writer thread pool in add_chunk()
+    RuntimeProfile::Counter* _submit_commit_task_timer = nullptr;
+    // Accumulated time to wait for async delta writers in add_chunk()
+    RuntimeProfile::Counter* _wait_write_timer = nullptr;
+    // Accumulated time to wait for secondary replicas in add_chunk()
+    RuntimeProfile::Counter* _wait_replica_timer = nullptr;
+    // Accumulated time to wait for txn persist in add_chunk()
+    RuntimeProfile::Counter* _wait_txn_persist_timer = nullptr;
+    // Accumulated time to wait sender close in add_chunk()
+    RuntimeProfile::Counter* _wait_drain_sender_timer = nullptr;
+
+    std::atomic<bool> _is_updating_profile{false};
+    std::unique_ptr<RuntimeProfile> _tablets_profile;
 };
 
-std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                          MemTracker* mem_tracker);
+class SecondaryReplicasWaiter {
+public:
+    SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms, int64_t eos_time_ms,
+                            std::vector<AsyncDeltaWriter*> delta_writers);
+    ~SecondaryReplicasWaiter();
+    Status wait();
+
+private:
+    void _try_check_replica_status_on_primary(int unfinished_tablet_start_index);
+    void _send_replica_status_request(int unfinished_tablet_start_index);
+    void _process_replica_status_response(int unfinished_tablet_start_index);
+    void _release_replica_status_closure();
+    void _try_diagnose_stack_strace_on_primary(int unfinished_tablet_start_index);
+
+    PUniqueId _load_id;
+    int64_t _txn_id;
+    int64_t _sink_id;
+    int64_t _timeout_ns;
+    std::vector<AsyncDeltaWriter*> _delta_writers;
+    int64_t _eos_time_ms;
+    int64_t _last_get_replica_status_time_ms;
+    int64_t _replica_status_fail_num{0};
+    ReusableClosure<PLoadReplicaStatusResult>* _replica_status_closure{nullptr};
+    bool _diagnose_triggered{false};
+};
+
+std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                               MemTracker* mem_tracker, RuntimeProfile* parent_profile);
 
 } // namespace starrocks

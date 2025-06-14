@@ -17,6 +17,7 @@
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
@@ -37,12 +38,10 @@ public:
 
     ~ExportSinkIOBuffer() override = default;
 
-    Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override;
-
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     Status _open_file_writer();
 
@@ -54,26 +53,6 @@ private:
     FragmentContext* _fragment_ctx;
 };
 
-Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
-    bool expected = false;
-    if (!_is_prepared.compare_exchange_strong(expected, true)) {
-        return Status::OK();
-    }
-    _state = state;
-
-    bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
-                                                       &ExportSinkIOBuffer::execute_io_task, this);
-    if (ret != 0) {
-        _exec_queue_id.reset();
-        return Status::InternalError("start execution queue error");
-    }
-
-    return Status::OK();
-}
-
 void ExportSinkIOBuffer::close(RuntimeState* state) {
     if (_file_builder != nullptr) {
         set_io_status(_file_builder->finish());
@@ -82,19 +61,7 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
-    if (_is_finished) {
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 0) {
-            close(_state);
-        }
-        return;
-    }
-
+void ExportSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_file_builder == nullptr) {
         if (Status status = _open_file_writer(); !status.ok()) {
             LOG(WARNING) << "open file write failed, error: " << status.to_string();
@@ -102,13 +69,7 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
             return;
         }
     }
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 0);
-        close(_state);
-        return;
-    }
+
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
@@ -187,6 +148,10 @@ bool ExportSinkOperator::is_finished() const {
 }
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
+    }
     return _export_sink_buffer->set_finishing();
 }
 
@@ -214,7 +179,7 @@ Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
     _export_sink_buffer =
-            std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _num_sinkers, _fragment_ctx);
+            std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _total_num_sinkers, _fragment_ctx);
     return Status::OK();
 }
 

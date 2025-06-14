@@ -26,6 +26,8 @@
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/type_traits.h"
@@ -45,7 +47,8 @@ class ExprContext;
 class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
-class BloomFilter;
+struct NgramBloomFilterReaderOptions;
+class RuntimeFilterProbeDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
@@ -77,6 +80,7 @@ enum class PredicateType {
     kExpr = 13,
     kTrue = 14,
     kMap = 15,
+    kPlaceHolder = 16,
 };
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);
@@ -150,12 +154,30 @@ public:
     // Return false to filter out a data page.
     virtual bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
 
-    virtual bool support_bloom_filter() const { return false; }
+    virtual bool support_original_bloom_filter() const { return false; }
+
+    // return true means this predicate can support ngram bloom filter, don't consider gram number(N)
+    // in ngram_bloom_filter(), if gram number is not equal(only happended in ngram_search right now)
+    // it will return true directly. This design is becasue gram number is hard to get in ScalarColumnIterator
+    // and not all predicate need gram size to determin whether support ngram bloom filter
+    virtual bool support_ngram_bloom_filter() const { return false; }
 
     // Return false to filter out a data page.
-    virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
+    virtual bool original_bloom_filter(const BloomFilter* bf) const { return true; }
 
-    virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const {
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const {
+        return true;
+    }
+
+    virtual bool support_bitmap_filter() const { return false; }
+
+    virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
+        return Status::Cancelled("not implemented");
+    }
+
+    virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                       roaring::Roaring* row_bitmap) const {
         return Status::Cancelled("not implemented");
     }
 
@@ -199,6 +221,7 @@ public:
     // bitmap index or bloom filter, the predicate operand should be right-padded with '\0'.
     virtual bool padding_zeros(size_t column_length) { return false; }
     const TypeInfo* type_info() const { return _type_info.get(); }
+    TypeInfoPtr type_info_ptr() const { return _type_info; }
 
 protected:
     constexpr static const char* kMsgTooManyItems = "too many bitmap filter items";
@@ -225,11 +248,32 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
 
 ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                          const std::vector<std::string>& operands);
+
+ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
+                                                  const std::vector<int32_t>& operands, size_t size);
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
 
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping);
+
+ColumnPredicate* new_column_placeholder_predicate(const TypeInfoPtr& type_info, ColumnId id);
+
+ColumnPredicate* new_column_eq_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_ne_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_lt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_le_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_gt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_ge_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
+                                                    const std::vector<Datum>& operands);
+ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
+                                                        const std::vector<Datum>& operands);
+
+template <LogicalType LT>
+class Bitset;
+template <LogicalType LT>
+ColumnPredicate* new_bitset_in_predicate(const TypeInfoPtr& type_info, ColumnId id, const Bitset<LT>& bitset);
 
 } //namespace starrocks

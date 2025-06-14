@@ -44,22 +44,22 @@
 
 namespace starrocks {
 
-EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash,
-                                       TVersion version, uint32_t* checksum)
-        : _tablet_id(tablet_id), _schema_hash(schema_hash), _version(version), _checksum(checksum) {
+EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TVersion version,
+                                       uint32_t* checksum)
+        : _tablet_id(tablet_id), _version(version), _checksum(checksum) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "checksum instance", mem_tracker);
 }
 
 Status EngineChecksumTask::execute() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    Status res = _compute_checksum();
-    return res;
-} // execute
+    return _compute_checksum();
+}
 
 Status EngineChecksumTask::_compute_checksum() {
+    int64_t begin_us = butil::gettimeofday_us();
     LOG(INFO) << "begin to process compute checksum."
-              << "tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash << ", version=" << _version;
+              << "tablet_id=" << _tablet_id << ", version=" << _version;
 
     if (_checksum == nullptr) {
         LOG(WARNING) << "The input checksum is a null pointer";
@@ -72,26 +72,15 @@ Status EngineChecksumTask::_compute_checksum() {
         return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
     }
 
-    if (tablet->updates() != nullptr) {
-        *_checksum = 0;
-        LOG(INFO) << "Skipped compute checksum for updatable tablet";
-        return Status::OK();
-    }
-
     std::vector<uint32_t> return_columns;
-    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    auto tablet_schema = tablet->tablet_schema();
 
-    size_t num_columns = tablet_schema.num_columns();
+    size_t num_columns = tablet_schema->num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-        LogicalType type = tablet_schema.column(i).type();
-        // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
-        // a fixed value, so these two types are ignored in calculating checksum.
-        // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
-        if (type == TYPE_FLOAT || type == TYPE_DOUBLE || type == TYPE_HLL || type == TYPE_OBJECT ||
-            type == TYPE_PERCENTILE || type == TYPE_JSON) {
-            continue;
+        const auto& column = tablet_schema->column(i);
+        if (column.is_support_checksum()) {
+            return_columns.push_back(i);
         }
-        return_columns.push_back(i);
     }
 
     Schema schema = ChunkHelper::convert_schema(tablet_schema, return_columns);
@@ -105,9 +94,22 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
+    // Calculate the chunk size based on the memory limit of the current thread.
+    int64_t chunk_rows_limit = 0;
+    // Estimate the average row size of the tablet
+    int64_t average_row_size = tablet->get_average_row_size();
+    if (average_row_size != 0 && _mem_tracker->parent()->has_limit()) {
+        // Limit the chunk size to avoid memory overflow
+        chunk_rows_limit = _mem_tracker->parent()->limit() / average_row_size /
+                           std::max(1, config::check_consistency_worker_count);
+    } else {
+        // no limitation for empty tablet
+        chunk_rows_limit = config::vector_chunk_size;
+    }
+
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CHECKSUM;
-    reader_params.chunk_size = config::vector_chunk_size;
+    reader_params.chunk_size = std::min((int64_t)config::vector_chunk_size, chunk_rows_limit + 1);
 
     st = reader.open(reader_params);
     if (!st.ok()) {
@@ -148,7 +150,12 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
-    LOG(INFO) << "success to finish compute checksum. checksum=" << checksum;
+    int64_t cost_time = butil::gettimeofday_us() - begin_us;
+
+    if (cost_time >= 30000000 /** 30s **/) {
+        LOG(INFO) << "success to finish compute checksum. checksum=" << checksum << ", tablet_id=" << _tablet_id
+                  << ", version=" << _version << " , cost_time=" << cost_time << "us";
+    }
     *_checksum = checksum;
     return Status::OK();
 }

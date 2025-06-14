@@ -20,6 +20,7 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
@@ -29,12 +30,9 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
 #include "util/thread.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
-
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::transport::TTransportException;
 
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
@@ -44,6 +42,7 @@ QueryContext::QueryContext()
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
     _stream_epoch_manager = std::make_shared<StreamEpochManager>();
+    _lifetime_sw.start();
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -54,6 +53,16 @@ QueryContext::~QueryContext() noexcept {
     // remaining other RuntimeStates after the current RuntimeState is freed, MemChunkAllocator uses the MemTracker of the
     // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
     // segmentation fault.
+    if (_mem_tracker != nullptr) {
+        if (lifetime() > config::big_query_sec * 1000 * 1000 * 1000) {
+            LOG(INFO) << fmt::format(
+                    "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
+                    "bytes:{}",
+                    print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(),
+                    get_spill_bytes());
+        }
+    }
+
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
         _fragment_mgr.reset();
@@ -66,6 +75,11 @@ QueryContext::~QueryContext() noexcept {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
+    }
+
+    // Make sure all bytes are released back to parent trackers.
+    if (_connector_scan_mem_tracker != nullptr) {
+        _connector_scan_mem_tracker->release_without_root();
     }
 }
 
@@ -84,7 +98,7 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        query_trace->dump();
+        (void)query_trace->dump();
     }
 }
 
@@ -92,59 +106,96 @@ FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }
 
-void QueryContext::cancel(const Status& status) {
+void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
+    _is_cancelled = true;
+    if (cancelled_by_fe) {
+        // only update when confirm cancelled from fe
+        set_cancelled_by_fe();
+    }
+    if (_cancelled_status.load() != nullptr) {
+        return;
+    }
+    Status* old_status = nullptr;
+    if (_cancelled_status.compare_exchange_strong(old_status, &_s_status)) {
+        _s_status = status;
+    }
     _fragment_mgr->cancel(status);
 }
 
-int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit,
-                                              size_t pipeline_dop, int64_t option_query_mem_limit) {
-    // no mem_limit
-    if (per_instance_mem_limit <= 0 && option_query_mem_limit <= 0) {
-        return -1;
-    }
-
-    int64_t mem_limit;
-    if (option_query_mem_limit > 0) {
-        mem_limit = option_query_mem_limit;
-    } else {
-        mem_limit = per_instance_mem_limit;
-        // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
-        static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
-        if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop > mem_limit) {
-            mem_limit *= static_cast<int64_t>(total_fragments()) * pipeline_dop;
-        } else {
-            mem_limit = MEM_LIMIT_MAX;
-        }
-    }
-
-    // query's mem_limit never exceeds its parent's limit if it exists
-    return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
-}
-
-void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
+void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
+                                    std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
+                                    RuntimeState* runtime_state, int connector_scan_node_number) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-        mem_tracker_counter->set(bytes_limit);
-        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
+        mem_tracker_counter->set(query_mem_limit);
+        size_t lowest_limit = parent->lowest_limit();
+        size_t tracker_reserve_limit = -1;
+
+        if (spill_mem_reserve_ratio.has_value()) {
+            tracker_reserve_limit = lowest_limit * spill_mem_reserve_ratio.value();
+        }
+
+        if (wg != nullptr && big_query_mem_limit > 0 &&
+            (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
+            std::string label = "Group=" + wg->name() + ", " + _profile->name();
+            _mem_tracker = std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
+                                                        std::move(label), parent);
+            _mem_tracker->set_reserve_limit(tracker_reserve_limit);
+        } else {
+            _mem_tracker =
+                    std::make_shared<MemTracker>(MemTrackerType::QUERY, query_mem_limit, _profile->name(), parent);
+            _mem_tracker->set_reserve_limit(tracker_reserve_limit);
+        }
+
+        _static_query_mem_limit = lowest_limit;
+        if (query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
+        }
+        if (big_query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
+        }
+        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
+                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
+
+        {
+            MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
+            if (wg != nullptr) {
+                connector_scan_parent = wg->connector_scan_mem_tracker();
+            }
+            double connector_scan_use_query_mem_ratio = config::connector_scan_use_query_mem_ratio;
+            if (runtime_state != nullptr && runtime_state->query_options().__isset.connector_scan_use_query_mem_ratio) {
+                connector_scan_use_query_mem_ratio = runtime_state->query_options().connector_scan_use_query_mem_ratio;
+            }
+            _connector_scan_mem_tracker = std::make_shared<MemTracker>(
+                    MemTrackerType::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
+                    _profile->name() + "/connector_scan", connector_scan_parent);
+        }
     });
 }
 
-Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
+Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
+    Status st;
+    std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
+        st = _spill_manager->init_block_manager(query_options);
+    });
+    return st;
+}
+
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
     Status st = Status::OK();
     if (wg != nullptr) {
-        std::call_once(_init_query_once, [this, &st, wg]() {
+        std::call_once(_init_query_once, [this, &st, wg, enable_group_level_query_queue]() {
             this->init_query_begin_time();
-            auto maybe_token = wg->acquire_running_query_token();
+            auto maybe_token = wg->acquire_running_query_token(enable_group_level_query_queue);
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
                 _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();
             } else {
                 st = maybe_token.status();
             }
-
-            _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
         });
     }
 
@@ -154,10 +205,20 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
 void QueryContext::release_workgroup_token_once() {
     auto* old = _wg_running_query_token_atomic_ptr.load();
     if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
+        // The release_workgroup_token_once function is called by FragmentContext::cancel
+        // to detach the QueryContext from the workgroup.
+        // When the workgroup undergoes a configuration change, the old version of the workgroup is released,
+        // and a new version is created. The old workgroup will only be physically destroyed once no
+        // QueryContext is attached to it.
+        // However, the MemTracker of the old workgroup outlives the workgroup itself because
+        // it is accessed during the destruction of the QueryContext through its MemTracker
+        // (the workgroup's MemTracker serves as the parent of the QueryContext's MemTracker).
+        // To prevent the MemTracker from being released prematurely, it must be explicitly retained
+        // to ensure it remains valid until it is no longer needed.
+        _wg_mem_tracker = _wg_running_query_token_ptr->get_wg()->grab_mem_tracker();
         _wg_running_query_token_ptr.reset();
     }
 }
-
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
     std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
 }
@@ -168,26 +229,85 @@ std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
 
 std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
-    // Not transmit delta if it's the result sink node
-    if (_is_result_sink) {
-        return query_statistic;
+    // Not transmit delta if it's the final sink
+    if (_is_final_sink) {
+        return nullptr;
     }
-    query_statistic->add_scan_stats(_delta_scan_rows_num.exchange(0), _delta_scan_bytes.exchange(0));
+
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->delta_scan_rows_num.exchange(0));
+            stats_item.set_scan_bytes(scan_stats->delta_scan_bytes.exchange(0));
+            query_statistic->add_stats_item(stats_item);
+        }
+    }
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        query_statistic->add_exec_stats_item(
+                node_id, exec_stats->push_rows.exchange(0), exec_stats->pull_rows.exchange(0),
+                exec_stats->pred_filter_rows.exchange(0), exec_stats->index_filter_rows.exchange(0),
+                exec_stats->rf_filter_rows.exchange(0));
+    }
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
 
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
-    DCHECK(_is_result_sink) << "must be the result sink";
+    DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
-    res->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
-    res->add_cpu_costs(_total_cpu_cost_ns);
+    res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
+    res->add_spill_bytes(get_spill_bytes());
+
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
+            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
+            res->add_stats_item(stats_item);
+        }
+    }
+
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
+                                 exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
+    }
 
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
+}
+
+void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
+    ScanStats* stats = nullptr;
+    {
+        std::lock_guard l(_scan_stats_lock);
+        auto iter = _scan_stats.find(table_id);
+        if (iter == _scan_stats.end()) {
+            _scan_stats.insert({table_id, std::make_shared<ScanStats>()});
+            iter = _scan_stats.find(table_id);
+        }
+        stats = iter->second.get();
+    }
+
+    stats->total_scan_rows_num += scan_rows_num;
+    stats->delta_scan_rows_num += scan_rows_num;
+    stats->total_scan_bytes += scan_bytes;
+    stats->delta_scan_bytes += scan_bytes;
+}
+
+void QueryContext::init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids) {
+    std::call_once(_node_exec_stats_init_flag, [this, &exec_stats_node_ids]() {
+        for (int32_t node_id : exec_stats_node_ids) {
+            auto node_exec_stats = std::make_shared<NodeExecStats>();
+            _node_exec_stats[node_id] = node_exec_stats;
+        }
+    });
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
@@ -257,7 +377,18 @@ QueryContextManager::~QueryContextManager() {
     }
 }
 
-QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
+#define RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(query_ctx) \
+    if (query_ctx->is_cancelled()) {                        \
+        return query_ctx->get_cancelled_status();           \
+    }                                                       \
+    query_ctx->increment_num_fragments();                   \
+    if (query_ctx->is_cancelled()) {                        \
+        query_ctx->rollback_inc_fragments();                \
+        return query_ctx->get_cancelled_status();           \
+    }
+
+StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& query_id,
+                                                             bool return_error_if_not_exist) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -268,7 +399,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         // lookup query context in context_map
         auto it = context_map.find(query_id);
         if (it != context_map.end()) {
-            it->second->increment_num_fragments();
+            RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         }
     }
@@ -278,18 +409,22 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         auto it = context_map.find(query_id);
         auto sc_it = sc_map.find(query_id);
         if (it != context_map.end()) {
-            it->second->increment_num_fragments();
+            RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         } else {
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
-                ctx->increment_num_fragments();
                 sc_map.erase(sc_it);
+                RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
                 auto* raw_ctx_ptr = ctx.get();
                 context_map.emplace(query_id, std::move(ctx));
                 return raw_ctx_ptr;
             }
+        }
+
+        if (return_error_if_not_exist) {
+            return Status::Cancelled("Query terminates prematurely");
         }
 
         // finally, find no query contexts, so create a new one
@@ -302,7 +437,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     }
 }
 
-QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
+QueryContextPtr QueryContextManager::get(const TUniqueId& query_id, bool need_prepared) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -310,13 +445,24 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
     std::shared_lock<std::shared_mutex> read_lock(mutex);
     // lookup query context in context_map for the first chance
     auto it = context_map.find(query_id);
+    auto check_if_prepared = [need_prepared](auto it) -> QueryContextPtr {
+        if (need_prepared) {
+            if (it->second->is_prepared()) {
+                return it->second;
+            } else {
+                return nullptr;
+            }
+        } else {
+            return it->second;
+        }
+    };
     if (it != context_map.end()) {
-        return it->second;
+        return check_if_prepared(it);
     } else {
         // lookup query context in context_map for the second chance
         auto sc_it = sc_map.find(query_id);
         if (sc_it != sc_map.end()) {
-            return sc_it->second;
+            return check_if_prepared(sc_it);
         } else {
             return nullptr;
         }
@@ -388,7 +534,7 @@ void QueryContextManager::report_fragments_with_same_host(
         if (reported[i] == false) {
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->all_pipelines_finished()) {
+            if (fragment_ctx->all_execution_groups_finished()) {
                 reported[i] = true;
                 continue;
             }
@@ -401,7 +547,6 @@ void QueryContextManager::report_fragments_with_same_host(
                 continue;
             }
 
-            Status fe_connection_status;
             auto fe_addr = fragment_ctx->fe_addr();
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
@@ -442,7 +587,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
         TUniqueId id;
         id.__set_hi(p_query_id.hi());
         id.__set_lo(p_query_id.lo());
-        if (auto query_ctx = get(id); query_ctx != nullptr) {
+        if (auto query_ctx = get(id, true); query_ctx != nullptr) {
             int64_t cpu_cost = query_ctx->cpu_cost();
             int64_t scan_rows = query_ctx->cur_scan_rows_num();
             int64_t scan_bytes = query_ctx->get_scan_bytes();
@@ -491,7 +636,7 @@ void QueryContextManager::report_fragments(
 
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->all_pipelines_finished()) {
+            if (fragment_ctx->all_execution_groups_finished()) {
                 continue;
             }
 
@@ -502,23 +647,10 @@ void QueryContextManager::report_fragments(
                 continue;
             }
 
-            Status fe_connection_status;
             auto fe_addr = fragment_ctx->fe_addr();
-            auto exec_env = fragment_ctx->runtime_state()->exec_env();
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
             DCHECK(runtime_state != nullptr);
-
-            FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr, &fe_connection_status);
-            if (!fe_connection_status.ok()) {
-                std::stringstream ss;
-                ss << "couldn't get a client for " << fe_addr;
-                LOG(WARNING) << ss.str();
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
-                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
-                exec_env->frontend_client_cache()->close_connections(fe_addr);
-                continue;
-            }
 
             std::vector<TReportExecStatusParams> report_exec_status_params_vector;
 
@@ -556,23 +688,15 @@ void QueryContextManager::report_fragments(
             Status rpc_status;
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
-
-            try {
-                try {
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                } catch (TTransportException& e) {
-                    LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen();
-                    if (!rpc_status.ok()) {
-                        continue;
-                    }
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                }
-
-            } catch (TException& e) {
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
+            rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    fe_addr,
+                    [&res, &report_batch](FrontendServiceConnection& client) {
+                        client->batchReportExecStatus(res, report_batch);
+                    },
+                    config::thrift_rpc_timeout_ms);
+            if (!rpc_status.ok()) {
+                LOG(WARNING) << "thrift rpc error:" << rpc_status;
+                continue;
             }
 
             const std::vector<TStatus>& status_list = res.status_list;
@@ -590,6 +714,18 @@ void QueryContextManager::report_fragments(
     for (const auto& key : fragment_context_non_exist) {
         starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(key.query_id,
                                                                                              key.fragment_instance_id);
+    }
+}
+
+void QueryContextManager::for_each_active_ctx(const std::function<void(QueryContextPtr)>& func) {
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _mutexes[i];
+        std::vector<QueryContextPtr> del_list;
+        std::unique_lock write_lock(mutex);
+        auto& contexts = _context_maps[i];
+        for (auto& [_, context] : contexts) {
+            func(context);
+        }
     }
 }
 

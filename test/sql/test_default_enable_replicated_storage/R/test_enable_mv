@@ -1,4 +1,4 @@
--- name: test_default_enable_mv
+-- name: test_default_enable_mv @sequential
 create database test_default_enable_mv;
 -- result:
 -- !result
@@ -16,7 +16,7 @@ create materialized view tvd distributed by hash(k) buckets 10 REFRESH ASYNC as 
 -- !result
 show create materialized view tvd;
 -- result:
-tvd	CREATE MATERIALIZED VIEW `tvd` (k, sum(v))
+tvd	CREATE MATERIALIZED VIEW `tvd` (`k`, `sum(v)`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 REFRESH ASYNC
 PROPERTIES (
@@ -36,7 +36,7 @@ create materialized view tvb distributed by hash(k) buckets 10 REFRESH ASYNC as 
 -- !result
 show create materialized view tvb;
 -- result:
-tvb	CREATE MATERIALIZED VIEW `tvb` (k, sum(v))
+tvb	CREATE MATERIALIZED VIEW `tvb` (`k`, `sum(v)`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 REFRESH ASYNC
 PROPERTIES (

@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.qe.SessionVariable;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -36,10 +35,10 @@ import java.util.List;
  *
  */
 public class RewriteTreeTask extends OptimizerTask {
-    private final OptExpression planTree;
-    private final boolean onlyOnce;
-    private final List<Rule> rules;
-    private long change = 0;
+    protected final OptExpression planTree;
+    protected final boolean onlyOnce;
+    protected final List<Rule> rules;
+    protected long change = 0;
 
     public RewriteTreeTask(TaskContext context, OptExpression root, List<Rule> rules, boolean onlyOnce) {
         super(context);
@@ -49,33 +48,62 @@ public class RewriteTreeTask extends OptimizerTask {
         Preconditions.checkState(planTree.getOp().getOpType() == OperatorType.LOGICAL);
     }
 
+    public RewriteTreeTask(TaskContext context, OptExpression root, Rule rule, boolean onlyOnce) {
+        this(context, root, List.of(rule), onlyOnce);
+    }
+
     public OptExpression getResult() {
         return planTree.getInputs().get(0);
     }
 
     @Override
     public void execute() {
+        if (rules.stream().allMatch(rule -> context.getOptimizerContext()
+                .getOptimizerOptions().isRuleDisable(rule.type()))) {
+            return;
+        }
         // first node must be RewriteAnchorNode
         rewrite(planTree, 0, planTree.getInputs().get(0));
-
+        // pushdownNotNullPredicates should task-bind, reset it before another RewriteTreeTask
+        // TODO: refactor TaskContext to make it local to support this requirement better?
+        context.getOptimizerContext().clearNotNullPredicates();
         if (change > 0 && !onlyOnce) {
-            pushTask(new RewriteTreeTask(context, planTree, rules, onlyOnce));
+            pushTask(new RewriteTreeTask(context, planTree, rules, false));
         }
     }
 
-    private void rewrite(OptExpression parent, int childIndex, OptExpression root) {
-        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
+    protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
+        root = applyRules(parent, childIndex, root, rules);
+        // prune cte column depend on prune right child first
+        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
+            rewrite(root, i, root.getInputs().get(i));
+        }
+    }
 
+    protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root, List<Rule> rules) {
         for (Rule rule : rules) {
+            if (context.getOptimizerContext().getOptimizerOptions().isRuleDisable(rule.type())) {
+                continue;
+            }
+            if (rule.exhausted(context.getOptimizerContext())) {
+                continue;
+            }
             if (!match(rule.getPattern(), root) || !rule.check(root, context.getOptimizerContext())) {
                 continue;
             }
 
-            List<OptExpression> result = rule.transform(root, context.getOptimizerContext());
+            if (!rule.predecessorRules().isEmpty()) {
+                root = applyRules(parent, childIndex, root, rule.predecessorRules());
+            }
+
+            OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, root);
+            List<OptExpression> result;
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.toString())) {
+                result = rule.transform(root, context.getOptimizerContext());
+            }
             Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
 
-            OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
-            OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, root, result);
+            OptimizerTraceUtil.logApplyRuleAfter(result);
 
             if (result.isEmpty()) {
                 continue;
@@ -85,19 +113,23 @@ public class RewriteTreeTask extends OptimizerTask {
             root = result.get(0);
             change++;
             deriveLogicalProperty(root);
-        }
 
-        // prune cte column depend on prune right child first
-        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
-            rewrite(root, i, root.getInputs().get(i));
+            if (!rule.successorRules().isEmpty()) {
+                root = applyRules(parent, childIndex, root, rule.successorRules());
+            }
         }
+        return root;
     }
 
-    private boolean match(Pattern pattern, OptExpression root) {
+    protected boolean match(Pattern pattern, OptExpression root) {
         if (!pattern.matchWithoutChild(root)) {
             return false;
         }
 
+        if (!pattern.children().isEmpty() && pattern.children().size() != root.getInputs().size() &&
+                pattern.children().stream().noneMatch(p -> p.is(OperatorType.PATTERN_MULTI_LEAF))) {
+            return false;
+        }
         int patternIndex = 0;
         int childIndex = 0;
 
@@ -109,7 +141,7 @@ public class RewriteTreeTask extends OptimizerTask {
                 return false;
             }
 
-            if (!(childPattern.isPatternMultiLeaf() && (root.getInputs().size() - childIndex) >
+            if (!(childPattern.is(OperatorType.PATTERN_MULTI_LEAF) && (root.getInputs().size() - childIndex) >
                     (pattern.children().size() - patternIndex))) {
                 patternIndex++;
             }
@@ -119,7 +151,7 @@ public class RewriteTreeTask extends OptimizerTask {
         return true;
     }
 
-    private void deriveLogicalProperty(OptExpression root) {
+    protected void deriveLogicalProperty(OptExpression root) {
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
         }
@@ -129,5 +161,9 @@ public class RewriteTreeTask extends OptimizerTask {
             context.deriveLogicalProperty();
             root.setLogicalProperty(context.getRootProperty());
         }
+    }
+
+    public boolean hasChange() {
+        return change > 0;
     }
 }

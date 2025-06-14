@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "boost/algorithm/string.hpp"
+#include "common/config.h"
 #include "common/logging.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
@@ -92,6 +93,7 @@ public:
 
     static void TearDownTestCase() {
         s_server->stop();
+        s_server->join();
         delete s_server;
     }
 };
@@ -123,14 +125,31 @@ TEST_F(HttpClientTest, download) {
     ASSERT_TRUE(st.ok());
     client.set_basic_auth("test1", "");
     std::string local_file = ".http_client_test.dat";
-    st = client.download(local_file);
-    ASSERT_TRUE(st.ok());
+    auto st_or = client.download(local_file);
+    ASSERT_TRUE(st_or.ok());
     char buf[50];
     auto fp = fopen(local_file.c_str(), "r");
     auto size = fread(buf, 1, 50, fp);
     buf[size] = 0;
     ASSERT_STREQ("test1", buf);
     unlink(local_file.c_str());
+}
+
+TEST_F(HttpClientTest, download_to_memory) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_basic_auth("test1", "");
+    std::string value;
+    st = client.download(
+            [&](const void* data, size_t length) {
+                value.append((const char*)data, length);
+                return Status::OK();
+            },
+            config::replication_min_speed_limit_kbps, config::replication_min_speed_time_seconds,
+            config::replication_max_speed_limit_kbps);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("test1", value);
 }
 
 TEST_F(HttpClientTest, get_failed) {
@@ -169,7 +188,7 @@ TEST_F(HttpClientTest, post_failed) {
     st = client.execute_post_request(request_body, &response);
     ASSERT_FALSE(st.ok());
     std::string not_found = "404";
-    ASSERT_TRUE(boost::algorithm::contains(st.get_error_msg(), not_found));
+    ASSERT_TRUE(boost::algorithm::contains(st.message(), not_found));
 }
 
 } // namespace starrocks

@@ -57,7 +57,7 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) override;
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
 
     Status open(RuntimeState* state);
 
@@ -68,8 +68,8 @@ public:
     Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk);
 
     // Called when need to generate incremental outputs and Output agg_states for the next batch.
-    Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
-                          std::vector<ChunkPtr>& detail_chunks);
+    Status output_changes_internal(int32_t chunk_size, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
+                                   std::vector<ChunkPtr>& detail_chunks);
 
     // Reset the aggregator's state to avoid hashmap too large.
     Status reset_state(RuntimeState* state);

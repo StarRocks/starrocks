@@ -20,11 +20,10 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public abstract class PartitionPersistInfoV2 implements Writable {
@@ -44,7 +43,7 @@ public abstract class PartitionPersistInfoV2 implements Writable {
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
     @SerializedName("storageCacheInfo")
-    private StorageCacheInfo storageCacheInfo;
+    private DataCacheInfo dataCacheInfo;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
@@ -55,7 +54,7 @@ public abstract class PartitionPersistInfoV2 implements Writable {
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
                                   boolean isInMemory, boolean isTempPartition,
-                                  StorageCacheInfo storageCacheInfo) {
+                                  DataCacheInfo dataCacheInfo) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
@@ -63,7 +62,7 @@ public abstract class PartitionPersistInfoV2 implements Writable {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
-        this.storageCacheInfo = storageCacheInfo;
+        this.dataCacheInfo = dataCacheInfo;
     }
 
     public final boolean isListPartitionPersistInfo() {
@@ -82,11 +81,7 @@ public abstract class PartitionPersistInfoV2 implements Writable {
         return (RangePartitionPersistInfo) this;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static PartitionPersistInfoV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -121,8 +116,8 @@ public abstract class PartitionPersistInfoV2 implements Writable {
         return this.isTempPartition;
     }
 
-    public StorageCacheInfo getStorageCacheInfo() {
-        return this.storageCacheInfo;
+    public DataCacheInfo getDataCacheInfo() {
+        return this.dataCacheInfo;
     }
 
 }

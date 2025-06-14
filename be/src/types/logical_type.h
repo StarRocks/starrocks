@@ -16,6 +16,7 @@
 
 #include <iostream>
 
+#include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
@@ -82,6 +83,14 @@ inline bool is_zone_map_key_type(LogicalType type) {
            type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
 }
 
+// The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
+// a fixed value, so these two types are ignored in calculating checksum.
+// And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
+inline bool is_support_checksum_type(LogicalType type) {
+    return type != TYPE_FLOAT && type != TYPE_DOUBLE && type != TYPE_HLL && type != TYPE_OBJECT &&
+           type != TYPE_PERCENTILE && type != TYPE_JSON;
+}
+
 template <LogicalType TYPE>
 inline constexpr LogicalType DelegateType = TYPE;
 template <>
@@ -113,7 +122,7 @@ inline bool is_float_type(LogicalType type) {
     return type == TYPE_FLOAT || type == TYPE_DOUBLE;
 }
 
-inline bool is_string_type(LogicalType type) {
+constexpr bool is_string_type(LogicalType type) {
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
 
@@ -153,6 +162,18 @@ inline bool is_scalar_field_type(LogicalType type) {
     }
 }
 
+inline bool is_semi_type(LogicalType type) {
+    switch (type) {
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_JSON:
+        return true;
+    default:
+        return false;
+    }
+}
+
 inline bool is_complex_metric_type(LogicalType type) {
     switch (type) {
     case TYPE_OBJECT:
@@ -164,7 +185,7 @@ inline bool is_complex_metric_type(LogicalType type) {
     }
 }
 
-inline bool is_enumeration_type(LogicalType type) {
+constexpr bool is_enumeration_type(LogicalType type) {
     switch (type) {
     case TYPE_TINYINT:
     case TYPE_SMALLINT:
@@ -228,6 +249,34 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     }
 }
 
+constexpr bool support_column_expr_predicate(LogicalType ltype) {
+    switch (ltype) {
+    case TYPE_BOOLEAN:  /* 2 */
+    case TYPE_TINYINT:  /* 3 */
+    case TYPE_SMALLINT: /* 4 */
+    case TYPE_INT:      /* 5 */
+    case TYPE_BIGINT:   /* 6 */
+    case TYPE_LARGEINT: /* 7 */
+    case TYPE_VARCHAR:  /* 10 */
+    case TYPE_DATE:     /* 11 */
+    case TYPE_DATETIME: /* 12 */
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        /* 13 */          // Not implemented
+    case TYPE_DECIMAL:    /* 14 */
+    case TYPE_CHAR:       /* 15 */
+    case TYPE_DECIMALV2:  /* 20 */
+    case TYPE_TIME:       /* 21 */
+    case TYPE_DECIMAL32:  /* 24 */
+    case TYPE_DECIMAL64:  /* 25 */
+    case TYPE_DECIMAL128: /* 26 */
+    case TYPE_STRUCT:
+        return true;
+    default:
+        return false;
+    }
+}
+
 constexpr size_t type_estimated_overhead_bytes(LogicalType ltype) {
     switch (ltype) {
     case TYPE_VARCHAR:
@@ -256,6 +305,8 @@ VALUE_GUARD(LogicalType, IntegerLTGuard, lt_is_integer, TYPE_TINYINT, TYPE_SMALL
             TYPE_LARGEINT)
 VALUE_GUARD(LogicalType, SumBigIntLTGuard, lt_is_sum_bigint, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
             TYPE_BIGINT)
+VALUE_GUARD(LogicalType, UnsignedLTGuard, lt_is_unsigned, TYPE_UNSIGNED_TINYINT, TYPE_UNSIGNED_SMALLINT,
+            TYPE_UNSIGNED_INT, TYPE_UNSIGNED_BIGINT)
 VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
 VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
 VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)

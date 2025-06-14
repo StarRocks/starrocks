@@ -23,8 +23,11 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -100,7 +103,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String MAX_BATCH_INTERVAL_SEC_PROPERTY = "max_batch_interval";
     public static final String MAX_BATCH_ROWS_PROPERTY = "max_batch_rows";
     public static final String MAX_BATCH_SIZE_PROPERTY = "max_batch_size";  // deprecated
-
+    public static final String TASK_CONSUME_SECOND = "task_consume_second";
+    public static final String TASK_TIMEOUT_SECOND = "task_timeout_second";
+    public static final int TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO = 4;
     public static final String LOG_REJECTED_RECORD_NUM_PROPERTY = "log_rejected_record_num";
 
     // the value is csv or json, default is csv
@@ -113,6 +118,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String TRIMSPACE = "trim_space";
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
+
+    public static final String PAUSE_ON_FATAL_PARSE_ERROR = "pause_on_fatal_parse_error";
 
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
@@ -134,7 +141,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String PULSAR_DEFAULT_INITIAL_POSITION = "pulsar_default_initial_position";
 
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
-    private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
+    // from: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/utils/Utils.java#L97
+    private static final String ENDPOINT_REGEX = ".*?\\[?([0-9a-zA-Z\\-%._:]*)\\]?:(\\d+)";
 
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
@@ -143,6 +151,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(MAX_BATCH_INTERVAL_SEC_PROPERTY)
             .add(MAX_BATCH_ROWS_PROPERTY)
             .add(MAX_BATCH_SIZE_PROPERTY)
+            .add(PAUSE_ON_FATAL_PARSE_ERROR)
             .add(FORMAT)
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
@@ -155,6 +164,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(ENCLOSE)
             .add(ESCAPE)
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
+            .add(TASK_CONSUME_SECOND)
+            .add(TASK_TIMEOUT_SECOND)
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -191,12 +203,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private double maxFilterRatio = 1;
     private long maxBatchIntervalS = -1;
     private long maxBatchRows = -1;
+    private long taskConsumeSecond;
+    private long taskTimeoutSecond;
     private long logRejectedRecordNum = 0;
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private boolean partialUpdate = false;
     private String mergeConditionStr;
     private String partialUpdateMode = "row";
+    private boolean pauseOnFatalParseError = RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -265,6 +280,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
         this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public long getTaskConsumeSecond() {
+        return taskConsumeSecond;
+    }
+
+    public long getTaskTimeoutSecond() {
+        return taskTimeoutSecond;
     }
 
     public boolean isTrimspace() {
@@ -363,6 +386,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return mergeConditionStr;
     }
 
+    public boolean isPauseOnFatalParseError() {
+        return pauseOnFatalParseError;
+    }
+
     public String getFormat() {
         return format;
     }
@@ -453,7 +480,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
-    public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws UserException {
+    public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws StarRocksException {
         if (loadPropertyList == null) {
             return null;
         }
@@ -487,6 +514,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of where predicate");
                 }
                 importWhereStmt = (ImportWhereStmt) parseNode;
+                if (importWhereStmt.isContainSubquery()) {
+                    throw new AnalysisException("the predicate cannot contain subqueries");
+                }
             } else if (parseNode instanceof PartitionNames) {
                 // check partition names
                 if (partitionNames != null) {
@@ -500,7 +530,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 partitionNames);
     }
 
-    public void checkJobProperties() throws UserException {
+    public void checkJobProperties() throws StarRocksException {
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -522,10 +552,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             try {
                 maxFilterRatio = Double.valueOf(maxFilterRatioStr);
             } catch (NumberFormatException exception) {
-                throw new UserException("Incorrect format of max_filter_ratio", exception);
+                throw new StarRocksException("Incorrect format of max_filter_ratio", exception);
             }
             if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
-                throw new UserException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
+                throw new StarRocksException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
             }
         }
 
@@ -558,6 +588,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         timezone = TimeUtils.checkTimeZoneValidAndStandardize(jobProperties.getOrDefault(LoadStmt.TIMEZONE, timezone));
 
+        pauseOnFatalParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(PAUSE_ON_FATAL_PARSE_ERROR),
+                RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR,
+                PAUSE_ON_FATAL_PARSE_ERROR + " should be a boolean");
+
         format = jobProperties.get(FORMAT);
         if (format != null) {
             if (format.equalsIgnoreCase("csv")) {
@@ -571,7 +605,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 format = "avro";
                 jsonPaths = jobProperties.get(JSONPATHS);
             } else {
-                throw new UserException("Format type is invalid. format=`" + format + "`");
+                throw new StarRocksException("Format type is invalid. format=`" + format + "`");
             }
         } else {
             format = "csv"; // default csv
@@ -588,6 +622,46 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             } else {
                 escape = 0;
             }
+        }
+
+        if (jobProperties.containsKey(TASK_CONSUME_SECOND) && jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
+            String taskConsumeSecondStr = jobProperties.get(TASK_CONSUME_SECOND);
+            try {
+                taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
+            } catch (NumberFormatException e) {
+                throw new StarRocksException(e.getMessage());
+            }
+            String taskTimeoutSecondStr = jobProperties.get(TASK_TIMEOUT_SECOND);
+            try {
+                taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
+            } catch (NumberFormatException e) {
+                throw new StarRocksException(e.getMessage());
+            }
+            if (taskConsumeSecond >= taskTimeoutSecond) {
+                throw new StarRocksException("task_timeout_second must be larger than task_consume_second");
+            }
+        } else if (jobProperties.containsKey(TASK_CONSUME_SECOND) || jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
+            if (jobProperties.containsKey(TASK_CONSUME_SECOND)) {
+                String taskConsumeSecondStr = jobProperties.get(TASK_CONSUME_SECOND);
+                try {
+                    taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
+                } catch (NumberFormatException e) {
+                    throw new StarRocksException(e.getMessage());
+                }
+                taskTimeoutSecond = taskConsumeSecond * TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
+            }
+            if (jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
+                String taskTimeoutSecondStr = jobProperties.get(TASK_TIMEOUT_SECOND);
+                try {
+                    taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
+                } catch (NumberFormatException e) {
+                    throw new StarRocksException(e.getMessage());
+                }
+                taskConsumeSecond = taskTimeoutSecond / TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
+            }
+        } else {
+            taskConsumeSecond = Config.routine_load_task_consume_second;
+            taskTimeoutSecond = Config.routine_load_task_timeout_second;
         }
     }
 
@@ -623,13 +697,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (Strings.isNullOrEmpty(kafkaBrokerList)) {
             throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + " is a required property");
         }
-        String[] kafkaBrokerList = this.kafkaBrokerList.split(",");
-        for (String broker : kafkaBrokerList) {
-            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
-                throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + ":" + broker
-                        + " not match pattern " + ENDPOINT_REGEX);
-            }
-        }
+        validateKafkaBrokerList(kafkaBrokerList);
 
         // check topic
         kafkaTopic = Strings.nullToEmpty(dataSourceProperties.get(KAFKA_TOPIC_PROPERTY)).replaceAll(" ", "");
@@ -674,8 +742,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                                                      Map<String, String> customKafkaProperties,
                                                      List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
-        kafkaPartitionsString = kafkaPartitionsString.replaceAll(" ", "");
-        if (kafkaPartitionsString.isEmpty()) {
+        String trimedKafkaPartitionsStr = kafkaPartitionsString.trim();
+        if (trimedKafkaPartitionsStr.isEmpty()) {
             throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY + " could not be a empty string");
         }
 
@@ -685,23 +753,18 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             kafkaDefaultOffset = getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
         }
 
-        String[] kafkaPartitionsStringList = kafkaPartitionsString.split(",");
+        String[] kafkaPartitionsStringList = trimedKafkaPartitionsStr.split(",");
         for (String s : kafkaPartitionsStringList) {
-            try {
-                kafkaPartitionOffsets.add(
-                        Pair.create(getIntegerValueFromString(s, KAFKA_PARTITIONS_PROPERTY),
-                                kafkaDefaultOffset == null ? KafkaProgress.OFFSET_END_VAL : kafkaDefaultOffset));
-            } catch (AnalysisException e) {
-                throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY
-                        + " must be a number string with comma-separated");
-            }
+            kafkaPartitionOffsets.add(
+                    Pair.create(getIntegerValueFromString(s.trim(), "kafka partition"),
+                            kafkaDefaultOffset == null ? KafkaProgress.OFFSET_END_VAL : kafkaDefaultOffset));
         }
     }
 
     public static void analyzeKafkaOffsetProperty(String kafkaOffsetsString,
                                                   List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
-        kafkaOffsetsString = kafkaOffsetsString.replaceAll(" ", "");
+        kafkaOffsetsString = kafkaOffsetsString.trim();
         if (kafkaOffsetsString.isEmpty()) {
             throw new AnalysisException(KAFKA_OFFSETS_PROPERTY + " could not be a empty string");
         }
@@ -720,6 +783,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     // OFFSET_BEGINNING: -2
     // OFFSET_END: -1
     public static long getKafkaOffset(String offsetStr) throws AnalysisException {
+        offsetStr = offsetStr.trim();
         long offset = -1;
         try {
             offset = getLongValueFromString(offsetStr, "kafka offset");
@@ -756,6 +820,23 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         // check kafka_default_offsets
         if (customKafkaProperties.containsKey(KAFKA_DEFAULT_OFFSETS)) {
             getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
+        }
+    }
+
+    public static void validateKafkaBrokerList(String brokerList) throws AnalysisException {
+        if (Strings.isNullOrEmpty(brokerList)) {
+            throw new AnalysisException("kafka_broker_list cannot be empty");
+        }
+
+        String cleanBrokerList = brokerList.replaceAll(" ", "");
+        String[] brokers = cleanBrokerList.split(",");
+
+        for (String broker : brokers) {
+            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
+                throw new AnalysisException(
+                    String.format("%s: %s does not match pattern %s",
+                        KAFKA_BROKER_LIST_PROPERTY, broker, ENDPOINT_REGEX));
+            }
         }
     }
 
@@ -895,11 +976,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (valueString.isEmpty()) {
             throw new AnalysisException(propertyName + " could not be a empty string");
         }
-        int value;
+        int value = -1;
         try {
             value = Integer.parseInt(valueString);
         } catch (NumberFormatException e) {
-            throw new AnalysisException(propertyName + " must be a integer");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, propertyName, valueString, "an integer");
         }
         return value;
     }
@@ -908,11 +989,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (valueString.isEmpty()) {
             throw new AnalysisException(propertyName + " could not be a empty string");
         }
-        long value;
+        long value = -1L;
         try {
             value = Long.valueOf(valueString);
         } catch (NumberFormatException e) {
-            throw new AnalysisException(propertyName + " must be a integer: " + valueString);
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, propertyName, valueString,
+                    String.format("an integer, %s, or %s", KafkaProgress.OFFSET_BEGINNING, KafkaProgress.OFFSET_END));
         }
         return value;
     }
@@ -936,10 +1018,5 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
-    }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return true;
     }
 }

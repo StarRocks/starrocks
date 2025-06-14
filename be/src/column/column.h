@@ -22,22 +22,26 @@
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
 #include "column/vectorized_fwd.h"
+#include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
+#include "util/slice.h"
 
 namespace starrocks {
 
 class MemPool;
 class MysqlRowBuffer;
 class Slice;
-class TypeDescriptor;
+struct TypeDescriptor;
 
 // Forward declaration
 class Datum;
 
-class Column {
+class Column : public Cow<Column> {
 public:
+    friend class Cow<Column>;
+
     // we use append fixed size to achieve faster memory copy.
     // We copy 350M rows, which total length is 2GB, max length is 15.
     // When size is 0, it means copy the string's actual size.
@@ -57,10 +61,9 @@ public:
     static const uint64_t MAX_CAPACITY_LIMIT = static_cast<uint64_t>(UINT32_MAX) + 1;
     static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
 
-    // mutable operations cannot be applied to shared data when concurrent
-    using Ptr = std::shared_ptr<Column>;
-    // mutable means you could modify the data safely
-    using MutablePtr = std::unique_ptr<Column>;
+    static const int EQUALS_FALSE = 0;
+    static const int EQUALS_NULL = -1;
+    static const int EQUALS_TRUE = 1;
 
     virtual ~Column() = default;
 
@@ -89,7 +92,17 @@ public:
 
     virtual bool is_object() const { return false; }
 
+    virtual bool is_json() const { return false; }
+
     virtual bool is_array() const { return false; }
+
+    virtual bool is_view() const { return false; }
+    virtual bool is_nullable_view() const { return false; }
+    virtual bool is_array_view() const { return false; }
+    virtual bool is_json_view() const { return false; }
+    virtual bool is_binary_view() const { return false; }
+    virtual bool is_struct_view() const { return false; }
+    virtual bool is_map_view() const { return false; }
 
     virtual bool is_map() const { return false; }
 
@@ -112,13 +125,7 @@ public:
 
     // Size of column data in memory (may be approximate). Zero, if could not be determined.
     virtual size_t byte_size() const = 0;
-    virtual size_t byte_size(size_t from, size_t size) const {
-        DCHECK_LE(from + size, this->size()) << "Range error";
-        if (empty()) {
-            return 0;
-        }
-        return byte_size() * size / this->size();
-    }
+    virtual size_t byte_size(size_t from, size_t size) const = 0;
 
     // The byte size for serialize, for varchar, we need to add the len byte size
     virtual size_t byte_size(size_t idx) const = 0;
@@ -132,14 +139,14 @@ public:
     // Return null, if the column is not overflow.
     // Return the new larger column, if upgrade success
     // Current, only support upgrade BinaryColumn to LargeBinaryColumn
-    virtual StatusOr<ColumnPtr> upgrade_if_overflow() = 0;
+    virtual StatusOr<Ptr> upgrade_if_overflow() = 0;
 
     // Downgrade the column from large column to normal column.
     // Return internal error if downgrade failed.
     // Return null, if the column is already normal column, no need to downgrade.
     // Return the new normal column, if downgrade success
     // Current, only support downgrade LargeBinaryColumn to BinaryColumn
-    virtual StatusOr<ColumnPtr> downgrade() = 0;
+    virtual StatusOr<Ptr> downgrade() = 0;
 
     // Check if the column contains large column.
     // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
@@ -161,26 +168,23 @@ public:
     // The type of |src| and |this| must be exactly matched.
     virtual void append(const Column& src, size_t offset, size_t count) = 0;
 
-    virtual void append_shallow_copy(const Column& src, size_t offset, size_t count) { append(src, offset, count); }
-
     virtual void append(const Column& src) { append(src, 0, src.size()); }
-
-    virtual void append_shallow_copy(const Column& src) { append_shallow_copy(src, 0, src.size()); }
 
     // replicate a column to align with an array's offset, used for captured columns in lambda functions
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
     // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
-    virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) {
+    virtual StatusOr<Ptr> replicate(const Buffer<uint32_t>& offsets) {
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
         dest->reserve(offsets.back());
         for (int i = 0; i < dest_size; ++i) {
-            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i], true);
+            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
         }
         return dest;
     }
+
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 
@@ -192,7 +196,7 @@ public:
     //      src_column data: [5, 6]
     // After call this function, column data will be set as [5, 1, 2, 6, 4]
     // The values in indexes is incremented
-    virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
+    virtual void update_rows(const Column& src, const uint32_t* indexes) = 0;
 
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.
@@ -205,40 +209,54 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
-    virtual void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
-                                               uint32_t size) {
-        return append_selective(src, indexes, from, size);
-    }
-
-    void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
+    template <typename Container, typename T = typename Container::value_type>
+    void append_selective(const Column& src, const Container& indexes) {
+        static_assert(std::is_same<T, uint32_t>::value, "The type of indexes must be uint32_t");
         return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
-    }
-
-    void append_selective_shallow_copy(const Column& src, const Buffer<uint32_t>& indexes) {
-        return append_selective_shallow_copy(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
     // Currently only `ObjectColumn<BitmapValue>` support shallow copy
-    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) = 0;
+    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
     virtual bool append_nulls(size_t count) = 0;
 
+    template <typename Container, typename T = typename Container::value_type>
+    bool append_strings(const Container& strs) {
+        static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
+        return append_strings(strs.data(), strs.size());
+    }
     // Append multiple strings into this column.
     // Return false if the column is not a binary column.
-    [[nodiscard]] virtual bool append_strings(const Buffer<Slice>& strs) = 0;
+    [[nodiscard]] virtual bool append_strings(const Slice* data, size_t size) { return false; }
 
     // Like append_strings. To achieve higher performance, this function will read 16 bytes out of
     // bounds. So the caller must make sure that no invalid address access exception occurs for
     // out-of-bounds reads
-    [[nodiscard]] virtual bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) { return false; }
+    template <typename Container, typename T = typename Container::value_type>
+    bool append_strings_overflow(const Container& strs, size_t max_length) {
+        static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
+        return append_strings_overflow(strs.data(), strs.size(), max_length);
+    }
+
+    [[nodiscard]] virtual bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+        return false;
+    }
 
     // Like `append_strings` but the corresponding storage of each slice is adjacent to the
     // next one's, the implementation can take advantage of this feature, e.g, copy the whole
     // memory at once.
-    [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) { return append_strings(strs); }
+    template <typename Container, typename T = typename Container::value_type>
+    [[nodiscard]] bool append_continuous_strings(const Container& strs) {
+        static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
+        return append_continuous_strings(strs.data(), strs.size());
+    }
+
+    [[nodiscard]] virtual bool append_continuous_strings(const Slice* data, size_t size) {
+        return append_strings(data, size);
+    }
 
     [[nodiscard]] virtual bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
         return false;
@@ -274,19 +292,17 @@ public:
     // we need one buffer to hold tmp serialize data,
     // So we need to know the max serialize_size for all column element
     // The bad thing is we couldn't get the string defined len from FE when query
-    virtual uint32_t max_one_element_serialize_size() const {
-        return 16; // For Non-string type, 16 is enough.
-    }
+    virtual uint32_t max_one_element_serialize_size() const = 0;
 
     // serialize one data,The memory must allocate firstly from mempool
-    virtual uint32_t serialize(size_t idx, uint8_t* pos) = 0;
+    virtual uint32_t serialize(size_t idx, uint8_t* pos) const = 0;
 
     // serialize default value of column
     // The behavior is consistent with append_default
-    virtual uint32_t serialize_default(uint8_t* pos) = 0;
+    virtual uint32_t serialize_default(uint8_t* pos) const = 0;
 
     virtual void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                 uint32_t max_one_row_size) = 0;
+                                 uint32_t max_one_row_size) const = 0;
 
     // A dedicated serialization method used by HashJoin to combine multiple columns into a wide-key
     // column, and it's only implemented by numeric columns right now.
@@ -295,13 +311,17 @@ public:
     // (which should be fixed size) of this column if this column supports this method, otherwise
     // it returns 0.
     virtual size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                               size_t count) {
+                                               size_t count) const {
         return 0;
     };
 
     // A dedicated serialization method used by NullableColumn to serialize data columns with null_masks.
     virtual void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                                 uint32_t max_one_row_size, uint8_t* null_masks, bool has_null);
+                                                 uint32_t max_one_row_size, const uint8_t* null_masks,
+                                                 bool has_null) const;
+
+    virtual void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
+                                                       Buffer<uint8_t>& is_nulls, bool& has_null) = 0;
 
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
@@ -316,9 +336,6 @@ public:
 
     virtual MutablePtr clone() const = 0;
 
-    // clone column
-    virtual Ptr clone_shared() const = 0;
-
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
     inline size_t filter(const Filter& filter) {
@@ -329,7 +346,7 @@ public:
     inline size_t filter(const Filter& filter, size_t count) { return filter_range(filter, 0, count); }
 
     // get rid of the case where the map/array is null but the map/array'elements are not empty.
-    bool empty_null_in_complex_column(const Filter& null_data, const std::vector<uint32_t>& offsets);
+    bool empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets);
 
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
@@ -347,16 +364,31 @@ public:
     virtual int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const = 0;
 
     // For some columns equals will be overwritten for more efficient
-    virtual bool equals(size_t left, const Column& rhs, size_t right) const {
+    // When safe equals, 0: false, 1: true
+    // When unsafe equals, -1: NULL, 0: false, 1: true
+    // return: EQUALS_FALSE, EQUALS_NULL, EQUALS_TRUE
+    virtual int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const {
         return compare_at(left, right, rhs, -1) == 0;
     }
 
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+    virtual void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+        throw std::runtime_error("not support fnv_hash_with_selection");
+    }
+    virtual void fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+        throw std::runtime_error("not support fnv_hash_selective: " + get_name());
+    }
 
     // used by data loading compute tablet bucket
     virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+    virtual void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+        throw std::runtime_error("not support crc32_hash_with_selection");
+    }
+    virtual void crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+        throw std::runtime_error("not support crc32_hash_selective: " + get_name());
+    }
 
     virtual void crc32_hash_at(uint32_t* seed, uint32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
 
@@ -365,7 +397,7 @@ public:
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
     // Push one row to MysqlRowBuffer
-    virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
+    virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const = 0;
 
     void set_delete_state(DelCondSatisfied delete_state) { _delete_state = delete_state; }
 
@@ -401,9 +433,10 @@ public:
 
     virtual void swap_column(Column& rhs) = 0;
 
+    // The interface will not free memory!!!
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
 
-    virtual bool capacity_limit_reached(std::string* msg = nullptr) const = 0;
+    virtual Status capacity_limit_reached() const = 0;
 
     virtual Status accept(ColumnVisitor* visitor) const = 0;
 
@@ -420,65 +453,82 @@ public:
     // current only used by adaptive_nullable_column
     virtual void materialized_nullable() const {}
 
+    // If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
+    // Shallow: doesn't do recursive calls; don't do call for itself.
+    virtual void mutate_each_subcolumn() {}
+
+    // mutate the column to mutable column, but doesn't reset the column
+    MutablePtr mutate() const&& {
+        MutablePtr res = try_mutate();
+        res->mutate_each_subcolumn();
+        return res;
+    }
+
+    // mutate the column to mutable column, and reset the column to nullptr
+    static MutablePtr mutate(Ptr ptr) {
+        MutablePtr res = ptr->try_mutate(); /// Now use_count is 2.
+        ptr.reset();                        /// Reset use_count to 1.
+        res->mutate_each_subcolumn();
+        return res;
+    }
+
 protected:
-    static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
-    static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col);
+    static StatusOr<Ptr> downgrade_helper_func(Ptr* col);
+    static StatusOr<Ptr> upgrade_helper_func(Ptr* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 
-// AncestorBase is root class of inheritance hierarchy
-// if Derived class is the direct subclass of the root, then AncestorBase is just the Base class
-// if Derived class is the indirect subclass of the root, Base class is parent class, and
-// AncestorBase must be the root class. because Derived class need some type information from
-// AncestorBase to override the virtual method. e.g. clone and clone_shared method.
-template <typename Base, typename Derived, typename AncestorBase = Base>
+using ColumnPtr = Column::Ptr;
+using Columns = std::vector<ColumnPtr>;
+using MutableColumnPtr = Column::MutablePtr;
+using MutableColumns = std::vector<MutableColumnPtr>;
+
+template <typename... Args>
+struct IsMutableColumns;
+
+template <typename Arg, typename... Args>
+struct IsMutableColumns<Arg, Args...> {
+    static const bool value = std::is_assignable<MutableColumnPtr&&, Arg>::value && IsMutableColumns<Args...>::value;
+};
+
+template <>
+struct IsMutableColumns<> {
+    static const bool value = true;
+};
+
+template <typename Base, typename Derived>
 class ColumnFactory : public Base {
 private:
-    Derived* mutable_derived() { return down_cast<Derived*>(this); }
+    Derived* derived() { return down_cast<Derived*>(this); }
     const Derived* derived() const { return down_cast<const Derived*>(this); }
 
 public:
     template <typename... Args>
     ColumnFactory(Args&&... args) : Base(std::forward<Args>(args)...) {}
-    // mutable operations cannot be applied to shared data when concurrent
-    using Ptr = std::shared_ptr<Derived>;
-    // mutable means you could modify the data safely
-    using MutablePtr = std::unique_ptr<Derived>;
-    using AncestorBaseType = std::enable_if_t<std::is_base_of_v<AncestorBase, Base>, AncestorBase>;
-
-    template <typename... Args>
-    static Ptr create(Args&&... args) {
-        return std::make_shared<Derived>(std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    static MutablePtr create_mutable(Args&&... args) {
-        return std::make_unique<Derived>(std::forward<Args>(args)...);
-    }
-
-    template <typename T>
-    static Ptr create(std::initializer_list<T>&& arg) {
-        return std::make_shared<Derived>(std::move(arg));
-    }
-
-    template <typename T>
-    static MutablePtr create_mutable(std::initializer_list<T>&& arg) {
-        return std::make_unique<Derived>(std::move(arg));
-    }
-
-    typename AncestorBaseType::MutablePtr clone() const override {
-        return typename AncestorBase::MutablePtr(new Derived(*derived()));
-    }
-
-    typename AncestorBaseType::Ptr clone_shared() const override {
-        return typename AncestorBase::Ptr(new Derived(*derived()));
-    }
 
     Status accept(ColumnVisitor* visitor) const override { return visitor->visit(*static_cast<const Derived*>(this)); }
 
     Status accept_mutable(ColumnVisitorMutable* visitor) override {
         return visitor->visit(static_cast<Derived*>(this));
+    }
+
+    void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size, Buffer<uint8_t>& is_nulls,
+                                               bool& has_null) override {
+        is_nulls.reserve(is_nulls.size() + chunk_size);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            bool null;
+            memcpy(&null, srcs[i].data, sizeof(bool));
+            srcs[i].data += sizeof(bool);
+            is_nulls.emplace_back(null);
+
+            if (null == 0) {
+                srcs[i].data = (char*)derived()->deserialize_and_append((uint8_t*)srcs[i].data);
+            } else {
+                has_null = true;
+                derived()->append_default();
+            }
+        }
     }
 };
 

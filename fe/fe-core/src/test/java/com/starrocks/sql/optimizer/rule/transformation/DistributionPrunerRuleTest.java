@@ -22,17 +22,18 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -46,15 +47,19 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
 
 public class DistributionPrunerRuleTest {
 
     @Test
-    public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked MaterializedIndex index,
+    public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked PhysicalPartition physicalPartition,
+                          @Mocked MaterializedIndex index,
                           @Mocked HashDistributionInfo distributionInfo) {
         List<Long> tabletIds = Lists.newArrayListWithExpectedSize(300);
         for (long i = 0; i < 300; i++) {
@@ -68,6 +73,13 @@ public class DistributionPrunerRuleTest {
                 new Column("channel", Type.CHAR, false),
                 new Column("shop_type", Type.CHAR, false)
         );
+        List<ColumnId> columnNames = columns.stream()
+                .map(column -> ColumnId.create(column.getName()))
+                .collect(Collectors.toList());
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : columns) {
+            idToColumn.put(column.getColumnId(), column);
+        }
 
         // filters
         PartitionColumnFilter dealDateFilter = new PartitionColumnFilter();
@@ -146,7 +158,8 @@ public class DistributionPrunerRuleTest {
                         inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
-                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), false);
+                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), null,
+                        false);
         operator.setPredicate(predicate);
 
         new Expectations() {
@@ -154,23 +167,29 @@ public class DistributionPrunerRuleTest {
                 olapTable.getPartition(anyLong);
                 result = partition;
 
-                partition.getIndex(anyLong);
+                olapTable.getIdToColumn();
+                result = idToColumn;
+
+                partition.getSubPartitions();
+                result = Arrays.asList(physicalPartition);
+
+                physicalPartition.getIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();
                 result = distributionInfo;
 
-                index.getTabletIdsInOrder();
+                index.getVirtualBuckets();
+                result = Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList());
+
+                index.getTabletIds();
                 result = tabletIds;
 
                 distributionInfo.getDistributionColumns();
-                result = columns;
+                result = columnNames;
 
                 distributionInfo.getType();
                 result = DistributionInfo.DistributionInfoType.HASH;
-
-                distributionInfo.getBucketNum();
-                result = tabletIds.size();
             }
         };
 
@@ -178,7 +197,7 @@ public class DistributionPrunerRuleTest {
 
         assertEquals(0, operator.getSelectedTabletId().size());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()))
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(new ColumnRefFactory()))
                         .get(0);
 
         assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());

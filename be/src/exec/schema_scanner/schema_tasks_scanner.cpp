@@ -22,12 +22,16 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true}};
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"SCHEDULE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+};
 
 SchemaTasksScanner::SchemaTasksScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -40,106 +44,38 @@ Status SchemaTasksScanner::start(RuntimeState* state) {
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tasks(*(_param->ip), _param->port, task_params, &_task_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tasks(_ss_state, task_params, &_task_result));
     _task_index = 0;
     return Status::OK();
 }
 
-Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
-    const TTaskInfo& task_info = _task_result.tasks[_task_index];
-    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
-    for (const auto& [slot_id, index] : slot_id_to_index_map) {
-        switch (slot_id) {
-        case 1: {
-            // TASK_NAME
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
-                const std::string* str = &task_info.task_name;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 2: {
-            // CREATE_TIME
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                if (task_info.__isset.create_time) {
-                    int64_t create_time = task_info.create_time;
-                    if (create_time <= 0) {
-                        nullable_column->append_nulls(1);
-                    } else {
-                        DateTimeValue t;
-                        t.from_unixtime(create_time, _runtime_state->timezone_obj());
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
-                    }
-                } else {
-                    nullable_column->append_nulls(1);
-                }
-            }
-            break;
-        }
-        case 3: {
-            // SCHEDULE
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                const std::string* str = &task_info.schedule;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 4: {
-            // DATABASE
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
-                const std::string* db_name = &task_info.database;
-                Slice value(db_name->c_str(), db_name->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 5: {
-            // DEFINITION
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
-                const std::string* str = &task_info.definition;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 6: {
-            // EXPIRE_TIME
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                if (task_info.__isset.expire_time) {
-                    int64_t expire_time = task_info.expire_time;
-                    if (expire_time <= 0) {
-                        nullable_column->append_nulls(1);
-                    } else {
-                        DateTimeValue t;
-                        t.from_unixtime(expire_time, _runtime_state->timezone_obj());
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
-                    }
-                } else {
-                    nullable_column->append_nulls(1);
-                }
-            }
-            break;
-        }
-        default:
-            break;
-        }
+DatumArray SchemaTasksScanner::_build_row() {
+    auto& task = _task_result.tasks.at(_task_index++);
+    if (!task.__isset.catalog) {
+        // Compatible for upgrades
+        task.catalog = "default_catalog";
     }
-    _task_index++;
-    return Status::OK();
+    Datum expire_time = task.__isset.expire_time && task.expire_time > 0
+                                ? TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+    Datum create_time = task.__isset.create_time && task.create_time > 0
+                                ? TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+
+    return {Slice(task.task_name),  create_time, Slice(task.schedule),   Slice(task.catalog), Slice(task.database),
+            Slice(task.definition), expire_time, Slice(task.properties), Slice(task.creator)};
+}
+
+Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
+    auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
+    auto datum_array = _build_row();
+    for (const auto& [slot_id, index] : slot_id_map) {
+        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
+        column->append_datum(datum_array[slot_id - 1]);
+    }
+    return {};
 }
 
 Status SchemaTasksScanner::get_next(ChunkPtr* chunk, bool* eos) {

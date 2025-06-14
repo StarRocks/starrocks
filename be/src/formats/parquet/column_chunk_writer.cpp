@@ -14,14 +14,13 @@
 
 #include "formats/parquet/column_chunk_writer.h"
 
-#include <parquet/arrow/writer.h>
+#include <parquet/column_writer.h>
+#include <parquet/types.h>
 
-#include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/level_builder.h"
 #include "gutil/casts.h"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
 ColumnChunkWriter::ColumnChunkWriter(::parquet::ColumnWriter* column_writer) : _column_writer(column_writer) {}
 
@@ -58,7 +57,7 @@ void ColumnChunkWriter::write(const LevelBuilderResult& result) {
     case ParquetType: {                                                                                         \
         auto typed_column_writer =                                                                              \
                 down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<ParquetType>>*>(_column_writer); \
-        return typed_column_writer->EstimatedBufferedValueBytes();                                              \
+        return typed_column_writer->estimated_buffered_value_bytes();                                           \
     }
 
 int64_t ColumnChunkWriter::estimated_buffered_value_bytes() {
@@ -77,5 +76,4 @@ int64_t ColumnChunkWriter::estimated_buffered_value_bytes() {
     }
 }
 
-} // namespace parquet
-} // namespace starrocks
+} // namespace starrocks::parquet

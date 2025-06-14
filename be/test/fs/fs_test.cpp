@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "testutil/assert.h"
+
 namespace starrocks {
 
 TEST(FileSystemTest, test_good_construction) {
@@ -40,6 +41,50 @@ TEST(FileSystemTest, test_good_construction) {
     for (auto& c : cases) {
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(c.uri));
         ASSERT_EQ(fs->type(), c.type);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("unknown1://"));
+        ASSERT_EQ(fs->type(), FileSystem::HDFS);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("unknown1://"));
+        ASSERT_EQ(fs->type(), FileSystem::HDFS);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("unknown2://"));
+        ASSERT_EQ(fs->type(), FileSystem::S3);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("unknown2://"));
+        ASSERT_EQ(fs->type(), FileSystem::S3);
+    }
+
+    {
+        std::unordered_map<std::string, std::string> params = {{"fs.s3a.readahead.range", "100"}};
+        std::unique_ptr<FSOptions> fs_options = std::make_unique<FSOptions>(params);
+        ASSIGN_OR_ABORT(auto fs, FileSystem::Create("unknown2://", *fs_options));
+        ASSERT_EQ(fs->type(), FileSystem::S3);
+    }
+
+    {
+        std::string uri = "wasbs://container_name@account_name.blob.core.windows.net/blob_name";
+
+        TCloudConfiguration cloud_configuration;
+        cloud_configuration.__set_cloud_type(TCloudType::AZURE);
+        cloud_configuration.__set_cloud_properties({});
+        cloud_configuration.__set_azure_use_native_sdk(true);
+        THdfsProperties hdfs_properties;
+        hdfs_properties.__set_cloud_configuration(cloud_configuration);
+        TBrokerScanRangeParams scan_range_params;
+        scan_range_params.__set_hdfs_properties(hdfs_properties);
+        FSOptions options(&scan_range_params);
+
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri, options));
+        ASSERT_EQ(fs->type(), FileSystem::AZBLOB);
     }
 }
 

@@ -39,10 +39,15 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TFrontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -51,13 +56,23 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
 /**
  * Full scan of an SCHEMA table.
  */
 public class SchemaScanNode extends ScanNode {
+
+    private static final Logger LOG = LogManager.getLogger(SchemaScanNode.class);
+
+    private String catalogName;
     private final String tableName;
     private String schemaDb;
     private String schemaTable;
@@ -80,6 +95,7 @@ public class SchemaScanNode extends ScanNode {
     private String logLevel = null;
     private String logPattern = null;
     private Long logLimit = null;
+    private List<TFrontend> frontends = null;
 
     private List<TScanRangeLocations> beScanRanges = null;
 
@@ -133,12 +149,17 @@ public class SchemaScanNode extends ScanNode {
         return tableName;
     }
 
+    public List<TFrontend> getFrontends() {
+        return frontends;
+    }
+
     /**
      * Constructs node to scan given data files of table 'tbl'.
      */
-    public SchemaScanNode(PlanNodeId id, TupleDescriptor desc) {
+    public SchemaScanNode(PlanNodeId id, TupleDescriptor desc, ComputeResource computeResource) {
         super(id, desc, "SCAN SCHEMA");
         this.tableName = desc.getTable().getName();
+        this.computeResource = computeResource;
     }
 
     @Override
@@ -148,13 +169,20 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
     }
 
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.SCHEMA_SCAN_NODE;
         msg.schema_scan_node = new TSchemaScanNode(desc.getId().asInt(), tableName);
+
+        if (catalogName != null) {
+            msg.schema_scan_node.setCatalog_name(catalogName);
+        } else {
+            msg.schema_scan_node.setCatalog_name(DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+
         if (schemaDb != null) {
             msg.schema_scan_node.setDb(schemaDb);
         } else {
@@ -230,6 +258,9 @@ public class SchemaScanNode extends ScanNode {
         if (getLimit() > 0) {
             msg.schema_scan_node.setLimit(getLimit());
         }
+        if (frontends != null) {
+            msg.schema_scan_node.setFrontends(frontends);
+        }
     }
 
     public void setBeId(long beId) {
@@ -284,18 +315,48 @@ public class SchemaScanNode extends ScanNode {
         return SystemTable.isBeSchemaTable(tableName);
     }
 
+    public void computeFeNodes() {
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
+            if (!fe.isAlive()) {
+                continue;
+            }
+            if (frontends == null) {
+                frontends = Lists.newArrayList();
+            }
+            TFrontend feInfo = new TFrontend();
+            feInfo.setId(fe.getNodeName());
+            feInfo.setIp(fe.getHost());
+            feInfo.setHttp_port(Config.http_port);
+            frontends.add(feInfo);
+        }
+    }
+
     public void computeBeScanRanges() {
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        List<ComputeNode> nodeList;
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
+
+            nodeList = computeNodeIds.stream()
+                    .map(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(id))
+                    .collect(Collectors.toList());
+        } else {
+            nodeList = Lists.newArrayList();
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends());
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes());
+        }
+
+        for (ComputeNode node : nodeList) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
-            if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
+            if ((node.isAlive() && beId == null) || (beId != null && beId.equals(node.getId()))) {
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
                 TScanRangeLocation location = new TScanRangeLocation();
-                location.setBackend_id(be.getId());
-                location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
+                location.setBackend_id(node.getId());
+                location.setServer(new TNetworkAddress(node.getHost(), node.getBePort()));
                 scanRangeLocations.addToLocations(location);
                 TScanRange scanRange = new TScanRange();
                 scanRangeLocations.setScan_range(scanRange);
@@ -314,18 +375,20 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return beScanRanges == null ? 1 : beScanRanges.size();
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return true;
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
+    }
 }

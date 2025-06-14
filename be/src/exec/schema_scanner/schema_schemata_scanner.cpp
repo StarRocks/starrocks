@@ -15,18 +15,20 @@
 #include "exec/schema_scanner/schema_schemata_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaSchemataScanner::_s_columns[] = {
         //   name,       type,          size
-        {"CATALOG_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"SCHEMA_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"SQL_PATH", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"CATALOG_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"SCHEMA_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFAULT_CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"DEFAULT_COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"SQL_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 };
 
 SchemaSchemataScanner::SchemaSchemataScanner()
@@ -39,6 +41,9 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
         return Status::InternalError("used before initial.");
     }
     TGetDbsParams db_params;
+    if (nullptr != _param->catalog) {
+        db_params.__set_catalog_name(*(_param->catalog));
+    }
     if (nullptr != _param->wild) {
         db_params.__set_pattern(*(_param->wild));
     }
@@ -52,14 +57,10 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
             db_params.__set_user_ip(*(_param->user_ip));
         }
     }
-
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
-
-    return Status::OK();
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
+    return SchemaScanner::start(state);
 }
 
 Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {
@@ -70,7 +71,9 @@ Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {
             // catalog
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
-                fill_data_column_with_null(column.get());
+                const char* str = "def";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }

@@ -15,25 +15,39 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 public class SubqueryRelation extends QueryRelation {
     private final QueryStatement queryStatement;
 
+    private final boolean assertRows;
+
     public SubqueryRelation(QueryStatement queryStatement) {
-        this(queryStatement, queryStatement.getPos());
+        this(queryStatement, false, queryStatement.getPos());
     }
 
-    public SubqueryRelation(QueryStatement queryStatement, NodePosition pos) {
+    public SubqueryRelation(QueryStatement queryStatement, boolean assertRows, NodePosition pos) {
         super(pos);
         this.queryStatement = queryStatement;
+        this.assertRows = assertRows;
         QueryRelation queryRelation = this.queryStatement.getQueryRelation();
         // The order by is meaningless in subquery
         if (!queryRelation.hasLimit()) {
             queryRelation.clearOrder();
         }
+    }
+
+    public boolean isAssertRows() {
+        return assertRows;
+    }
+
+    @Override
+    public Map<Expr, FieldId> getColumnReferences() {
+        return queryStatement.getQueryRelation().getColumnReferences();
     }
 
     public QueryStatement getQueryStatement() {
@@ -45,6 +59,10 @@ public class SubqueryRelation extends QueryRelation {
         return alias == null ? "anonymous" : alias.toString();
     }
 
+    public boolean isAnonymous() {
+        return alias == null;
+    }
+
     @Override
     public List<Expr> getOutputExpression() {
         return this.queryStatement.getQueryRelation().getOutputExpression();
@@ -52,6 +70,6 @@ public class SubqueryRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSubquery(this, context);
+        return visitor.visitSubqueryRelation(this, context);
     }
 }

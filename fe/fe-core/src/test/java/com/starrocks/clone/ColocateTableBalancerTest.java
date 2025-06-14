@@ -101,9 +101,13 @@ public class ColocateTableBalancerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         balancer.setStop();
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
+        GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
+        ColocateTableBalancer.getInstance().setStop();
     }
 
     @Before
@@ -139,24 +143,25 @@ public class ColocateTableBalancerTest {
     }
 
     private void addTabletsToScheduler(String dbName, String tableName, boolean setGroupId) {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
-        OlapTable table = (OlapTable) database.getTable(tableName);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
         // add its tablet to TabletScheduler
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex materializedIndex = partition.getBaseIndex();
+            MaterializedIndex materializedIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
             for (Tablet tablet : materializedIndex.getTablets()) {
                 TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
-                        database.getId(),
-                        table.getId(),
-                        partition.getId(),
-                        materializedIndex.getId(),
-                        tablet.getId(),
-                        System.currentTimeMillis());
+                            database.getId(),
+                            table.getId(),
+                            partition.getId(),
+                            materializedIndex.getId(),
+                            tablet.getId(),
+                            System.currentTimeMillis());
                 ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 if (setGroupId) {
                     ctx.setColocateGroupId(
-                            GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
+                                GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
                 }
                 tabletScheduler.addTablet(ctx, false);
             }
@@ -166,12 +171,13 @@ public class ColocateTableBalancerTest {
     @Test
     public void test1MatchGroup() throws Exception {
         starRocksAssert.withDatabase("db1").useDatabase("db1")
-                .withTable("CREATE TABLE db1.tbl(id INT NOT NULL) " +
-                        "distributed by hash(`id`) buckets 3 " +
-                        "properties('replication_num' = '1', 'colocate_with' = 'group1');");
+                    .withTable("CREATE TABLE db1.tbl(id INT NOT NULL) " +
+                                "distributed by hash(`id`) buckets 3 " +
+                                "properties('replication_num' = '1', 'colocate_with' = 'group1');");
 
-        Database database = GlobalStateMgr.getCurrentState().getDb("db1");
-        OlapTable table = (OlapTable) database.getTable("tbl");
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tbl");
         addTabletsToScheduler("db1", "tbl", false);
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -199,16 +205,17 @@ public class ColocateTableBalancerTest {
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         starRocksAssert.withDatabase("db3").useDatabase("db3")
-                .withTable("CREATE TABLE db3.tbl3(id INT NOT NULL) " +
-                        "distributed by hash(`id`) buckets 1 " +
-                        "properties('replication_num' = '1', 'colocate_with' = 'group3');");
+                    .withTable("CREATE TABLE db3.tbl3(id INT NOT NULL) " +
+                                "distributed by hash(`id`) buckets 1 " +
+                                "properties('replication_num' = '1', 'colocate_with' = 'group3');");
 
-        Database database = GlobalStateMgr.getCurrentState().getDb("db3");
-        OlapTable table = (OlapTable) database.getTable("tbl3");
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
+        OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tbl3");
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
-        LocalTablet tablet = (LocalTablet) partitions.get(0).getBaseIndex().getTablets().get(0);
+        LocalTablet tablet = (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
         long oldVal = Config.tablet_sched_repair_delay_factor_second;
@@ -301,11 +308,11 @@ public class ColocateTableBalancerTest {
 
         FeConstants.runningUnitTest = true;
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         GroupId groupId = new GroupId(10005, 10006);
         short replicationNUm = 3;
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(1L, 2L, 3L, 1L, 2L, 3L, 1L, 2L, 4L, 1L, 2L, 5L), replicationNUm);
+                    Lists.newArrayList(1L, 2L, 3L, 1L, 2L, 3L, 1L, 2L, 4L, 1L, 2L, 5L), replicationNUm);
         setGroup2Schema(groupId, colocateTableIndex, 4, replicationNUm);
 
         Set<Long> unavailableBeIds = Sets.newHashSet(5L);
@@ -314,31 +321,43 @@ public class ColocateTableBalancerTest {
         boolean changed = false;
         ColocateTableBalancer.disableRepairPrecedence = true;
         changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         Assert.assertTrue(changed);
         System.out.println(balancedBackendsPerBucketSeq);
         List<List<Long>> expected = Lists.partition(
-                Lists.newArrayList(4L, 2L, 3L, 1L, 2L, 3L, 1L, 3L, 4L, 1L, 2L, 4L), 3);
+                    Lists.newArrayList(4L, 2L, 3L, 1L, 2L, 3L, 1L, 3L, 4L, 1L, 2L, 4L), 3);
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
 
         ColocateTableBalancer.disableRepairPrecedence = false;
         balancedBackendsPerBucketSeq.clear();
         changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         Assert.assertTrue(changed);
         System.out.println(balancedBackendsPerBucketSeq);
         expected = Lists.partition(
-                Lists.newArrayList(1L, 2L, 3L, 1L, 2L, 3L, 1L, 2L, 4L, 1L, 2L, 4L), 3);
+                    Lists.newArrayList(1L, 2L, 3L, 1L, 2L, 3L, 1L, 2L, 4L, 1L, 2L, 4L), 3);
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
     }
 
     @Test
     public void testPerGroupBalance(@Mocked SystemInfoService infoService,
-                                    @Mocked ClusterLoadStatistic statistic) {
+                                    @Mocked ClusterLoadStatistic statistic) throws InterruptedException {
         new Expectations() {
             {
+                // try to fix the unstable test
+                // java.util.ConcurrentModificationException
+                //    at mockit.internal.expectations.state.ExecutingTest.isInjectableMock(ExecutingTest.java:142)
+                //    at mockit.internal.expectations.state.ExecutingTest.addInjectableMock(ExecutingTest.java:137)
+                //    at com.starrocks.clone.ColocateTableBalancerTest$2.<init>(ColocateTableBalancerTest.java:342)
+                //    at com.starrocks.clone.ColocateTableBalancerTest.testPerGroupBalance(ColocateTableBalancerTest.java:340)
+                //
+                // this exception happens at the internal of the mockit, probably a bug of mockit
+                // need to use concurrent safe list for mockit.internal.expectations.state.ExecutingTest#injectableMocks
+                // because mockit itself will start some background thread to clean `injectableMocks` which will have
+                // conflict with our test thread, here is just a workaround, wait for a while to avoid that.
+                Thread.sleep(2000);
                 infoService.getBackend(1L);
                 result = backend1;
                 minTimes = 0;
@@ -373,7 +392,6 @@ public class ColocateTableBalancerTest {
             }
         };
 
-
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", Type.INT));
@@ -385,27 +403,27 @@ public class ColocateTableBalancerTest {
         // [[1, 2, 3], [4, 1, 2], [3, 4, 1], [2, 3, 4], [1, 2, 3]]
         FeConstants.runningUnitTest = true;
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(1L, 2L, 3L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
+                    Lists.newArrayList(1L, 2L, 3L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
 
         List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
         List<Long> allAvailBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
         boolean changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, new HashSet<Long>(), allAvailBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, new HashSet<Long>(), allAvailBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         List<List<Long>> expected = Lists.partition(
-                Lists.newArrayList(9L, 5L, 3L, 4L, 6L, 8L, 7L, 6L, 1L, 2L, 9L, 4L, 1L, 2L, 3L), 3);
+                    Lists.newArrayList(9L, 5L, 3L, 4L, 6L, 8L, 7L, 6L, 1L, 2L, 9L, 4L, 1L, 2L, 3L), 3);
         Assert.assertTrue(changed);
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
 
         // 2. balance an already balanced group
         colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(9L, 8L, 7L, 8L, 6L, 5L, 9L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
+                    Lists.newArrayList(9L, 8L, 7L, 8L, 6L, 5L, 9L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
         balancedBackendsPerBucketSeq.clear();
         changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, new HashSet<Long>(), allAvailBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, new HashSet<Long>(), allAvailBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         System.out.println(balancedBackendsPerBucketSeq);
         Assert.assertFalse(changed);
         Assert.assertTrue(balancedBackendsPerBucketSeq.isEmpty());
@@ -416,9 +434,9 @@ public class ColocateTableBalancerTest {
             e.printStackTrace();
         }
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
-        GlobalStateMgr.getCurrentSystemInfo().getBackendIds();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
     }
 
     @Test
@@ -497,13 +515,13 @@ public class ColocateTableBalancerTest {
             ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 3, (short) 1);
             group2Schema.put(groupId, groupSchema);
         }
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         // For group 1, bucket: 3, replication_num: 1, backend list per bucket seq: [[1], [2], [3]]
         colocateTableIndex.addBackendsPerBucketSeq(groupId1,
-                Lists.partition(Lists.newArrayList(1L, 2L, 3L), 1));
+                    Lists.partition(Lists.newArrayList(1L, 2L, 3L), 1));
         // For group 2, bucket: 3, replication_num: 1, backend list per bucket seq: [[1], [2], [3]]
         colocateTableIndex.addBackendsPerBucketSeq(groupId2,
-                Lists.partition(Lists.newArrayList(1L, 2L, 3L), 1));
+                    Lists.partition(Lists.newArrayList(1L, 2L, 3L), 1));
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
         Multimap<GroupId, Long> group2Tables = ArrayListMultimap.create();
         group2Tables.put(groupId1, 20001L);
@@ -530,7 +548,7 @@ public class ColocateTableBalancerTest {
             // totally 6 replicas, after adding 2 backends and overall balance,
             // every backend should have 1 replica, except one
             Assert.assertEquals(Lists.newArrayList(1, 1, 1, 1, 2),
-                    result.values().stream().sorted().collect(Collectors.toList()));
+                        result.values().stream().sorted().collect(Collectors.toList()));
         }
     }
 
@@ -539,7 +557,7 @@ public class ColocateTableBalancerTest {
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", Type.INT));
         ColocateGroupSchema groupSchema =
-                new ColocateGroupSchema(groupId, distributionCols, bucketNum, replicationNum);
+                    new ColocateGroupSchema(groupId, distributionCols, bucketNum, replicationNum);
         Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
         group2Schema.put(groupId, groupSchema);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
@@ -592,10 +610,10 @@ public class ColocateTableBalancerTest {
         };
 
         // To avoid "missing x invocation to..." error
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(4L, 2L, 3L, 4L, 2L, 3L, 4L, 2L, 3L), 3);
+                    Lists.newArrayList(4L, 2L, 3L, 4L, 2L, 3L, 4L, 2L, 3L), 3);
         setGroup2Schema(groupId, colocateTableIndex, 3, (short) 3);
 
         Set<Long> unavailableBeIds = Sets.newHashSet(3L, 4L);
@@ -603,8 +621,8 @@ public class ColocateTableBalancerTest {
         List<Long> availBackendIds = Lists.newArrayList(2L);
 
         boolean changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         // in this case, there is only on available backend, no need to make balancing decision.
         Assert.assertFalse(changed);
     }
@@ -658,10 +676,10 @@ public class ColocateTableBalancerTest {
             }
         };
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(4L, 2L, 3L, 4L, 2L, 3L, 4L, 2L, 3L), 1);
+                    Lists.newArrayList(4L, 2L, 3L, 4L, 2L, 3L, 4L, 2L, 3L), 1);
         setGroup2Schema(groupId, colocateTableIndex, 9, (short) 1);
 
         Set<Long> unavailableBeIds = Sets.newHashSet(4L);
@@ -670,22 +688,22 @@ public class ColocateTableBalancerTest {
         boolean changed = false;
 
         changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         // there is unavailable backend, but the replication number is 1 and replicas on available backends are
         // already balanced, so the bucket sequence will remain unchanged.
         Assert.assertFalse(changed);
 
         colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(2L, 2L, 4L, 2L, 2L, 4L, 3L, 2L, 4L), 1);
+                    Lists.newArrayList(2L, 2L, 4L, 2L, 2L, 4L, 3L, 2L, 4L), 1);
         setGroup2Schema(groupId, colocateTableIndex, 9, (short) 1);
         changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         Assert.assertTrue(changed);
         System.out.println(balancedBackendsPerBucketSeq);
         List<List<Long>> expected = Lists.partition(
-                Lists.newArrayList(3L, 3L, 4L, 2L, 2L, 4L, 3L, 2L, 4L), 1);
+                    Lists.newArrayList(3L, 3L, 4L, 2L, 2L, 4L, 3L, 2L, 4L), 1);
         // there is unavailable backend, but the replication number is 1 and replicas on available backends are
         // not balanced, check the balancer actually working.
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
@@ -699,15 +717,15 @@ public class ColocateTableBalancerTest {
         };
         balancedBackendsPerBucketSeq = Lists.newArrayList();
         colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(2L, 2L, 4L, 2L, 2L, 4L, 3L, 2L, 4L), 1);
+                    Lists.newArrayList(2L, 2L, 4L, 2L, 2L, 4L, 3L, 2L, 4L), 1);
         setGroup2Schema(groupId, colocateTableIndex, 9, (short) 1);
         changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, availBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         Assert.assertTrue(changed);
         System.out.println(balancedBackendsPerBucketSeq);
         List<List<Long>> expected3 = Lists.partition(
-                Lists.newArrayList(2L, 2L, 3L, 2L, 2L, 3L, 3L, 2L, 3L), 1);
+                    Lists.newArrayList(2L, 2L, 3L, 2L, 2L, 3L, 3L, 2L, 3L), 1);
         // there is unavailable backend, but the replication number is 1 and there is decommissioned backend,
         // so we need to do relocation first.
         Assert.assertEquals(expected3, balancedBackendsPerBucketSeq);
@@ -750,7 +768,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
             }
         };
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", Type.INT));
@@ -761,42 +779,42 @@ public class ColocateTableBalancerTest {
         // 1. only one available backend
         // [[7], [7], [7], [7], [7]]
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(7L, 7L, 7L, 7L, 7L), 3);
+                    Lists.newArrayList(7L, 7L, 7L, 7L, 7L), 3);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
 
         List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
         List<Long> allAvailBackendIds = Lists.newArrayList(7L);
         boolean changed =
-                Deencapsulation.invoke(balancer, "doRelocateAndBalance",
-                        groupId, new HashSet<Long>(), allAvailBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    Deencapsulation.invoke(balancer, "doRelocateAndBalance",
+                                groupId, new HashSet<Long>(), allAvailBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         Assert.assertFalse(changed);
 
         // 2. all backends are checked but this round is not changed
         // [[7], [7], [7], [7], [7]]
         // and add new backends 8, 9 that are on the same host with 7
         colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(7L, 7L, 7L, 7L, 7L), 3);
+                    Lists.newArrayList(7L, 7L, 7L, 7L, 7L), 3);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
 
         balancedBackendsPerBucketSeq = Lists.newArrayList();
         allAvailBackendIds = Lists.newArrayList(7L, 8L, 9L);
         changed =
-                Deencapsulation.invoke(balancer, "doRelocateAndBalance",
-                        groupId, new HashSet<Long>(), allAvailBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    Deencapsulation.invoke(balancer, "doRelocateAndBalance",
+                                groupId, new HashSet<Long>(), allAvailBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         Assert.assertFalse(changed);
 
         // 3. all backends are not available
         colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(7L, 7L, 7L, 7L, 7L), 3);
+                    Lists.newArrayList(7L, 7L, 7L, 7L, 7L), 3);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
         balancedBackendsPerBucketSeq = Lists.newArrayList();
         allAvailBackendIds = Lists.newArrayList();
         Set<Long> unAvailableBackendIds = Sets.newHashSet(7L);
         changed = Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unAvailableBackendIds, allAvailBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unAvailableBackendIds, allAvailBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         Assert.assertFalse(changed);
     }
 
@@ -814,21 +832,21 @@ public class ColocateTableBalancerTest {
             }
         };
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         // all buckets are on different be
         List<Long> allAvailBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L);
         Set<Long> unavailBackendIds = Sets.newHashSet(9L);
         List<Long> flatBackendsPerBucketSeq = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
         List<Map.Entry<Long, Long>> backends = Deencapsulation.invoke(balancer, "getSortedBackendReplicaNumPairs",
-                allAvailBackendIds, unavailBackendIds, statistic, flatBackendsPerBucketSeq);
+                    allAvailBackendIds, unavailBackendIds, statistic, flatBackendsPerBucketSeq);
         long[] backendIds = backends.stream().mapToLong(Map.Entry::getKey).toArray();
         Assert.assertArrayEquals(new long[] {7L, 8L, 6L, 2L, 3L, 5L, 4L, 1L}, backendIds);
 
         // 0,1 bucket on same be and 5, 6 on same be
         flatBackendsPerBucketSeq = Lists.newArrayList(1L, 1L, 3L, 4L, 5L, 6L, 7L, 7L, 9L);
         backends = Deencapsulation
-                .invoke(balancer, "getSortedBackendReplicaNumPairs", allAvailBackendIds, unavailBackendIds,
-                        statistic, flatBackendsPerBucketSeq);
+                    .invoke(balancer, "getSortedBackendReplicaNumPairs", allAvailBackendIds, unavailBackendIds,
+                                statistic, flatBackendsPerBucketSeq);
         backendIds = backends.stream().mapToLong(Map.Entry::getKey).toArray();
         Assert.assertArrayEquals(new long[] {7L, 1L, 6L, 3L, 5L, 4L, 8L, 2L}, backendIds);
     }
@@ -849,89 +867,45 @@ public class ColocateTableBalancerTest {
     public void testGetBeSeqIndexes() {
         List<Long> flatBackendsPerBucketSeq = Lists.newArrayList(1L, 2L, 2L, 3L, 4L, 2L);
         List<Integer> indexes = Deencapsulation.invoke(balancer,
-                "getBeSeqIndexes", flatBackendsPerBucketSeq, 2L);
+                    "getBeSeqIndexes", flatBackendsPerBucketSeq, 2L);
         Assert.assertArrayEquals(new int[] {1, 2, 5}, indexes.stream().mapToInt(i -> i).toArray());
         System.out.println("backend1 id is " + backend1.getId());
     }
 
     @Test
-    public void testGetUnavailableBeIdsInGroup(@Mocked ColocateTableIndex colocateTableIndex,
-                                               @Mocked SystemInfoService infoService,
-                                               @Mocked Backend myBackend2,
-                                               @Mocked Backend myBackend3,
-                                               @Mocked Backend myBackend4,
-                                               @Mocked Backend myBackend5
-    ) {
+    public void testGetUnavailableBeIdsInGroup() {
         GroupId groupId = new GroupId(10000, 10001);
-        Set<Long> allBackendsInGroup = Sets.newHashSet(1L, 2L, 3L, 4L, 5L);
-        new Expectations() {
-            {
-                infoService.getBackend(1L);
-                result = null;
-                minTimes = 0;
+        List<Long> allBackendsInGroup = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
+        List<List<Long>> backendsPerBucketSeq = new ArrayList<>();
+        backendsPerBucketSeq.add(allBackendsInGroup);
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+        SystemInfoService infoService = new SystemInfoService();
+        colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
 
-                // backend2 is available
-                infoService.getBackend(2L);
-                result = myBackend2;
-                minTimes = 0;
-                myBackend2.isAvailable();
-                result = true;
-                minTimes = 0;
+        Backend be2 = new Backend(2L, "", 2002);
+        be2.setAlive(true);
+        infoService.replayAddBackend(be2);
 
-                // backend3 not available, and dead for a long time
-                infoService.getBackend(3L);
-                result = myBackend3;
-                minTimes = 0;
-                myBackend3.isAvailable();
-                result = false;
-                minTimes = 0;
-                myBackend3.isAlive();
-                result = false;
-                minTimes = 0;
-                myBackend3.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2;
-                minTimes = 0;
+        Backend be3 = new Backend(3L, "", 3003);
+        be3.setAlive(false);
+        be3.setLastUpdateMs(System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2);
+        infoService.replayAddBackend(be3);
 
-                // backend4 not available, and dead for a short time
-                infoService.getBackend(4L);
-                result = myBackend4;
-                minTimes = 0;
-                myBackend4.isAvailable();
-                result = false;
-                minTimes = 0;
-                myBackend4.isAlive();
-                result = false;
-                minTimes = 0;
-                myBackend4.getLastUpdateMs();
-                result = System.currentTimeMillis();
-                minTimes = 0;
+        Backend be4 = new Backend(4L, "", 4004);
+        be4.setAlive(false);
+        be4.setLastUpdateMs(System.currentTimeMillis());
+        infoService.replayAddBackend(be4);
 
-                // backend5 not available, and in decommission
-                infoService.getBackend(5L);
-                result = myBackend5;
-                minTimes = 0;
-                myBackend5.isAvailable();
-                result = false;
-                minTimes = 0;
-                myBackend5.isAlive();
-                result = true;
-                minTimes = 0;
-                myBackend5.isDecommissioned();
-                result = true;
-                minTimes = 0;
+        Backend be5 = new Backend(5L, "", 5005);
+        be5.setDecommissioned(true);
+        infoService.replayAddBackend(be5);
 
-                colocateTableIndex.getBackendsByGroup(groupId);
-                result = allBackendsInGroup;
-                minTimes = 0;
-            }
-        };
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
         Set<Long> unavailableBeIds = Deencapsulation
-                .invoke(balancer, "getUnavailableBeIdsInGroup", infoService, colocateTableIndex, groupId);
-        System.out.println(unavailableBeIds);
+                    .invoke(balancer, "getUnavailableBeIdsInGroup", infoService, colocateTableIndex, groupId);
         Assert.assertArrayEquals(new long[] {1L, 3L, 5L},
-                unavailableBeIds.stream().mapToLong(i -> i).sorted().toArray());
+                    unavailableBeIds.stream().mapToLong(i -> i).sorted().toArray());
     }
 
     @Test
@@ -1003,7 +977,7 @@ public class ColocateTableBalancerTest {
             }
         };
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         List<Long> availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds", infoService);
         Assert.assertArrayEquals(new long[] {2L, 4L}, availableBeIds.stream().mapToLong(i -> i).sorted().toArray());
     }
@@ -1050,7 +1024,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
             }
         };
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", Type.INT));
@@ -1060,18 +1034,53 @@ public class ColocateTableBalancerTest {
 
         // group is balanced before backend 9 is dropped
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
-                Lists.newArrayList(9L, 8L, 7L, 8L, 6L, 5L, 9L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
+                    Lists.newArrayList(9L, 8L, 7L, 8L, 6L, 5L, 9L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
         List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
         Set<Long> unavailableBeIds = Sets.newHashSet(9L);
         List<Long> allAvailBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L);
         boolean changed = (Boolean) Deencapsulation
-                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, allAvailBackendIds,
-                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+                    .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBeIds, allAvailBackendIds,
+                                colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         System.out.println(balancedBackendsPerBucketSeq);
         Assert.assertTrue(changed);
         List<List<Long>> expected = Lists.partition(
-                Lists.newArrayList(5L, 8L, 7L, 8L, 6L, 5L, 6L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
+                    Lists.newArrayList(5L, 8L, 7L, 8L, 6L, 5L, 6L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
+    }
+
+    @Test
+    public void testSystemStable() throws Exception {
+        ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
+        Backend backend1 = new Backend(100001L, "192.168.0.1", 9050);
+        backend1.setAlive(true);
+        Backend backend2 = new Backend(100002L, "192.168.0.2", 9050);
+        backend2.setAlive(true);
+        SystemInfoService infoService = new SystemInfoService();
+        infoService.replayAddBackend(backend1);
+        infoService.replayAddBackend(backend2);
+
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        // set stable last time to 1s, and sleep 1s, the system becomes to stable
+        Config.tablet_sched_colocate_balance_wait_system_stable_time_s = 1;
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                    + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                    + "alive backend is: " + infoService.getBackendIds(true));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
+
+        // one backend is changed to not alive, the system becomes to unstable
+        backend1.setAlive(false);
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                    + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                    + "alive backend is: " + infoService.getBackendIds(true));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
     }
 }

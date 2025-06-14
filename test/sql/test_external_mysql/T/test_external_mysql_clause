@@ -1,0 +1,58 @@
+-- name: testExternalMysqlCaluse
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t00` (
+  `id` int,
+  `s` string  
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+insert into t00 values(1, "hello"), (2, "world"), (3, null);
+
+CREATE EXTERNAL TABLE mysql_ext
+(
+  `id` int,
+  `s` string  
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "${mysql_host}",
+    "port" = "${mysql_port}",
+    "user" = "${mysql_user}",
+    "password" = "${mysql_password}",
+    "database" = "db_${uuid0}",
+    "table" = "t00"
+);
+
+set cbo_derive_join_is_null_predicate = true;
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id = 3;
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id in (1, 2, 3);
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id in (1, 2);
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id in (1);
+
+
+set cbo_derive_join_is_null_predicate = false;
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id = 3;
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id in (1, 2, 3);
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id in (1, 2);
+
+select * from mysql_ext x inner join t00 on x.s = t00.s where t00.id in (1);
+

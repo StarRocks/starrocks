@@ -36,6 +36,9 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ChunkSource {
 public:
+    inline static const std::string IO_TASK_EXEC_TIMER_NAME = "IOTaskExecTime";
+
+public:
     ChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                 BalancedChunkBuffer& chunk_buffer);
 
@@ -44,6 +47,13 @@ public:
     virtual Status prepare(RuntimeState* state);
 
     virtual void close(RuntimeState* state) = 0;
+
+    // Start the ChunkSource for some heavy operations like RPC calls
+    // The difference between prepare() is, the start() is executed in IO-ThreadPool instead of Exec-ThreadPool,
+    // which is more suitable for blocking network operations.
+    // The start() itself should use std::once to make sure it's idempotent and called once, since the io-thread would
+    // call it multiple times
+    virtual Status start(RuntimeState* state) { return {}; }
 
     // Return true if eos is not reached
     // Return false if eos is reached or error occurred
@@ -67,6 +77,7 @@ public:
 
     virtual bool reach_limit() { return false; }
 
+    virtual void update_chunk_exec_stats(RuntimeState* state) {}
     // Used to print custom error msg in be.out when coredmp
     // Don't do heavey work, it calls frequently
     virtual const std::string get_custom_coredump_msg() const { return ""; }
@@ -75,13 +86,7 @@ protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) = 0;
     // The schedule entity of this workgroup for resource group.
-    virtual const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const = 0;
-
-    // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
-    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
-    // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
-    // if it runs in the worker thread owned by other workgroup, which has running drivers.
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
+    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const;
 
     ScanOperator* _scan_op;
     const int32_t _scan_operator_seq;

@@ -18,9 +18,18 @@ import com.starrocks.sql.optimizer.rule.tree.pdagg.PushDownDistinctAggregateRewr
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 public class PushDownDistinctAggregateRule implements TreeRewriteRule {
+
+    public final PushDownDistinctAggregateRewriter rewriter;
+
+    public PushDownDistinctAggregateRule(TaskContext context) {
+        rewriter = new PushDownDistinctAggregateRewriter(context);
+    }
+
+    public PushDownDistinctAggregateRewriter getRewriter() {
+        return rewriter;
+    }
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        PushDownDistinctAggregateRewriter rewriter = new PushDownDistinctAggregateRewriter(taskContext);
         return rewriter.rewrite(root);
     }
 }

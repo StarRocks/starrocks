@@ -73,6 +73,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         key_options.need_zone_map = false;
         key_options.need_bloom_filter = key_column.is_bf_column();
         key_options.need_bitmap_index = key_column.has_bitmap_index();
+        key_options.need_flat = opts.need_flat;
+        key_options.is_compaction = opts.is_compaction;
         if (key_column.type() == LogicalType::TYPE_ARRAY) {
             if (key_options.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
@@ -93,6 +95,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         value_options.need_zone_map = false;
         value_options.need_bloom_filter = value_column.is_bf_column();
         value_options.need_bitmap_index = value_column.has_bitmap_index();
+        value_options.need_flat = opts.need_flat;
+        value_options.is_compaction = opts.is_compaction;
         if (value_column.type() == LogicalType::TYPE_ARRAY) {
             if (value_options.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
@@ -109,14 +113,14 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         null_options.meta = opts.meta->add_children_columns();
         null_options.meta->set_column_id(opts.meta->column_id());
         null_options.meta->set_unique_id(opts.meta->unique_id());
-        null_options.meta->set_type(TYPE_BOOLEAN);
+        null_options.meta->set_type(TYPE_TINYINT);
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
         null_options.meta->set_is_nullable(false);
 
-        TypeInfoPtr bool_type_info = get_type_info(TYPE_BOOLEAN);
-        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_type_info), wfile);
+        TypeInfoPtr tinyint_type_info = get_type_info(TYPE_TINYINT);
+        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(tinyint_type_info), wfile);
     }
 
     std::unique_ptr<ScalarColumnWriter> offsets_writer;
@@ -165,11 +169,11 @@ Status MapColumnWriter::init() {
 
 Status MapColumnWriter::append(const Column& column) {
     const MapColumn* map_column = nullptr;
-    NullColumn* null_column = nullptr;
+    const NullColumn* null_column = nullptr;
     if (is_nullable()) {
         const auto& nullable_column = down_cast<const NullableColumn&>(column);
-        map_column = down_cast<MapColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
+        map_column = down_cast<const MapColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         map_column = down_cast<const MapColumn*>(&column);
     }

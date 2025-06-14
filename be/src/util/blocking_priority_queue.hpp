@@ -39,6 +39,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "gutil/port.h"
 
@@ -106,6 +107,17 @@ public:
             return true;
         }
         return false;
+    }
+
+    // force push val
+    void force_put(T&& val) {
+        std::unique_lock<std::mutex> unique_lock(_lock);
+        if (!_shutdown) {
+            _heap.emplace_back(std::move(val));
+            std::push_heap(_heap.begin(), _heap.end());
+            unique_lock.unlock();
+            _get_cv.notify_one();
+        }
     }
 
     // Return false iff has been shutdown.

@@ -55,10 +55,8 @@ public class CastToEmptyRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        List<ColumnRefOperator> refs = Lists.newArrayList();
-        for (int columnId : input.getOutputColumns().getColumnIds()) {
-            refs.add(context.getColumnRefFactory().getColumnRef(columnId));
-        }
-        return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs, Lists.newArrayList())));
+        List<ColumnRefOperator> refs =
+                input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
+        return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs)));
     }
 }

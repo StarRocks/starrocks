@@ -22,11 +22,37 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ExternalTableTest extends PlanTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        FeConstants.runningUnitTest = true;
+        starRocksAssert.withTable("create external table test.jdbc_key_words_test\n" +
+                "(a int, `schema` varchar(20))\n" +
+                "ENGINE=jdbc\n" +
+                "PROPERTIES (\n" +
+                "\"resource\"=\"jdbc_test\",\n" +
+                "\"table\"=\"test_table\"\n" +
+                ");");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testKeyWordWhereCaluse() throws Exception {
+        String sql = "select * from test.jdbc_key_words_test where `schema` = \"test\"";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "schema = 'test'");
+    }
+
     @Test
     public void testMysqlTableFilter() throws Exception {
         String sql = "select * from ods_order where order_dt = '2025-08-07' and order_no = 'p' limit 10;";
@@ -159,8 +185,8 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("0:SCAN JDBC\n" +
-                "     TABLE: `test_table`\n" +
-                "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10) AND (b < 'abc')\n" +
+                "     TABLE: test_table\n" +
+                "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10) AND (b < 'abc')\n" +
                 "     limit: 10"));
         sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
         plan = getFragmentPlan(sql);
@@ -170,8 +196,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  limit: 10\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
-                        "     TABLE: `test_table`\n" +
-                        "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10)"));
+                        "     TABLE: test_table\n" +
+                        "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10)"));
 
     }
 
@@ -185,8 +211,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  group by: b\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
-                        "     TABLE: `test_table`\n" +
-                        "     QUERY: SELECT a, b FROM `test_table`"));
+                        "     TABLE: test_table\n" +
+                        "     QUERY: SELECT a, b FROM test_table"));
     }
 
     @Test
@@ -210,11 +236,12 @@ public class ExternalTableTest extends PlanTestBase {
     @Test
     public void testJoinWithMysqlTable() throws Exception {
         // set data size and row count for the olap table
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("jointest");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "jointest");
         for (Partition partition : tbl.getPartitions()) {
-            partition.updateVisibleVersion(2);
-            for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            partition.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            for (MaterializedIndex mIndex : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 mIndex.setRowCount(10000);
                 for (Tablet tablet : mIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

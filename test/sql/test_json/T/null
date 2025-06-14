@@ -1,0 +1,28 @@
+-- name: test_json_null
+
+drop database if exists db_json_null;
+create database db_json_null;
+use db_json_null;
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL,
+  `c1` json NULL
+);
+
+INSERT INTO t0 VALUES(0, '{"a": 0, "b": null}');
+
+
+SELECT c1 IS NULL FROM t0;
+SELECT c1->'a' IS NULL, c1->'a' IS NOT NULL FROM t0;
+SELECT c1->'b' IS NULL, c1->'b' IS NOT NULL FROM t0;
+SELECT c1->'c' IS NULL, c1->'c' IS NOT NULL FROM t0;
+
+SELECT 
+    parse_json('{"a": 0, "b": null}')->'a' IS NULL,
+    parse_json('{"a": 0, "b": null}')->'a' IS NOT NULL;
+SELECT 
+    parse_json('{"a": 0, "b": null}')->'b' IS NULL,
+    parse_json('{"a": 0, "b": null}')->'b' IS NOT NULL;
+SELECT 
+    parse_json('{"a": 0, "b": null}')->'c' IS NULL,
+    parse_json('{"a": 0, "b": null}')->'c' IS NOT NULL;

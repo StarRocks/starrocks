@@ -23,18 +23,19 @@
 
 namespace starrocks {
 
-class MapColumn final : public ColumnFactory<Column, MapColumn> {
-    friend class ColumnFactory<Column, MapColumn>;
+class MapColumn final : public CowFactory<ColumnFactory<Column, MapColumn>, MapColumn> {
+    friend class CowFactory<ColumnFactory<Column, MapColumn>, MapColumn>;
+    using Base = CowFactory<ColumnFactory<Column, MapColumn>, MapColumn>;
 
 public:
     using ValueType = void;
 
-    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets);
+    MapColumn(MutableColumnPtr&& keys, MutableColumnPtr&& values, MutableColumnPtr&& offsets);
 
     MapColumn(const MapColumn& rhs)
-            : _keys(rhs._keys->clone_shared()),
-              _values(rhs._values->clone_shared()),
-              _offsets(std::static_pointer_cast<UInt32Column>(rhs._offsets->clone_shared())) {}
+            : _keys(rhs._keys->clone()),
+              _values(rhs._values->clone()),
+              _offsets(UInt32Column::static_pointer_cast(rhs._offsets->clone())) {}
 
     MapColumn(MapColumn&& rhs) noexcept
             : _keys(std::move(rhs._keys)), _values(std::move(rhs._values)), _offsets(std::move(rhs._offsets)) {}
@@ -51,6 +52,18 @@ public:
         return *this;
     }
 
+    static Ptr create(const ColumnPtr& keys, const ColumnPtr& values, const ColumnPtr& offsets) {
+        return MapColumn::create(keys->as_mutable_ptr(), values->as_mutable_ptr(), offsets->as_mutable_ptr());
+    }
+
+    static Ptr create(const MapColumn& rhs) { return Base::create(rhs); }
+
+    static Ptr create(MapColumn&& rhs) { return Base::create(std::move(rhs)); }
+
+    template <typename... Args>
+    requires(IsMutableColumns<Args...>::value) static MutablePtr create(Args&&... args) {
+        return Base::create(std::forward<Args>(args)...);
+    }
     ~MapColumn() override = default;
 
     bool is_map() const override { return true; }
@@ -82,11 +95,9 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
     bool append_nulls(size_t count) override;
-
-    bool append_strings(const Buffer<Slice>& strs) override { return false; }
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -98,18 +109,18 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     void remove_first_n_values(size_t count) override;
 
     uint32_t max_one_element_serialize_size() const override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -123,7 +134,7 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
 
-    bool equals(size_t left, const Column& rhs, size_t right) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
 
     void crc32_hash_at(uint32_t* seed, uint32_t idx) const override;
     void fnv_hash_at(uint32_t* seed, uint32_t idx) const override;
@@ -133,7 +144,7 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string get_name() const override { return "map"; }
 
@@ -156,6 +167,7 @@ public:
     void reset_column() override;
 
     const UInt32Column& offsets() const { return *_offsets; }
+    const UInt32Column::Ptr& offsets_column() const { return _offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
 
     bool is_nullable() const override { return false; }
@@ -164,9 +176,10 @@ public:
 
     std::string debug_string() const override;
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
-        return _keys->capacity_limit_reached(msg) || _values->capacity_limit_reached(msg) ||
-               _offsets->capacity_limit_reached(msg);
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_keys->capacity_limit_reached());
+        RETURN_IF_ERROR(_values->capacity_limit_reached());
+        return _offsets->capacity_limit_reached();
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
@@ -178,12 +191,12 @@ public:
     void check_or_die() const override;
 
     const Column& keys() const { return *_keys; }
+    const ColumnPtr& keys_column() const { return _keys; }
     ColumnPtr& keys_column() { return _keys; }
-    ColumnPtr keys_column() const { return _keys; }
 
     const Column& values() const { return *_values; }
+    const ColumnPtr& values_column() const { return _values; }
     ColumnPtr& values_column() { return _values; }
-    ColumnPtr values_column() const { return _values; }
 
     size_t get_map_size(size_t idx) const;
     std::pair<size_t, size_t> get_map_offset_size(size_t idx) const;
@@ -191,6 +204,15 @@ public:
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
     void remove_duplicated_keys(bool need_recursive = false);
+
+    void mutate_each_subcolumn() override {
+        // keys
+        _keys = (std::move(*_keys)).mutate();
+        // values
+        _values = (std::move(*_values)).mutate();
+        // offsets
+        _offsets = UInt32Column::static_pointer_cast((std::move(*_offsets)).mutate());
+    }
 
 private:
     // Keys must be NullableColumn to facilitate handling nested types.

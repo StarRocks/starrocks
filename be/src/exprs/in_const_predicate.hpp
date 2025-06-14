@@ -14,13 +14,19 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
+#include "column/type_traits.h"
 #include "common/object_pool.h"
+#include "exprs/function_helper.h"
+#include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/types.h"
+#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -59,9 +65,9 @@ class VectorizedInConstPredicate final : public Predicate {
 public:
     using ValueType = typename RunTimeTypeTraits<Type>::CppType;
 
-    VectorizedInConstPredicate(const TExprNode& node)
-            : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _is_prepare(false), _null_in_set(false) {}
+    VectorizedInConstPredicate(const TExprNode& node) : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
+    // _string_values is ColumnPtr, not deep copied, so once opened, should not be modified.
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other),
               _is_not_in(other._is_not_in),
@@ -69,7 +75,10 @@ public:
               _null_in_set(other._null_in_set),
               _is_join_runtime_filter(other._is_join_runtime_filter),
               _eq_null(other._eq_null),
-              _array_size(other._array_size) {}
+              _array_size(other._array_size),
+              _array_buffer(other._array_buffer),
+              _hash_set(other._hash_set),
+              _string_values(other._string_values) {}
 
     ~VectorizedInConstPredicate() override = default;
 
@@ -103,7 +112,7 @@ public:
     }
 
     Status prepare(RuntimeState* state, ExprContext* context) override {
-        Expr::prepare(state, context);
+        RETURN_IF_ERROR(Expr::prepare(state, context));
 
         if (_is_prepare) {
             return Status::OK();
@@ -125,48 +134,49 @@ public:
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
-
-        if (Type != _children[0]->type().type) {
-            if (!isSliceLT<Type> || !_children[0]->type().is_string_type()) {
-                return Status::InternalError("VectorizedInPredicate type is error");
-            }
-        }
-
-        bool use_array = is_use_array();
-        for (int i = 1; i < _children.size(); ++i) {
-            if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
-                (_children[0]->type().type == _children[i]->type().type) ||
-                (LogicalType::TYPE_NULL == _children[i]->type().type)) {
-                // pass
-            } else {
-                return Status::InternalError("VectorizedInPredicate type not same");
-            }
-
-            ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
-            if (!value->is_constant() && !value->only_null()) {
-                return Status::InternalError("VectorizedInPredicate value not const");
-            }
-
-            ColumnViewer<Type> viewer(value);
-            if (viewer.is_null(0)) {
-                _null_in_set = true;
-                continue;
-            }
-
-            // insert into set
-            if constexpr (isSliceLT<Type>) {
-                if (_hash_set.emplace(viewer.value(0)).second) {
-                    _string_values.emplace_back(value);
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            if (Type != _children[0]->type().type) {
+                if (!isSliceLT<Type> || !_children[0]->type().is_string_type()) {
+                    return Status::InternalError("VectorizedInPredicate type is error");
                 }
-                continue;
             }
 
-            if (use_array) {
-                if constexpr (can_use_array()) {
-                    _set_array_index(viewer.value(0));
+            bool use_array = is_use_array();
+            for (int i = 1; i < _children.size(); ++i) {
+                if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
+                    (_children[0]->type().type == _children[i]->type().type) ||
+                    (LogicalType::TYPE_NULL == _children[i]->type().type)) {
+                    // pass
+                } else {
+                    return Status::InternalError("VectorizedInPredicate type not same");
                 }
-            } else {
-                _hash_set.emplace(viewer.value(0));
+
+                ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
+                if (!value->is_constant() && !value->only_null()) {
+                    return Status::InternalError("VectorizedInPredicate value not const");
+                }
+
+                ColumnViewer<Type> viewer(value);
+                if (viewer.is_null(0)) {
+                    _null_in_set = true;
+                    continue;
+                }
+
+                // insert into set
+                if constexpr (isSliceLT<Type>) {
+                    if (_hash_set.emplace(viewer.value(0)).second) {
+                        _string_values.emplace_back(value);
+                    }
+                    continue;
+                }
+
+                if (use_array) {
+                    if constexpr (can_use_array()) {
+                        _set_array_index(viewer.value(0));
+                    }
+                } else {
+                    _hash_set.emplace(viewer.value(0));
+                }
             }
         }
         return Status::OK();
@@ -212,7 +222,7 @@ public:
         }
 
         if (lhs->is_constant()) {
-            return ConstColumn::create(result, size);
+            return ConstColumn::create(std::move(result), size);
         }
         return result;
     }
@@ -228,7 +238,7 @@ public:
 
         uint8_t* null_data = builder.null_column()->get_data().data();
         memset(null_data, 0x0, size);
-        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
+        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column().get())->get_data().data();
 
         auto update_row = [&](int row) {
             if (viewer.is_null(row)) {
@@ -321,23 +331,44 @@ public:
         return evaluate_with_filter(context, ptr, nullptr);
     }
 
-    void insert(const ValueType* value) {
-        if (value == nullptr) {
-            _null_in_set = true;
+    ColumnPtr get_all_values() const {
+        ColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+        if constexpr (isSliceLT<Type>) {
+            for (auto v : _hash_set) {
+                // v -> SliceWithHash
+                Slice s{v.data, v.size};
+                values->append_datum(s);
+            }
         } else {
-            _hash_set.emplace(*value);
+            for (auto v : _hash_set) {
+                values->append_datum(v);
+            }
+            if constexpr (can_use_array()) {
+                if (is_use_array()) {
+                    for (size_t i = 0; i < _array_size; i++) {
+                        if (_array_buffer[i]) {
+                            values->append_datum(static_cast<ValueType>(i)); //NOLINT
+                        }
+                    }
+                }
+            }
+        }
+
+        if (_null_in_set) {
+            values->append_nulls(1);
+        }
+        return values;
+    }
+
+    void insert(const ValueType& value) { _hash_set.emplace(value); }
+
+    void insert_array(const ValueType& value) {
+        if constexpr (can_use_array()) {
+            _set_array_index(value);
         }
     }
 
-    void insert_array(const ValueType* value) {
-        if (value == nullptr) {
-            _null_in_set = true;
-        } else {
-            if constexpr (can_use_array()) {
-                _set_array_index(*value);
-            }
-        }
-    }
+    void insert_null() { _null_in_set = true; }
 
     template <bool use_array>
     uint8_t check_value_existence(const ValueType& value) const {
@@ -353,6 +384,8 @@ public:
     bool is_not_in() const { return _is_not_in; }
 
     bool null_in_set() const { return _null_in_set; }
+
+    bool is_eq_null() const { return _eq_null; }
 
     void set_null_in_set(bool v) { _null_in_set = v; }
 
@@ -383,9 +416,9 @@ private:
         }
     }
 
-    const bool _is_not_in;
-    bool _is_prepare;
-    bool _null_in_set;
+    const bool _is_not_in{false};
+    bool _is_prepare{false};
+    bool _null_in_set{false};
     bool _is_join_runtime_filter = false;
     bool _eq_null = false;
     int _array_size = 0;
@@ -393,24 +426,136 @@ private:
 
     in_const_pred_detail::LHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
-    std::vector<ColumnPtr> _string_values;
+    Columns _string_values;
+};
+
+class VectorizedInConstPredicateGeneric final : public Predicate {
+public:
+    VectorizedInConstPredicateGeneric(const TExprNode& node)
+            : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
+
+    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other)
+            : Predicate(other), _is_not_in(other._is_not_in), _const_input(other._const_input) {}
+
+    ~VectorizedInConstPredicateGeneric() override = default;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicateGeneric(*this)); }
+
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+        RETURN_IF_ERROR(Expr::open(state, context, scope));
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            _const_input.resize(_children.size());
+            for (auto i = 0; i < _children.size(); ++i) {
+                if (_children[i]->is_constant()) {
+                    // _const_input[i] maybe not be of ConstColumn
+                    ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
+                } else {
+                    _const_input[i] = nullptr;
+                }
+            }
+        } else {
+            DCHECK_EQ(_const_input.size(), _const_input.size());
+        }
+        return Status::OK();
+    }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        DCHECK_EQ(_const_input.size(), _children.size());
+        auto child_size = _children.size();
+        Columns input_data(child_size);
+        std::vector<NullColumnPtr> input_null(child_size);
+        std::vector<bool> is_const(child_size, true);
+        Columns columns_ref(child_size);
+        ColumnPtr value;
+        bool all_const = true;
+        for (int i = 0; i < child_size; ++i) {
+            value = _const_input[i];
+            if (value == nullptr) {
+                ASSIGN_OR_RETURN(value, _children[i]->evaluate_checked(context, ptr));
+                is_const[i] = value->is_constant();
+                all_const &= is_const[i];
+            }
+            if (i == 0) {
+                RETURN_IF_COLUMNS_ONLY_NULL({value});
+            }
+            columns_ref[i] = value;
+            if (value->is_constant()) {
+                value = down_cast<ConstColumn*>(value.get())->data_column();
+            }
+            if (value->is_nullable()) {
+                auto nullable = down_cast<const NullableColumn*>(value.get());
+                input_null[i] = nullable->null_column();
+                input_data[i] = nullable->data_column();
+            } else {
+                input_null[i] = nullptr;
+                input_data[i] = value;
+            }
+        }
+        auto size = columns_ref[0]->size();
+        DCHECK(ptr == nullptr || ptr->num_rows() == size); // ptr is null in tests.
+        auto dest_size = size;
+        if (all_const) {
+            dest_size = 1;
+        }
+        BooleanColumn::MutablePtr res = BooleanColumn::create(dest_size, _is_not_in);
+        NullColumnPtr res_null = NullColumn::create(dest_size, DATUM_NULL);
+        auto& res_data = res->get_data();
+        auto& res_null_data = res_null->get_data();
+        for (auto i = 0; i < dest_size; ++i) {
+            auto id_0 = is_const[0] ? 0 : i;
+            if (input_null[0] == nullptr || !input_null[0]->get_data()[id_0]) {
+                bool has_null = false;
+                for (auto j = 1; j < child_size; ++j) {
+                    auto id = is_const[j] ? 0 : i;
+                    // input[j] is null
+                    if (input_null[j] != nullptr && input_null[j]->get_data()[id]) {
+                        has_null = true;
+                        continue;
+                    }
+                    // input[j] is not null
+                    auto is_equal = input_data[0]->equals(id_0, *input_data[j], id, false);
+                    if (is_equal == 1) {
+                        res_null_data[i] = false;
+                        res_data[i] = !_is_not_in;
+                        break;
+                    } else if (is_equal == -1) {
+                        has_null = true;
+                    }
+                }
+                if (_is_not_in == res_data[i]) {
+                    res_null_data[i] = has_null;
+                }
+            }
+        }
+        if (all_const) {
+            if (res_null_data[0]) { // return only_null column
+                return ColumnHelper::create_const_null_column(size);
+            } else {
+                return ConstColumn::create(std::move(res), size);
+            }
+        } else {
+            if (SIMD::count_nonzero(res_null_data) > 0) {
+                return NullableColumn::create(std::move(res), std::move(res_null));
+            } else {
+                return res;
+            }
+        }
+    }
+
+private:
+    const bool _is_not_in{false};
+    Columns _const_input;
 };
 
 class VectorizedInConstPredicateBuilder {
 public:
     VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)
-            : _state(state),
-              _pool(pool),
-              _expr(expr),
-              _eq_null(false),
-              _null_in_set(false),
-              _is_not_in(false),
-              _is_join_runtime_filter(false),
-              _array_size(0),
-              _in_pred_ctx(nullptr) {}
+            : _state(state), _pool(pool), _expr(expr) {}
 
     Status create();
-    Status add_values(const ColumnPtr& column, size_t column_offset);
+    // For string type, this interface will only copy the slice array, not add ColumnPtr,
+    // so be careful to manage the life cycle of source ColumnPtr.
+    void add_values(const ColumnPtr& column, size_t column_offset);
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }
     void set_eq_null(bool v) { _eq_null = v; }
@@ -423,12 +568,12 @@ private:
     RuntimeState* _state;
     ObjectPool* _pool;
     Expr* _expr;
-    bool _eq_null;
-    bool _null_in_set;
-    bool _is_not_in;
-    bool _is_join_runtime_filter;
-    int _array_size;
-    ExprContext* _in_pred_ctx;
+    bool _eq_null{false};
+    bool _null_in_set{false};
+    bool _is_not_in{false};
+    bool _is_join_runtime_filter{false};
+    int _array_size{0};
+    ExprContext* _in_pred_ctx{nullptr};
     Status _st;
 };
 

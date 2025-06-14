@@ -34,10 +34,11 @@
 
 #include "types/bitmap_value.h"
 
-#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value_detail.h"
+#include "util/defer_op.h"
 #include "util/phmap/phmap.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -58,11 +59,14 @@ static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_h
     }
 }
 
-BitmapValue::BitmapValue() = default;
-
 BitmapValue::BitmapValue(BitmapValue&& other) noexcept
-        : _bitmap(std::move(other._bitmap)), _set(std::move(other._set)), _sv(other._sv), _type(other._type) {
+        : _bitmap(std::move(other._bitmap)),
+          _set(std::move(other._set)),
+          _sv(other._sv),
+          _mem_usage(other._mem_usage),
+          _type(other._type) {
     other._sv = 0;
+    other._mem_usage = 0;
     other._type = EMPTY;
 }
 
@@ -71,8 +75,10 @@ BitmapValue& BitmapValue::operator=(BitmapValue&& other) noexcept {
         this->_bitmap = std::move(other._bitmap);
         this->_set = std::move(other._set);
         this->_sv = other._sv;
+        this->_mem_usage = other._mem_usage;
         this->_type = other._type;
         other._sv = 0;
+        other._mem_usage = 0;
         other._type = EMPTY;
     }
     return *this;
@@ -88,27 +94,26 @@ BitmapValue::BitmapValue(const char* src) {
 }
 
 BitmapValue::BitmapValue(const Slice& src) {
-    deserialize(src.data);
+    bool res = deserialize(src.data);
+    DCHECK(res);
 }
 
-BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy)
-        : _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
+BitmapValue::BitmapValue(const BitmapValue& other)
+        : _bitmap(other._bitmap),
+          _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
           _sv(other._sv),
+          _mem_usage(other._mem_usage),
           _type(other._type) {
     // TODO: _set is usually relatively small, and it needs system performance testing to decide
     //  whether to change std::unique_ptr to std::shared_ptr and support shallow copy
-    if (deep_copy) {
-        _bitmap = (other._bitmap == nullptr) ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap);
-    } else {
-        _bitmap = (other._bitmap == nullptr) ? nullptr : other._bitmap;
-    }
 }
 
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
-        this->_bitmap = (other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap));
+        this->_bitmap = other._bitmap;
         this->_set = other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set);
         this->_sv = other._sv;
+        this->_mem_usage = other._mem_usage;
         this->_type = other._type;
     }
     return *this;
@@ -116,6 +121,7 @@ BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
 
 // Construct a bitmap from given elements.
 BitmapValue::BitmapValue(const std::vector<uint64_t>& bits) {
+    // TODO: why not use SET ?
     switch (bits.size()) {
     case 0:
         _type = EMPTY;
@@ -147,6 +153,7 @@ void BitmapValue::_from_set_to_bitmap() {
 // EMPTY  -> BITMAP
 // SINGLE -> BITMAP
 BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
+    _mem_usage = 0;
     switch (rhs._type) {
     case EMPTY:
         return *this;
@@ -156,8 +163,7 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
     case BITMAP:
         switch (_type) {
         case EMPTY:
-            // TODO: Reduce memory copy.
-            _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _bitmap = rhs._bitmap;
             _type = BITMAP;
             break;
         case SINGLE:
@@ -166,6 +172,7 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
             _type = BITMAP;
             break;
         case BITMAP:
+            _copy_on_write();
             *_bitmap |= *rhs._bitmap;
             break;
         case SET:
@@ -199,10 +206,10 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP:
+            _copy_on_write();
             for (auto x : *rhs._set) {
                 _bitmap->add(x);
             }
-            _type = BITMAP;
             break;
         }
     }
@@ -216,9 +223,10 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
 // BITMAP -> EMPTY
 // BITMAP -> SINGLE
 BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
+    _mem_usage = 0;
     switch (rhs._type) {
     case EMPTY:
-        clear();
+        reset();
         break;
     case SINGLE:
         switch (_type) {
@@ -226,8 +234,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (_sv != rhs._sv) {
-                _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
@@ -237,7 +244,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
                 _type = SINGLE;
                 _sv = rhs._sv;
             }
-            _bitmap->clear();
+            _bitmap.reset();
             break;
         case SET:
             if (!_set->contains(rhs._sv)) {
@@ -256,13 +263,13 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (!rhs._bitmap->contains(_sv)) {
-                _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
+            _copy_on_write();
             *_bitmap &= *rhs._bitmap;
-            _convert_to_smaller_type();
+            _from_bitmap_to_smaller_type();
             break;
         case SET: {
             auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
@@ -282,8 +289,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (!rhs._set->contains(_sv)) {
-                _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP: {
@@ -315,16 +321,17 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
 }
 
 void BitmapValue::remove(uint64_t rhs) {
+    _mem_usage = 0;
     switch (_type) {
     case EMPTY:
         break;
     case SINGLE:
         if (_sv == rhs) {
-            _type = EMPTY;
-            clear();
+            reset();
         }
         break;
     case BITMAP:
+        _copy_on_write();
         _bitmap->remove(rhs);
         break;
     case SET:
@@ -334,6 +341,7 @@ void BitmapValue::remove(uint64_t rhs) {
 }
 
 BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
+    _mem_usage = 0;
     switch (rhs._type) {
     case EMPTY:
         break;
@@ -343,11 +351,11 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (_sv == rhs._sv) {
-                _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
+            _copy_on_write();
             _bitmap->remove(rhs._sv);
             break;
         case SET:
@@ -361,13 +369,13 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (rhs._bitmap->contains(_sv)) {
-                _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
+            _copy_on_write();
             *_bitmap -= *rhs._bitmap;
-            _convert_to_smaller_type();
+            _from_bitmap_to_smaller_type();
             break;
         case SET: {
             auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
@@ -387,16 +395,15 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (rhs._set->contains(_sv)) {
-                _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP: {
-            detail::Roaring64Map bitmap;
+            _copy_on_write();
             for (auto x : *rhs._set) {
                 _bitmap->remove(x);
             }
-            _convert_to_smaller_type();
+            _from_bitmap_to_smaller_type();
             break;
         }
         case SET: {
@@ -416,6 +423,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
 }
 
 BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
+    _mem_usage = 0;
     switch (rhs._type) {
     case EMPTY:
         break;
@@ -426,13 +434,13 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (_sv == rhs._sv) {
-                _type = EMPTY;
-                clear();
+                reset();
             } else {
                 add(rhs._sv);
             }
             break;
         case BITMAP:
+            _copy_on_write();
             if (_bitmap->contains(rhs._sv)) {
                 _bitmap->remove(rhs._sv);
             } else {
@@ -451,7 +459,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
     case BITMAP:
         switch (_type) {
         case EMPTY:
-            _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _bitmap = rhs._bitmap;
             _type = BITMAP;
             break;
         case SINGLE:
@@ -464,10 +472,8 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
             _type = BITMAP;
             break;
         case BITMAP: {
-            BitmapValue rhs_bitmap(rhs);
-            *rhs_bitmap._bitmap -= *_bitmap;
-            *_bitmap -= *rhs._bitmap;
-            *_bitmap |= *rhs_bitmap._bitmap;
+            _copy_on_write();
+            *_bitmap ^= *rhs._bitmap;
             break;
         }
         case SET: {
@@ -550,7 +556,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
 }
 
 // check if value x is present
-bool BitmapValue::contains(uint64_t x) {
+bool BitmapValue::contains(uint64_t x) const {
     switch (_type) {
     case EMPTY:
         return false;
@@ -627,7 +633,7 @@ std::optional<uint64_t> BitmapValue::min() const {
 
 // Return how many bytes are required to serialize this bitmap.
 // See BitmapTypeCode for the serialized format.
-size_t BitmapValue::getSizeInBytes() const {
+size_t BitmapValue::get_size_in_bytes() const {
     size_t res = 0;
     switch (_type) {
     case EMPTY:
@@ -670,7 +676,6 @@ void BitmapValue::write(char* dst) const {
         _bitmap->write(dst, config::bitmap_serialize_version);
         break;
     case SET:
-
         *dst = BitmapTypeCode::SET;
         dst += 1;
         uint32_t size = _set->size();
@@ -686,6 +691,7 @@ void BitmapValue::write(char* dst) const {
 // Deserialize a bitmap value from `src`.
 // Return false if `src` begins with unknown type code, true otherwise.
 bool BitmapValue::deserialize(const char* src) {
+    _mem_usage = 0;
     if (src == nullptr) {
         _type = EMPTY;
         return true;
@@ -736,6 +742,7 @@ bool BitmapValue::deserialize(const char* src) {
 }
 
 bool BitmapValue::valid_and_deserialize(const char* src, size_t max_bytes) {
+    _mem_usage = 0;
     if (!max_bytes) {
         return false;
     }
@@ -842,7 +849,7 @@ std::string BitmapValue::to_string() const {
     }
     case SET:
         int pos = 0;
-        int64_t values[_set->size()];
+        uint64_t values[_set->size()];
         for (auto value : *_set) {
             values[pos++] = value;
         }
@@ -862,7 +869,7 @@ std::string BitmapValue::to_string() const {
 }
 
 // Append values to array
-void BitmapValue::to_array(std::vector<int64_t>* array) const {
+void BitmapValue::to_array(Buffer<int64_t>* array) const {
     switch (_type) {
     case EMPTY:
         break;
@@ -870,9 +877,9 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
         array->emplace_back(_sv);
         break;
     case BITMAP: {
-        for (unsigned long ptr_value : *_bitmap) {
-            array->emplace_back(ptr_value);
-        }
+        size_t cur_size = array->size();
+        array->resize(cur_size + _bitmap->cardinality());
+        _bitmap->toUint64Array((uint64_t*)(*array).data() + cur_size);
         break;
     }
     case SET:
@@ -885,168 +892,317 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
 
 size_t BitmapValue::serialize(uint8_t* dst) const {
     write(reinterpret_cast<char*>(dst));
-    return getSizeInBytes();
+    return get_size_in_bytes();
 }
 
 // When you persist bitmap value to disk, you could call this method.
 // This method should be called before `serialize_size`.
-void BitmapValue::compress() const {
+void BitmapValue::compress() {
     if (_type == BITMAP) {
+        _mem_usage = 0;
+        _copy_on_write();
         _bitmap->runOptimize();
         _bitmap->shrinkToFit();
     }
 }
 
 void BitmapValue::clear() {
-    _type = EMPTY;
     if (_bitmap != nullptr) {
-        _bitmap->clear();
+        if (_bitmap.use_count() <= 1) {
+            _bitmap->clear();
+        } else {
+            _bitmap.reset();
+        }
     }
+    if (_set != nullptr) {
+        _set->clear();
+    }
+    _sv = 0;
+    _mem_usage = 0;
+    _type = EMPTY;
+}
+
+void BitmapValue::reset() {
+    _bitmap.reset();
     _set.reset();
     _sv = 0;
+    _mem_usage = 0;
+    _type = EMPTY;
 }
 
-void BitmapValue::_convert_to_smaller_type() {
-    if (_type == BITMAP) {
-        uint64_t c = _bitmap->cardinality();
-        if (c > 1) return;
-        if (c == 0) {
-            _type = EMPTY;
-        } else {
-            _type = SINGLE;
-            auto min_value = _bitmap->minimum();
-            DCHECK(min_value.has_value());
-            _sv = min_value.value();
+void BitmapValue::_from_bitmap_to_smaller_type() {
+    uint64_t c = _bitmap->cardinality();
+    if (c > 1) return;
+    if (c == 0) {
+        _type = EMPTY;
+    } else {
+        _type = SINGLE;
+        auto min_value = _bitmap->minimum();
+        DCHECK(min_value.has_value());
+        _sv = min_value.value();
+    }
+    _bitmap.reset();
+}
+
+std::vector<BitmapValue> BitmapValue::split_bitmap(size_t batch_size) const {
+    std::vector<BitmapValue> results;
+
+    if (batch_size == 0) {
+        return results;
+    }
+
+    size_t cardinary_size = cardinality();
+    size_t split_num = cardinary_size / batch_size + (cardinary_size % batch_size != 0);
+
+    if (split_num <= 1) {
+        results.emplace_back(*this);
+        return results;
+    }
+
+    switch (_type) {
+    case EMPTY:
+        results.emplace_back();
+        break;
+    case SINGLE:
+        results.emplace_back(*this);
+        break;
+    case SET: {
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
+
+        for (size_t i = 0; i < split_num; i++) {
+            BitmapValue sub_bitmap;
+            size_t end = std::min((i + 1) * batch_size, cardinary_size);
+            for (size_t j = i * batch_size; j < end; j++) {
+                sub_bitmap.add(values[j]);
+            }
+            results.emplace_back(std::move(sub_bitmap));
         }
-        _bitmap->clear();
+        break;
     }
+    case BITMAP: {
+        auto iter = _bitmap->begin();
+        for (size_t i = 0; i < split_num; i++) {
+            BitmapValue sub_bitmap;
+            for (size_t j = 0; j < batch_size && iter != _bitmap->end(); j++, iter++) {
+                //TODO: add batch for performance
+                sub_bitmap.add(*iter);
+            }
+            results.emplace_back(std::move(sub_bitmap));
+        }
+        break;
+    }
+    default:
+        CHECK(false);
+    }
+
+    return results;
 }
 
-int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
-    if (offset > 0 && offset >= _bitmap->cardinality()) {
+int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const {
+    switch (_type) {
+    case EMPTY:
         return 0;
+    case SINGLE: {
+        if (offset >= 1 || offset < -1 || len <= 0) {
+            return 0;
+        } else {
+            ret_bitmap->add(_sv);
+            return 1;
+        }
     }
-    if (offset < 0 && std::abs(offset) > _bitmap->cardinality()) {
-        return 0;
-    }
-    int64_t abs_offset = offset;
-    if (offset < 0) {
-        abs_offset = _bitmap->cardinality() + offset;
-    }
+    case SET: {
+        size_t cardinality = _set->size();
+        if ((offset > 0 && offset >= cardinality) || (offset < 0 && std::abs(offset) > cardinality)) {
+            return 0;
+        }
+        int64_t abs_offset = offset;
+        if (offset < 0) {
+            abs_offset = cardinality + offset;
+        }
 
-    int64_t count = 0;
-    int64_t offset_count = 0;
-    auto it = _bitmap->begin();
-    for (; it != _bitmap->end() && offset_count < abs_offset; ++it) {
-        ++offset_count;
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
+
+        int64_t count = 0;
+        for (auto idx = abs_offset; idx < values.size() && count < len; ++idx, ++count) {
+            ret_bitmap->add(values[idx]);
+        }
+        return count;
     }
-    for (; it != _bitmap->end() && count < len; ++it, ++count) {
-        ret_bitmap->add(*it);
+    default:
+        DCHECK_EQ(_type, BITMAP);
+        size_t cardinality = _bitmap->cardinality();
+        if ((offset > 0 && offset >= cardinality) || (offset < 0 && std::abs(offset) > cardinality)) {
+            return 0;
+        }
+        int64_t abs_offset = offset;
+        if (offset < 0) {
+            abs_offset = cardinality + offset;
+        }
+
+        int64_t count = 0;
+        int64_t offset_count = 0;
+        auto it = _bitmap->begin();
+        for (; it != _bitmap->end() && offset_count < abs_offset; ++it) {
+            ++offset_count;
+        }
+        for (; it != _bitmap->end() && count < len; ++it, ++count) {
+            ret_bitmap->add(*it);
+        }
+        return count;
     }
-    return count;
 }
 
 int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
-
-                                                  BitmapValue* ret_bitmap) {
-    bool is_reverse = false;
-
-    int64_t abs_limit = limit;
-    if (limit < 0) {
-        is_reverse = true;
-        abs_limit = -limit;
-    }
-
-    int64_t count = 0;
-
-    if (is_reverse) {
-        detail::Roaring64Map::const_iterator start = _bitmap->begin();
-        detail::Roaring64Map::const_iterator end = _bitmap->begin();
-
-        int64_t offset = 0;
-        for (; end != _bitmap->end() && offset < abs_limit && *end <= range_start;) {
-            ++end;
-            ++offset;
+                                                  BitmapValue* ret_bitmap) const {
+    switch (_type) {
+    case EMPTY:
+        return 0;
+    case SINGLE: {
+        if ((limit > 0 && _sv < range_start) || (limit < 0 && _sv > range_start) || limit == 0) {
+            return 0;
+        } else {
+            ret_bitmap->add(_sv);
+            return 1;
         }
-        if (offset == abs_limit) {
-            for (; end != _bitmap->end() && *end <= range_start;) {
-                ++start;
+    }
+    case SET: {
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
+
+        int64_t count = 0;
+        if (limit < 0) {
+            int64_t abs_limit = -limit;
+            auto it = std::lower_bound(values.rbegin(), values.rend(), range_start, std::greater<uint64_t>());
+            for (; it != values.rend() && count < abs_limit; ++it, ++count) {
+                ret_bitmap->add(*it);
+            }
+        } else {
+            auto it = std::lower_bound(values.begin(), values.end(), range_start);
+            for (; it != values.end() && count < limit; ++it, ++count) {
+                ret_bitmap->add(*it);
+            }
+        }
+        return count;
+    }
+    default:
+        DCHECK_EQ(_type, BITMAP);
+        int64_t count = 0;
+        if (limit < 0) {
+            int64_t abs_limit = -limit;
+            auto start = _bitmap->begin();
+            auto end = _bitmap->begin();
+
+            int64_t offset = 0;
+            for (; end != _bitmap->end() && offset < abs_limit && *end <= range_start;) {
                 ++end;
+                ++offset;
+            }
+            if (offset == abs_limit) {
+                for (; end != _bitmap->end() && *end <= range_start;) {
+                    ++start;
+                    ++end;
+                }
+            }
+
+            for (; start != end; ++start, ++count) {
+                ret_bitmap->add(*start);
+            }
+        } else {
+            auto it = _bitmap->begin();
+            for (; it != _bitmap->end() && *it < range_start;) {
+                ++it;
+            }
+            for (; it != _bitmap->end() && count < limit; ++it, ++count) {
+                ret_bitmap->add(*it);
             }
         }
 
-        for (; start != end; ++start, ++count) {
-            ret_bitmap->add(*start);
+        return count;
+    }
+}
+
+int64_t BitmapValue::bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
+                                                     BitmapValue* ret_bitmap) const {
+    // range_end < range_start already checked in BitmapFunctions::bitmap_subset_in_range
+    switch (_type) {
+    case EMPTY:
+        return 0;
+    case SINGLE: {
+        if (_sv < range_start || _sv >= range_end) {
+            return 0;
+        } else {
+            ret_bitmap->add(_sv);
+            return 1;
         }
     }
-
-    else {
+    case SET: {
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
+        auto it = std::lower_bound(values.begin(), values.end(), range_start);
+        int64_t count = 0;
+        for (; it != values.end() && *it < range_end; ++it, ++count) {
+            ret_bitmap->add(*it);
+        }
+        return count;
+    }
+    default:
+        DCHECK_EQ(_type, BITMAP);
         auto it = _bitmap->begin();
         for (; it != _bitmap->end() && *it < range_start;) {
             ++it;
         }
-        for (; it != _bitmap->end() && count < abs_limit; ++it, ++count) {
+        int64_t count = 0;
+        for (; it != _bitmap->end() && *it < range_end; ++it, ++count) {
             ret_bitmap->add(*it);
         }
+        return count;
     }
-
-    return count;
-}
-
-int64_t BitmapValue::bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
-
-                                                     BitmapValue* ret_bitmap) {
-    auto it = _bitmap->begin();
-    for (; it != _bitmap->end() && *it < range_start;) {
-        ++it;
-    }
-
-    int64_t count = 0;
-
-    for (; it != _bitmap->end() && *it < range_end; ++it, ++count) {
-        ret_bitmap->add(*it);
-    }
-
-    return count;
 }
 
 void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {
+    _mem_usage = 0;
     if (_type != BITMAP) {
         for (size_t i = 0; i < n_args; i++) {
             add(vals[i]);
         }
     } else {
+        _copy_on_write();
         _bitmap->addMany(n_args, vals);
     }
 }
 
-void BitmapValue::add(uint64_t value) {
-    switch (_type) {
-    case EMPTY:
-        _sv = value;
-        _type = SINGLE;
-        break;
-    case SINGLE:
-        //there is no need to convert the type if two variables are equal
-        if (_sv == value) {
-            break;
-        }
-
-        _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
-        _set->insert(_sv);
-        _set->insert(value);
-        _type = SET;
-        break;
-    case BITMAP:
-        _bitmap->add(value);
-        break;
-    case SET:
-        if (_set->size() < 32) {
-            _set->insert(value);
-        } else {
-            _from_set_to_bitmap();
-            _bitmap->add(value);
-        }
+uint64_t BitmapValueIter::next_batch(uint64_t* values, uint64_t count) {
+    uint64_t remain_rows = _remain_rows();
+    uint64_t read_count = std::min(count, remain_rows);
+    if (read_count <= 0) {
+        return 0;
     }
+
+    switch (_bitmap->type()) {
+    case BitmapValue::EMPTY:
+        break;
+    case BitmapValue::SINGLE:
+        values[0] = _bitmap->_sv;
+        break;
+    case BitmapValue::SET: {
+        std::vector tmp_array(_bitmap->_set->begin(), _bitmap->_set->end());
+        std::sort(tmp_array.begin(), tmp_array.end());
+        for (uint64_t i = 0; i < read_count; i++) {
+            values[i] = tmp_array[_offset + i];
+        }
+        break;
+    }
+    case BitmapValue::BITMAP: {
+        for (uint64_t i = 0; i < read_count; i++) {
+            values[i] = *((*_bitmap_iter)++);
+        }
+        break;
+    }
+    }
+    _offset += read_count;
+    return read_count;
 }
+
 } // namespace starrocks

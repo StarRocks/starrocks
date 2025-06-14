@@ -29,8 +29,11 @@
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/schedule/common.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "exprs/runtime_filter_bank.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
 #include "util/phmap/phmap.h"
@@ -48,8 +51,8 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
-using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
-using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+using ConstDriverPredicator = std::function<bool(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {
@@ -195,10 +198,33 @@ class PipelineDriver {
     friend class PipelineDriverPoller;
 
 public:
+    // used in event scheduler
+    // If event_scheduler doesn't get the token, it proves that the observer has entered the critical zone,
+    // and we don't know the real state of the driver, so we need to try scheduling the driver one more time.
+    class ScheduleToken {
+    public:
+        ScheduleToken(DriverRawPtr driver, bool acquired) : _driver(driver), _acquired(acquired) {}
+        ~ScheduleToken() {
+            if (_acquired) {
+                _driver->_schedule_token = true;
+            }
+        }
+
+        ScheduleToken(const ScheduleToken&) = delete;
+        void operator=(const ScheduleToken&) = delete;
+
+        bool acquired() const { return _acquired; }
+
+    private:
+        DriverRawPtr _driver;
+        bool _acquired;
+    };
+
+public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    Pipeline* pipeline, int32_t driver_id)
-            : _operators(operators),
-
+            : _observer(this),
+              _operators(operators),
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _pipeline(pipeline),
@@ -208,6 +234,7 @@ public:
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
         }
+
         _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
     }
 
@@ -216,6 +243,7 @@ public:
                              driver._driver_id) {}
 
     virtual ~PipelineDriver() noexcept;
+    void check_operator_close_states(const std::string& func_name);
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
@@ -270,6 +298,7 @@ public:
             _output_full_timer_sw->reset();
             break;
         case DriverState::PRECONDITION_BLOCK:
+            DCHECK_EQ(_state, DriverState::READY);
             _precondition_block_timer_sw->reset();
             break;
         case DriverState::PENDING_FINISH:
@@ -297,8 +326,11 @@ public:
 
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
-    void mark_precondition_ready(RuntimeState* runtime_state);
+    void mark_precondition_ready();
+    bool precondition_prepared() const { return _precondition_prepared; }
     void start_timers();
+    void stop_timers();
+    int64_t get_active_time() const { return _active_timer->value(); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
@@ -306,21 +338,17 @@ public:
     void cancel_operators(RuntimeState* runtime_state);
 
     Operator* sink_operator() { return _operators.back().get(); }
-    bool is_finished() {
+    bool is_ready() const {
+        return _state == DriverState::READY || _state == DriverState::RUNNING || _state == DriverState::LOCAL_WAITING;
+    }
+    bool is_finished() const {
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||
                _state == DriverState::INTERNAL_ERROR;
     }
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
     bool is_still_pending_finish() { return source_operator()->pending_finish() || sink_operator()->pending_finish(); }
     // return false if all the dependencies are ready, otherwise return true.
-    bool dependencies_block() {
-        if (_all_dependencies_ready) {
-            return false;
-        }
-        _all_dependencies_ready =
-                std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); });
-        return !_all_dependencies_ready;
-    }
+    bool dependencies_block();
 
     // return false if all the local runtime filters are ready, otherwise return false.
     bool local_rf_block() {
@@ -336,11 +364,11 @@ public:
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-
         _all_global_rf_ready_or_timeout =
                 _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(),
-                            [](auto* rf_desc) { return rf_desc->runtime_filter() != nullptr; }); // or ready.
+                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
+                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
+                }); // or all the remote RFs are ready.
 
         return !_all_global_rf_ready_or_timeout;
     }
@@ -359,13 +387,30 @@ public:
             // wait global rf to be ready for at most _global_rf_wait_time_out_ns after
             // both dependencies_block and local_rf_block return false.
             _global_rf_wait_timeout_ns += _precondition_block_timer_sw->elapsed_time();
+            _update_global_rf_timer();
             return global_rf_block();
         } else {
             return global_rf_block();
         }
     }
 
-    bool is_not_blocked() {
+    void set_all_global_rf_timeout() { _all_global_rf_ready_or_timeout = true; }
+
+    bool has_precondition() const {
+        return !_local_rf_holders.empty() || !_dependencies.empty() || !_global_rf_descriptors.empty();
+    }
+
+    std::string get_preconditions_block_reasons() {
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            return std::string(dependencies_block() ? "(dependencies," : "(") +
+                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(local_rf_block() ? "local runtime filter)" : ")");
+        } else {
+            return "";
+        }
+    }
+
+    StatusOr<bool> is_not_blocked() {
         // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
         if (sink_operator()->is_finished()) {
             return true;
@@ -382,9 +427,9 @@ public:
 
             // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
             //  This writing method is a bit tricky, and when there is a better way, replace it
-            mark_precondition_ready(_runtime_state);
+            mark_precondition_ready();
 
-            check_short_circuit();
+            RETURN_IF_ERROR(check_short_circuit());
             if (_state == DriverState::PENDING_FINISH) {
                 return false;
             }
@@ -408,7 +453,11 @@ public:
     }
 
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
-    void check_short_circuit();
+    Status check_short_circuit();
+
+    bool need_report_exec_state();
+    void report_exec_state_if_necessary();
+    void runtime_report_action();
 
     std::string to_readable_string() const;
 
@@ -420,8 +469,28 @@ public:
     size_t get_driver_queue_level() const { return _driver_queue_level; }
     void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
-    inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
-    void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
+    inline bool is_in_ready() const { return _in_ready.load(std::memory_order_acquire); }
+    void set_in_ready(bool v) {
+        SCHEDULE_CHECK(!v || !is_in_ready());
+        _in_ready.store(v, std::memory_order_release);
+    }
+
+    bool is_in_blocked() const { return _in_blocked.load(std::memory_order_acquire); }
+    void set_in_blocked(bool v) {
+        SCHEDULE_CHECK(!v || !is_in_blocked());
+        SCHEDULE_CHECK(!is_in_ready());
+        _in_blocked.store(v, std::memory_order_release);
+    }
+
+    ScheduleToken acquire_schedule_token() {
+        bool val = false;
+        return {this, _schedule_token.compare_exchange_strong(val, true)};
+    }
+
+    DECLARE_RACE_DETECTOR(schedule)
+
+    bool need_check_reschedule() const { return _need_check_reschedule; }
+    void set_need_check_reschedule(bool need_reschedule) { _need_check_reschedule = need_reschedule; }
 
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
@@ -437,9 +506,14 @@ public:
         return source_operator()->is_epoch_finishing() || sink_operator()->is_epoch_finishing();
     }
 
+    PipelineObserver* observer() { return &_observer; }
+    void assign_observer();
+    bool is_operator_cancelled() const { return _is_operator_cancelled; }
+
 protected:
     PipelineDriver()
-            : _operators(),
+            : _observer(this),
+              _operators(),
               _query_ctx(nullptr),
               _fragment_ctx(nullptr),
               _pipeline(nullptr),
@@ -451,6 +525,8 @@ protected:
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT_NS = 5'000'000L;
+    // Execution time exceed this is considered overloaded
+    static constexpr int64_t OVERLOADED_MAX_TIME_SPEND_NS = 150'000'000L;
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
@@ -461,16 +537,23 @@ protected:
     void _close_operators(RuntimeState* runtime_state);
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
+    void _try_to_release_buffer(RuntimeState* state, OperatorPtr& op);
 
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
-    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
-    void _update_overhead_timer();
+    void _update_statistics(RuntimeState* state, size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
+    void _update_scan_statistics(RuntimeState* state);
+    void _update_driver_level_timer();
+
+    // used in event scheduler
+    void _update_global_rf_timer();
 
     RuntimeState* _runtime_state = nullptr;
+    PipelineObserver _observer;
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
+    bool _precondition_prepared = false;
 
     mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
     bool _all_local_rf_ready = false;
@@ -495,13 +578,26 @@ protected:
     DriverState _state{DriverState::NOT_READY};
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
 
-    phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
+    phmap::flat_hash_map<int32_t, OperatorStage, StdHash<int32_t>> _operator_stages;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
     DriverQueue* _in_queue = nullptr;
     // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
-    std::atomic<bool> _in_ready_queue{false};
+    // Indicates whether it is in a ready queue.
+    std::atomic<bool> _in_ready{false};
+    // Indicates whether it is in a block states. Only used when enable event scheduler mode.
+    std::atomic<bool> _in_blocked{false};
+
+    std::atomic<bool> _schedule_token{true};
+    // Indicates if the block queue needs to be checked when it is added to the block queue. See EventScheduler for details.
+    std::atomic<bool> _need_check_reschedule{false};
+
+    std::atomic<bool> _has_log_cancelled{false};
+
+    std::atomic<bool> _is_operator_cancelled{false};
+
+    std::unique_ptr<PipelineTimerTask> _global_rf_timer;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
@@ -510,6 +606,7 @@ protected:
     RuntimeProfile::Counter* _schedule_timer = nullptr;
 
     // Schedule counters
+    // Record global schedule count during this driver lifecycle
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_preempt_counter = nullptr;

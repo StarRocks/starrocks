@@ -35,6 +35,7 @@ private:
     int _table_index{0};
     TGetDbsResult _db_result;
     TListTableStatusResult _table_result;
+
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

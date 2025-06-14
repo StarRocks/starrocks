@@ -20,12 +20,17 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 
+import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class StatisticsSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.STATISTICS_ID,
-                "statistics",
+    private static final String NAME = "statistics";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.STATISTICS_ID,
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("TABLE_CATALOG", ScalarType.createVarchar(512))
@@ -44,6 +49,7 @@ public class StatisticsSystemTable {
                         .column("INDEX_TYPE", ScalarType.createVarchar(16))
                         .column("COMMENT", ScalarType.createVarchar(16))
                         .column("INDEX_COMMENT", ScalarType.createVarchar(1024))
+                        .column("EXPRESSION", ScalarType.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .build(), TSchemaTableType.SCH_STATISTICS);
     }
 }

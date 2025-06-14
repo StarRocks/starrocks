@@ -1,0 +1,46 @@
+-- name: test_load_channel_profile
+CREATE TABLE `t0` (
+  `v1` int(11) NOT NULL,
+  `v2` int(11) NOT NULL,
+  `v3` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+CREATE MATERIALIZED VIEW `mv1` AS
+SELECT `v1`, SUM(`v2`) FROM `t0`
+GROUP BY `v1`;
+
+function: wait_materialized_view_finish()
+
+CREATE MATERIALIZED VIEW `mv2` AS
+SELECT `v1`, MAX(`v3`) FROM `t0`
+GROUP BY `v1`;
+
+function: wait_materialized_view_finish()
+
+INSERT INTO `t0` (v1, v2, v3) values
+    (1, 1, 1),
+    (1, 1, 2),
+    (1, 1, 3),
+    (1, 2, 4),
+    (1, 2, 5),
+    (1, 2, 6),
+    (2, 3, 7),
+    (2, 3, 8),
+    (2, 3, 9),
+    (2, 4, 10),
+    (2, 4, 11),
+    (2, 4, 12);
+
+SET enable_profile=true;
+SET enable_async_profile=false;
+INSERT INTO t0 WITH LABEL label_${uuid0} SELECT * FROM t0;
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
+
+alter table t0 set('enable_load_profile'='true');
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label: "label_${uuid1}"" -H "column_separator: ," -d '1,2,3' -X PUT ${url}/api/${db[0]}/t0/_stream_load
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh

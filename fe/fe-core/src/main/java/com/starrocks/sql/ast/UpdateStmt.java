@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
@@ -49,7 +50,7 @@ public class UpdateStmt extends DmlStmt {
         this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
-        this.assignmentColumns = Sets.newHashSet();
+        this.assignmentColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnAssignment each : assignments) {
             this.assignmentColumns.add(each.getColumn());
         }
@@ -67,6 +68,15 @@ public class UpdateStmt extends DmlStmt {
 
     public List<ColumnAssignment> getAssignments() {
         return assignments;
+    }
+
+    public boolean assignmentsContainsParameter() {
+        for (ColumnAssignment assignment : assignments) {
+            if (assignment.getExpr().contains(Parameter.class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Relation> getFromRelations() {

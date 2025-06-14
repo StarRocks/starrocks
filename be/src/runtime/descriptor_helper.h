@@ -47,7 +47,12 @@ private:
 class TTupleDescriptorBuilder;
 class TSlotDescriptorBuilder {
 public:
-    TSlotDescriptorBuilder() { _slot_desc.isMaterialized = true; }
+    TSlotDescriptorBuilder() {
+        _slot_desc.isMaterialized = true;
+        _slot_desc.isOutputColumn = true;
+        _slot_desc.__isset.isOutputColumn = true;
+        _slot_desc.id = -1;
+    }
     TSlotDescriptorBuilder& type(LogicalType type) { return this->type(TypeDescriptor(type)); }
     TSlotDescriptorBuilder& type(const TypeDescriptor& type) {
         _slot_desc.slotType = type.to_thrift();
@@ -79,6 +84,11 @@ public:
     }
     TSlotDescriptorBuilder& is_materialized(bool is_materialized) {
         _slot_desc.isMaterialized = is_materialized;
+        return *this;
+    }
+    TSlotDescriptorBuilder& is_output_column(bool is_output_column) {
+        _slot_desc.isOutputColumn = is_output_column;
+        _slot_desc.__isset.isOutputColumn = true;
         return *this;
     }
     TSlotDescriptorBuilder& column_name(const std::string& name) {
@@ -124,7 +134,7 @@ public:
             int size = td.get_slot_size();
             int align = (size > 16) ? 16 : size;
             offset = ((offset + align - 1) / align) * align;
-            slot_desc.id = tb->next_slot_id();
+            slot_desc.id = slot_desc.id == -1 ? tb->next_slot_id() : slot_desc.id;
             slot_desc.parent = _tuple_id;
             slot_desc.byteOffset = offset;
             offset += size;

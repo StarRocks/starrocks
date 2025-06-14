@@ -1,0 +1,431 @@
+-- name: test_mv_refresh_with_union
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+PARTITION BY RANGE(`k1`) 
+(
+PARTITION p20201022 VALUES [("2020-10-22"), ("2020-10-23")), 
+PARTITION p20201023 VALUES [("2020-10-23"), ("2020-10-24")), 
+PARTITION p20201024 VALUES [("2020-10-24"), ("2020-10-25"))
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 ;
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+CREATE TABLE `t2` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+PARTITION BY RANGE(`k1`) 
+(
+PARTITION p20201010 VALUES [("2020-10-10"), ("2020-10-11")), 
+PARTITION p20201011 VALUES [("2020-10-11"), ("2020-10-12")), 
+PARTITION p20201012 VALUES [("2020-10-12"), ("2020-10-13")), 
+PARTITION p20201021 VALUES [("2020-10-21"), ("2020-10-22")), 
+PARTITION p20201022 VALUES [("2020-10-22"), ("2020-10-23"))
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3;
+-- result:
+-- !result
+INSERT INTO t2 VALUES
+    ('2020-10-10','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `k1`
+DISTRIBUTED BY HASH(`k1`)
+REFRESH ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+-- result:
+None
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-10	1
+2020-10-11	1
+2020-10-12	1
+2020-10-21	1
+2020-10-22	2
+2020-10-23	1
+2020-10-24	1
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `k1`
+DISTRIBUTED BY HASH(`k1`)
+REFRESH DEFERRED ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-10	1
+2020-10-11	1
+2020-10-12	1
+2020-10-21	1
+2020-10-22	2
+2020-10-23	1
+2020-10-24	1
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `k1`
+DISTRIBUTED BY HASH(`k1`)
+REFRESH DEFERRED ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+refresh materialized view  test_mv1 partition start('2020-10-01') end ('2020-10-30') force with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-10	1
+2020-10-11	1
+2020-10-12	1
+2020-10-21	1
+2020-10-22	2
+2020-10-23	1
+2020-10-24	1
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `k1`
+DISTRIBUTED BY HASH(`k1`)
+REFRESH DEFERRED ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+refresh materialized view  test_mv1 partition start('2020-10-21') end ('2020-10-23') force with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-21	1
+2020-10-22	2
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+PARTITION BY date_trunc('day', `k1`) 
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 ;
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+CREATE TABLE `t2` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+PARTITION BY date_trunc('day', `k1`) 
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3;
+-- result:
+-- !result
+INSERT INTO t2 VALUES
+    ('2020-10-10','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY date_trunc('day', `k1`)
+DISTRIBUTED BY HASH(`k1`)
+REFRESH ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+-- result:
+None
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-10	1
+2020-10-11	1
+2020-10-12	1
+2020-10-21	1
+2020-10-22	2
+2020-10-23	1
+2020-10-24	1
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY date_trunc('day', `k1`)
+DISTRIBUTED BY HASH(`k1`)
+REFRESH DEFERRED ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-10	1
+2020-10-11	1
+2020-10-12	1
+2020-10-21	1
+2020-10-22	2
+2020-10-23	1
+2020-10-24	1
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `k1`
+DISTRIBUTED BY HASH(`k1`)
+REFRESH DEFERRED ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+refresh materialized view  test_mv1 partition start('2020-10-01') end ('2020-10-30') force with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-10	1
+2020-10-11	1
+2020-10-12	1
+2020-10-21	1
+2020-10-22	2
+2020-10-23	1
+2020-10-24	1
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `k1`
+DISTRIBUTED BY HASH(`k1`)
+REFRESH DEFERRED ASYNC
+as 
+select * from t1
+union all
+select * from t2;
+-- result:
+-- !result
+refresh materialized view  test_mv1 partition start('2020-10-21') end ('2020-10-23') force with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-21	1
+2020-10-22	2
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `k1`
+DISTRIBUTED BY HASH(`k1`)
+REFRESH DEFERRED ASYNC
+as 
+    select t1.k1, t1.k2 as k12, concat(t1.k3, '[', t1.k4, ']') as v1, t1.k9 as k19 from t1 join t2 on t1.k1=t2.k1
+    union all
+    select t1.k1, t1.k2 as k12, concat(t1.k3, '[', t1.k4, ']') as v1, t1.k9 as k19 from t1 join t2 on t1.k1=t2.k1;
+-- result:
+-- !result
+refresh materialized view  test_mv1 partition start('2020-10-21') end ('2020-10-23') force with sync mode;
+select k1, count(1) from test_mv1 group by k1 order by k1;
+-- result:
+2020-10-22	2
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+CREATE TABLE if not EXISTS `s1` (
+  `k1` int(11) NULL,
+  `k2` bigint(20) NULL,
+  `k3` varchar(255) NULL,
+  `k4` varchar(65533) NULL,
+  `k5` varchar(65533) NULL,
+  `k6` varchar(65533) NULL,
+  `v1` varchar(65533) NULL,
+  `v2` datetime NULL
+) ENGINE=OLAP 
+UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`, `k6`)
+DISTRIBUTED BY HASH(`k1`)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE if not EXISTS `s2` (
+  `dt` int(11) NOT NULL,
+  `_k2_` int(11) NOT NULL,
+  `c1` varchar(65533) NOT NULL,
+  `c2` varchar(65533) NOT NULL,
+  `k3` varchar(65533) NULL,
+  `k3_val` varchar(65533) NULL,
+  `k4` varchar(65533) NULL,
+  `k4_val` varchar(65533) NULL,
+  `status` varchar(65533) NULL,
+  `status_val` varchar(65533) NULL,
+  `c1_val` varchar(65533) NULL,
+  `k5` varchar(65533) NULL,
+  `c4` int(11) NULL,
+  `c5` int(11) NULL,
+  `diff` decimal(20, 2) NULL,
+  `c6` varchar(65533) NULL,
+  `c7` varchar(65533) NULL,
+  `v2` datetime NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`dt`, `_k2_`, `c1`, `c2`)
+PARTITION BY RANGE(`dt`)
+(
+    PARTITION p20241120 VALUES [("20241120"), ("20241121")),
+    PARTITION p20241121 VALUES [("20241121"), ("20241122")),
+    PARTITION p20241122 VALUES [("20241122"), ("20241123")),
+    PARTITION p20241123 VALUES [("20241123"), ("20241124")),
+    PARTITION p20241124 VALUES [("20241124"), ("20241125")),
+    PARTITION p20241125 VALUES [("20241125"), ("20241126")))
+DISTRIBUTED BY HASH(`dt`)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `s1` (
+  `k1`, 
+  `k2`, 
+  `k3`, 
+  `k4`, 
+  `k5`, 
+  `k6`, 
+  `v1`, 
+  `v2`
+) VALUES
+(101, 100001, 'ODS', 'financial_report', 'Annual Financial Report', 'Rule 1: Validate totals', 'John Doe', '2024-11-26 10:00:00');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW `test_mv1` 
+PARTITION BY (`dt`)
+DISTRIBUTED BY HASH(`v2`)
+REFRESH DEFERRED ASYNC START("2024-08-10 00:00:00") EVERY(INTERVAL 1 MINUTE)
+PROPERTIES (
+"replication_num" = "1"
+)
+AS 
+SELECT `t1`.`k3`, `t1`.`k3_val`, `t1`.`k4`, `t1`.`k4_val`, `t1`.`status`, `t1`.`status_val`, `t1`.`c1`, `t1`.`c1_val`, `t1`.`k5`, `t1`.`c2`, `t1`.`c4`, `t1`.`c5`, `t1`.`diff`, `t1`.`c6`, `t1`.`_k2_`, `t1`.`c7`, `t1`.`v2`, `t1`.`dt`, concat(`t2`.`v1`, '[', `t2`.`k1`, ']') AS `responsible_person`
+FROM `s2` AS `t1` LEFT OUTER JOIN `s1` AS `t2` ON `t1`.`k3` = `t2`.`k3` AND `t1`.`k4` = `t2`.`k4` AND `t1`.`c1` = `t2`.`k6` AND `t1`.`k5` = `t2`.`k5`
+UNION ALL 
+SELECT `t1`.`k3`, `t1`.`k3_val`, `t1`.`k4`, `t1`.`k4_val`, `t1`.`status`, `t1`.`status_val`, `t1`.`c1`, `t1`.`c1_val`, `t1`.`k5`, `t1`.`c2`, `t1`.`c4`, `t1`.`c5`, `t1`.`diff`, `t1`.`c6`, `t1`.`_k2_`, `t1`.`c7`, `t1`.`v2`, `t1`.`dt`, concat(`t2`.`v1`, '[', `t2`.`k1`, ']') AS `responsible_person`
+FROM `s2` AS `t1` LEFT OUTER JOIN `s1` AS `t2` ON `t1`.`k3` = `t2`.`k3` AND `t1`.`k4` = `t2`.`k4` AND `t1`.`c1` = `t2`.`k6`;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select count(1) from test_mv1;
+-- result:
+0
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result

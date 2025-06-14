@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
@@ -32,6 +33,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -77,6 +81,7 @@ public class ExportStmt extends StatementBase {
     // may catalog.db.table
     private TableRef tableRef;
     private long exportStartTime;
+    private boolean sync;
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
@@ -85,6 +90,11 @@ public class ExportStmt extends StatementBase {
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos) {
+        this(tableRef, columnNames, path, properties, brokerDesc, pos, false);
+    }
+
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+                      Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos, boolean sync) {
         super(pos);
         this.tableRef = tableRef;
         this.columnNames = columnNames;
@@ -96,6 +106,15 @@ public class ExportStmt extends StatementBase {
         this.columnSeparator = DEFAULT_COLUMN_SEPARATOR;
         this.rowDelimiter = DEFAULT_LINE_DELIMITER;
         this.includeQueryId = true;
+        this.sync = sync;
+    }
+
+    public boolean getSync() {
+        return sync;
+    }
+
+    public void setSync(boolean sync) {
+        this.sync = sync;
     }
 
     public long getExportStartTime() {
@@ -158,23 +177,18 @@ public class ExportStmt extends StatementBase {
         return includeQueryId;
     }
 
-    @Override
-    public boolean needAuditEncryption() {
-        return brokerDesc != null;
-    }
-
     public void checkTable(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDb(tblName.getDb());
+        Database db = globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
-        db.readLock();
-        try {
-            Table table = db.getTable(tblName.getTbl());
-            if (table == null) {
-                throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
-            }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
+        }
 
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:
@@ -187,7 +201,7 @@ public class ExportStmt extends StatementBase {
                 case VIEW:
                 default:
                     throw new SemanticException("Table[" + tblName.getTbl() + "] is " + tblType +
-                            " type, do not support EXPORT.");
+                                " type, do not support EXPORT.");
             }
 
             if (partitions != null) {
@@ -219,8 +233,6 @@ public class ExportStmt extends StatementBase {
                     }
                 }
             }
-        } finally {
-            db.readUnlock();
         }
     }
 

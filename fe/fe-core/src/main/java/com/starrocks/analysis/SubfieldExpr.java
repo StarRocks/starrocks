@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
@@ -26,12 +25,14 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
+import java.util.Objects;
 
 public class SubfieldExpr extends Expr {
 
     // We use fieldNames to extract subfield column from children[0],
     // children[0] must be an StructType.
-    private final List<String> fieldNames;
+    private List<String> fieldNames;
+    private boolean copyFlag = true;
 
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, List<String> fieldNames) {
@@ -55,12 +56,21 @@ public class SubfieldExpr extends Expr {
         }
         children.add(child);
         this.type = type;
-        this.fieldNames = fieldNames.stream().map(String::toLowerCase).collect(ImmutableList.toImmutableList());
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
     }
 
     public SubfieldExpr(SubfieldExpr other) {
         super(other);
         fieldNames = other.fieldNames;
+        copyFlag = other.copyFlag;
+    }
+
+    public void setFieldNames(List<String> fieldNames) {
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
+    }
+
+    public void setCopyFlag(boolean copyFlag) {
+        this.copyFlag = copyFlag;
     }
 
     public List<String> getFieldNames() {
@@ -78,17 +88,49 @@ public class SubfieldExpr extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames);
+        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames) + '[' + copyFlag + ']';
     }
 
     @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.SUBFIELD_EXPR);
         msg.setUsed_subfield_names(fieldNames);
+        msg.setCopy_flag(copyFlag);
     }
 
     @Override
     public Expr clone() {
         return new SubfieldExpr(this);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return children.get(0).isSelfMonotonic();
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object o) {
+        if (!super.equalsWithoutChild(o)) {
+            return false;
+        }
+        SubfieldExpr that = (SubfieldExpr) o;
+        return Objects.equals(fieldNames, that.fieldNames) && this.copyFlag == that.copyFlag;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), fieldNames, copyFlag);
+    }
+
+    public String getPath() {
+        String childPath = getChildPath();
+        return childPath + "." + Joiner.on('.').join(fieldNames);
+    }
+
+    private String getChildPath() {
+        if (children.get(0) instanceof SlotRef) {
+            return ((SlotRef) children.get(0)).getColumnName();
+        }
+        return children.get(0).toSqlImpl();
     }
 }

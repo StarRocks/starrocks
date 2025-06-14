@@ -26,10 +26,12 @@ class ExceptOutputSourceOperator final : public SourceOperator {
 public:
     ExceptOutputSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                std::shared_ptr<ExceptContext> except_ctx, const int32_t dependency_index)
-            : SourceOperator(factory, id, "except_output_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "except_output_source", plan_node_id, false, driver_sequence),
               _except_ctx(std::move(except_ctx)) {
         _except_ctx->ref();
     }
+
+    Status prepare(RuntimeState* state) override;
 
     bool has_output() const override { return _except_ctx->is_probe_finished() && !_except_ctx->is_output_finished(); }
 
@@ -53,6 +55,7 @@ public:
             : SourceOperatorFactory(id, "except_output_source", plan_node_id),
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dependency_index(dependency_index) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ExceptOutputSourceOperator>(this, _id, _plan_node_id, driver_sequence,

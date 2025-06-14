@@ -41,7 +41,7 @@ public:
         ttype_desc.types.emplace_back();
         ttype_desc.types.back().__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types.back().__set_scalar_type(TScalarType());
-        ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::VARCHAR);
+        ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::INT);
         ttype_desc.types.back().scalar_type.__set_len(10);
         tttype_desc.push_back(ttype_desc);
     }
@@ -56,7 +56,7 @@ TEST_F(VectorizedIfExprTest, ifArray) {
     auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
     std::unique_ptr<Expr> expr_ptr(expr);
 
-    auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+    ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
     target->append_datum(Datum{(int8_t)0});
     target->append_datum(Datum{(int8_t)1});
     target->append_datum(Datum{(int8_t)0});
@@ -64,13 +64,13 @@ TEST_F(VectorizedIfExprTest, ifArray) {
 
     TypeDescriptor type_arr_int = array_type(TYPE_INT);
 
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    ColumnPtr array0 = ColumnHelper::create_column(type_arr_int, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
     auto array_expr0 = MockExpr(type_arr_int, array0);
 
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    ColumnPtr array1 = ColumnHelper::create_column(type_arr_int, false);
     array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
     array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
@@ -97,6 +97,7 @@ TEST_F(VectorizedIfExprTest, ifConstTrue) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockConstVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, true);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -122,6 +123,7 @@ TEST_F(VectorizedIfExprTest, ifAllFalse) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, false);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -147,6 +149,7 @@ TEST_F(VectorizedIfExprTest, ifNull) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -168,6 +171,40 @@ TEST_F(VectorizedIfExprTest, ifNull) {
                     ASSERT_EQ(10, v->get_data()[j]);
                 } else {
                     ASSERT_TRUE(ptr->is_null(j));
+                }
+            }
+        }
+    }
+}
+
+TEST_F(VectorizedIfExprTest, ifNullRightConst) {
+    for (auto desc : tttype_desc) {
+        expr_node.type = desc;
+        auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
+        std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+
+        MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
+        MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
+        MockConstVectorizedExpr<TYPE_BIGINT> col2(expr_node, 20);
+
+        expr->_children.push_back(&bol);
+        expr->_children.push_back(&col1);
+        expr->_children.push_back(&col2);
+        {
+            ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+            ASSERT_TRUE(ptr->is_nullable());
+            ASSERT_FALSE(ptr->is_numeric());
+
+            auto v = ColumnHelper::cast_to_raw<TYPE_BIGINT>(
+                    ColumnHelper::as_raw_column<NullableColumn>(ptr)->data_column());
+            for (int j = 0; j < ptr->size(); ++j) {
+                if (j % 2 == 0) {
+                    ASSERT_FALSE(ptr->is_null(j));
+                    ASSERT_EQ(10, v->get_data()[j]);
+                } else {
+                    ASSERT_FALSE(ptr->is_null(j));
+                    ASSERT_EQ(20, v->get_data()[j]);
                 }
             }
         }

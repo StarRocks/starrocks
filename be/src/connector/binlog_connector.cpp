@@ -44,13 +44,17 @@ const TupleDescriptor* BinlogDataSourceProvider::tuple_descriptor(RuntimeState* 
 BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.binlog_scan_range) {}
 
+std::string BinlogDataSource::name() const {
+    return "BinlogDataSource";
+}
+
 Status BinlogDataSource::open(RuntimeState* state) {
     const TBinlogScanNode& binlog_scan_node = _provider->_binlog_scan_node;
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
     _is_stream_pipeline = state->fragment_ctx()->is_stream_pipeline();
 
-#ifndef NDEBUG
+#ifdef BE_TEST
     // for ut
     if (state->fragment_ctx()->is_stream_test()) {
         return Status::OK();
@@ -82,15 +86,17 @@ void BinlogDataSource::close(RuntimeState* state) {
 }
 
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    SCOPED_RAW_TIMER(&_cpu_time_ns);
+    MonotonicStopWatch watch;
+    watch.start();
 
-#ifndef NDEBUG
+    Status status;
+#ifdef BE_TEST
     // for ut
     if (state->fragment_ctx()->is_stream_test()) {
-        return _mock_chunk_test(chunk);
+        status = _mock_chunk_test(chunk);
     }
-#endif
-    if (_need_seek_binlog.load(std::memory_order::memory_order_acquire)) {
+#else
+    if (_need_seek_binlog.load(std::memory_order::acquire)) {
         if (!_is_stream_pipeline) {
             RETURN_IF_ERROR(_prepare_non_stream_pipeline());
         }
@@ -98,12 +104,23 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         _need_seek_binlog.store(false);
     }
 
-    _init_chunk(chunk, state->chunk_size());
-    Status status = _binlog_reader->get_next(chunk, _max_version_exclusive);
+    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, state->chunk_size()));
+    status = _binlog_reader->get_next(chunk, _max_version_exclusive);
     VLOG_IF(3, !status.ok()) << "Fail to read binlog, tablet: " << _tablet->full_name()
                              << ", binlog reader id: " << _binlog_reader->reader_id()
                              << ", start_version: " << _start_version << ", _start_seq_id: " << _start_seq_id
                              << ", _max_version_exclusive: " << _max_version_exclusive << ", " << status;
+#endif
+
+    auto time_ns = watch.elapsed_time();
+    _cpu_time_ns += time_ns;
+    _cpu_time_spent_in_epoch += time_ns;
+    Chunk* ck = chunk->get();
+    if (ck) {
+        _rows_read_number += ck->num_rows();
+        _bytes_read += ck->bytes_usage();
+        _rows_read_in_epoch += ck->num_rows();
+    }
     return status;
 }
 
@@ -139,9 +156,8 @@ Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id)
 }
 
 Status BinlogDataSource::reset_status() {
-    _rows_read_number = 0;
-    _bytes_read = 0;
-    _cpu_time_ns = 0;
+    _rows_read_in_epoch = 0;
+    _cpu_time_spent_in_epoch = 0;
     VLOG(3) << "Binlog connector reset status, tablet: " << _tablet->full_name()
             << ", binlog reader id: " << _binlog_reader->reader_id();
     return Status::OK();
@@ -177,7 +193,8 @@ BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_ci
 }
 
 StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
-    BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(_tablet->tablet_schema().num_columns());
+    auto tablet_schema = _tablet->tablet_schema();
+    BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(tablet_schema->num_columns());
     std::vector<uint32_t> data_column_cids;
     std::vector<uint32_t> meta_column_slot_index;
     Fields meta_fields;
@@ -185,7 +202,7 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
     for (auto slot : _tuple_desc->slots()) {
         DCHECK(slot->is_materialized());
         slot_index += 1;
-        int32_t index = _tablet->field_index(slot->col_name());
+        int32_t index = tablet_schema->field_index(slot->col_name());
         if (index >= 0) {
             data_column_cids.push_back(index);
         } else if (slot->col_name() == _column_name_constants.BINLOG_OP_COLUMN_NAME) {
@@ -211,7 +228,6 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
         return Status::InternalError("failed to build binlog schema, no materialized data slot!");
     }
 
-    const TabletSchema& tablet_schema = _tablet->tablet_schema();
     Schema schema = ChunkHelper::convert_schema(tablet_schema, data_column_cids);
     for (int32_t i = 0; i < meta_column_slot_index.size(); i++) {
         uint32_t index = meta_column_slot_index[i];
@@ -282,7 +298,7 @@ Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
             VLOG_ROW << "Append col:" << idx << ", row:" << start;
             column->append(start % ndv_count);
         }
-        chunk_temp->append_column(column, SlotId(idx));
+        chunk_temp->append_column(std::move(column), SlotId(idx));
     }
 
     // ops

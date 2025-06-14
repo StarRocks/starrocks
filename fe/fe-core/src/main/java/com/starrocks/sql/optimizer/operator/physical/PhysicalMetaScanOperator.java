@@ -12,38 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
     private final Map<Integer, String> aggColumnIdToNames;
+    private final List<String> selectPartitionNames;
 
-    public PhysicalMetaScanOperator(Map<Integer, String> aggColumnIdToNames,
-                                    Table table,
-                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                    long limit,
-                                    ScalarOperator predicate,
-                                    Projection projection) {
-        super(OperatorType.PHYSICAL_META_SCAN, table, colRefToColumnMetaMap, limit, predicate,
-                projection);
-        this.aggColumnIdToNames = aggColumnIdToNames;
+    public PhysicalMetaScanOperator(LogicalMetaScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_META_SCAN, scanOperator);
+        this.aggColumnIdToNames = scanOperator.getAggColumnIdToNames();
+        this.selectPartitionNames = scanOperator.getSelectPartitionNames();
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
         return aggColumnIdToNames;
+    }
+
+    public List<String> getSelectPartitionNames() {
+        return selectPartitionNames;
     }
 
     @Override
@@ -67,7 +63,8 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
         }
 
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
-        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames);
+        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
+                Objects.equals(selectPartitionNames, that.selectPartitionNames);
     }
 
     @Override

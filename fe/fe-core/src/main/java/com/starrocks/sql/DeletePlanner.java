@@ -17,20 +17,27 @@ package com.starrocks.sql;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -66,13 +73,11 @@ public class DeletePlanner {
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
-            Optimizer optimizer = new Optimizer();
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.initContext(session, columnRefFactory));
             OptExpression optimizedPlan = optimizer.optimize(
-                    session,
                     logicalPlan.getRoot(),
                     new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     logicalPlan.getOutputColumn(), columnRefFactory,
                     colNames, TResultSinkType.MYSQL_PROTOCAL, false);
@@ -81,7 +86,7 @@ public class DeletePlanner {
 
             OlapTable table = (OlapTable) deleteStatement.getTable();
             for (Column column : table.getBaseSchema()) {
-                if (column.isKey()) {
+                if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setType(column.getType());
@@ -103,8 +108,24 @@ public class DeletePlanner {
                 partitionIds.add(partition.getId());
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage(), false, false);
+                    table.enableReplicatedStorage(), false, false,
+                    session.getCurrentComputeResource());
             execPlan.getFragments().get(0).setSink(dataSink);
+
+            // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+            session.getSessionVariable().setPreferComputeNode(false);
+            session.getSessionVariable().setUseComputeNodes(0);
+            OlapTableSink olapTableSink = (OlapTableSink) dataSink;
+            TableName catalogDbTable = deleteStatement.getTableName();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, catalogDbTable.getCatalog(), catalogDbTable.getDb());
+            try {
+                olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
+                olapTableSink.complete();
+            } catch (StarRocksException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {

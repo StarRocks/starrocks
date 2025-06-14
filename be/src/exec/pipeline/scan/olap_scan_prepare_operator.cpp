@@ -22,7 +22,7 @@ namespace starrocks::pipeline {
 /// OlapScanPrepareOperator
 OlapScanPrepareOperator::OlapScanPrepareOperator(OperatorFactory* factory, int32_t id, const string& name,
                                                  int32_t plan_node_id, int32_t driver_sequence, OlapScanContextPtr ctx)
-        : SourceOperator(factory, id, name, plan_node_id, driver_sequence), _ctx(std::move(ctx)) {
+        : SourceOperator(factory, id, name, plan_node_id, true, driver_sequence), _ctx(std::move(ctx)) {
     _ctx->ref();
 }
 
@@ -36,10 +36,17 @@ OlapScanPrepareOperator::~OlapScanPrepareOperator() {
 }
 
 Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
+    TEST_SUCC_POINT("OlapScanPrepareOperator::prepare");
+
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
-    RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+
+    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    {
+        SCOPED_TIMER(capture_tablet_rowsets_timer);
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
+    }
 
     return Status::OK();
 }
@@ -57,19 +64,51 @@ bool OlapScanPrepareOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
-    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
+    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters(), _driver_sequence);
 
     _morsel_queue->set_key_ranges(_ctx->key_ranges());
-    _morsel_queue->set_tablets(_ctx->tablets());
-    _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
+    std::vector<BaseTabletSharedPtr> tablets;
+    for (auto& tablet : _ctx->tablets()) {
+        tablets.emplace_back(tablet);
+    }
+    _morsel_queue->set_tablets(std::move(tablets));
 
-    _ctx->set_prepare_finished();
-    if (!status.ok()) {
-        _ctx->set_finished();
-        return status;
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    for (auto& rowsets : _ctx->tablet_rowsets()) {
+        tablet_rowsets.emplace_back();
+        auto& rss = tablet_rowsets.back();
+        for (auto& rowset : rowsets) {
+            rss.emplace_back(rowset);
+        }
+    }
+    _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
+
+    if ((_morsel_queue->type() == MorselQueue::Type::LOGICAL_SPLIT ||
+         _morsel_queue->type() == MorselQueue::Type::PHYSICAL_SPLIT) &&
+        !tablets.empty()) {
+        _morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
     }
 
-    return nullptr;
+    DeferOp defer([&]() {
+        _ctx->set_prepare_finished();
+        _ctx->notify_observers();
+        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
+    });
+
+    if (!status.ok()) {
+        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::before_set_finished");
+        // OlapScanOperator::has_output() will `use !_ctx->is_prepare_finished() || _ctx->is_finished()` to
+        // determine whether OlapScanOperator::pull_chunk() needs to be executed.
+        // When _ctx->parse_conjuncts returns EOF, if set_prepare_finished first, and then set_finished.
+        // Between calling set_finished, OlapScanOperator::has_output maybe return true,
+        // causing OlapScanOperator::pull_chunk to be executed, which is invalid, maybe cause crash.
+        // So we will set_finished first and set_prepare_finished()
+        static_cast<void>(_ctx->set_finished());
+        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_finished");
+        return status;
+    } else {
+        return nullptr;
+    }
 }
 
 /// OlapScanPrepareOperatorFactory
@@ -89,6 +128,7 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
 
     DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
+    DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
 
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));

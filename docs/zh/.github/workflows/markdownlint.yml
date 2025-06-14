@@ -1,0 +1,55 @@
+name: markdownlint
+
+on: [push, pull_request]
+
+jobs:
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+
+    # Checkout the test-harness first
+    - uses: actions/checkout@v4
+      with:
+        repository: 'StarRocks/docusaurus-build'
+
+    # this second checkout gets the docs from this
+    # repo and checks them out to a dir named:
+    # `docs`
+    - uses: actions/checkout@v4
+      with:
+        path: 'docs'
+
+    # The README and contrib files have some sample markdown that fails
+    # link checking. StarRocks_intro.md uses a Gatsby component and will
+    # be replaced when we switch Gatsby off. Release notes we grab from
+    # main, so don't check in PRs.
+    - run: rm -f ./docs/README.md
+    - run: rm -f ./docs/feedback-and-contribute.md
+    - run: rm -f ./docs/introduction/StarRocks_intro.md
+    - run: rm -f ./docs/TOC.md
+    - run: rm -rf ./docs/release_notes
+
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 18
+    - name: markdownlint-cli
+      uses: articulate/actions-markdownlint@v1
+      with:
+        config: ./docs/.markdownlint.yaml
+        files: 'docs/**/*.md'
+        ignore: assets
+
+    - name: docusaurus-mdx-checker
+      if: always()
+      run: |
+          npx docusaurus-mdx-checker -c docs
+    - name: link check
+      if: always()
+      uses: lycheeverse/lychee-action@v1.8.0
+      with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --offline "docs/**/*.md"
+    - run: yarn install --frozen-lockfile
+    - run: yarn build

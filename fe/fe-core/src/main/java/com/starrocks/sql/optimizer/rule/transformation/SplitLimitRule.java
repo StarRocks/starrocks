@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -49,8 +48,8 @@ public class SplitLimitRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
 
-        LogicalLimitOperator global = LogicalLimitOperator.global(limit.getLimit());
-        LogicalLimitOperator local = LogicalLimitOperator.local(limit.getLimit());
+        LogicalLimitOperator global = LogicalLimitOperator.global(limit.getLimit(), limit.getOffset());
+        LogicalLimitOperator local = LogicalLimitOperator.local(limit.getLimit() + limit.getOffset());
 
         return Lists.newArrayList(OptExpression.create(global, OptExpression.create(local, input.getInputs())));
     }

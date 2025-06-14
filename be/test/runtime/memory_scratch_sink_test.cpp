@@ -44,7 +44,7 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
-#include <arrow/visitor_inline.h>
+#include <arrow/visitor_generate.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -109,16 +109,16 @@ public:
         _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = "./data";
 
-        system("mkdir -p ./test_run/output/");
-        system("pwd");
-        system("cp -r ./be/test/runtime/test_data/ ./test_run/.");
+        [[maybe_unused]] auto res = system("mkdir -p ./test_run/output/");
+        res = system("pwd");
+        res = system("cp -r ./be/test/runtime/test_data/ ./test_run/.");
 
         init();
     }
 
     void TearDown() override {
         _obj_pool.clear();
-        system("rm -rf ./test_run");
+        [[maybe_unused]] auto res = system("rm -rf ./test_run");
         config::storage_root_path = _default_storage_root_path;
     }
 
@@ -185,7 +185,6 @@ public:
 private:
     ObjectPool _obj_pool;
     ExecEnv* _exec_env = nullptr;
-    // std::vector<TExpr> _exprs;
     TDescriptorTable _t_desc_table;
     RuntimeState* _state = nullptr;
     TPlanNode _tnode;
@@ -261,14 +260,12 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     t_tuple_desc.__isset.tableId = true;
     _t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
 
-    DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size).ok());
 
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);
 
-    std::vector<bool> nullable_tuples;
-    nullable_tuples.push_back(false);
-    _row_desc = _obj_pool.add(new RowDescriptor(*_desc_tbl, row_tids, nullable_tuples));
+    _row_desc = _obj_pool.add(new RowDescriptor(*_desc_tbl, row_tids));
 
     // node
     _tnode.node_id = 0;
@@ -276,7 +273,6 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     _tnode.num_children = 0;
     _tnode.limit = -1;
     _tnode.row_tuples.push_back(0);
-    _tnode.nullable_tuples.push_back(false);
 }
 
 TEST_F(MemoryScratchSinkTest, work_flow_normal) {

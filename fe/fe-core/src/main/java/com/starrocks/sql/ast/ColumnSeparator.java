@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Delimiter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.text.StringEscapeUtils;
 
 public class ColumnSeparator implements ParseNode {
     private final String oriSeparator;
@@ -36,8 +37,20 @@ public class ColumnSeparator implements ParseNode {
         this.separator = Delimiter.convertDelimiter(oriSeparator);
     }
 
+    // for show
+    public String getOriSeparator() {
+        return oriSeparator;
+    }
+
     public String getColumnSeparator() {
         return separator;
+    }
+
+    public String toSql(boolean escape) {
+        if (!escape) {
+            return toSql();
+        }
+        return "'" + StringEscapeUtils.escapeJava(oriSeparator) + "'";
     }
 
     public String toSql() {

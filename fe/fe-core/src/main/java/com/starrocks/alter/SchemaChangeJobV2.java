@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
@@ -50,6 +51,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -57,27 +59,33 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.SchemaVersionAndHash;
+import com.starrocks.common.Status;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -91,22 +99,22 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -114,8 +122,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /*
@@ -126,12 +134,12 @@ import java.util.stream.Collectors;
 public class SchemaChangeJobV2 extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeJobV2.class);
 
-    // partition id -> (shadow index id -> (shadow tablet id -> origin tablet id))
+    // physical partition id -> (shadow index id -> (shadow tablet id -> origin tablet id))
     @SerializedName(value = "partitionIndexTabletMap")
-    private Table<Long, Long, Map<Long, Long>> partitionIndexTabletMap = HashBasedTable.create();
-    // partition id -> (shadow index id -> shadow index))
+    private Table<Long, Long, Map<Long, Long>> physicalPartitionIndexTabletMap = HashBasedTable.create();
+    // physical partition id -> (shadow index id -> shadow index))
     @SerializedName(value = "partitionIndexMap")
-    private Table<Long, Long, MaterializedIndex> partitionIndexMap = HashBasedTable.create();
+    private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     // shadow index id -> origin index id
     @SerializedName(value = "indexIdMap")
     private Map<Long, Long> indexIdMap = Maps.newHashMap();
@@ -152,7 +160,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @SerializedName(value = "hasBfChange")
     private boolean hasBfChange;
     @SerializedName(value = "bfColumns")
-    private Set<String> bfColumns = null;
+    private Set<ColumnId> bfColumns = null;
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
@@ -169,29 +177,37 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private long startTime;
     @SerializedName(value = "sortKeyIdxes")
     private List<Integer> sortKeyIdxes;
+    @SerializedName(value = "sortKeyUniqueIds")
+    private List<Integer> sortKeyUniqueIds;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+
+    // runtime variable for synchronization between cancel and runPendingJob
+    private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
+    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
+    private AtomicBoolean isCancelling = new AtomicBoolean(false);
 
     public SchemaChangeJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
 
+    // for deserialization
     private SchemaChangeJobV2() {
         super(JobType.SCHEMA_CHANGE);
     }
 
     public void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
-        Map<Long, Long> tabletMap = partitionIndexTabletMap.get(partitionId, shadowIdxId);
+        Map<Long, Long> tabletMap = physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId);
         if (tabletMap == null) {
             tabletMap = Maps.newHashMap();
-            partitionIndexTabletMap.put(partitionId, shadowIdxId, tabletMap);
+            physicalPartitionIndexTabletMap.put(partitionId, shadowIdxId, tabletMap);
         }
         tabletMap.put(shadowTabletId, originTabletId);
     }
 
     public void addPartitionShadowIndex(long partitionId, long shadowIdxId, MaterializedIndex shadowIdx) {
-        partitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
+        physicalPartitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
     }
 
     public void addIndexSchema(long shadowIdxId, long originIdxId, String shadowIndexName, int shadowSchemaVersion,
@@ -203,7 +219,27 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         indexSchemaMap.put(shadowIdxId, shadowIdxSchema);
     }
 
-    public void setBloomFilterInfo(boolean hasBfChange, Set<String> bfColumns, double bfFpp) {
+    @VisibleForTesting
+    public void setIsCancelling(boolean isCancelling) {
+        this.isCancelling.set(isCancelling);
+    }
+
+    @VisibleForTesting
+    public boolean isCancelling() {
+        return this.isCancelling.get();
+    }
+
+    @VisibleForTesting
+    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
+        this.waitingCreatingReplica.set(waitingCreatingReplica);
+    }
+
+    @VisibleForTesting
+    public boolean waitingCreatingReplica() {
+        return this.waitingCreatingReplica.get();
+    }
+
+    public void setBloomFilterInfo(boolean hasBfChange, Set<ColumnId> bfColumns, double bfFpp) {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
@@ -226,13 +262,21 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.sortKeyIdxes = sortKeyIdxes;
     }
 
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    public void setWatershedTxnId(long txnId) {
+        this.watershedTxnId = txnId;
+    }
+
     /**
      * clear some date structure in this job to save memory
      * these data structures must not used in getInfo method
      */
     private void pruneMeta() {
-        partitionIndexTabletMap.clear();
-        partitionIndexMap.clear();
+        physicalPartitionIndexTabletMap.clear();
+        physicalPartitionIndexMap.clear();
         indexSchemaMap.clear();
         indexShortKeyMap.clear();
     }
@@ -248,7 +292,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected void runPendingJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
         LOG.info("begin to send create replica tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
@@ -261,29 +305,34 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         AgentBatchTask batchTask = new AgentBatchTask();
         // count total replica num
         int totalReplicaNum = 0;
-        for (MaterializedIndex shadowIdx : partitionIndexMap.values()) {
+        for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.values()) {
             for (Tablet tablet : shadowIdx.getTablets()) {
                 totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
-        db.readLock();
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
+        createReplicaLatch = countDownLatch;
 
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+        try {
+            long baseIndexId = tbl.getBaseIndexId();
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = tbl.getPartition(partitionId);
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 if (partition == null) {
                     continue;
                 }
-                TStorageMedium storageMedium = tbl.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+                TStorageMedium storageMedium = tbl.getPartitionInfo()
+                        .getDataProperty(partition.getParentId()).getStorageMedium();
 
-                Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
@@ -291,83 +340,57 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     short shadowShortKeyColumnCount = indexShortKeyMap.get(shadowIdxId);
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
+                    int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
-                    int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
-                    List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-
-                    // copy for generate some const default value
-                    List<Column> copiedShadowSchema = Lists.newArrayList();
-                    for (Column column : shadowSchema) {
-                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                        if (defaultValueType == Column.DefaultValueType.CONST) {
-                            Column copiedColumn = new Column(column);
-                            copiedColumn.setDefaultValue(column.calculatedDefaultValueWithTime(startTime));
-                            copiedShadowSchema.add(copiedColumn);
-                        } else {
-                            copiedShadowSchema.add(column);
-                        }
-                    }
-
-                    List<Integer> copiedSortKeyIdxes = index.getSortKeyIdxes();
-                    if (index.getSortKeyIdxes() != null) {
-                        if (originSchema.size() > shadowSchema.size()) {
-                            List<Column> differences = originSchema.stream().filter(element ->
-                                    !shadowSchema.contains(element)).collect(Collectors.toList());
-                            // can just drop one column one time, so just one element in differences
-                            Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
-                            for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
-                                Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
-                                if (dropIdx < sortKeyIdx) {
-                                    copiedSortKeyIdxes.set(i, sortKeyIdx - 1);
-                                }
-                            }
-                        } else if (originSchema.size() < shadowSchema.size()) {
-                            List<Column> differences = shadowSchema.stream().filter(element ->
-                                    !originSchema.contains(element)).collect(Collectors.toList());
-                            for (Column difference : differences) {
-                                int addColumnIdx = shadowSchema.indexOf(difference);
-                                for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
-                                    Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
-                                    int shadowSortKeyIdx = shadowSchema.indexOf(originSchema.get(index.getSortKeyIdxes().get(i)));
-                                    if (addColumnIdx < shadowSortKeyIdx) {
-                                        copiedSortKeyIdxes.set(i, sortKeyIdx + 1);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (sortKeyIdxes != null) {
-                        copiedSortKeyIdxes = sortKeyIdxes;
-                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
-                        sortKeyIdxes = copiedSortKeyIdxes;
-                    }
+                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                            .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
+                            .setKeysType(originKeysType)
+                            .setShortKeyColumnCount(shadowShortKeyColumnCount)
+                            .setSchemaHash(shadowSchemaHash)
+                            .setVersion(shadowSchemaVersion)
+                            .setStorageType(tbl.getStorageType())
+                            .setBloomFilterColumnNames(bfColumns)
+                            .setBloomFilterFpp(bfFpp)
+                            .setIndexes(originIndexId == baseIndexId ?
+                                        indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
+                            .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
+                            .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
+                            .addColumns(shadowSchema)
+                            .build().toTabletSchema();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
+                        long baseTabletId = physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId)
+                                .get(shadowTabletId);
                         for (Replica shadowReplica : shadowReplicas) {
                             long backendId = shadowReplica.getBackendId();
                             countDownLatch.addMark(backendId, shadowTabletId);
-                            CreateReplicaTask createReplicaTask = new CreateReplicaTask(
-                                    backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
-                                    shadowShortKeyColumnCount, shadowSchemaHash,
-                                    Partition.PARTITION_INIT_VERSION,
-                                    originKeysType, TStorageType.COLUMN, storageMedium,
-                                    copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
-                                    tbl.isInMemory(),
-                                    tbl.enablePersistentIndex(),
-                                    tbl.getPartitionInfo().getTabletType(partitionId),
-                                    tbl.getCompressionType(), copiedSortKeyIdxes);
-                            createReplicaTask.setBaseTablet(
-                                    partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
-                                    originSchemaHash);
-                            batchTask.addTask(createReplicaTask);
+                            CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                    .setNodeId(backendId)
+                                    .setDbId(dbId)
+                                    .setTableId(tableId)
+                                    .setPartitionId(partitionId)
+                                    .setIndexId(shadowIdxId)
+                                    .setTabletId(shadowTabletId)
+                                    .setVersion(Partition.PARTITION_INIT_VERSION)
+                                    .setStorageMedium(storageMedium)
+                                    .setLatch(countDownLatch)
+                                    .setEnablePersistentIndex(tbl.enablePersistentIndex())
+                                    .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
+                                    .setTabletType(tbl.getPartitionInfo().getTabletType(partition.getParentId()))
+                                    .setCompressionType(tbl.getCompressionType())
+                                    .setCompressionLevel(tbl.getCompressionLevel())
+                                    .setBaseTabletId(baseTabletId)
+                                    .setTabletSchema(tabletSchema)
+                                    .build();
+                            batchTask.addTask(task);
                         } // end for rollupReplicas
                     } // end for rollupTablets
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         if (!FeConstants.runningUnitTest) {
@@ -378,10 +401,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     Config.max_create_table_timeout_second * 1000L);
             boolean ok = false;
             try {
+                waitingCreatingReplica.set(true);
+                if (isCancelling.get()) {
+                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                    return;
+                }
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
                 ok = false;
+            } finally {
+                waitingCreatingReplica.set(false);
             }
 
             if (!ok) {
@@ -404,20 +434,20 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         // create all replicas success.
         // add all shadow indexes to globalStateMgr
-        db.writeLock();
+        tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
+        }
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             addShadowIndexToCatalog(tbl);
         } finally {
-            db.writeUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
         this.watershedTxnId =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
@@ -429,12 +459,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void addShadowIndexToCatalog(OlapTable tbl) {
-        for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = tbl.getPartition(partitionId);
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
             if (partition == null) {
                 continue;
             }
-            Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+            Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 Preconditions.checkState(shadowIndex.getState() == IndexState.SHADOW, shadowIndex.getState());
                 partition.createRollupIndex(shadowIndex);
@@ -442,12 +472,27 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            List<Integer> sortKeyColumnIndexes = null;
+            List<Integer> sortKeyColumnUniqueIds = null;
+
+            long orgIndexId = indexIdMap.get(shadowIdxId);
+            if (orgIndexId == tbl.getBaseIndexId()) {
+                sortKeyColumnIndexes = sortKeyIdxes;
+                sortKeyColumnUniqueIds = sortKeyUniqueIds;
+            }
+
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyColumnIndexes,
+                    sortKeyColumnUniqueIds);
+            MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
 
         tbl.rebuildFullSchema();
@@ -473,67 +518,69 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
+        }
 
-        db.readLock();
+        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = tbl.getPartition(partitionId);
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
 
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
 
-                Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
 
                     long originIdxId = indexIdMap.get(shadowIdxId);
 
-                    boolean hasNewMaterializedColumn = false;
-                    List<Column> diffMaterializedColumnSchema = Lists.newArrayList();
+                    boolean hasNewGeneratedColumn = false;
+                    List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
                     if (originIdxId == tbl.getBaseIndexId()) {
                         List<String> originSchema = tbl.getSchemaByIndexId(originIdxId).stream().map(col ->
-                                                        new String(col.getName())).collect(Collectors.toList());
+                                new String(col.getName())).collect(Collectors.toList());
                         List<String> newSchema = tbl.getSchemaByIndexId(shadowIdxId).stream().map(col ->
-                                                    new String(col.getName())).collect(Collectors.toList());
+                                new String(col.getName())).collect(Collectors.toList());
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
                             for (String colNameInNewSchema : newSchema) {
                                 if (!originSchema.contains(colNameInNewSchema) &&
-                                        tbl.getColumn(colNameInNewSchema).isMaterializedColumn()) {
-                                    diffMaterializedColumnSchema.add(tbl.getColumn(colNameInNewSchema));
+                                        tbl.getColumn(colNameInNewSchema).isGeneratedColumn()) {
+                                    diffGeneratedColumnSchema.add(tbl.getColumn(colNameInNewSchema));
                                 }
                             }
                         }
 
-                        if (diffMaterializedColumnSchema.size() != 0) {
-                            hasNewMaterializedColumn = true;
+                        if (diffGeneratedColumnSchema.size() != 0) {
+                            hasNewGeneratedColumn = true;
                         }
                     }
                     Map<Integer, TExpr> mcExprs = new HashMap<>();
-                    TAlterTabletMaterializedColumnReq materializedColumnReq = new TAlterTabletMaterializedColumnReq();
-                    if (hasNewMaterializedColumn) {
+                    TAlterTabletMaterializedColumnReq generatedColumnReq = new TAlterTabletMaterializedColumnReq();
+                    if (hasNewGeneratedColumn) {
                         DescriptorTable descTbl = new DescriptorTable();
                         TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
                         Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
 
                         /*
-                          * The expression substitution is needed here, because all slotRefs in 
-                          * MaterializedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                          * if it is init by SlotDescriptor. The slot information will be used by be to indentify
-                          * the column location in a chunk.
-                        */
+                         * The expression substitution is needed here, because all slotRefs in
+                         * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
+                         * if it is init by SlotDescriptor. The slot information will be used by be to indentify
+                         * the column location in a chunk.
+                         */
                         for (Column col : tbl.getFullSchema()) {
                             SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
                             slotDesc.setType(col.getType());
@@ -544,17 +591,16 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             slotDescByName.put(col.getName(), slotDesc);
                         }
 
-                        for (Column materializedColumn : diffMaterializedColumnSchema) {
-                            Column column = materializedColumn;
-                            Expr expr = column.materializedColumnExpr();
+                        for (Column generatedColumn : diffGeneratedColumnSchema) {
+                            Expr expr = generatedColumn.getGeneratedColumnExpr(tbl.getIdToColumn());
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : tbl.getBaseSchema()) {
                                 SlotDescriptor slotDesc = slotDescByName.get(col.getName());
 
                                 if (slotDesc == null) {
-                                    throw new AlterCancelException("Expression for materialized column can not find " +
-                                                                   "the ref column");
+                                    throw new AlterCancelException("Expression for generated column can not find " +
+                                            "the ref column");
                                 }
 
                                 SlotRef slotRef = new SlotRef(slotDesc);
@@ -567,34 +613,44 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             // sourceScope must be set null tableName for its Field in RelationFields
                             // because we hope slotRef can not be resolved in sourceScope but can be
                             // resolved in outputScope to force to replace the node using outputExprs.
-                            Scope sourceScope = new Scope(RelationId.anonymous(), 
-                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                                        new Field(col.getName(), col.getType(), null, null))
-                                                            .collect(Collectors.toList())));
+                            Scope sourceScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), null, null))
+                                            .collect(Collectors.toList())));
 
-                            Scope outputScope = new Scope(RelationId.anonymous(), 
-                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                                        new Field(col.getName(), col.getType(), tableName, null))
-                                                            .collect(Collectors.toList())));
+                            Scope outputScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), tableName, null))
+                                            .collect(Collectors.toList())));
 
-                            RewriteAliasVisitor visitor =
-                                                new RewriteAliasVisitor(sourceScope, outputScope,
-                                                    outputExprs, ConnectContext.get());
-
-                            Expr materializedColumnExpr = expr.accept(visitor, null);
-
-                            materializedColumnExpr = Expr.analyzeAndCastFold(materializedColumnExpr);
-
-                            int columnIndex = -1;
-                            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
-                                    column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
-                                String originName = Column.removeNamePrefix(column.getName());
-                                columnIndex = tbl.getFullSchema().indexOf(tbl.getColumn(originName));
+                            if (ConnectContext.get() == null) {
+                                LOG.warn("Connect Context is null when add/modify generated column");
                             } else {
-                                columnIndex = tbl.getFullSchema().indexOf(column);
+                                ConnectContext.get().setDatabase(db.getFullName());
                             }
 
-                            mcExprs.put(columnIndex, materializedColumnExpr.treeToThrift());
+                            RewriteAliasVisitor visitor =
+                                    new RewriteAliasVisitor(sourceScope, outputScope,
+                                            outputExprs, ConnectContext.get());
+
+                            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                            new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                    col.getType(), tableName, null)).collect(Collectors.toList()))),
+                                    ConnectContext.get());
+
+                            Expr generatedColumnExpr = expr.accept(visitor, null);
+
+                            generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
+
+                            int columnIndex = -1;
+                            if (generatedColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                                String originName = Column.removeNamePrefix(generatedColumn.getName());
+                                columnIndex = tbl.getFullSchema().indexOf(tbl.getColumn(originName));
+                            } else {
+                                columnIndex = tbl.getFullSchema().indexOf(generatedColumn);
+                            }
+
+                            mcExprs.put(columnIndex, generatedColumnExpr.treeToThrift());
                         }
                         // we need this thing, otherwise some expr evalution will fail in BE
                         TQueryGlobals queryGlobals = new TQueryGlobals();
@@ -605,28 +661,36 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                         TQueryOptions queryOptions = new TQueryOptions();
 
-                        materializedColumnReq.setQuery_globals(queryGlobals);
-                        materializedColumnReq.setQuery_options(queryOptions);
-                        materializedColumnReq.setMc_exprs(mcExprs);
+                        generatedColumnReq.setQuery_globals(queryGlobals);
+                        generatedColumnReq.setQuery_options(queryOptions);
+                        generatedColumnReq.setMc_exprs(mcExprs);
                     }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
+                    List<TColumn> originSchemaTColumns = indexToThriftColumns.get(originIdxId);
+                    if (originSchemaTColumns == null) {
+                        originSchemaTColumns = tbl.getSchemaByIndexId(originIdxId).stream()
+                                .map(Column::toThrift)
+                                .collect(Collectors.toList());
+                        indexToThriftColumns.put(originIdxId, originSchemaTColumns);
+                    }
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
-                        long originTabletId = partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId);
+                        long originTabletId = physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId);
                         for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
                             AlterReplicaTask rollupTask = AlterReplicaTask.alterLocalTablet(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
-                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId, materializedColumnReq);
+                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId,
+                                    generatedColumnReq, originSchemaTColumns);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }
                 }
             } // end for partitions
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         AgentTaskQueue.addBatchTask(schemaChangeBatchTask);
@@ -653,19 +717,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
 
-        db.readLock();
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
-        } finally {
-            db.readUnlock();
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
         if (!schemaChangeBatchTask.isFinished()) {
@@ -684,43 +743,40 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * we just check whether all new replicas are healthy.
          */
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-        Future<Boolean> future;
-        long start;
-        db.writeLock();
+        JournalTask journalTask;
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
             // Before schema change, collect modified columns for related mvs.
             Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(tbl);
 
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = tbl.getPartition(partitionId);
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
 
-                long visiableVersion = partition.getVisibleVersion();
-                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getId());
+                long visibleVersion = partition.getVisibleVersion();
+                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getParentId());
 
-                Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         // Mark schema changed tablet not to move to trash.
-                        long baseTabletId = partitionIndexTabletMap.get(
-                                                    partitionId, shadowIdxId).get(shadowTablet.getId());
+                        long baseTabletId = physicalPartitionIndexTabletMap.get(
+                                partitionId, shadowIdxId).get(shadowTablet.getId());
                         // NOTE: known for sure that only LocalTablet uses this SchemaChangeJobV2 class
-                        GlobalStateMgr.getCurrentInvertedIndex().
-                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().
+                                markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
                             if (replica.getLastFailedVersion() < 0
-                                    && replica.checkVersionCatchUp(visiableVersion, false)) {
+                                    && replica.checkVersionCatchUp(visibleVersion, false)) {
                                 healthyReplicaNum++;
                             }
                         }
@@ -739,19 +795,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            inactiveRelatedMv(modifiedColumns, tbl);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
 
             pruneMeta();
+            tbl.onReload();
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            start = System.nanoTime();
-            future = editLog.logAlterJobNoWait(this);
+            journalTask = editLog.logAlterJobNoWait(this);
         } finally {
-            db.writeUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
-        editLog.waitInfinity(start, future);
+        EditLog.waitInfinity(journalTask);
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
@@ -771,8 +827,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             if (shadowSchema.size() == originSchema.size()) {
                 // modify column
                 for (Column col : shadowSchema) {
-                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, col.getName()));
                     }
                 }
             } else if (shadowSchema.size() < originSchema.size()) {
@@ -789,43 +845,20 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return modifiedColumns;
     }
 
-    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable table) {
-        if (modifiedColumns.isEmpty()) {
-            return;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        for (MvId mvId : table.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-            }
-            for (Column mvColumn : mv.getColumns()) {
-                if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            mvColumn.getName(), table.getName());
-                    mv.setInactiveAndReason(
-                            "base-table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
-                    return;
-                }
-            }
-        }
-    }
-
     @Override
     protected void runFinishedRewritingJob() {
         // nothing to do
     }
 
     private void onFinished(OlapTable tbl) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        tbl.setState(OlapTableState.UPDATING_META);
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // 
         // partition visible version won't update in schema change, so we need make global
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
             if (column.getType().isVarchar()) {
-                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getColumnId());
             }
         }
         // replace the origin index with shadow index, set index state as NORMAL
@@ -835,40 +868,43 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
                 long originIdxId = entry.getValue();
-                // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
-                // because if this alter job is recovered from edit log, index in 'partitionIndexMap'
-                // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
-                // in globalStateMgr.
-                MaterializedIndex shadowIdx = partition.getIndex(shadowIdxId);
-                Preconditions.checkNotNull(shadowIdx, shadowIdxId);
-                MaterializedIndex droppedIdx = null;
-                if (originIdxId == partition.getBaseIndex().getId()) {
-                    droppedIdx = partition.getBaseIndex();
-                } else {
-                    droppedIdx = partition.deleteRollupIndex(originIdxId);
-                }
-                Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                // Add to TabletInvertedIndex.
-                // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
-                // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
-                // should add the tablet to TabletInvertedIndex again on finish state.
-                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId,
-                        indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
-                for (Tablet tablet : shadowIdx.getTablets()) {
-                    invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
-                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                        // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
-                        replica.setState(ReplicaState.NORMAL);
-                        invertedIndex.addReplica(tablet.getId(), replica);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
+                    // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
+                    // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
+                    // in globalStateMgr.
+                    MaterializedIndex shadowIdx = physicalPartition.getIndex(shadowIdxId);
+                    Preconditions.checkNotNull(shadowIdx, shadowIdxId);
+                    MaterializedIndex droppedIdx = null;
+                    if (originIdxId == physicalPartition.getBaseIndex().getId()) {
+                        droppedIdx = physicalPartition.getBaseIndex();
+                    } else {
+                        droppedIdx = physicalPartition.deleteRollupIndex(originIdxId);
                     }
-                }
+                    Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                partition.visualiseShadowIndex(shadowIdxId, originIdxId == partition.getBaseIndex().getId());
+                    // Add to TabletInvertedIndex.
+                    // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
+                    // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
+                    // should add the tablet to TabletInvertedIndex again on finish state.
+                    TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, physicalPartition.getId(), shadowIdxId,
+                            indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
+                    for (Tablet tablet : shadowIdx.getTablets()) {
+                        invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                            // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
+                            replica.setState(ReplicaState.NORMAL);
+                            invertedIndex.addReplica(tablet.getId(), replica);
+                        }
+                    }
 
-                // the origin tablet created by old schema can be deleted from FE meta data
-                for (Tablet originTablet : droppedIdx.getTablets()) {
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
+                    physicalPartition.visualiseShadowIndex(shadowIdxId, originIdxId == physicalPartition.getBaseIndex().getId());
+
+                    // the origin tablet created by old schema can be deleted from FE meta data
+                    for (Tablet originTablet : droppedIdx.getTablets()) {
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(originTablet.getId());
+                    }
                 }
             }
         }
@@ -902,8 +938,28 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             tbl.setIndexes(indexes);
         }
 
+        LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), tbl.getMaxColUniqueId());
+
         tbl.setState(OlapTableState.NORMAL);
-        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
+    }
+
+    @Override
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                return cancelInternal(errMsg);
+            }
+        } finally {
+            isCancelling.set(false);
+        }
     }
 
     /*
@@ -932,18 +988,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // clear tasks if has
         AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         // remove all shadow indexes, and set state to NORMAL
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
-            db.writeLock();
-            try {
-                OlapTable tbl = (OlapTable) db.getTable(tableId);
-                if (tbl != null) {
-                    for (long partitionId : partitionIndexMap.rowKeySet()) {
-                        Partition partition = tbl.getPartition(partitionId);
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            if (tbl != null) {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+                try {
+                    for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                        PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                         Preconditions.checkNotNull(partition, partitionId);
 
-                        Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+                        Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                         for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                             MaterializedIndex shadowIdx = entry.getValue();
                             for (Tablet shadowTablet : shadowIdx.getTablets()) {
@@ -956,9 +1013,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         tbl.deleteIndexInfo(shadowIndexName);
                     }
                     tbl.setState(OlapTableState.NORMAL);
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 }
-            } finally {
-                db.writeUnlock();
             }
         }
 
@@ -967,7 +1024,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
@@ -977,27 +1034,29 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * These changes should be same as changes in SchemaChangeHandler.createJob()
      */
     private void replayPending(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
 
-        db.writeLock();
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                // table may be dropped before replaying this log. just return
-                return;
-            }
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            // table may be dropped before replaying this log. just return
+            return;
+        }
 
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-            for (Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        try {
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+            for (Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
                 long partitionId = cell.getRowKey();
                 long shadowIndexId = cell.getColumnKey();
                 MaterializedIndex shadowIndex = cell.getValue();
+                PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
 
-                TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+                TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId,
                         indexSchemaVersionAndHashMap.get(shadowIndexId).schemaHash, medium);
 
@@ -1012,7 +1071,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
         } finally {
-            db.writeUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
         // to make sure that this job will run runPendingJob() again to create the shadow index replicas
@@ -1026,22 +1085,23 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            // table may be dropped before replaying this log. just return
+            return;
+        }
 
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                // table may be dropped before replaying this log. just return
-                return;
-            }
             addShadowIndexToCatalog(tbl);
         } finally {
-            db.writeUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
         // should still be in WAITING_TXN state, so that the alter tasks will be resend again
@@ -1055,16 +1115,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
-            db.writeLock();
-            try {
-                OlapTable tbl = (OlapTable) db.getTable(tableId);
-                if (tbl != null) {
+
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            if (tbl != null) {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+                try {
                     onFinished(tbl);
+                    tbl.onReload();
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 }
-            } finally {
-                db.writeUnlock();
             }
         }
         jobState = JobState.FINISHED;
@@ -1150,149 +1213,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return taskInfos;
     }
 
-    /**
-     * read data need to persist when job not finish
-     */
-    private void readJobNotFinishData(DataInput in) throws IOException {
-        int partitionNum = in.readInt();
-        for (int i = 0; i < partitionNum; i++) {
-            long partitionId = in.readLong();
-            int indexNum = in.readInt();
-            for (int j = 0; j < indexNum; j++) {
-                long shadowIndexId = in.readLong();
-                int tabletNum = in.readInt();
-                Map<Long, Long> tabletMap = Maps.newHashMapWithExpectedSize(tabletNum);
-                for (int k = 0; k < tabletNum; k++) {
-                    long shadowTabletId = in.readLong();
-                    long originTabletId = in.readLong();
-                    tabletMap.put(shadowTabletId, originTabletId);
-                }
-                partitionIndexTabletMap.put(partitionId, shadowIndexId, tabletMap);
-                // shadow index
-                MaterializedIndex shadowIndex = MaterializedIndex.read(in);
-                partitionIndexMap.put(partitionId, shadowIndexId, shadowIndex);
-            }
-        }
-
-        // shadow index info
-        int indexNum = in.readInt();
-        for (int i = 0; i < indexNum; i++) {
-            long shadowIndexId = in.readLong();
-            long originIndexId = in.readLong();
-            String indexName = Text.readString(in);
-            // index schema
-            int colNum = in.readInt();
-            List<Column> schema = Lists.newArrayListWithCapacity(colNum);
-            for (int j = 0; j < colNum; j++) {
-                schema.add(Column.read(in));
-            }
-            int schemaVersion = in.readInt();
-            int schemaVersionHash = in.readInt();
-            SchemaVersionAndHash schemaVersionAndHash = new SchemaVersionAndHash(schemaVersion, schemaVersionHash);
-            short shortKeyCount = in.readShort();
-
-            indexIdMap.put(shadowIndexId, originIndexId);
-            indexIdToName.put(shadowIndexId, indexName);
-            indexSchemaMap.put(shadowIndexId, schema);
-            indexSchemaVersionAndHashMap.put(shadowIndexId, schemaVersionAndHash);
-            indexShortKeyMap.put(shadowIndexId, shortKeyCount);
-        }
-
-        // bloom filter
-        hasBfChange = in.readBoolean();
-        if (hasBfChange) {
-            int bfNum = in.readInt();
-            bfColumns = Sets.newHashSetWithExpectedSize(bfNum);
-            for (int i = 0; i < bfNum; i++) {
-                bfColumns.add(Text.readString(in));
-            }
-            bfFpp = in.readDouble();
-        }
-
-        watershedTxnId = in.readLong();
-
-        // index
-        indexChange = in.readBoolean();
-        if (indexChange) {
-            if (in.readBoolean()) {
-                int indexCount = in.readInt();
-                this.indexes = new ArrayList<>();
-                for (int i = 0; i < indexCount; ++i) {
-                    this.indexes.add(Index.read(in));
-                }
-            } else {
-                this.indexes = null;
-            }
-        }
-
-        Text.readString(in); //placeholder
-    }
-
-    /**
-     * read data need to persist when job finished
-     */
-    private void readJobFinishedData(DataInput in) throws IOException {
-        // shadow index info
-        int indexNum = in.readInt();
-        for (int i = 0; i < indexNum; i++) {
-            long shadowIndexId = in.readLong();
-            long originIndexId = in.readLong();
-            String indexName = Text.readString(in);
-            int schemaVersion = in.readInt();
-            int schemaVersionHash = in.readInt();
-            SchemaVersionAndHash schemaVersionAndHash = new SchemaVersionAndHash(schemaVersion, schemaVersionHash);
-
-            indexIdMap.put(shadowIndexId, originIndexId);
-            indexIdToName.put(shadowIndexId, indexName);
-            indexSchemaVersionAndHashMap.put(shadowIndexId, schemaVersionAndHash);
-        }
-
-        // bloom filter
-        hasBfChange = in.readBoolean();
-        if (hasBfChange) {
-            int bfNum = in.readInt();
-            bfColumns = Sets.newHashSetWithExpectedSize(bfNum);
-            for (int i = 0; i < bfNum; i++) {
-                bfColumns.add(Text.readString(in));
-            }
-            bfFpp = in.readDouble();
-        }
-
-        watershedTxnId = in.readLong();
-
-        // index
-        indexChange = in.readBoolean();
-        if (indexChange) {
-            if (in.readBoolean()) {
-                int indexCount = in.readInt();
-                this.indexes = new ArrayList<>();
-                for (int i = 0; i < indexCount; ++i) {
-                    this.indexes.add(Index.read(in));
-                }
-            } else {
-                this.indexes = null;
-            }
-        }
-
-        Text.readString(in); //placeholder
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
         Text.writeString(out, json);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        boolean isMetaPruned = in.readBoolean();
-        if (isMetaPruned) {
-            readJobFinishedData(in);
-        } else {
-            readJobNotFinishData(in);
-        }
     }
 
     @Override

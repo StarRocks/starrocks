@@ -39,7 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void> {
+public class QueryConverter implements AstVisitor<QueryBuilders.QueryBuilder, Void> {
 
     // expr sets which can not be pushed down to Elasticsearch, SR BE should process
     List<Expr> localConjuncts = new ArrayList<>();
@@ -209,7 +209,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
         return columnName;
     }
 
-    private static class ExtractColumnName extends AstVisitor<String, Void> {
+    private static class ExtractColumnName implements AstVisitor<String, Void> {
         @Override
         public String visitCastExpr(CastExpr node, Void context) {
             return node.getChild(0).accept(this, null);

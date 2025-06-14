@@ -54,7 +54,7 @@ class ExchangeParallelMergeSourceOperator final : public SourceOperator {
 public:
     ExchangeParallelMergeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                         int32_t driver_sequence)
-            : SourceOperator(factory, id, "global_parallel_merge_source", plan_node_id, driver_sequence) {}
+            : SourceOperator(factory, id, "global_parallel_merge_source", plan_node_id, false, driver_sequence) {}
 
     ~ExchangeParallelMergeSourceOperator() override = default;
 
@@ -69,6 +69,8 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+    std::string get_name() const override;
 
 private:
     std::atomic<bool> _is_finished{false};
@@ -93,6 +95,7 @@ public:
               _limit(limit) {}
 
     ~ExchangeParallelMergeSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
@@ -100,11 +103,12 @@ public:
 
     void close(RuntimeState* state) override;
 
-    DataStreamRecvr* get_stream_recvr(RuntimeState* state, const std::shared_ptr<RuntimeProfile>& profile);
+    DataStreamRecvr* get_stream_recvr(RuntimeState* state);
     merge_path::MergePathCascadeMerger* get_merge_path_merger(RuntimeState* state);
     void close_stream_recvr();
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+    void set_materialized_mode(TLateMaterializeMode::type mode) { _late_materialize_mode = mode; }
 
 private:
     const int32_t _num_sender;
@@ -114,6 +118,7 @@ private:
     const std::vector<bool>& _nulls_first;
     const int64_t _offset;
     const int64_t _limit;
+    TLateMaterializeMode::type _late_materialize_mode = TLateMaterializeMode::AUTO;
 
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
     std::atomic<int64_t> _stream_recvr_cnt = 0;

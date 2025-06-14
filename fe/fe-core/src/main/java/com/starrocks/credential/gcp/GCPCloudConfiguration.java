@@ -19,14 +19,12 @@ import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.Map;
 
-public class GCPCloudConfiguration implements CloudConfiguration {
+public class GCPCloudConfiguration extends CloudConfiguration {
 
     private final GCPCloudCredential gcpCloudCredential;
 
@@ -37,15 +35,16 @@ public class GCPCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-
-        List<TCloudProperty> properties = new LinkedList<>();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         gcpCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         gcpCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -56,12 +55,12 @@ public class GCPCloudConfiguration implements CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support gcp credential
         return gcpCloudCredential.toFileStoreInfo();
     }
 
     @Override
-    public String getCredentialString() {
-        return gcpCloudCredential.getCredentialString();
+    public String toConfString() {
+        return String.format("GCPCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                gcpCloudCredential.toCredString());
     }
 }

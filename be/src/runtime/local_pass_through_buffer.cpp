@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -24,11 +25,12 @@ namespace starrocks {
 // channel per [sender_id]
 class PassThroughSenderChannel {
 public:
-    PassThroughSenderChannel() = default;
+    PassThroughSenderChannel(std::atomic_int64_t& total_bytes) : _total_bytes(total_bytes) {}
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
             CurrentThread::current().mem_consume(_physical_bytes);
+            GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
         }
     }
 
@@ -39,19 +41,22 @@ public:
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
         CurrentThread::current().mem_release(physical_bytes);
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(physical_bytes);
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
         _bytes.push_back(chunk_size);
         _physical_bytes += physical_bytes;
+        _total_bytes += physical_bytes;
     }
     void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
         std::unique_lock lock(_mutex);
         chunks->swap(_buffer);
         bytes->swap(_bytes);
-
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
         // Consume physical bytes in current MemTracker, since later it would be released
         CurrentThread::current().mem_consume(_physical_bytes);
+        _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }
 
@@ -60,6 +65,7 @@ private:
     ChunkUniquePtrVector _buffer;
     std::vector<size_t> _bytes;
     int64_t _physical_bytes = 0; // Physical consumed bytes for each chunk
+    std::atomic_int64_t& _total_bytes;
 };
 
 // channel per [fragment_instance_id, dest_node_id]
@@ -69,8 +75,8 @@ public:
         std::unique_lock lock(_mutex);
         auto it = _sender_id_to_channel.find(sender_id);
         if (it == _sender_id_to_channel.end()) {
-            auto* channel = new PassThroughSenderChannel();
-            _sender_id_to_channel.emplace(std::make_pair(sender_id, channel));
+            auto* channel = new PassThroughSenderChannel(_total_bytes);
+            _sender_id_to_channel.emplace(sender_id, channel);
             return channel;
         } else {
             return it->second;
@@ -83,16 +89,22 @@ public:
         _sender_id_to_channel.clear();
     }
 
+    int64_t get_total_bytes() const { return _total_bytes; }
+
 private:
     std::mutex _mutex;
     std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
+    std::atomic_int64_t _total_bytes = 0;
 };
 
 PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
         : _mutex(), _query_id(query_id), _ref_count(1) {}
 
 PassThroughChunkBuffer::~PassThroughChunkBuffer() {
-    DCHECK(_ref_count == 0);
+    if (UNLIKELY(_ref_count != 0)) {
+        LOG(WARNING) << "PassThroughChunkBuffer reference leak detected! query_id=" << print_id(_query_id)
+                     << ", _ref_count=" << _ref_count;
+    }
     for (auto& it : _key_to_channel) {
         delete it.second;
     }
@@ -104,7 +116,7 @@ PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
         auto* channel = new PassThroughChannel();
-        _key_to_channel.emplace(std::make_pair(key, channel));
+        _key_to_channel.emplace(key, channel);
         return channel;
     } else {
         return it->second;
@@ -124,6 +136,10 @@ void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks
     sender_channel->pull_chunks(chunks, bytes);
 }
 
+int64_t PassThroughContext::total_bytes() const {
+    return _channel->get_total_bytes();
+}
+
 void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id) {
     VLOG_FILE << "PassThroughChunkBufferManager::open_fragment_instance, query_id = " << query_id;
     {
@@ -131,10 +147,18 @@ void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& quer
         auto it = _query_id_to_buffer.find(query_id);
         if (it == _query_id_to_buffer.end()) {
             auto* buffer = new PassThroughChunkBuffer(query_id);
-            _query_id_to_buffer.emplace(std::make_pair(query_id, buffer));
+            _query_id_to_buffer.emplace(query_id, buffer);
         } else {
             it->second->ref();
         }
+    }
+}
+
+void PassThroughChunkBufferManager::close() {
+    std::unique_lock lock(_mutex);
+    for (auto it = _query_id_to_buffer.begin(); it != _query_id_to_buffer.end();) {
+        delete it->second;
+        it = _query_id_to_buffer.erase(it);
     }
 }
 

@@ -23,9 +23,13 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TablePrivilegesSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.TABLE_PRIVILEGES_ID,
-                "table_privileges",
+    private static final String NAME = "table_privileges";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.TABLE_PRIVILEGES_ID,
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))

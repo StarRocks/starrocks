@@ -38,7 +38,7 @@ public:
 
 struct ExceptSliceFlagEqual {
     bool operator()(const ExceptSliceFlag& x, const ExceptSliceFlag& y) const {
-        return memequal(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+        return memequal_padded(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
     }
 };
 
@@ -54,7 +54,7 @@ template <typename HashSet>
 class ExceptHashSet {
 public:
     using Iterator = typename HashSet::iterator;
-    using KeyVector = std::vector<Slice>;
+    using KeyVector = Buffer<Slice>;
 
     /// Used to allocate memory for serializing columns to the key.
     struct BufferState {
@@ -84,7 +84,7 @@ public:
     Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
                                BufferState* buffer_state);
 
-    void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size);
+    Status deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size);
 
     int64_t mem_usage(BufferState* buffer_state);
 

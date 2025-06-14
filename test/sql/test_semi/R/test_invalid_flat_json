@@ -1,0 +1,75 @@
+-- name: test_flat_not_object_json_load @system
+CREATE TABLE `js1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `j1` json NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into js1 values
+(1,1, parse_json('[{"s1": 4}, {"s2": 5}]')),
+(2,2, parse_json('"a"')),
+(3,3, parse_json('1')),
+(4,4, parse_json('2020-12-12')),
+(5,5, parse_json('1.000000')),
+(6,6, parse_json('')),
+(6,7, parse_json(null)),
+(6,8, parse_json(TRUE)),
+(7,9, parse_json('{"k1": null, "k2": 2}')),
+(8,8, json_object('1')),
+(9,9, json_object('"a"')),
+(10,10, json_object('')),
+(11,11, json_object()),
+(12,12, json_object(null));
+-- result:
+-- !result
+select get_json_string(j1, "$.key2"), get_json_double(j1, "$.key3"), get_json_string(j1, "$.key4") from js1 order by v1 limit 2;
+-- result:
+None	None	None
+None	None	None
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j1, "$.key2.key3") from js1 order by v1 limit 2;
+-- result:
+0	0
+0	0
+-- !result
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.key4") from js1 order by v1 limit 2;
+-- result:
+0	0	0
+0	0	0
+-- !result
+select json_object('"1"')->"1", json_object('"1"')->"1" is null;
+-- result:
+null	1
+-- !result
+select j1, j1->"1", j1->"1" is null from js1 order by v1, v2;
+-- result:
+[{"s1": 4}, {"s2": 5}]	None	1
+"a"	None	1
+"1"	None	1
+"2020-12-12"	None	1
+"1.000000"	None	1
+""	None	1
+None	None	1
+"1"	None	1
+{"k1": null, "k2": 2}	None	1
+{"1": null}	null	1
+{"a": null}	None	1
+None	None	1
+{}	None	1
+None	None	1
+-- !result
+select json_object(j1)->"k3", json_object(j1)->"k1", json_object(j1)->"k2.k3" from js1 where v1 = 7;
+-- result:
+None	None	None
+-- !result

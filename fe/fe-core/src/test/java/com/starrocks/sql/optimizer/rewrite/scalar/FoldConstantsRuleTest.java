@@ -145,14 +145,18 @@ public class FoldConstantsRuleTest {
         CastOperator cast5 = new CastOperator(Type.DATE, ConstantOperator.createVarchar("2020-02-12 12:23:00"));
         assertEquals(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 12, 0, 0, 0)), rule.apply(cast5, null));
 
-        CastOperator cast6 = new CastOperator(Type.BIGINT, ConstantOperator.createDate(LocalDateTime.now()));
-        assertEquals(cast6, rule.apply(cast6, null));
+        CastOperator cast6 = new CastOperator(Type.BIGINT, ConstantOperator.createDate(LocalDateTime.of(2020, 2, 12, 0, 0, 0)));
+        assertEquals(ConstantOperator.createBigint(20200212), rule.apply(cast6, null));
 
         CastOperator cast7 = new CastOperator(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 1, 1),
                 ConstantOperator.createDecimal(BigDecimal.valueOf(0.00008),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 6, 6))
         );
         assertEquals("0.0", rule.apply(cast7, null).toString());
+
+        // cast(96.1 as int)-> 96
+        CastOperator cast8 = new CastOperator(Type.INT, ConstantOperator.createDouble(96.1));
+        assertEquals(ConstantOperator.createInt(96), rule.apply(cast8, null));
     }
 
     @Test

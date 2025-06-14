@@ -22,9 +22,9 @@ import org.junit.Test;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
-        MaterializedViewTestBase.setUp();
+        MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
@@ -112,5 +112,20 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "lineorder_flat_mv");
         PlanTestBase.assertNotContains(plan, "LO_ORDERDATE <= 19950100");
+    }
+
+    @Test
+    public void testPartitionPredicateWithRelatedMVsLimit() throws Exception {
+        int oldVal = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+        String query = "select sum(LO_EXTENDEDPRICE * LO_DISCOUNT) AS revenue\n" +
+                "from lineorder\n" +
+                "join dates on lo_orderdate = d_datekey\n" +
+                "where weekofyear(LO_ORDERDATE) = 6 AND LO_ORDERDATE >= 19940101 and LO_ORDERDATE <= 19941231\n" +
+                "and lo_discount between 5 and 7\n" +
+                "and lo_quantity between 26 and 35;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "lineorder_flat_mv");
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
     }
 }

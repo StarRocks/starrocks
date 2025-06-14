@@ -23,8 +23,8 @@ void assert_chunk_equals(const Chunk& chunk1, const Chunk& chunk2) {
     CHECK_EQ(chunk1.num_columns(), chunk2.num_columns());
     CHECK_EQ(chunk1.num_rows(), chunk2.num_rows());
     for (size_t i = 0, m = chunk1.num_columns(); i < m; i++) {
-        auto col1 = chunk1.get_column_by_index(i);
-        auto col2 = chunk2.get_column_by_index(i);
+        const auto& col1 = chunk1.get_column_by_index(i);
+        const auto& col2 = chunk2.get_column_by_index(i);
         for (size_t j = 0, n = chunk1.num_rows(); j < n; j++) {
             CHECK(col1->equals(j, *col2, j)) << "different at column " << i << " row " << j << ":\n"
                                              << col1->debug_string() << "\nvs\n"

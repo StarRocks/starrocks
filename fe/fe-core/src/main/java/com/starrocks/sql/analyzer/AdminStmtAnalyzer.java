@@ -24,13 +24,13 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -51,7 +51,7 @@ public class AdminStmtAnalyzer {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
-    static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }
@@ -131,11 +131,7 @@ public class AdminStmtAnalyzer {
             }
             adminShowReplicaStatusStmt.setDbName(dbName);
 
-            try {
-                CatalogUtils.checkIsLakeTable(dbName, tblName);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage(), pos);
-            }
+            CatalogUtils.checkIsLakeTable(dbName, tblName);
 
             List<String> partitions = Lists.newArrayList();
             PartitionNames partitionNames = adminShowReplicaStatusStmt.getTblRef().getPartitionNames();
@@ -229,6 +225,12 @@ public class AdminStmtAnalyzer {
             return null;
         }
 
+        @Override
+        public Void visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, ConnectContext context) {
+            statement.getTableName().normalization(context);
+            return null;
+        }
+
         private boolean analyzeWhere(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt) {
             Expr where = adminShowReplicaStatusStmt.getWhere();
             Replica.ReplicaStatus statusFilter = null;
@@ -259,6 +261,7 @@ public class AdminStmtAnalyzer {
                             ((StringLiteral) rightChild).getStringValue().toUpperCase())
                     .orNull();
 
+            adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
             return statusFilter != null;
         }
     }

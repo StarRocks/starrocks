@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "column/column_hash.h"
+#include "runtime/memory/counting_allocator.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
@@ -50,7 +51,7 @@ public:
     bool operator()(const SliceWithHash& x, const SliceWithHash& y) const {
         // by comparing hash value first, we can avoid comparing real data
         // which may touch another memory area and has bad cache locality.
-        return x.hash == y.hash && memequal(x.data, x.size, y.data, y.size);
+        return x.hash == y.hash && memequal_padded(x.data, x.size, y.data, y.size);
     }
 };
 
@@ -74,7 +75,7 @@ public:
     bool operator()(const TSliceWithHash<seed>& x, const TSliceWithHash<seed>& y) const {
         // by comparing hash value first, we can avoid comparing real data
         // which may touch another memory area and has bad cache locality.
-        return x.hash == y.hash && memequal(x.data, x.size, y.data, y.size);
+        return x.hash == y.hash && memequal_padded(x.data, x.size, y.data, y.size);
     }
 };
 

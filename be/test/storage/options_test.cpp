@@ -42,12 +42,12 @@
 namespace starrocks {
 
 static void set_up() {
-    system("rm -rf ./test_run && mkdir -p ./test_run");
-    system("mkdir -p ./test_run/data && mkdir -p ./test_run/data.ssd");
+    [[maybe_unused]] auto res = system("rm -rf ./test_run && mkdir -p ./test_run");
+    res = system("mkdir -p ./test_run/data && mkdir -p ./test_run/data.ssd");
 }
 
 static void tear_down() {
-    system("rm -rf ./test_run");
+    [[maybe_unused]] auto res = system("rm -rf ./test_run");
 }
 
 class OptionsTest : public testing::Test {

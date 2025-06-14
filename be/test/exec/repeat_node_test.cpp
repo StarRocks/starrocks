@@ -53,8 +53,8 @@ public:
             second_column->append(22);
 
             auto result_chunk = std::make_shared<Chunk>();
-            result_chunk->append_column(first_column, 0);
-            result_chunk->append_column(second_column, 1);
+            result_chunk->append_column(std::move(first_column), 0);
+            result_chunk->append_column(std::move(second_column), 1);
 
             *chunk = std::move(result_chunk);
         } else {
@@ -71,7 +71,7 @@ public:
 
     Status open(RuntimeState* state) override { return Status::OK(); }
 
-    Status close(RuntimeState* state) override { return Status::OK(); }
+    void close(RuntimeState* state) override {}
 
 private:
     int times{0};
@@ -128,7 +128,9 @@ protected:
             }
         }
 
-        DescriptorTbl::create(&_runtime_state, &_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
+        ASSERT_TRUE(
+                DescriptorTbl::create(&_runtime_state, &_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size)
+                        .ok());
 
         _runtime_state.set_desc_tbl(_desc_tbl);
 
@@ -196,7 +198,6 @@ protected:
         _tnode.repeat_node.output_tuple_id = 1;
 
         _tnode.row_tuples.push_back(1);
-        _tnode.nullable_tuples.push_back(false);
     }
 
     void TearDown() override {}

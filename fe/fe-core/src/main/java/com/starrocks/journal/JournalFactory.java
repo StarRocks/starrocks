@@ -22,15 +22,14 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 public class JournalFactory {
     public enum JournalType {
         BDB
-    };
+    }
 
     public static Journal create(String nodeName) throws JournalException, InterruptedException {
         JournalType type = JournalType.valueOf(Config.edit_log_type.toUpperCase());
         switch (type) {
             case BDB: {
                 BDBEnvironment environment = BDBEnvironment.initBDBEnvironment(nodeName);
-                Journal journal = new BDBJEJournal(environment);
-                return journal;
+                return new BDBJEJournal(environment);
             }
 
             default:

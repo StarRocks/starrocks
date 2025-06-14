@@ -17,9 +17,8 @@ package com.starrocks.sql.optimizer.rule.implementation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -38,11 +37,11 @@ public class OlapScanImplementationRuleTest {
         LogicalOlapScanOperator logical = new LogicalOlapScanOperator(table, Maps.newHashMap(), Maps.newHashMap(),
                 null, -1, ConstantOperator.createBoolean(true),
                 1, Lists.newArrayList(1L, 2L, 3L), null,
-                false, Lists.newArrayList(4L), null, false);
+                false, Lists.newArrayList(4L), null, null, false);
 
         List<OptExpression> output =
-                new OlapScanImplementationRule().transform(new OptExpression(logical), new OptimizerContext(
-                        new Memo(), new ColumnRefFactory()));
+                new OlapScanImplementationRule().transform(new OptExpression(logical),
+                        OptimizerFactory.mockContext(new ColumnRefFactory()));
 
         assertEquals(1, output.size());
 

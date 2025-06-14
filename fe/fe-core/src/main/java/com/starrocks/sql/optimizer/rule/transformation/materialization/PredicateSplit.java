@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PredicateSplit {
     // column equality predicates conjuncts
@@ -70,38 +68,45 @@ public class PredicateSplit {
         return Lists.newArrayList(equalPredicates, rangePredicates, residualPredicates);
     }
 
+    private static ScalarOperator filterPredicate(ScalarOperator predicate) {
+        if (predicate == null) {
+            return null;
+        }
+        List<ScalarOperator> filterPredicate = Utils.extractConjuncts(predicate)
+                .stream()
+                .filter(x -> !x.isConstantTrue())
+                .collect(Collectors.toList());
+        return Utils.compoundAnd(filterPredicate);
+    }
+
     // split predicate into three parts: equal columns predicates, range predicates, and residual predicates
     public static PredicateSplit splitPredicate(ScalarOperator predicate) {
-        if (predicate == null) {
+        ScalarOperator normalPredicate = filterPredicate(predicate);
+        if (normalPredicate == null) {
             return PredicateSplit.of(null, null, null);
         }
-        List<ScalarOperator> predicateConjuncts = Utils.extractConjuncts(predicate);
-        List<ScalarOperator> columnEqualityPredicates = Lists.newArrayList();
-        List<ScalarOperator> rangePredicates = Lists.newArrayList();
-        List<ScalarOperator> residualPredicates = Lists.newArrayList();
-        // Split predicates into three kinds:
-        //  - Equal Predicates:  col1 = col2 (both col1 and col2 are ColumnRefs)
-        //  - Range Predicates:  col1 >/>=/=/</<= 2 (col1 is ColumnRef and right is ConstantRef)
-        // TODO: support NotEqual/Or Range as range predicates
-        //  - Other Predicates:  others(eg: NonEqual BinaryPredicateOperator or others)
-        for (ScalarOperator scalarOperator : predicateConjuncts) {
-            if (scalarOperator instanceof BinaryPredicateOperator) {
-                BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
-                ScalarOperator leftChild = scalarOperator.getChild(0);
-                ScalarOperator rightChild = scalarOperator.getChild(1);
-                BinaryType binaryType = binary.getBinaryType();
-                if (binaryType.isEqual() && leftChild.isColumnRef() && rightChild.isColumnRef()) {
-                    columnEqualityPredicates.add(scalarOperator);
-                } else if (binaryType.isEqualOrRange() && leftChild.isColumnRef() && rightChild.isConstantRef()) {
-                    rangePredicates.add(scalarOperator);
-                } else {
-                    residualPredicates.add(scalarOperator);
-                }
-            } else {
-                residualPredicates.add(scalarOperator);
-            }
+
+        PredicateExtractor extractor = new PredicateExtractor();
+        RangePredicate rangePredicate =
+                normalPredicate.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
+        ScalarOperator equalityConjunct = Utils.compoundAnd(extractor.getColumnEqualityPredicates());
+        ScalarOperator rangeConjunct = null;
+        ScalarOperator residualConjunct = Utils.compoundAnd(extractor.getResidualPredicates());
+        if (rangePredicate != null) {
+            // convert rangePredicate to rangeConjunct
+            rangeConjunct = rangePredicate.toScalarOperator();
+        } else if (extractor.getColumnEqualityPredicates().isEmpty() && extractor.getResidualPredicates().isEmpty()) {
+            residualConjunct = Utils.compoundAnd(residualConjunct, normalPredicate);
         }
-        return PredicateSplit.of(Utils.compoundAnd(columnEqualityPredicates), Utils.compoundAnd(rangePredicates),
-                Utils.compoundAnd(residualPredicates));
+        return PredicateSplit.of(equalityConjunct, rangeConjunct, residualConjunct);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("equalPredicates=%s, rangePredicates=%s, residualPredicates=%s",
+                equalPredicates == null ? "" : equalPredicates,
+                rangePredicates == null ? "" : rangePredicates,
+                residualPredicates == null ? "" : residualPredicates
+        );
     }
 }

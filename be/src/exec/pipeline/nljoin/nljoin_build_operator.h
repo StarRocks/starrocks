@@ -29,7 +29,8 @@ public:
     NLJoinBuildOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const int32_t driver_sequence,
                         const std::shared_ptr<NLJoinContext>& cross_join_context,
                         const char* name = "nestloop_join_build")
-            : Operator(factory, id, name, plan_node_id, driver_sequence), _cross_join_context(cross_join_context) {
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence),
+              _cross_join_context(cross_join_context) {
         _cross_join_context->ref();
     }
 
@@ -48,6 +49,7 @@ public:
 
     OutputAmplificationType intra_pipeline_amplification_type() const override;
     size_t output_amplification_factor() const override;
+    void update_exec_stats(RuntimeState* state) override {}
 
 private:
     std::atomic<bool> _is_finished = false;
@@ -62,6 +64,7 @@ public:
             : OperatorFactory(id, "nljoin_build", plan_node_id), _cross_join_context(std::move(cross_join_context)) {}
 
     ~NLJoinBuildOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<NLJoinBuildOperator>(this, _id, _plan_node_id, driver_sequence, _cross_join_context);

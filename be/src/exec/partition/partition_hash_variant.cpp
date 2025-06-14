@@ -132,11 +132,19 @@ void PartitionHashMapVariant::reset() {
 }
 
 size_t PartitionHashMapVariant::capacity() const {
-    return visit([](const auto& hash_map_with_key) { return hash_map_with_key->hash_map.capacity(); });
+    return visit([](const auto& hash_map_with_key) {
+        if (hash_map_with_key == nullptr) {
+            return static_cast<size_t>(0);
+        }
+        return hash_map_with_key->hash_map.capacity();
+    });
 }
 
 size_t PartitionHashMapVariant::size() const {
     return visit([](const auto& hash_map_with_key) {
+        if (hash_map_with_key == nullptr) {
+            return static_cast<size_t>(0);
+        }
         size_t size = hash_map_with_key->hash_map.size();
         if constexpr (std::decay_t<decltype(*hash_map_with_key)>::is_nullable) {
             size += (hash_map_with_key->null_key_value.chunks.empty() ? 0 : 1);
@@ -146,10 +154,37 @@ size_t PartitionHashMapVariant::size() const {
 }
 
 size_t PartitionHashMapVariant::memory_usage() const {
-    return visit([](const auto& hash_map_with_key) { return hash_map_with_key->hash_map.dump_bound(); });
+    return visit([](const auto& hash_map_with_key) {
+        if (hash_map_with_key == nullptr) {
+            return static_cast<size_t>(0);
+        }
+        return hash_map_with_key->hash_map.dump_bound();
+    });
 }
 
 bool PartitionHashMapVariant::is_nullable() const {
-    return visit([](const auto& hash_map_with_key) { return std::decay_t<decltype(*hash_map_with_key)>::is_nullable; });
+    return visit([](const auto& hash_map_with_key) {
+        if (hash_map_with_key == nullptr) {
+            return false;
+        }
+        return std::decay_t<decltype(*hash_map_with_key)>::is_nullable;
+    });
 }
+
+void PartitionHashMapVariant::set_passthrough() {
+    visit([](auto& hash_map_with_key) {
+        if (hash_map_with_key == nullptr) {
+            return;
+        }
+        hash_map_with_key->is_passthrough = true;
+    });
+}
+
+void PartitionHashMapVariant::set_enable_pre_agg() {
+    visit([](auto& hash_map_with_key) {
+        DCHECK(hash_map_with_key != nullptr);
+        hash_map_with_key->enable_pre_agg = true;
+    });
+}
+
 } // namespace starrocks

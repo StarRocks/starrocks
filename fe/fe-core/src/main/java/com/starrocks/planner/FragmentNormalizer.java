@@ -35,19 +35,21 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.UnionFind;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
-import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TGlobalDict;
+import com.starrocks.thrift.TNormalPlanNode;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.protocol.TSimpleJSONProtocol;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -55,13 +57,17 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static com.starrocks.rpc.ConfigurableSerDesFactory.Protocol.SIMPLE_JSON;
 
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
 // is normalized, FragmentNormalizer draws out required information as follows from the fragment.
@@ -103,6 +109,7 @@ public class FragmentNormalizer {
 
     private Set<Integer> cachedPlanNodeIds = Sets.newHashSet();
     private boolean assignScanRangesAcrossDrivers = false;
+
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
         this.fragment = fragment;
@@ -199,7 +206,7 @@ public class FragmentNormalizer {
     }
 
     public Integer remapSlotId(Integer slotId) {
-        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getMaxId()).asInt();
+        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getNextId()).asInt();
     }
 
     public List<Integer> remapSlotIds(List<SlotId> slotIds) {
@@ -227,9 +234,8 @@ public class FragmentNormalizer {
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
-        //TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
-        TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
         try {
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
@@ -237,7 +243,7 @@ public class FragmentNormalizer {
         return null;
     }
 
-    public static class SimpleRangePredicateVisitor extends AstVisitor<String, Void> {
+    public static class SimpleRangePredicateVisitor implements AstVisitor<String, Void> {
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
             String lhs = visit(node.getChild(0), context);
@@ -306,9 +312,13 @@ public class FragmentNormalizer {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
             for (TNormalPlanNode node : normalizedPlanNodes) {
-                byte[] data = serializer.serialize(node);
-                digest.update(data);
+                digest.update(serializer.serialize(node));
             }
+            List<TGlobalDict> dicts = normalizeDicts(getAllOffspringFragments(fragment));
+            for (TGlobalDict dict : dicts) {
+                digest.update(serializer.serialize(dict));
+            }
+
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
             Map<Integer, Integer> outputSlotIdRemapping = Maps.newHashMap();
@@ -323,6 +333,10 @@ public class FragmentNormalizer {
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
             cacheParam.setKeys_type(keysType.toThrift());
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
+            if (RunMode.isSharedDataMode()) {
+                cacheParam.setIs_lake(true);
+            }
+
             fragment.setCacheParam(cacheParam);
             return true;
         } catch (TException | NoSuchAlgorithmException e) {
@@ -413,11 +427,18 @@ public class FragmentNormalizer {
     boolean hasNonDeterministicFunctions(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr callExpr = (FunctionCallExpr) expr;
-            if (FunctionSet.nonDeterministicFunctions.contains(callExpr.getFn().functionName())) {
+            String funcName = callExpr.getFn().functionName();
+            if (FunctionSet.nonDeterministicFunctions.contains(funcName)) {
+                return true;
+            }
+            if (FunctionSet.NOW.equals(funcName)) {
+                return true;
+            }
+            if (FunctionSet.nonDeterministicTimeFunctions.contains(funcName) && callExpr.getChildren().isEmpty()) {
                 return true;
             }
         }
-        return expr.getChildren().stream().anyMatch(e -> hasNonDeterministicFunctions(e));
+        return expr.getChildren().stream().anyMatch(this::hasNonDeterministicFunctions);
     }
 
     List<Range<PartitionKey>> convertPredicateToRange(Column partitionColumn, Expr expr) {
@@ -497,8 +518,8 @@ public class FragmentNormalizer {
     }
 
     List<Expr> getPartitionRangePredicates(List<Expr> conjuncts,
-                                           List<Map.Entry<Long, Range<PartitionKey>>> rangeMap,
-                                           RangePartitionInfo partitionInfo,
+                                           List<Pair<Long, Range<PartitionKey>>> rangeMap,
+                                           List<Column> partitionColumns,
                                            SlotId partitionSlotId) {
 
         List<Expr> exprs = conjuncts.stream().flatMap(e -> flatAndPredicate(e).stream()).collect(Collectors.toList());
@@ -526,20 +547,20 @@ public class FragmentNormalizer {
         //  create a simpleRangeMap without predicates' decomposition to turn on the cache. date_trunc function
         //  is frequently-used, we should decompose predicates contains date_trunc in the future.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         }
 
         if (boundSimpleRegionExprs.isEmpty()) {
-            for (Map.Entry<Long, Range<PartitionKey>> range : rangeMap) {
-                selectedRangeMap.put(range.getKey(), range.getValue().toString());
+            for (Pair<Long, Range<PartitionKey>> range : rangeMap) {
+                selectedRangeMap.put(range.first, range.second.toString());
             }
             return conjuncts;
         }
 
-        Column partitionColumn = partitionInfo.getPartitionColumns().get(0);
+        Column partitionColumn = partitionColumns.get(0);
         List<Range<PartitionKey>> partitionRanges = rangeMap.stream()
-                .map(Map.Entry::getValue).collect(Collectors.toList());
+                .map(r -> r.second).collect(Collectors.toList());
 
         // compute the intersection region of partition range and region predicates
         for (Expr expr : boundSimpleRegionExprs) {
@@ -558,17 +579,22 @@ public class FragmentNormalizer {
             if (range.isEmpty()) {
                 continue;
             }
-            range = toClosedOpenRange(range);
-            Map.Entry<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
+            Optional<Range> optRange = Optional.empty();
+            try {
+                optRange = Optional.ofNullable(toClosedOpenRange(range));
+            } catch (Throwable ignored) {
+            }
+
+            Pair<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
             // when the range is to total cover this partition, we also cache it
-            if (!range.isEmpty()) {
-                selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
+            if (optRange.isPresent() && !optRange.get().isEmpty()) {
+                selectedRangeMap.put(partitionKeyRange.first, optRange.get().toString());
             }
         }
         // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
         // we get a empty selectedRangeMap. it is defensive-style programming.
         if (selectedRangeMap.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         } else {
             List<Expr> remainConjuncts = Lists.newArrayList();
@@ -582,7 +608,7 @@ public class FragmentNormalizer {
     // just create a simple selectedRangeMap which is used to construct cache key in BE.
     public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
         selectedRangeMap = Maps.newHashMap();
-        selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
+        selectedPartitionIds.forEach(id -> selectedRangeMap.put(id, "[]"));
     }
 
     public Set<SlotId> getSlotsUseAggColumns() {
@@ -759,15 +785,17 @@ public class FragmentNormalizer {
         // Not cacheable unless alien GRF(s) take effects on this PlanFragment.
         // The alien GRF(s) mean the GRF(S) that not created by PlanNodes of the subtree rooted at
         // the PlanFragment.planRoot.
+
         Set<Integer> grfBuilders =
                 fragment.getProbeRuntimeFilters().values().stream().filter(RuntimeFilterDescription::isHasRemoteTargets)
                         .map(RuntimeFilterDescription::getBuildPlanNodeId).collect(Collectors.toSet());
         if (!grfBuilders.isEmpty()) {
             List<PlanFragment> rightSiblings = Lists.newArrayList();
             collectRightSiblingFragments(root, rightSiblings, Sets.newHashSet());
-            Set<Integer> acceptableGrfBuilders = rightSiblings.stream().flatMap(
-                    frag -> frag.getBuildRuntimeFilters().values().stream().map(
-                            RuntimeFilterDescription::getBuildPlanNodeId)).collect(Collectors.toSet());
+            Set<Integer> acceptableGrfBuilders = rightSiblings.stream()
+                    .flatMap(frag -> frag.getBuildRuntimeFilters().values().stream())
+                    .map(RuntimeFilterDescription::getBuildPlanNodeId)
+                    .collect(Collectors.toSet());
             boolean hasAlienGrf = !Sets.difference(grfBuilders, acceptableGrfBuilders).isEmpty();
             if (hasAlienGrf) {
                 return false;
@@ -794,61 +822,40 @@ public class FragmentNormalizer {
         normalizeSubTree(leftNodeIds, topMostDigestNode, Sets.newHashSet());
         List<PlanNode> cachedPlanNodes = leftNodesTopDown.stream().skip(firstAggNodeIdx).collect(Collectors.toList());
         fragment.setAssignScanRangesPerDriverSeq(canAssignScanRangesAcrossDrivers(cachedPlanNodes));
-        cachedPlanNodeIds = cachedPlanNodes.stream().map(node->node.getId().asInt()).collect(Collectors.toSet());
+        cachedPlanNodeIds = cachedPlanNodes.stream().map(node -> node.getId().asInt()).collect(Collectors.toSet());
         return computeDigest(firstAggNode);
     }
 
-    public static class SlotEquivRelation {
-        private Map<SlotId, Integer> slotId2Group = Maps.newHashMap();
-        private Map<Integer, Set<SlotId>> eqGroupMap = Maps.newHashMap();
-
-        public Map<SlotId, Set<SlotId>> getEquivGroups(Set<SlotId> slotIds) {
-            Map<SlotId, Set<SlotId>> slotId2EqSlots = Maps.newHashMap();
-            for (SlotId slotId : slotIds) {
-                if (!slotId2Group.containsKey(slotId)) {
-                    continue;
-                }
-                Set<SlotId> eqSlots = eqGroupMap.get(slotId2Group.get(slotId));
-                if (eqSlots.size() > 1) {
-                    slotId2EqSlots.put(slotId, eqSlots);
-                }
-            }
-            return slotId2EqSlots;
-        }
-
-        public void add(List<SlotId> slotIds) {
-            slotIds.forEach(s -> {
-                if (!find(s)) {
-                    slotId2Group.put(s, s.asInt());
-                    eqGroupMap.put(s.asInt(), Sets.newHashSet(s));
-                }
-            });
-        }
-
-        public void union(SlotId lhs, SlotId rhs) {
-            add(Arrays.asList(lhs, rhs));
-            Integer lhsGroupId = slotId2Group.get(lhs);
-            Integer rhsGroupId = slotId2Group.get(rhs);
-            if (!lhsGroupId.equals(rhsGroupId)) {
-                Set<SlotId> lhsGroup = eqGroupMap.get(lhsGroupId);
-                Set<SlotId> rhsGroup = eqGroupMap.get(rhsGroupId);
-                Set<SlotId> newGroup = Sets.union(lhsGroup, rhsGroup);
-                rhsGroup.forEach(s -> {
-                    slotId2Group.put(s, lhsGroupId);
-                });
-                eqGroupMap.put(lhsGroupId, newGroup);
-                eqGroupMap.remove(rhsGroupId);
-            }
-        }
-
-        private boolean find(SlotId slotId) {
-            return slotId2Group.containsKey(slotId);
-        }
+    // get All of offspring fragments of the current fragment, the current fragment
+    // is also included. fragments containing MulticastSink are counted once.
+    private List<PlanFragment> getAllOffspringFragments(PlanFragment fragment) {
+        List<ExchangeNode> exchangeNodes = Lists.newArrayList();
+        fragment.getPlanRoot().collect(ExchangeNode.class, exchangeNodes);
+        List<PlanFragment> fragments = exchangeNodes.stream()
+                .flatMap(ex -> ex.getChildren().stream().map(PlanNode::getFragment))
+                .sorted(Comparator.comparingInt(frag -> frag.getFragmentId().asInt()))
+                .distinct().collect(Collectors.toList());
+        fragments.add(fragment);
+        return fragments;
     }
 
-    private SlotEquivRelation equivRelation = new SlotEquivRelation();
+    // Normalize global dicts of the given fragments
+    private List<TGlobalDict> normalizeDicts(List<PlanFragment> fragments) {
+        List<TGlobalDict> dicts = Lists.newArrayList();
+        for (PlanFragment fragment : fragments) {
+            if (fragment.getQueryGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getQueryGlobalDicts(), this));
+            }
+            if (fragment.getLoadGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getLoadGlobalDicts(), this));
+            }
+        }
+        return dicts;
+    }
 
-    public SlotEquivRelation getEquivRelation() {
+    private UnionFind<SlotId> equivRelation = new UnionFind<>();
+
+    public UnionFind<SlotId> getEquivRelation() {
         return equivRelation;
     }
 

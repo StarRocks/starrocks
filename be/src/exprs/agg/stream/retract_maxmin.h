@@ -37,7 +37,7 @@ template <LogicalType LT>
 struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDetailState<LT> {
     using T = RunTimeCppType<LT>;
 
-    MaxAggregateDataRetractable() {}
+    MaxAggregateDataRetractable() = default;
 
     T result = RunTimeTypeLimits<LT>::min_value();
     void reset_result() { result = RunTimeTypeLimits<LT>::min_value(); }
@@ -50,21 +50,29 @@ struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
 template <LogicalType LT>
 struct MaxAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        _buffer.resize(slice.size);
+        size_t length = std::min<size_t>(PADDED_SIZE, slice.size);
+        memcpy(_buffer.data(), slice.data, length);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return buffer.size() > 0; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
     void reset() {
         StreamDetailState<LT>::reset();
         reset_result();
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename = guard::Guard>
@@ -83,21 +91,29 @@ struct MinAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
 template <LogicalType LT>
 struct MinAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
-    int32_t size = -1;
-    Buffer<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        _buffer.resize(slice.size);
+        size_t length = std::min<size_t>(PADDED_SIZE, slice.size);
+        memcpy(_buffer.data(), slice.data, length);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return size > -1; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
     void reset() {
         StreamDetailState<LT>::reset();
         reset_result();
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename State, class OP, typename T = RunTimeCppType<LT>>
@@ -159,7 +175,7 @@ public:
                 column->append(this->data(state).slice());
             }
         } else {
-            InputColumnType* column = down_cast<InputColumnType*>(dst);
+            auto* column = down_cast<InputColumnType*>(dst);
             for (size_t i = start; i < end; ++i) {
                 column->get_data()[i] = this->data(state).result;
             }
@@ -249,12 +265,12 @@ public:
 
     void output_is_sync(FunctionContext* ctx, size_t chunk_size, Column* to,
                         AggDataPtr __restrict state) const override {
-        UInt8Column* sync_col = down_cast<UInt8Column*>(to);
+        auto* sync_col = down_cast<UInt8Column*>(to);
         uint8_t is_sync = this->data(state).is_sync();
         sync_col->append(is_sync);
     }
 
-    void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& to,
+    void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& to,
                        Column* count) const override {
         if constexpr (lt_is_string<LT>) {
             DCHECK((*to[0]).is_binary());
@@ -262,8 +278,8 @@ public:
             DCHECK((*to[0]).is_numeric());
         }
         DCHECK((*to[1]).is_numeric());
-        InputColumnType* column0 = down_cast<InputColumnType*>(to[0].get());
-        Int64Column* column1 = down_cast<Int64Column*>(to[1].get());
+        auto* column0 = down_cast<InputColumnType*>(to[0].get());
+        auto* column1 = down_cast<Int64Column*>(to[1].get());
         auto& detail_state = this->data(state).detail_state();
         for (auto iter = detail_state.cbegin(); iter != detail_state.cend(); iter++) {
             // is it possible that count is negative?
@@ -271,7 +287,7 @@ public:
             column0->append(iter->first);
             column1->append(iter->second);
         }
-        Int64Column* count_col = down_cast<Int64Column*>(count);
+        auto* count_col = down_cast<Int64Column*>(count);
         count_col->append(detail_state.size());
     }
     std::string get_name() const override { return "retract_maxmin"; }

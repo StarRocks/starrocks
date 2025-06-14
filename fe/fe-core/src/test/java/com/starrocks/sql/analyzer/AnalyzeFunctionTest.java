@@ -267,7 +267,7 @@ public class AnalyzeFunctionTest {
                 "CREATE FUNCTION f(INT, INT, CHAR(10), BIGINT, ...) RETURNS INT",
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
-                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT INTERMEDIATE INT",
+                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT",
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "CREATE TABLE FUNCTION f(INT, INT) RETURNS INT",
@@ -285,5 +285,33 @@ public class AnalyzeFunctionTest {
                 "DROP FUNCTION f(int, ...)", getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "DROP FUNCTION db.f(int, char(2))", getConnectContext());
+    }
+
+    @Test
+    public void testStatistics() throws Exception {
+        analyzeFail("select corr(v1,3) from t0");
+        analyzeFail("select covar_samp(v1,3) from t0");
+        analyzeFail("select covar_samp(3,v1) from t0");
+        analyzeFail("select covar_pop(v1,3) from t0");
+        analyzeFail("select corr(v1) from t0");
+    }
+
+    @Test
+    public void testTypeofFunction() throws Exception {
+        analyzeFail("select typeof(cast(1 as tinyint),  cast(1 as int))");
+        analyzeFail("select typeof()");
+    }
+
+    @Test
+    public void testFieldFunction() throws Exception {
+        analyzeSuccess("select field(1, 2, 2)");
+        analyzeSuccess("select field(1, 2.0, 2.1)");
+        analyzeSuccess("select field(1, 'a', 2.1)");
+        analyzeSuccess("select field(1, 'a', 2.1, NULL)");
+        analyzeSuccess("select field(NULL, 'a', 2.1, NULL)");
+        analyzeFail("select field((1,2), (1,2))");
+        analyzeFail("select field((1,2), 'a')");
+        analyzeFail("select field(1)");
+        analyzeFail("select field((1,2))");
     }
 }

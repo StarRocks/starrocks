@@ -24,9 +24,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeTabletsSystemTable {
+    public static final String NAME = "be_tablets";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_TABLETS_ID,
-                "be_tablets",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
@@ -46,6 +48,9 @@ public class BeTabletsSystemTable {
                         .column("DATA_DIR", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("SHARD_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("SCHEMA_HASH", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("INDEX_DISK", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("MEDIUM_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("NUM_SEGMENT", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_TABLETS);
     }
 }

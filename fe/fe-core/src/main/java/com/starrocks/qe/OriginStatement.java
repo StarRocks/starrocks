@@ -23,7 +23,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 /*
@@ -44,16 +43,16 @@ public class OriginStatement implements Writable {
         this.idx = idx;
     }
 
+    public OriginStatement(String singleOriginStmt) {
+        this(singleOriginStmt, 0);
+    }
+
     public static OriginStatement read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, OriginStatement.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public String toString() {
@@ -61,5 +60,13 @@ public class OriginStatement implements Writable {
                 "originStmt='" + originStmt + '\'' +
                 ", idx=" + idx +
                 '}';
+    }
+
+    public String getOrigStmt() {
+        return originStmt;
+    }
+
+    public int getIdx() {
+        return idx;
     }
 }

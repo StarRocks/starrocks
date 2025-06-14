@@ -17,10 +17,12 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -123,11 +125,16 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(1, statementBase.size());
         SetStmt originStmt = (SetStmt) statementBase.get(0);
         Analyzer.analyze(originStmt, AnalyzeTestUtil.getConnectContext());
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(2));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(3));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(4));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(5));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(6));
         Assert.assertEquals("SET SESSION `time_zone` = 'Asia/Shanghai',SESSION `allow_default_partition` = TRUE," +
                 "@`var1` = cast (1 as tinyint(4))," +
                 "@`var2` = cast ('2020-01-01' as date)," +
                 "@`var3` = cast ('foo' as varchar)," +
-                "@`var4` = cast (1.23 as decimal32(3, 2))," +
+                "@`var4` = cast (1.23 as decimal(3, 2))," +
                 "@`select` = cast (7 as int(11))", AstToStringBuilder.toString(originStmt));
 
         statementBase = SqlParser.parse(
@@ -135,6 +142,11 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(1, statementBase.size());
         SetStmt convertStmt = (SetStmt) statementBase.get(0);
         Analyzer.analyze(convertStmt, AnalyzeTestUtil.getConnectContext());
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(2));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(3));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(4));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(5));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(6));
 
         Assert.assertEquals(7, convertStmt.getSetListItems().size());
         Assert.assertEquals(SetType.SESSION, ((SystemVariable) convertStmt.getSetListItems().get(0)).getType());
@@ -161,5 +173,25 @@ public class AST2StringBuilderTest {
                         "WHERE (NOT FALSE) IS NOT NULL)", viewStmt.getInlineViewDef());
         statementBase = SqlParser.parse(sql, new SessionVariable());
         Assert.assertEquals(1, statementBase.size());
+    }
+
+    @Test
+    public void testSelectStarExcludeToString() throws Exception {
+        String sql = "SELECT * EXCLUDE (name, email) FROM test_exclude;";
+
+        List<StatementBase> stmts = 
+                SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assert.assertEquals(1, stmts.size());
+
+        StatementBase stmt = stmts.get(0);
+        Assert.assertTrue(stmt instanceof QueryStatement);
+        QueryStatement queryStmt = (QueryStatement) stmt;
+
+        Analyzer.analyze(queryStmt, AnalyzeTestUtil.getConnectContext());
+
+        String expected = "SELECT * EXCLUDE ( `name`,`email` )  FROM test.test_exclude";
+        String actual =  AstToStringBuilder.toString(queryStmt);
+
+        Assert.assertEquals(expected, actual);
     }
 }

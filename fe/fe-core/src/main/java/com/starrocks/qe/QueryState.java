@@ -64,29 +64,44 @@ public class QueryState {
 
     public enum ErrType {
         ANALYSIS_ERR,
-        OTHER_ERR
+        IGNORE_ERR,
+
+        INTERNAL_ERR,
+
+        IO_ERR,
+
+        // execution Timeout
+        EXEC_TIME_OUT,
+
+        UNKNOWN
     }
 
     private MysqlStateType stateType = MysqlStateType.OK;
     private String errorMessage = "";
     private ErrorCode errorCode;
     private String infoMessage;
-    private ErrType errType = ErrType.OTHER_ERR;
+    private ErrType errType = ErrType.UNKNOWN;
     private boolean isQuery = false;
     private long affectedRows = 0;
     private int warningRows = 0;
     // make it public for easy to use
     public int serverStatus = 0;
+    private boolean isFinished = false;
 
     public QueryState() {
     }
 
     public void reset() {
         stateType = MysqlStateType.OK;
+        errorMessage = "";
         errorCode = null;
         infoMessage = null;
-        serverStatus = 0;
+        errType = ErrType.UNKNOWN;
         isQuery = false;
+        affectedRows = 0;
+        warningRows = 0;
+        serverStatus = 0;
+        isFinished = false;
     }
 
     public MysqlStateType getStateType() {
@@ -95,6 +110,7 @@ public class QueryState {
 
     public void setEof() {
         stateType = MysqlStateType.EOF;
+        isFinished = true;
     }
 
     public void setOk() {
@@ -106,11 +122,13 @@ public class QueryState {
         this.warningRows = warningRows;
         this.infoMessage = infoMessage;
         stateType = MysqlStateType.OK;
+        isFinished = true;
     }
 
     public void setError(String errorMsg) {
         this.stateType = MysqlStateType.ERR;
         this.setMsg(errorMsg);
+        isFinished = true;
     }
 
     public boolean isError() {
@@ -118,7 +136,7 @@ public class QueryState {
     }
 
     public boolean isRunning() {
-        return stateType == MysqlStateType.OK;
+        return !isFinished;
     }
 
     public void setStateType(MysqlStateType stateType) {
@@ -157,6 +175,10 @@ public class QueryState {
         return errorCode;
     }
 
+    public void setErrorCode(ErrorCode errorCode) {
+        this.errorCode = errorCode;
+    }
+
     public long getAffectedRows() {
         return affectedRows;
     }
@@ -181,6 +203,16 @@ public class QueryState {
                 break;
         }
         return packet;
+    }
+
+    public String toProfileString() {
+        if (stateType == MysqlStateType.ERR) {
+            return "Error";
+        } else if (isFinished) {
+            return "Finished";
+        } else {
+            return "Running";
+        }
     }
 
     @Override

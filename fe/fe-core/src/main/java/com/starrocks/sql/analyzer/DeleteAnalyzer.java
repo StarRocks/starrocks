@@ -23,20 +23,28 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -47,11 +55,51 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.Map;
 
 public class DeleteAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DeleteAnalyzer.class);
+
+    public static List<Predicate> replaceParameterInExpr(List<Predicate> deleteConditions) {
+        List<Predicate> result = Lists.newArrayList();
+        for (Predicate exprOrig : deleteConditions) {
+            Predicate expr = (Predicate) exprOrig.clone();
+            result.add(expr);
+            if (expr instanceof BinaryPredicate) {
+                BinaryPredicate binaryPredicate = (BinaryPredicate) expr;
+                Expr rightExpr = binaryPredicate.getChild(1);
+                if (rightExpr instanceof Parameter) {
+                    binaryPredicate.setChild(1, getLiteralFromParameter((Parameter) rightExpr));
+                }
+            } else if (expr instanceof InPredicate) {
+                InPredicate inPredicate = (InPredicate) expr;
+                int inElementNum = inPredicate.getInElementNum();
+                for (int i = 1; i <= inElementNum; i++) {
+                    Expr child = inPredicate.getChild(i);
+                    if (child instanceof Parameter) {
+                        inPredicate.setChild(i, getLiteralFromParameter((Parameter) child));
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    @NotNull
+    private static Expr getLiteralFromParameter(Parameter p) {
+        Expr e = p.getExpr();
+        if (e == null) {
+            throw new SemanticException("Parameter is not set", p.getPos());
+        }
+        if (e instanceof VariableExpr) {
+            Object value = ((VariableExpr) e).getValue();
+            e = value == null ? new NullLiteral() : new StringLiteral(value.toString());
+        }
+        return e;
+    }
 
     private static void analyzePredicate(Expr predicate, List<Predicate> deleteConditions) {
         if (predicate instanceof BinaryPredicate) {
@@ -61,7 +109,7 @@ public class DeleteAnalyzer {
                 throw new SemanticException("Left expr of binary predicate should be column name", leftExpr.getPos());
             }
             Expr rightExpr = binaryPredicate.getChild(1);
-            if (!(rightExpr instanceof LiteralExpr)) {
+            if (!(rightExpr instanceof LiteralExpr || rightExpr instanceof Parameter)) {
                 throw new SemanticException("Right expr of binary predicate should be value", rightExpr.getPos());
             }
             deleteConditions.add(binaryPredicate);
@@ -94,7 +142,7 @@ public class DeleteAnalyzer {
             }
             for (int i = 1; i <= inElementNum; i++) {
                 Expr expr = inPredicate.getChild(i);
-                if (!(expr instanceof LiteralExpr)) {
+                if (!(expr instanceof LiteralExpr || expr instanceof Parameter)) {
                     throw new SemanticException("Child of in predicate should be value", expr.getPos());
                 }
             }
@@ -138,11 +186,25 @@ public class DeleteAnalyzer {
         deleteStatement.setDeleteConditions(deleteConditions);
     }
 
+    private static void analyzeProperties(DeleteStmt deleteStmt, ConnectContext session) {
+        Map<String, String> properties = deleteStmt.getProperties();
+        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
+    }
+
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
+        analyzeProperties(deleteStatement, session);
+
         TableName tableName = deleteStatement.getTableName();
-        MetaUtils.normalizationTableName(session, tableName);
-        MetaUtils.getDatabase(session, tableName);
-        Table table = MetaUtils.getTable(session, tableName);
+        MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
+        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof MaterializedView) {
             String msg = String.format("The data of '%s' cannot be deleted because it is a materialized view," +
@@ -167,10 +229,10 @@ public class DeleteAnalyzer {
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
-            if (col.isKey()) {
+            if (col.isKey() || col.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             } else {
-                break;
+                continue;
             }
             selectList.addItem(item);
         }

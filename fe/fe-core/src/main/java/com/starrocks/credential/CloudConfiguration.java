@@ -15,23 +15,71 @@
 package com.starrocks.credential;
 
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-public interface CloudConfiguration {
+import java.util.HashMap;
+import java.util.Map;
 
-    void toThrift(TCloudConfiguration tCloudConfiguration);
+public class CloudConfiguration {
+    private static final Logger LOG = LogManager.getLogger(CloudConfiguration.class);
 
-    void applyToConfiguration(Configuration configuration);
+    private String configResources;
+    private String runtimeJars;
+    private String hadoopUsername;
+
+    public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
+        Map<String, String> properties = new HashMap<>();
+        properties.put(HadoopExt.HADOOP_CONFIG_RESOURCES, configResources);
+        properties.put(HadoopExt.HADOOP_RUNTIME_JARS, runtimeJars);
+        properties.put(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
+        properties.put(HadoopExt.HADOOP_USERNAME, hadoopUsername);
+        tCloudConfiguration.setCloud_properties(properties);
+    }
+
+    public void applyToConfiguration(Configuration configuration) {
+        if (configResources != null) {
+            configuration.set(HadoopExt.HADOOP_CONFIG_RESOURCES, configResources);
+        }
+        if (runtimeJars != null) {
+            configuration.set(HadoopExt.HADOOP_RUNTIME_JARS, runtimeJars);
+        }
+        if (hadoopUsername != null) {
+            configuration.set(HadoopExt.HADOOP_USERNAME, hadoopUsername);
+        }
+        configuration.set(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
+        HadoopExt.getInstance().rewriteConfiguration(configuration);
+    }
 
     // Hadoop FileSystem has a cache itself, it used request uri as a cache key by default,
     // so it cannot sense the CloudCredential changed.
     // So we need to generate an identifier for different CloudCredential, and used it as cache key.
-    // getCredentialString() Method just like toString()
-    String getCredentialString();
+    // toConfString() Method just like toString()
+    public String toConfString() {
+        return "CloudConfiguration{" + getCommonFieldsString() + "}";
+    }
 
-    CloudType getCloudType();
+    public CloudType getCloudType() {
+        return CloudType.DEFAULT;
+    }
 
     // Convert to the protobuf used by staros.
-    FileStoreInfo toFileStoreInfo();
+    public FileStoreInfo toFileStoreInfo() {
+        return null;
+    }
+
+    public void loadCommonFields(Map<String, String> properties) {
+        configResources = properties.getOrDefault(HadoopExt.HADOOP_CONFIG_RESOURCES, "");
+        runtimeJars = properties.getOrDefault(HadoopExt.HADOOP_RUNTIME_JARS, "");
+        hadoopUsername = properties.getOrDefault(HadoopExt.HADOOP_USERNAME, "");
+    }
+
+    public String getCommonFieldsString() {
+        return String.format("resources='%s', jars='%s', hdpuser='%s'", configResources, runtimeJars, hadoopUsername);
+    }
 }

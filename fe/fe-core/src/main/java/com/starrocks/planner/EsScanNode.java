@@ -43,13 +43,16 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
 import com.starrocks.connector.elasticsearch.QueryConverter;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TEsScanNode;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExplainLevel;
@@ -59,6 +62,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,32 +72,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class EsScanNode extends ScanNode {
 
     private static final Logger LOG = LogManager.getLogger(EsScanNode.class);
 
     private final Random random = new Random(System.currentTimeMillis());
-    private Multimap<String, Backend> backendMap;
-    private List<Backend> backendList;
+    private Multimap<String, ComputeNode> nodeMap;
+    private List<ComputeNode> nodeList;
     private List<TScanRangeLocations> shardScanRanges = Lists.newArrayList();
     private EsTable table;
 
-    public EsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
+    public EsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, ComputeResource computeResource) {
         super(id, desc, planNodeName);
-        table = (EsTable) (desc.getTable());
+        this.table = (EsTable) (desc.getTable());
+        this.computeResource = computeResource;
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         super.init(analyzer);
 
-        assignBackends();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return shardScanRanges.size();
+        assignNodes();
     }
 
     @Override
@@ -106,7 +107,7 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
     }
 
     /**
@@ -165,29 +166,40 @@ public class EsScanNode extends ScanNode {
         msg.es_scan_node = esScanNode;
     }
 
-    public void assignBackends() throws UserException {
-        backendMap = HashMultimap.create();
-        backendList = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
-            if (be.isAlive()) {
-                backendMap.put(be.getHost(), be);
-                backendList.add(be);
+    public void assignNodes() throws StarRocksException {
+        nodeMap = HashMultimap.create();
+        nodeList = Lists.newArrayList();
+
+        List<ComputeNode> nodes;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if (RunMode.isSharedDataMode()) {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
+            nodes = computeNodeIds.stream()
+                    .map(id -> systemInfoService.getBackendOrComputeNode(id)).collect(Collectors.toList());
+        } else {
+            nodes = systemInfoService.backendAndComputeNodeStream().collect(Collectors.toList());
+        }
+        for (ComputeNode node : nodes) {
+            if (node.isAlive()) {
+                nodeMap.put(node.getHost(), node);
+                nodeList.add(node);
             }
         }
-        if (backendMap.isEmpty()) {
-            throw new UserException("No Alive backends");
+        if (nodeMap.isEmpty()) {
+            throw new StarRocksException("No Alive backends or compute nodes");
         }
     }
 
     public List<TScanRangeLocations> computeShardLocations(List<EsShardPartitions> selectedIndex) {
-        int size = backendList.size();
-        int beIndex = random.nextInt(size);
+        int size = nodeList.size();
+        int nodeIndex = random.nextInt(size);
         List<TScanRangeLocations> result = Lists.newArrayList();
         for (EsShardPartitions indexState : selectedIndex) {
             for (List<EsShardRouting> shardRouting : indexState.getShardRoutings().values()) {
-                // get backends
-                Set<Backend> colocatedBes = Sets.newHashSet();
-                int numBe = Math.min(3, size);
+                // get compute nodes
+                Set<ComputeNode> colocatedNodes = Sets.newHashSet();
+                int numNode = Math.min(3, size);
                 List<TNetworkAddress> shardAllocations = new ArrayList<>();
                 for (EsShardRouting item : shardRouting) {
                     shardAllocations.add(EsTable.KEY_TRANSPORT_HTTP.equals(table.getTransport()) ? item.getHttpAddress() :
@@ -196,24 +208,29 @@ public class EsScanNode extends ScanNode {
 
                 Collections.shuffle(shardAllocations, random);
                 for (TNetworkAddress address : shardAllocations) {
-                    colocatedBes.addAll(backendMap.get(address.getHostname()));
+                    if (address == null) {
+                        continue;
+                    }
+                    colocatedNodes.addAll(nodeMap.get(address.getHostname()));
                 }
-                boolean usingRandomBackend = colocatedBes.size() == 0;
-                List<Backend> candidateBeList = Lists.newArrayList();
-                if (usingRandomBackend) {
-                    for (int i = 0; i < numBe; ++i) {
-                        candidateBeList.add(backendList.get(beIndex++ % size));
+                boolean usingRandomNode = colocatedNodes.size() == 0;
+                List<ComputeNode> candidateNodeList = Lists.newArrayList();
+                if (usingRandomNode) {
+                    for (int i = 0; i < numNode; ++i) {
+                        candidateNodeList.add(nodeList.get(nodeIndex++ % size));
                     }
                 } else {
-                    candidateBeList.addAll(colocatedBes);
-                    Collections.shuffle(candidateBeList);
+                    candidateNodeList.addAll(colocatedNodes);
+                    if (!candidateNodeList.isEmpty()) {
+                        Collections.shuffle(candidateNodeList);
+                    }
                 }
 
                 // Locations
                 TScanRangeLocations locations = new TScanRangeLocations();
-                for (int i = 0; i < numBe && i < candidateBeList.size(); ++i) {
+                for (int i = 0; i < numNode && i < candidateNodeList.size(); ++i) {
                     TScanRangeLocation location = new TScanRangeLocation();
-                    Backend be = candidateBeList.get(i);
+                    ComputeNode be = candidateNodeList.get(i);
                     location.setBackend_id(be.getId());
                     location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
                     locations.addToLocations(location);
@@ -290,11 +307,6 @@ public class EsScanNode extends ScanNode {
                     .append("\n");
         }
         return output.toString();
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return true;
     }
 
     @Override

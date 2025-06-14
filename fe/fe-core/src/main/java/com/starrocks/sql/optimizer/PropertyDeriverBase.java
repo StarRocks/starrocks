@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -22,9 +23,11 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -71,6 +74,25 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
         }
     }
 
+    public static List<PhysicalPropertySet> computeShuffleSetRequiredProperties(PhysicalSetOperation node) {
+        Preconditions.checkArgument(
+                !((node instanceof PhysicalUnionOperator) && ((PhysicalUnionOperator) node).isUnionAll()));
+        List<PhysicalPropertySet> requiredProperties =
+                Lists.newArrayListWithCapacity(node.getChildOutputColumns().size());
+        for (int i = 0; i < node.getChildOutputColumns().size(); ++i) {
+            List<Integer> columns = node.getChildOutputColumns().get(i).stream().map(ColumnRefOperator::getId)
+                    .collect(Collectors.toList());
+            HashDistributionSpec distribution = DistributionSpec.createHashDistributionSpec(
+                    new HashDistributionDesc(columns, SHUFFLE_JOIN));
+
+            PhysicalPropertySet requiredPropertySet =
+                    new PhysicalPropertySet(DistributionProperty.createProperty(distribution));
+            requiredProperties.add(requiredPropertySet);
+        }
+        return requiredProperties;
+    }
+
+
 
     protected static Optional<HashDistributionDesc> getShuffleJoinHashDistributionDesc(
             PhysicalPropertySet requiredPropertySet) {
@@ -95,38 +117,32 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
                 new HashDistributionDesc(rightColumns, SHUFFLE_JOIN));
 
         PhysicalPropertySet leftRequiredPropertySet =
-                new PhysicalPropertySet(new DistributionProperty(leftDistribution));
+                new PhysicalPropertySet(DistributionProperty.createProperty(leftDistribution));
         PhysicalPropertySet rightRequiredPropertySet =
-                new PhysicalPropertySet(new DistributionProperty(rightDistribution));
+                new PhysicalPropertySet(DistributionProperty.createProperty(rightDistribution));
 
         return Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet);
     }
 
-    protected PhysicalPropertySet createLimitGatherProperty(long limit) {
-        DistributionSpec distributionSpec = DistributionSpec.createGatherDistributionSpec(limit);
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY);
-    }
-
     protected PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
+        DistributionProperty distributionProperty = DistributionProperty.createProperty(distributionSpec);
         return new PhysicalPropertySet(distributionProperty);
     }
 
     protected DistributionProperty createShuffleAggProperty(List<DistributionCol> partitionColumns) {
-        return new DistributionProperty(DistributionSpec.createHashDistributionSpec(
+        return DistributionProperty.createProperty(DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(partitionColumns, HashDistributionDesc.SourceType.SHUFFLE_AGG)));
     }
 
     protected PhysicalPropertySet createShuffleAggPropertySet(List<DistributionCol> partitions) {
         HashDistributionDesc desc = new HashDistributionDesc(partitions, HashDistributionDesc.SourceType.SHUFFLE_AGG);
-        DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(desc));
+        DistributionProperty property = DistributionProperty.createProperty(DistributionSpec.createHashDistributionSpec(desc));
         return new PhysicalPropertySet(property);
     }
 
     protected PhysicalPropertySet createGatherPropertySet() {
         DistributionProperty distributionProperty =
-                new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
+                DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
         return new PhysicalPropertySet(distributionProperty);
     }
 

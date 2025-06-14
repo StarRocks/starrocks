@@ -34,7 +34,10 @@
 
 package com.starrocks.connector.elasticsearch;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import okhttp3.Credentials;
@@ -45,10 +48,6 @@ import org.apache.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
-import org.codehaus.jackson.JsonParser;
-import org.codehaus.jackson.map.DeserializationConfig;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.map.SerializationConfig;
 
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -82,8 +81,7 @@ public class EsRestClient {
 
     {
         mapper = new ObjectMapper();
-        mapper.configure(DeserializationConfig.Feature.USE_ANNOTATIONS, false);
-        mapper.configure(SerializationConfig.Feature.USE_ANNOTATIONS, false);
+        mapper.configure(MapperFeature.USE_ANNOTATIONS, false);
     }
 
     private static final OkHttpClient NETWORK_CLIENT = new OkHttpClient.Builder()
@@ -207,6 +205,7 @@ public class EsRestClient {
             // User may set a config like described below:
             // hosts: "http://192.168.0.1:8200, http://192.168.0.2:8200"
             // then currentNode will be "http://192.168.0.1:8200", " http://192.168.0.2:8200"
+            // If use ipv6, remember to use format like [2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8080
             currentNode = currentNode.trim();
             if (!(currentNode.startsWith("http://") || currentNode.startsWith("https://"))) {
                 currentNode = "http://" + currentNode;

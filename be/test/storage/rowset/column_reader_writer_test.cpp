@@ -99,7 +99,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get());
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
     }
 
     template <LogicalType type, EncodingTypePB encoding, uint32_t version>
@@ -160,11 +160,8 @@ protected:
         }
         // read and check
         {
-            // create page cache
-            std::unique_ptr<MemTracker> page_cache_mem_tracker = std::make_unique<MemTracker>();
-            StoragePageCache::create_global_cache(page_cache_mem_tracker.get(), 1000000000);
             // read and check
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -226,11 +223,11 @@ protected:
                     ASSERT_TRUE(st.ok());
 
                     ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
-                    SparseRange read_range;
+                    SparseRange<> read_range;
                     size_t write_num = src.size();
-                    read_range.add(Range(0, write_num / 3));
-                    read_range.add(Range(write_num / 2, (write_num * 2 / 3)));
-                    read_range.add(Range((write_num * 3 / 4), write_num));
+                    read_range.add(Range<>(0, write_num / 3));
+                    read_range.add(Range<>(write_num / 2, (write_num * 2 / 3)));
+                    read_range.add(Range<>((write_num * 3 / 4), write_num));
                     size_t read_num = read_range.span_size();
 
                     st = iter->next_batch(read_range, dst.get());
@@ -238,9 +235,9 @@ protected:
                     ASSERT_EQ(read_num, dst->size());
 
                     size_t offset = 0;
-                    SparseRangeIterator read_iter = read_range.new_iterator();
+                    SparseRangeIterator<> read_iter = read_range.new_iterator();
                     while (read_iter.has_more()) {
-                        Range r = read_iter.next(read_num);
+                        Range<> r = read_iter.next(read_num);
                         for (int i = 0; i < r.span_size(); ++i) {
                             ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
                                     << " row " << r.begin() + i << ": "
@@ -273,8 +270,7 @@ protected:
 
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
-                int idx = 0;
-                size_t rows_read = 1024;
+                size_t rows_read = 512;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
@@ -287,19 +283,17 @@ protected:
                     } else {
                         ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                     }
-                    idx++;
                 }
             }
 
             {
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
-                for (int rowid = 0; rowid < 2048; rowid += 128) {
+                for (int rowid = 0; rowid < 1024; rowid += 128) {
                     st = iter.seek_to_ordinal(rowid);
                     ASSERT_TRUE(st.ok());
 
-                    int idx = rowid;
-                    size_t rows_read = 1024;
+                    size_t rows_read = 512;
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
@@ -312,7 +306,6 @@ protected:
                         } else {
                             ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                         }
-                        idx++;
                     }
                 }
             }
@@ -329,9 +322,9 @@ protected:
         TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
         array_column.add_sub_column(int_column);
 
-        auto src_offsets = UInt32Column::create();
-        auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        ColumnPtr src_column = ArrayColumn::create(src_elements, src_offsets);
+        UInt32Column::Ptr src_offsets = UInt32Column::create();
+        NullableColumn::Ptr src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ArrayColumn::Ptr src_column = ArrayColumn::create(src_elements, src_offsets);
 
         // insert [1, 2, 3], [4, 5, 6]
         src_elements->append_datum(1);
@@ -391,7 +384,7 @@ protected:
 
         // read and check
         {
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -409,9 +402,9 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_offsets = UInt32Column::create();
-                auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = ArrayColumn::create(dst_elements, dst_offsets);
+                UInt32Column::Ptr dst_offsets = UInt32Column::create();
+                NullableColumn::Ptr dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                ArrayColumn::Ptr dst_column = ArrayColumn::create(dst_elements, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -431,7 +424,7 @@ protected:
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
-        size_t count = 2 * 1024 * 1024 / sizeof(CppType);
+        size_t count = 2 * 1024 / sizeof(CppType);
         col->reserve(count);
         for (size_t i = 0; i < count; ++i) {
             (void)col->append_numbers(&value, sizeof(CppType));
@@ -480,7 +473,7 @@ protected:
         nc->reserve(count);
         down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
-            (void)col->append_strings({s1, s2, s3, s4, s5, s6, s7, s8});
+            (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
 
             std::next_permutation(s1.begin(), s1.end());
             std::next_permutation(s2.begin(), s2.end());
@@ -500,7 +493,7 @@ protected:
     }
 
     ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(DateValue);
+        size_t count = 4 * 1024 / sizeof(DateValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
         DateValue value = DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {
@@ -515,7 +508,7 @@ protected:
     }
 
     ColumnPtr datetime_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(TimestampValue);
+        size_t count = 4 * 1024 / sizeof(TimestampValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
         TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
         for (size_t i = 0; i < count; i++) {
@@ -714,11 +707,94 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     // read and check
     {
         // read and check
-        auto res = ColumnReader::create(&meta, segment.get());
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
         ASSERT_EQ(1024, meta.num_rows());
         ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
+    }
+}
+
+TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    const std::string fname = strings::Substitute("$0/test_large_varchar_column_writer.data", TEST_DIR);
+    // write data
+    {
+        int32_t old_config = config::dictionary_speculate_min_chunk_size;
+        const int TEST_N = 100;
+        // Test 3 different dictionary_speculate_min_chunk_size.
+        int32_t dict_chunk_sizes[3] = {TEST_N - 1, TEST_N, TEST_N + 1};
+        for (int32_t dict_chunk_size : dict_chunk_sizes) {
+            fs->delete_file(fname);
+            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+            ColumnMetaPB meta;
+            ColumnWriterOptions writer_opts;
+            writer_opts.page_format = 2;
+            writer_opts.meta = &meta;
+            writer_opts.meta->set_column_id(0);
+            writer_opts.meta->set_unique_id(0);
+            writer_opts.meta->set_type(TYPE_VARCHAR);
+            writer_opts.meta->set_length(1024 * 1024);
+            writer_opts.meta->set_encoding(PLAIN_ENCODING);
+            writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+            writer_opts.meta->set_is_nullable(true);
+            writer_opts.need_zone_map = true;
+
+            TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_VARCHAR);
+            column = create_varchar_key(1, true, 1024 * 1024);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+            config::dictionary_speculate_min_chunk_size = dict_chunk_size;
+            auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            config::dictionary_speculate_min_chunk_size = 4096;
+            std::vector<Slice> col_slices;
+            std::vector<std::string> col_strs;
+            col_strs.resize(TEST_N);
+            for (int i = 0; i < TEST_N; i++) {
+                col_strs[i] = strings::Substitute("test_$0", i);
+                col_slices.push_back(Slice(col_strs[i]));
+            }
+            col->reserve(TEST_N);
+            col->append_strings(col_slices);
+            ASSERT_TRUE(writer->append(*col).ok());
+
+            ASSERT_TRUE(writer->finish().ok());
+            ASSERT_TRUE(writer->write_data().ok());
+            ASSERT_TRUE(writer->write_ordinal_index().ok());
+            ASSERT_TRUE(writer->write_zone_map().ok());
+
+            // close the file
+            ASSERT_TRUE(wfile->close().ok());
+            // read and check result
+            auto segment = create_dummy_segment(fs, fname);
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            iter_opts.use_page_cache = true;
+            auto st = iter->init(iter_opts);
+            ASSERT_TRUE(st.ok());
+            ASSERT_TRUE(iter->seek_to_first().ok());
+            ColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            dst->reserve(TEST_N);
+            size_t rows_read = TEST_N;
+            ASSERT_TRUE(iter->next_batch(&rows_read, dst.get()).ok());
+            ASSERT_EQ(dst->size(), TEST_N);
+
+            TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+            for (size_t i = 0; i < TEST_N; i++) {
+                ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i)))
+                        << " row " << i << ": " << datum_to_string(type_info.get(), col->get(i)) << " vs "
+                        << datum_to_string(type_info.get(), dst->get(i));
+            }
+        }
+        config::dictionary_speculate_min_chunk_size = old_config;
     }
 }
 

@@ -20,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include "runtime/memory/column_allocator.h"
+
 namespace starrocks::raw {
 
 // RawAllocator allocates `trailing` more object(not bytes) than caller required,
@@ -55,13 +57,9 @@ public:
         T* x = A::allocate(n + RawAllocator::_trailing);
         return x;
     }
-    T* allocate(size_t n, const void* hint) {
-        T* x = A::allocate(n + RawAllocator::_trailing, hint);
-        return x;
-    }
 
     // deallocate the storage referenced by the pointer p
-    void deallocate(T* p, size_t n) { A::deallocate(p, n + RawAllocator::_trailing); }
+    void deallocate(T* p, size_t n) { A::deallocate(p, (n + RawAllocator::_trailing)); }
 
     // do not initialized allocated.
     template <typename U>
@@ -152,28 +150,43 @@ using RawStringPad16 = std::string;
 // starrocks::raw::RawVectorPad16<int8_t> a;
 // a.resize(100);
 // std::vector<uint8_t> b = std::move(reinterpret_cast<std::vector<uint8_t>&>(a));
-template <class T>
-using RawVector = std::vector<T, RawAllocator<T, 0>>;
+template <class T, class Alloc = std::allocator<T>>
+using RawVector = std::vector<T, RawAllocator<T, 0, Alloc>>;
 
-template <class T>
-using RawVectorPad16 = std::vector<T, RawAllocator<T, 16>>;
+template <class T, class Alloc = std::allocator<T>>
+using RawVectorPad16 = std::vector<T, RawAllocator<T, 16, Alloc>>;
 
-template <class T>
-inline void make_room(std::vector<T>* v, size_t n) {
-    RawVector<T> rv;
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+make_room(Container* v, size_t n) {
+    RawVector<T, typename Container::allocator_type> rv;
     rv.resize(n);
-    v->swap(reinterpret_cast<std::vector<T>&>(rv));
+    v->swap(reinterpret_cast<Container&>(rv));
 }
 
 inline void make_room(std::string* s, size_t n) {
-    RawStringPad16 rs;
+    RawString rs;
     rs.resize(n);
     s->swap(reinterpret_cast<std::string&>(rs));
 }
 
-template <typename T>
-inline void stl_vector_resize_uninitialized(std::vector<T>* vec, size_t new_size) {
-    ((RawVector<T>*)vec)->resize(new_size);
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
+    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+stl_vector_resize_uninitialized(Container* vec, size_t reserve_size, size_t new_size) {
+    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(reserve_size);
+    vec->resize(new_size);
 }
 
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {

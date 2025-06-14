@@ -21,9 +21,14 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -32,17 +37,13 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.UUID;
+import java.util.List;
+import java.util.Set;
 
 public class TransactionStateTest {
 
@@ -55,29 +56,15 @@ public class TransactionStateTest {
     }
 
     @Test
-    public void testSerDe() throws IOException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        UUID uuid = UUID.randomUUID();
+    public void testSerDe() {
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
 
-        transactionState.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        TransactionState readTransactionState = new TransactionState();
-        readTransactionState.readFields(in);
-
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
         Assert.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
-        in.close();
     }
 
     @Test
@@ -121,12 +108,9 @@ public class TransactionStateTest {
     }
 
     @Test
-    public void testSerDeTxnStateNewFinish() throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        DataOutputStream dataOut = new DataOutputStream(out);
-        UUID uuid = UUID.randomUUID();
+    public void testSerDeTxnStateNewFinish() {
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
 
@@ -136,18 +120,70 @@ public class TransactionStateTest {
         transactionState.clearErrorMsg();
         transactionState.setNewFinish();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
-        transactionState.write(dataOut);
 
-        byte[] bytes = out.toByteArray();
-        System.out.printf("TransactionState size: %d\n", bytes.length);
-
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes));
-        TransactionState readTransactionState = new TransactionState();
-        try {
-            readTransactionState.readFields(in);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
         Assert.assertTrue(readTransactionState.isNewFinish());
+    }
+
+    @Test
+    public void testIsRunning() {
+        Set<TransactionStatus> nonRunningStatus = new HashSet<>();
+        nonRunningStatus.add(TransactionStatus.UNKNOWN);
+        nonRunningStatus.add(TransactionStatus.VISIBLE);
+        nonRunningStatus.add(TransactionStatus.ABORTED);
+
+        for (TransactionStatus status : TransactionStatus.values()) {
+            TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                    3000, "label123", UUIDUtil.genTUniqueId(),
+                    LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                    60 * 1000L);
+            transactionState.setTransactionStatus(status);
+            Assert.assertEquals(nonRunningStatus.contains(status), !transactionState.isRunning());
+        }
+    }
+
+    @Test
+    public void testCheckReplicaNeedSkip() {
+        TransactionState state = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L), 3000, "label123",
+                UUIDUtil.genTUniqueId(), LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"),
+                50000L, 60 * 1000L);
+
+        PartitionCommitInfo pcInfo = new PartitionCommitInfo(1L, 100L, 1L);
+
+        Tablet tablet0 = new LocalTablet(1001L);
+        Tablet tablet1 = new LocalTablet(10001L);
+        Tablet tablet2 = new LocalTablet(10002L);
+
+        TabletCommitInfo info1 = new TabletCommitInfo(10001L, 10001L);
+        TabletCommitInfo info2 = new TabletCommitInfo(10001L, 10002L);
+        TabletCommitInfo info3 = new TabletCommitInfo(10002L, 10002L);
+        List<TabletCommitInfo> infos = new ArrayList<>();
+        infos.add(info1);
+        infos.add(info2);
+        infos.add(info3);
+        state.setTabletCommitInfos(infos);
+
+        // replica state is not normal and clone
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.ALTER, 1L, 0), pcInfo));
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.SCHEMA_CHANGE, 1L, 0), pcInfo));
+        Assert.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+        Assert.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.CLONE, 1L, 0), pcInfo));
+
+        // replica is in tabletCommitInfos
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(2L, 10001L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(3L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet2, new Replica(4L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+
+        // replica current version >= commit version
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 100L, 0), pcInfo));
+
+        // follower tabletCommitInfos is null
+        Deencapsulation.setField(state, "tabletCommitInfos", null);
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+
+        // follower tabletCommitInfos is null and unknownReplicas contains the replica
+        state.addUnknownReplica(5L);
+        Assert.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
     }
 }

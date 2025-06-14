@@ -22,18 +22,23 @@ import com.google.common.collect.Queues;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregateCompactRequest;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
@@ -45,9 +50,15 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -63,6 +74,11 @@ import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PUpdateTransactionStateRequest;
+import com.starrocks.proto.PUpdateTransactionStateResponse;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -76,10 +92,14 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumRequest;
+import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
+import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -95,6 +115,7 @@ import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TCancelPlanFragmentParams;
 import com.starrocks.thrift.TCancelPlanFragmentResult;
 import com.starrocks.thrift.TCloneReq;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDeleteEtlFilesRequest;
@@ -109,6 +130,8 @@ import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TMasterResult;
@@ -226,6 +249,8 @@ public class PseudoBackend {
     private AtomicLong nextRowsetId = new AtomicLong(0);
 
     private Random random;
+
+    private AtomicLong numSchemaScan = new AtomicLong(0);
 
     private static ThreadLocal<PseudoBackend> currentBackend = new ThreadLocal<>();
 
@@ -414,7 +439,7 @@ public class PseudoBackend {
     }
 
     public String getHostHeartbeatPort() {
-        return host + ":" + heartBeatPort;
+        return NetUtils.getHostPortInAccessibleFormat(host, heartBeatPort);
     }
 
     public long getId() {
@@ -453,14 +478,26 @@ public class PseudoBackend {
         return publishFailureRate;
     }
 
+    public long getNumSchemaScan() {
+        return numSchemaScan.get();
+    }
+
     private void reportTablets() {
         // report tablets
         TReportRequest request = new TReportRequest();
+        // Report_version must be set before setting the tablets to
+        // ensure that the tablet in FE will not be accidentally deleted in the following case:
+        // t1: tablet1, tablet2, tablet3 are created on BE and current reportVersion is 3.
+        // t2: tablet1, tablet2, tablet3 are set into request.tables.
+        // t3: tablet4 is created and reportVersion changed to 4.
+        // t4: 4 is set into request.report_version.
+        // t5: The request is sent to the FE node and it is found that tablet4 is not in request.tablets
+        // and request.report_version is equal to the latest report_version recorded by FE,
+        // tablet4 metadata will be deleted from FE. Code: ReportHandler.deleteFromMeta
+        request.setReport_version(reportVersion.get());
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
-        reportVersion.incrementAndGet();
-        request.setReport_version(reportVersion.get());
         try {
             if (!shutdown) {
                 TMasterResult result = frontendService.report(request);
@@ -555,12 +592,20 @@ public class PseudoBackend {
         return ts;
     }
 
-    void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+    void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws StarRocksException {
         // Ignore the initial disk usage of tablet
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
         } else {
-            tabletManager.createTablet(request.create_tablet_req);
+            TCreateTabletReq createTabletReq = request.create_tablet_req;
+            tabletManager.createTablet(createTabletReq);
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setPath_hash(PATH_HASH);
+            tabletInfo.setData_size(0);
+            tabletInfo.setTablet_id(createTabletReq.tablet_id);
+            tabletInfo.setSchema_hash(createTabletReq.tablet_schema.schema_hash);
+            tabletInfo.setVersion(createTabletReq.version);
+            finish.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
         }
     }
 
@@ -595,15 +640,26 @@ public class PseudoBackend {
         if (destTablet == null) {
             destTablet = new Tablet(task.tablet_id, srcTablet.tableId, srcTablet.partitionId, srcTablet.schemaHash,
                     srcTablet.enablePersistentIndex);
-            destTablet.fullCloneFrom(srcTablet, srcBackend.getId());
+            destTablet.fullCloneFrom(srcTablet, srcBackend.getId(), getId());
             tabletManager.addClonedTablet(destTablet);
         } else {
-            destTablet.cloneFrom(srcTablet, srcBackend.getId());
+            destTablet.cloneFrom(srcTablet, srcBackend.getId(), getId());
         }
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
 
+    private String alterTaskError = null;
+
+    public void injectAlterTaskError(String errMsg) {
+        alterTaskError = errMsg;
+    }
+
     private void handleAlter(TAgentTaskRequest request, TFinishTaskRequest finishTaskRequest) throws Exception {
+        if (alterTaskError != null) {
+            String err = alterTaskError;
+            alterTaskError = null;
+            throw new Exception(err);
+        }
         TAlterTabletReqV2 task = request.alter_tablet_req_v2;
         if (task.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             finishTaskRequest.finish_tablet_infos = Lists.newArrayList(
@@ -623,7 +679,7 @@ public class PseudoBackend {
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet not found", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));
         }
-        if (newTablet.isRunning() == true) {
+        if (newTablet.isRunning()) {
             throw new Exception(
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet is running", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));
@@ -637,8 +693,6 @@ public class PseudoBackend {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
                 request.getTask_type(), request.getSignature(),
                 new TStatus(TStatusCode.OK));
-        long v = reportVersion.incrementAndGet();
-        finishTaskRequest.setReport_version(v);
         try {
             switch (finishTaskRequest.task_type) {
                 case CREATE:
@@ -667,6 +721,8 @@ public class PseudoBackend {
             finishTaskRequest.setTask_status(toStatus(e));
         }
         try {
+            long v = reportVersion.incrementAndGet();
+            finishTaskRequest.setReport_version(v);
             frontendService.finishTask(finishTaskRequest);
         } catch (TException e) {
             LOG.warn("error call finishTask", e);
@@ -843,6 +899,13 @@ public class PseudoBackend {
             return null;
         }
 
+        @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) throws TException {
+            TGetTabletsInfoResult result = new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+            result.setReport_version(reportVersion.get());
+            result.setTablets(tabletManager.getAllTabletInfo());
+            return result;
+        }
     }
 
     private class PseudoPBackendService implements PBackendService {
@@ -866,9 +929,9 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -899,9 +962,9 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -1007,6 +1070,16 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request) {
+            return null;
+        }
+
+        @Override
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             ExecuteCommandResultPB result = new ExecuteCommandResultPB();
             StatusPB pStatus = new StatusPB();
@@ -1021,9 +1094,29 @@ public class PseudoBackend {
             }
             return CompletableFuture.completedFuture(result);
         }
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request) {
+            throw new org.apache.commons.lang.NotImplementedException("TODO");
+        }
     }
 
-    private class PseudoLakeService implements LakeService {
+    public static class PseudoLakeService implements LakeService {
         @Override
         public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
@@ -1040,7 +1133,17 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<CompactResponse> aggregateCompact(AggregateCompactRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
         public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 
@@ -1061,6 +1164,11 @@ public class PseudoBackend {
 
         @Override
         public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 
@@ -1086,6 +1194,16 @@ public class PseudoBackend {
 
         @Override
         public Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<VacuumResponse> vacuum(VacuumRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }
@@ -1132,8 +1250,11 @@ public class PseudoBackend {
                                 .collect(Collectors.toList());
                         numTabletScan += scanRanges.size();
                         runOlapScan(planNode, scanRanges);
-                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                        LOG.info(String.format("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan));
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (numTabletScan > 0) {
@@ -1196,12 +1317,15 @@ public class PseudoBackend {
                                 .collect(Collectors.toList());
                         numTabletScan += scanRanges.size();
                         runOlapScan(planNode, scanRanges);
-                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                        LOG.info(String.format("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan));
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (allScans != numTabletScan) {
-                System.out.printf("not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
+                LOG.info(String.format(" not all scanrange used: all:%d used:%d\n", allScans, numTabletScan));
             }
             if (numTabletScan > 0) {
                 scansByQueryId.computeIfAbsent(DebugUtil.printId(commonParams.params.query_id), k -> new AtomicInteger(0))
@@ -1311,7 +1435,8 @@ public class PseudoBackend {
             void cancel() {
             }
 
-            void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+            void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws
+                    StarRocksException {
                 for (PTabletWithPartition tabletWithPartition : tablets) {
                     Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
                     if (tablet == null) {
@@ -1351,7 +1476,7 @@ public class PseudoBackend {
             }
         }
 
-        void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+        void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws StarRocksException {
             TabletsChannel tabletsChannel = indexToTabletsChannel.get(request.indexId);
             if (tabletsChannel == null) {
                 result.status =
@@ -1425,7 +1550,7 @@ public class PseudoBackend {
                 }
                 try {
                     channel.close(request, result);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     LOG.warn("error close load channel", e);
                     channel.cancel();
                     loadChannels.remove(loadIdString);

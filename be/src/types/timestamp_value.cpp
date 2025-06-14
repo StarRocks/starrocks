@@ -32,6 +32,12 @@ static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday"
                                    "Friday", "Saturday", "Sunday",    nullptr};
 static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
 
+TimestampValue TimestampValue::create_from_unixtime(int64_t ts, const cctz::time_zone& ctz) {
+    TimestampValue value;
+    value.from_unixtime(ts, ctz);
+    return value;
+}
+
 bool TimestampValue::from_timestamp_literal(uint64_t timestamp) {
     uint64_t date = timestamp / 1000000;
     uint64_t time = timestamp % 1000000;
@@ -93,17 +99,27 @@ int64_t TimestampValue::diff_microsecond(TimestampValue other) const {
 }
 
 bool TimestampValue::from_string(const char* date_str, size_t len) {
-    int year, month, day, hour, minute, second, microsecond;
-    if (!date::from_string_to_datetime(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond)) {
+    date::ToDatetimeResult res;
+    const auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, len, &res);
+    if (!is_valid) {
         return false;
     }
 
-    if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
-        return false;
-    }
+    auto process = [&](int year, int month, int day, int hour, int minute, int second, int microsecond) {
+        if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
+            return false;
+        }
+        from_timestamp(year, month, day, hour, minute, second, microsecond);
+        return true;
+    };
 
-    from_timestamp(year, month, day, hour, minute, second, microsecond);
-    return true;
+    // If `date_str` only contains date part, then pass constant zero for hour/minute/second/usec
+    // to make compiler eliminate some compution logic.
+    if (is_only_date) {
+        return process(res.year, res.month, res.day, 0, 0, 0, 0);
+    } else {
+        return process(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
+    }
 }
 
 // process string content based on format like "%Y-%m-%d". '-' means any char.
@@ -636,6 +652,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 date_part_used = true;
                 break;
             case 'r':
+                tmp = val + std::min(11, (int)(val_end - val));
                 if (from_uncommon_format_str("%I:%i:%S %p", 11, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -643,6 +660,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 time_part_used = true;
                 break;
             case 'T':
+                tmp = val + std::min(8, (int)(val_end - val));
                 if (from_uncommon_format_str("%H:%i:%S", 8, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -757,6 +775,12 @@ void TimestampValue::to_timestamp(int* year, int* month, int* day, int* hour, in
     timestamp::to_datetime(_timestamp, year, month, day, hour, minute, second, usec);
 }
 
+void TimestampValue::trunc_to_millisecond() {
+    Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
+    uint64_t microseconds = time % USECS_PER_MILLIS;
+    _timestamp -= microseconds;
+}
+
 void TimestampValue::trunc_to_second() {
     Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
     uint64_t microseconds = time % USECS_PER_SEC;
@@ -803,11 +827,29 @@ void TimestampValue::trunc_to_quarter() {
     _timestamp = timestamp::from_datetime(year, month_to_quarter[month], 1, 0, 0, 0, 0);
 }
 
+// return seconds since epoch.
 int64_t TimestampValue::to_unix_second() const {
     int64_t result = timestamp::to_julian(_timestamp);
     result *= SECS_PER_DAY;
     result += timestamp::to_time(_timestamp) / USECS_PER_SEC;
     result -= timestamp::UNIX_EPOCH_SECONDS;
+    return result;
+}
+
+// return microseconds since epoch.
+int64_t TimestampValue::to_unixtime() const {
+    int64_t result = timestamp::to_julian(_timestamp);
+    result *= SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= 1000L;
+    result += timestamp::to_time(_timestamp) / USECS_PER_MILLIS;
+    return result;
+}
+
+int64_t TimestampValue::to_unixtime(const cctz::time_zone& ctz) const {
+    int64_t offset = TimezoneUtils::to_utc_offset(ctz);
+    int64_t result = to_unixtime();
+    result -= offset * MILLIS_PER_SEC;
     return result;
 }
 
@@ -835,11 +877,11 @@ void TimestampValue::from_unixtime(int64_t second, int64_t microsecond, const cc
     return;
 }
 
-void TimestampValue::from_unix_second(int64_t second) {
+void TimestampValue::from_unix_second(int64_t second, int64_t microsecond) {
     second += timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
     Timestamp s = second % SECS_PER_DAY;
-    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC);
+    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC + microsecond);
 }
 
 bool TimestampValue::is_valid() const {
@@ -850,8 +892,11 @@ bool TimestampValue::is_valid_non_strict() const {
     return is_valid();
 }
 
-std::string TimestampValue::to_string() const {
-    return timestamp::to_string(_timestamp);
+std::string TimestampValue::to_string(bool igonre_microsecond) const {
+    if (igonre_microsecond) {
+        return timestamp::to_string<false, true>(_timestamp);
+    }
+    return timestamp::to_string<false, false>(_timestamp);
 }
 
 int TimestampValue::to_string(char* s, size_t n) const {

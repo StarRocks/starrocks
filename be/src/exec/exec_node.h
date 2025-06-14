@@ -149,7 +149,7 @@ public:
     // get_next(). The default implementation updates runtime profile counters and calls
     // close() on the children. To ensure that close() is called on the entire plan tree,
     // each implementation should start out by calling the default implementation.
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
 
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.
@@ -244,6 +244,13 @@ public:
 
     static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
+    void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
+
+    const std::vector<ExecNode*>& children() const { return _children; }
+
+    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
+                                         const DescriptorTbl& descs, ExecNode** node);
+
 protected:
     friend class DataSink;
 
@@ -294,9 +301,6 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
-    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
-                                         const DescriptorTbl& descs, ExecNode** node);
-
     static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
                                      const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
 
@@ -312,6 +316,8 @@ protected:
     Status exec_debug_action(TExecNodePhase::type phase);
 
 private:
+    // TODO: delete this function if removed tupleId
+    Status static checkTupleIdsInDescs(const DescriptorTbl& descs, const TPlanNode& planNode);
     RuntimeState* _runtime_state;
     bool _is_closed;
 };

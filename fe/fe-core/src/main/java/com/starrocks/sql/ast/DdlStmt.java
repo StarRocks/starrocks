@@ -19,7 +19,6 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class DdlStmt extends StatementBase {
-
     protected DdlStmt(NodePosition pos) {
         super(pos);
     }
@@ -33,4 +32,5 @@ public abstract class DdlStmt extends StatementBase {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDDLStatement(this, context);
     }
+
 }

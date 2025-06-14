@@ -26,7 +26,9 @@ namespace starrocks::pipeline {
 Status LocalParallelMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _sort_context->ref();
+    _sort_context->attach_source_observer(state, observer());
     _merger->bind_profile(_merge_parallel_id, _unique_metrics.get());
+    _merger->attach_observer(state, observer());
     return Status::OK();
 }
 
@@ -86,7 +88,7 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
                 return false;
             }
             if (!only_check_if_has_data) {
-                chunks_sorter->get_next(chunk, eos);
+                (void)chunks_sorter->get_next(chunk, eos);
             }
             return true;
         });
@@ -103,7 +105,7 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
             _mergers.push_back(std::make_unique<merge_path::MergePathCascadeMerger>(
                     _state->chunk_size(), degree_of_parallelism, sort_context->sort_exprs(), sort_context->sort_descs(),
                     _tuple_desc, sort_context->topn_type(), sort_context->offset(), sort_context->limit(),
-                    chunk_providers));
+                    chunk_providers, _late_materialize_mode));
         }
         return std::make_shared<LocalParallelMergeSortSourceOperator>(
                 this, _id, _plan_node_id, driver_sequence, sort_context.get(), _is_gathered, _mergers[0].get());

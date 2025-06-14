@@ -18,15 +18,19 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UseCatalogStmt;
+import org.apache.hadoop.util.Sets;
 
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
@@ -36,11 +40,15 @@ public class CatalogAnalyzer {
 
     private static final String WHITESPACE = "\\s+";
 
+    private static final Set<String> NOT_SUPPORT_ALTER_PROPERTIES = Sets.newHashSet(
+            "type"
+    );
+
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new CatalogAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class CatalogAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class CatalogAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -113,6 +121,24 @@ public class CatalogAnalyzer {
             }
 
             FeNameFormat.checkCatalogName(statement.getCatalogName());
+            return null;
+        }
+
+        @Override
+        public Void visitAlterCatalogStatement(AlterCatalogStmt statement, ConnectContext context) {
+            if (statement.getAlterClause() instanceof ModifyTablePropertiesClause) {
+                ModifyTablePropertiesClause modifyTablePropertiesClause =
+                        (ModifyTablePropertiesClause) statement.getAlterClause();
+                Map<String, String> properties = modifyTablePropertiesClause.getProperties();
+
+                for (Map.Entry<String, String> property : properties.entrySet()) {
+                    String confName = property.getKey();
+
+                    if (NOT_SUPPORT_ALTER_PROPERTIES.contains(confName)) {
+                        throw new SemanticException("Not support alter catalog property " + property.getKey());
+                    }
+                }
+            }
             return null;
         }
     }

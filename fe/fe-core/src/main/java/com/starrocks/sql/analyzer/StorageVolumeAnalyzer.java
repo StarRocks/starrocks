@@ -36,7 +36,7 @@ public class StorageVolumeAnalyzer {
         new StorageVolumeAnalyzer.StorageVolumeAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class StorageVolumeAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class StorageVolumeAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -47,10 +47,20 @@ public class StorageVolumeAnalyzer {
             if (Strings.isNullOrEmpty(svName)) {
                 throw new SemanticException("'storage volume name' can not be null or empty");
             }
+            if (svName.equals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME)) {
+                throw new SemanticException(String.format(
+                        "%s is a reserved storage volume name, please choose a different name for the storage volume",
+                        StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+            }
 
             List<String> locations = statement.getStorageLocations();
             if (locations.isEmpty()) {
-                throw new SemanticException("'storage volume locations' can not be empty");
+                throw new SemanticException("'location' field is required to create the storage volume");
+            }
+            for (String location : locations) {
+                if (location.isEmpty()) {
+                    throw new SemanticException("'location' field is required to create the storage volume");
+                }
             }
 
             String svType = statement.getStorageVolumeType();

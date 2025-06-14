@@ -41,25 +41,26 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "storage/chunk_helper.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
 BloomFilterIndexReader::BloomFilterIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), sizeof(BloomFilterIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                             sizeof(BloomFilterIndexReader));
 }
 
 BloomFilterIndexReader::~BloomFilterIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> BloomFilterIndexReader::load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
-                                     _mem_usage() - sizeof(BloomFilterIndexReader));
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                                     mem_usage() - sizeof(BloomFilterIndexReader));
         } else {
             _reset();
         }
@@ -72,8 +73,8 @@ Status BloomFilterIndexReader::_do_load(const IndexReadOptions& opts, const Bloo
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
-    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(opts, bf_index_meta);
-    RETURN_IF_ERROR(_bloom_filter_reader->load());
+    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(bf_index_meta);
+    RETURN_IF_ERROR(_bloom_filter_reader->load(opts));
     return Status::OK();
 }
 
@@ -84,10 +85,10 @@ void BloomFilterIndexReader::_reset() {
     _bloom_filter_reader.reset();
 }
 
-Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator) {
+Status BloomFilterIndexReader::new_iterator(const IndexReadOptions& opts,
+                                            std::unique_ptr<BloomFilterIndexIterator>* iterator) {
     std::unique_ptr<IndexedColumnIterator> bf_iter;
-    IndexReadOptions options;
-    RETURN_IF_ERROR(_bloom_filter_reader->new_iterator(&bf_iter, options));
+    RETURN_IF_ERROR(_bloom_filter_reader->new_iterator(opts, &bf_iter));
     iterator->reset(new BloomFilterIndexIterator(this, std::move(bf_iter)));
     return Status::OK();
 }
@@ -100,10 +101,10 @@ Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_
     RETURN_IF_ERROR(_bloom_filter_iter->next_batch(&num_read, column.get()));
     DCHECK(num_to_read == num_read);
 
-    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnViewer<TYPE_VARCHAR> viewer(std::move(column));
     auto value = viewer.value(0);
     // construct bloom filter
-    BloomFilter::create(_reader->_algorithm, bf);
+    RETURN_IF_ERROR(BloomFilter::create(_reader->_algorithm, bf));
 
     RETURN_IF_ERROR((*bf)->init(value.data, value.size, _reader->_hash_strategy));
     return Status::OK();

@@ -34,12 +34,17 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.thrift.TColumn;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,6 +54,9 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NOT_SET;
@@ -322,5 +330,44 @@ public class ColumnTest {
         } catch (DdlException ex) {
 
         }
+    }
+
+    @Test
+    public void testLscColumn() {
+        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, null, false,
+                new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
+
+        Index i0 = new Index("i0",
+                Collections.singletonList(ColumnId.create("f0")), IndexType.BITMAP, "");
+
+        Set<ColumnId> bfColumns = new HashSet<>();
+        bfColumns.add(ColumnId.create("f0"));
+        TColumn t0 = f0.toThrift();
+        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
+
+        Assert.assertEquals(t0.has_bitmap_index, true);
+        Assert.assertEquals(t0.is_bloom_filter_column, true);
+
+        Assert.assertEquals(f0.getUniqueId(), 0);
+        f0.setUniqueId(1);
+
+        Assert.assertEquals(f0.getUniqueId(), 1);
+
+    }
+
+    @Test
+    public void testColumnDeserialization() {
+        String str = "{\"name\": \"test\"}";
+        Column column = GsonUtils.GSON.fromJson(str, Column.class);
+        Assert.assertEquals("test", column.getColumnId().getId());
+    }
+
+    @Test
+    public void testToSqlWithoutAggregateTypeName() {
+        String comment = "{\"id\":\"0\",\"value\":\"1\"}";
+        Column column = new Column("col", ScalarType.createType(PrimitiveType.JSON), false, null, true, null, comment);
+        String toSql = column.toSqlWithoutAggregateTypeName(null);
+
+        Assert.assertEquals("`col` json NULL COMMENT \"{\\\"id\\\":\\\"0\\\",\\\"value\\\":\\\"1\\\"}\"", toSql);
     }
 }

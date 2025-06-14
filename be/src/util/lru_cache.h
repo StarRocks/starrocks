@@ -132,7 +132,7 @@ public:
     //
     // When the inserted entry is no longer needed, the key and
     // value will be passed to "deleter".
-    virtual Handle* insert(const CacheKey& key, void* value, size_t charge,
+    virtual Handle* insert(const CacheKey& key, void* value, size_t value_size,
                            void (*deleter)(const CacheKey& key, void* value),
                            CachePriority priority = CachePriority::NORMAL) = 0;
 
@@ -179,10 +179,10 @@ public:
     virtual void get_cache_status(rapidjson::Document* document) = 0;
 
     virtual void set_capacity(size_t capacity) = 0;
-    virtual size_t get_capacity() = 0;
-    virtual size_t get_memory_usage() = 0;
-    virtual size_t get_lookup_count() = 0;
-    virtual size_t get_hit_count() = 0;
+    virtual size_t get_capacity() const = 0;
+    virtual size_t get_memory_usage() const = 0;
+    virtual size_t get_lookup_count() const = 0;
+    virtual size_t get_hit_count() const = 0;
 
     //  Decrease or increase cache capacity.
     virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
@@ -206,6 +206,7 @@ typedef struct LRUHandle {
     uint32_t refs;
     uint32_t hash; // Hash of key(); used for fast sharding and comparisons
     CachePriority priority = CachePriority::NORMAL;
+    size_t value_size;
     char key_data[1]; // Beginning of key
 
     CacheKey key() const {
@@ -267,7 +268,7 @@ public:
     void set_capacity(size_t capacity);
 
     // Like Cache methods, but with an extra "hash" parameter.
-    Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t charge,
+    Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                           void (*deleter)(const CacheKey& key, void* value),
                           CachePriority priority = CachePriority::NORMAL);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
@@ -275,10 +276,11 @@ public:
     void erase(const CacheKey& key, uint32_t hash);
     int prune();
 
-    uint64_t get_lookup_count();
-    uint64_t get_hit_count();
-    size_t get_usage();
-    size_t get_capacity();
+    uint64_t get_lookup_count() const;
+    uint64_t get_hit_count() const;
+    size_t get_usage() const;
+    size_t get_capacity() const;
+    static size_t key_handle_size(const CacheKey& key) { return sizeof(LRUHandle) - 1 + key.size(); }
 
 private:
     void _lru_remove(LRUHandle* e);
@@ -291,7 +293,7 @@ private:
     size_t _capacity{0};
 
     // _mutex protects the following state.
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     size_t _usage{0};
 
     // Dummy head of LRU list.
@@ -312,7 +314,8 @@ class ShardedLRUCache : public Cache {
 public:
     explicit ShardedLRUCache(size_t capacity);
     ~ShardedLRUCache() override = default;
-    Handle* insert(const CacheKey& key, void* value, size_t charge, void (*deleter)(const CacheKey& key, void* value),
+    Handle* insert(const CacheKey& key, void* value, size_t value_size,
+                   void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;
     void release(Handle* handle) override;
@@ -323,20 +326,20 @@ public:
     void prune() override;
     void get_cache_status(rapidjson::Document* document) override;
     void set_capacity(size_t capacity) override;
-    size_t get_memory_usage() override;
-    size_t get_capacity() override;
-    uint64_t get_lookup_count() override;
-    uint64_t get_hit_count() override;
+    size_t get_memory_usage() const override;
+    size_t get_capacity() const override;
+    uint64_t get_lookup_count() const override;
+    uint64_t get_hit_count() const override;
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override;
 
 private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
     void _set_capacity(size_t capacity);
-    size_t _get_stat(size_t (LRUCache::*mem_fun)());
+    size_t _get_stat(size_t (LRUCache::*mem_fun)() const) const;
 
     LRUCache _shards[kNumShards];
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     uint64_t _last_id;
     size_t _capacity;
 };

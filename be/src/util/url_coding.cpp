@@ -17,9 +17,11 @@
 
 #include "util/url_coding.h"
 
-#include <cmath>
+#include <curl/curl.h>
+
 #include <exception>
 #include <memory>
+#include <sstream>
 
 namespace starrocks {
 static void encode_base64_internal(const std::string& in, std::string* out, const unsigned char* basis, bool padding) {
@@ -151,6 +153,25 @@ bool base64_decode(const std::string& in, std::string* out) {
     out->assign(tmp, len);
     delete[] tmp;
     return true;
+}
+
+// refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
+std::string url_encode(const std::string& decoded) {
+    const auto encoded_value = curl_easy_escape(nullptr, decoded.c_str(), static_cast<int>(decoded.length()));
+    std::string result(encoded_value);
+    curl_free(encoded_value);
+    return result;
+}
+
+StatusOr<std::string> url_decode(const std::string& in) {
+    int decoded_length = 0;
+    const auto decoded_value = curl_easy_unescape(nullptr, in.c_str(), static_cast<int>(in.length()), &decoded_length);
+    if (decoded_value == nullptr) {
+        return Status::InvalidArgument("invalid encoding in URL");
+    }
+    std::string result(decoded_value);
+    curl_free(decoded_value);
+    return result;
 }
 
 } // namespace starrocks

@@ -15,11 +15,14 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.StringJoiner;
 
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
@@ -90,16 +93,18 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
-        if (getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+        if (OperatorType.LAMBDA_ARGUMENT.equals(getOpType())) {
             return new ColumnRefSet();
         }
         return new ColumnRefSet(id);
     }
 
     @Override
-    public List<ColumnRefOperator> getColumnRefs(List<ColumnRefOperator> list) {
-        list.add(this);
-        return list;
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        if (OperatorType.LAMBDA_ARGUMENT.equals(getOpType())) {
+            return;
+        }
+        columns.add(this);
     }
 
 
@@ -108,16 +113,12 @@ public final class ColumnRefOperator extends ScalarOperator {
         return id + ": " + name;
     }
 
-    public static String toString(List<ColumnRefOperator> columns) {
-        StringBuilder sb = new StringBuilder();
-        int i = 0;
+    public static String toString(Collection<ColumnRefOperator> columns) {
+        StringJoiner joiner = new StringJoiner(", ", "{", "}");
         for (ColumnRefOperator column : columns) {
-            if (i++ != 0) {
-                sb.append(",");
-            }
-            sb.append(column);
+            joiner.add(column.toString());
         }
-        return sb.toString();
+        return joiner.toString();
     }
 
     @Override
@@ -161,6 +162,22 @@ public final class ColumnRefOperator extends ScalarOperator {
         final ColumnRefOperator column = (ColumnRefOperator) obj;
         // The column id is unique
         return id == column.id;
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!(obj instanceof ColumnRefOperator)) {
+            return false;
+        }
+
+        if (obj == this) {
+            return true;
+        }
+
+        ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
+        return SRStringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+                && this.getType().equals(rightColumn.getType())
+                && this.isNullable() == rightColumn.isNullable();
     }
 
     /**

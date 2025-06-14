@@ -39,10 +39,10 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
+#include "io/seekable_input_stream.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "util/slice.h"
-
 namespace starrocks {
 
 class BlockCompressionCodec;
@@ -52,7 +52,8 @@ struct OlapReaderStatistics;
 
 struct PageReadOptions {
     // block to read page
-    RandomAccessFile* read_file = nullptr;
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
     // location of the page
     PagePointer page_pointer;
     // decompressor for page body (null means page body is not compressed)
@@ -63,9 +64,6 @@ struct PageReadOptions {
     bool verify_checksum = true;
     // whether to use page cache in read path
     bool use_page_cache = true;
-    // if true, use DURABLE CachePriority in page cache
-    // currently used for in memory olap table
-    bool kept_in_memory = false;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
 

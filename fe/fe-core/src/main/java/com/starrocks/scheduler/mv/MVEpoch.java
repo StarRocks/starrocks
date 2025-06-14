@@ -28,12 +28,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.validation.constraints.NotNull;
 
 /**
  * The incremental maintenance of MV consists of epochs, whose lifetime is defined as:
@@ -83,6 +83,7 @@ public class MVEpoch implements Writable {
         return epoch;
     }
 
+    @NotNull
     public List<TabletCommitInfo> getCommitInfos() {
         return commitInfos;
     }
@@ -127,7 +128,7 @@ public class MVEpoch implements Writable {
                 state.equals(EpochState.COMMITTED) ||
                 state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
-        this.commitInfos.clear();;
+        this.commitInfos.clear();
         this.failedInfos.clear();
         numEpochFinished.set(0);
     }
@@ -150,10 +151,7 @@ public class MVEpoch implements Writable {
         return GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public TMVEpoch toThrift() {
         TMVEpoch res = new TMVEpoch();

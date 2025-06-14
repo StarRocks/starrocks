@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/olap_table_sink_operator.h"
 
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
@@ -23,13 +24,13 @@
 
 namespace starrocks::pipeline {
 Status OlapTableSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
 
     state->set_per_fragment_instance_idx(_sender_id);
 
-    _sink->set_nonblocking_send_chunk(true);
     _automatic_partition_chunk.reset();
 
+    _sink->set_profile(_unique_metrics.get());
     RETURN_IF_ERROR(_sink->prepare(state));
 
     RETURN_IF_ERROR(_sink->try_open(state));
@@ -38,9 +39,6 @@ Status OlapTableSinkOperator::prepare(RuntimeState* state) {
 }
 
 void OlapTableSinkOperator::close(RuntimeState* state) {
-    _unique_metrics->copy_all_info_strings_from(_sink->profile());
-    _unique_metrics->copy_all_counters_from(_sink->profile());
-
     Operator::close(state);
 }
 
@@ -73,7 +71,7 @@ bool OlapTableSinkOperator::pending_finish() const {
         if (_sink->is_full()) {
             return true;
         }
-        auto st = _sink->send_chunk(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
+        auto st = _sink->send_chunk_nonblocking(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
         _automatic_partition_chunk.reset();
         if (!st.ok()) {
             _fragment_ctx->cancel(st);
@@ -98,37 +96,6 @@ bool OlapTableSinkOperator::pending_finish() const {
     return false;
 }
 
-bool OlapTableSinkOperator::is_epoch_finishing() const {
-    return pending_finish();
-}
-
-Status OlapTableSinkOperator::set_epoch_finishing(RuntimeState* state) {
-    _is_epoch_finished = true;
-    if (_is_open_done && !_automatic_partition_chunk) {
-        // sink's open already finish, we can try_close
-        return _sink->try_close(state);
-    } else {
-        // sink's open not finish, we need check in pending_finish() before close
-        return Status::OK();
-    }
-}
-
-Status OlapTableSinkOperator::reset_epoch(RuntimeState* state) {
-    if (!_sink->is_close_done()) {
-        RETURN_IF_ERROR(_sink->close(state, Status::OK()));
-    }
-
-    _is_epoch_finished = false;
-
-    RETURN_IF_ERROR(_sink->reset_epoch(state));
-
-    RETURN_IF_ERROR(_sink->prepare(state));
-
-    RETURN_IF_ERROR(_sink->try_open(state));
-
-    return Status::OK();
-}
-
 Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
     _is_cancelled = true;
     return _sink->close(state, Status::Cancelled("Cancelled by pipeline engine"));
@@ -137,6 +104,10 @@ Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        _fragment_ctx->workgroup()->executors()->driver_executor()->report_audit_statistics(state->query_ctx(),
+                                                                                            state->fragment_ctx());
+    }
     if (_is_open_done && !_automatic_partition_chunk) {
         // sink's open already finish, we can try_close
         return _sink->try_close(state);
@@ -169,7 +140,7 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     // previous push_chunk() trigger automatic partition creation
     if (_automatic_partition_chunk) {
         // resend previous chunk before send new chunk
-        auto st = _sink->send_chunk(state, _automatic_partition_chunk.get());
+        auto st = _sink->send_chunk_nonblocking(state, _automatic_partition_chunk.get());
         _automatic_partition_chunk.reset();
         if (!st.ok()) {
             return st;
@@ -181,8 +152,8 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
         return Status::OK();
     }
 
-    // send_chunk() will return EAGAIN to avoid block
-    auto st = _sink->send_chunk(state, chunk.get());
+    // send_chunk_nonblocking() will return EAGAIN to avoid block
+    auto st = _sink->send_chunk_nonblocking(state, chunk.get());
     if (st.is_eagain()) {
         // temporarily save the chunk, wait for the partition to be created and send again
         _automatic_partition_chunk = chunk;
@@ -193,12 +164,13 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 }
 
 OperatorPtr OlapTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    _increment_num_sinkers_no_barrier();
     if (driver_sequence == 0) {
         return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
-                                                       _sink0, _fragment_ctx);
+                                                       _sink0, _fragment_ctx, _num_sinkers);
     } else {
         return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
-                                                       _sinks[driver_sequence - 1].get(), _fragment_ctx);
+                                                       _sinks[driver_sequence - 1].get(), _fragment_ctx, _num_sinkers);
     }
 }
 

@@ -14,64 +14,26 @@
 
 #pragma once
 
-#include <memory>
-#include <queue>
-#include <set>
-#include <string>
-#include <thread>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
-#include "common/object_pool.h"
-#include "common/status.h"
-#include "common/tracer.h"
-#include "exec/data_sink.h"
-#include "exec/tablet_info.h"
 #include "exec/tablet_sink_index_channel.h"
-#include "gen_cpp/Types_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
-#include "gen_cpp/internal_service.pb.h"
-#include "runtime/mem_tracker.h"
-#include "util/compression/block_compression.h"
-#include "util/raw_container.h"
-#include "util/ref_count_closure.h"
-#include "util/reusable_closure.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
-class MemTracker;
-class RuntimeProfile;
-class RowDescriptor;
-class TupleDescriptor;
-class ExprContext;
-class TExpr;
+class CombinedTxnLogPB;
 
-namespace stream_load {
 // TabletSinkSender will control one index/table's send chunks.
 class TabletSinkSender {
 public:
-    TabletSinkSender( // unique load id
-            PUniqueId load_id, int64_t txn_id, OlapTableLocationParam* location,
-            OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
-            std::unordered_map<int64_t, NodeChannel*> node_channels, std::vector<ExprContext*> output_expr_ctxs,
-            bool enable_replicated_storage, TWriteQuorumType::type write_quorum_type, int num_repicas)
-            : _load_id(load_id),
-              _txn_id(txn_id),
-              _location(location),
-              _vectorized_partition(vectorized_partition),
-              _channels(std::move(channels)),
-              _node_channels(std::move(node_channels)),
-              _output_expr_ctxs(std::move(output_expr_ctxs)),
-              _enable_replicated_storage(enable_replicated_storage),
-              _write_quorum_type(write_quorum_type),
-              _num_repicas(num_repicas) {}
+    TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
+                     OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
+                     std::unordered_map<int64_t, NodeChannel*> node_channels,
+                     std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
+                     TWriteQuorumType::type write_quorum_type, int num_repicas);
+
     virtual ~TabletSinkSender() = default;
 
 public:
     virtual Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,
-                              const std::vector<uint32_t>& tablet_indexes,
+                              const std::vector<uint32_t>& record_hashes,
                               const std::vector<uint16_t>& validate_select_idx,
                               std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunk);
 
@@ -81,11 +43,17 @@ public:
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
     virtual Status try_close(RuntimeState* state);
-    virtual Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile);
+    virtual Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
+                              bool write_txn_log);
 
     virtual bool is_open_done();
     virtual bool is_full();
     virtual bool is_close_done();
+
+    virtual bool get_immutable_partition_ids(std::set<int64_t>* partition_ids);
+
+    // mutable
+    IndexIdToTabletBEMap* index_id_to_tablet_be_map() { return &_index_id_to_tablet_be_map; }
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
@@ -101,7 +69,7 @@ public:
 
 protected:
     Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
-
+    Status _write_combined_txn_log();
     void _mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool _is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
     bool _has_intolerable_failure() {
@@ -118,9 +86,10 @@ protected:
     // unique load id
     PUniqueId _load_id;
     int64_t _txn_id = -1;
-    OlapTableLocationParam* _location = nullptr;
+    // index_id -> (tablet_id -> bes) map
+    IndexIdToTabletBEMap _index_id_to_tablet_be_map;
     // partition schema
-    OlapTablePartitionParam* _vectorized_partition = nullptr;
+    OlapTablePartitionParam* _partition_params = nullptr;
     // index_channel
     std::vector<IndexChannel*> _channels;
     std::unordered_map<int64_t, NodeChannel*> _node_channels;
@@ -135,7 +104,8 @@ protected:
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
     std::set<int64_t> _failed_channels;
+    // mapping from partition id to CombinedTxnLogPB
+    std::map<int64_t, CombinedTxnLogPB> _txn_log_map;
 };
 
-} // namespace stream_load
 } // namespace starrocks

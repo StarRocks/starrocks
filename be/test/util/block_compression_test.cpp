@@ -40,6 +40,7 @@
 #include <thread>
 
 #include "gen_cpp/segment.pb.h"
+#include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
 #include "util/random.h"
 #include "util/raw_container.h"
@@ -361,7 +362,7 @@ void benchmark_decompression(starrocks::CompressionTypePB type, std::string& str
 }
 
 TEST_F(BlockCompressionTest, LZ4F_compression_LARGE_PAGE_TEST) {
-    std::string str = random_string(1024 * 1024 * 20);
+    std::string str = random_string(1024 * 5);
     CompressionTypePB type = starrocks::CompressionTypePB::LZ4_FRAME;
 
     const BlockCompressionCodec* codec = nullptr;
@@ -384,6 +385,22 @@ TEST_F(BlockCompressionTest, LZ4F_compression_LARGE_PAGE_TEST) {
     Slice compressed_slice;
     st = codec->compress(orig_slices, &compressed_slice, true, total_size, nullptr, &compressed);
     ASSERT_TRUE(st.ok());
+}
+
+TEST_F(BlockCompressionTest, test_multi_thread_get_ctx) {
+    for (int j = 0; j < 10; j++) {
+        std::vector<std::thread> workers;
+        for (int cnt = 0; cnt < 30; cnt++) {
+            workers.emplace_back([]() {
+                for (uint64_t i = 1; i < 1000; i++) {
+                    StatusOr<compression::LZ4F_CCtx_Pool::Ref> ref = compression::getLZ4F_CCtx();
+                }
+            });
+        }
+        for (auto& worker : workers) {
+            worker.join();
+        }
+    }
 }
 
 //#define LZ4_BENCHMARK

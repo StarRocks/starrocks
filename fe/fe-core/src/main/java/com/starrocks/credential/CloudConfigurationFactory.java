@@ -14,84 +14,100 @@
 
 package com.starrocks.credential;
 
-import com.staros.proto.FileStoreInfo;
-import com.starrocks.credential.aliyun.AliyunCloudConfigurationFactory;
-import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
-import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
-import com.starrocks.credential.gcp.GCPCloudConfigurationFactory;
-import com.starrocks.credential.hdfs.HDFSCloudConfigurationFactory;
-import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudType;
-import org.apache.hadoop.conf.Configuration;
+import com.google.common.collect.ImmutableList;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
+import com.starrocks.credential.aws.AwsCloudConfigurationProvider;
+import com.starrocks.credential.aws.AwsCloudCredential;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
+import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+import com.starrocks.credential.hdfs.StrictHDFSCloudConfigurationProvider;
+import com.starrocks.credential.tencent.TencentCloudConfigurationProvider;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.iceberg.aws.AwsClientProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 
+import java.util.HashMap;
 import java.util.Map;
 
-public abstract class CloudConfigurationFactory {
+public class CloudConfigurationFactory {
+
+    static ImmutableList<CloudConfigurationProvider> cloudConfigurationFactoryChain = ImmutableList.of(
+            new AwsCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new TencentCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider(),
+            (Map<String, String> properties) -> new CloudConfiguration());
+
+    static ImmutableList<CloudConfigurationProvider> strictCloudConfigurationFactoryChain = ImmutableList.of(
+            new AwsCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new TencentCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider(),
+            new StrictHDFSCloudConfigurationProvider(),
+            (Map<String, String> properties) -> new CloudConfiguration());
+
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
-        CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(properties);
-        CloudConfiguration cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new AzureCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new GCPCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new AliyunCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new HDFSCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        return buildDefaultCloudConfiguration();
+        return buildCloudConfigurationForStorage(properties, false);
     }
 
-    // If user didn't specific any credential, we create DefaultCloudConfiguration instead.
-    // It will use Hadoop default constructor instead, user can put core-site.xml into java CLASSPATH to control
-    // authentication manually
-    public static CloudConfiguration buildDefaultCloudConfiguration() {
-        return new CloudConfiguration() {
-            @Override
-            public void toThrift(TCloudConfiguration tCloudConfiguration) {
-                tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
+    public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties, boolean strictMode) {
+        ImmutableList<CloudConfigurationProvider> factories = cloudConfigurationFactoryChain;
+        if (strictMode) {
+            factories = strictCloudConfigurationFactoryChain;
+        }
+        for (CloudConfigurationProvider factory : factories) {
+            CloudConfiguration cloudConfiguration = factory.build(properties);
+            if (cloudConfiguration != null) {
+                cloudConfiguration.loadCommonFields(properties);
+                return cloudConfiguration;
             }
-
-            @Override
-            public void applyToConfiguration(Configuration configuration) {
-
-            }
-
-            @Override
-            public CloudType getCloudType() {
-                return CloudType.DEFAULT;
-            }
-
-            @Override
-            public FileStoreInfo toFileStoreInfo() {
-                return null;
-            }
-
-            @Override
-            public String getCredentialString() {
-                return "default";
-            }
-        };
+        }
+        // Should never reach here.
+        return null;
     }
 
-    protected abstract CloudConfiguration buildForStorage();
+    public static AwsCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+        for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
+            if (factory instanceof AwsCloudConfigurationProvider) {
+                AwsCloudConfigurationProvider provider = ((AwsCloudConfigurationProvider) factory);
+                return provider.buildGlueCloudCredential(hiveConf);
+            }
+        }
+        // Should never reach here.
+        return null;
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForVendedCredentials(Map<String, String> properties) {
+        Map<String, String> copiedProperties = new HashMap<>();
+        String sessionAk = properties.getOrDefault(S3FileIOProperties.ACCESS_KEY_ID, null);
+        String sessionSk = properties.getOrDefault(S3FileIOProperties.SECRET_ACCESS_KEY, null);
+        String sessionToken = properties.getOrDefault(S3FileIOProperties.SESSION_TOKEN, null);
+        String region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION,
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, null));
+        String enablePathStyle = properties.getOrDefault(S3FileIOProperties.PATH_STYLE_ACCESS,
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS, null));
+        String endpoint = properties.getOrDefault(S3FileIOProperties.ENDPOINT,
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, null));
+        if (sessionAk != null && sessionSk != null && sessionToken != null) {
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
+            if (region != null) {
+                copiedProperties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
+            }
+            if (endpoint != null) {
+                copiedProperties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
+            }
+            if (enablePathStyle != null) {
+                copiedProperties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS, enablePathStyle);
+            }
+        }
+        return buildCloudConfigurationForStorage(copiedProperties);
+    }
 }

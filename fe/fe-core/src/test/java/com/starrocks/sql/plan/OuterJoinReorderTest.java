@@ -16,7 +16,6 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -34,14 +33,12 @@ public class OuterJoinReorderTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
     }
 
-
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("joinAssocRuleSqls")
-    void joinAssociativityRuleSql(Pair<String, String> pair) throws Exception {
-        String plan = getFragmentPlan(pair.first);
-        assertContains(plan, pair.second);
+    void joinAssociativityRuleSql(String sql, String expectedPlan) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, expectedPlan);
     }
-
 
     public static Stream<Arguments> joinAssocRuleSqls() {
         List<String> sqlList = Lists.newArrayList();
@@ -58,7 +55,7 @@ public class OuterJoinReorderTest extends PlanTestBase {
         planList.add("7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 12: add = 1: v1");
+                "  |  equal join conjunct: 10: add = 1: v1");
         sqlList.add("select * from t0 left join (select v4 from t1 union select v7 from t2) t1 on v2 > v4 " +
                 "left semi join t2 on v1 = v7");
         planList.add("3:HASH JOIN\n" +
@@ -70,10 +67,9 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "on (ref_2.v8 = ref_3.v10) inner join t4 as ref_4 on (ref_2.v9 = ref_4.v14) " +
                 "where (space(cast(ref_4.v15 as INT)) <= ref_4.v14) or ( ref_1.v5 = tan(cast(ref_1.v6 as DOUBLE))) " +
                 "limit 111;");
-        planList.add("16:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
+        planList.add("7:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: v9 = 15: v14\n" +
                 "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE)) " +
                 "OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
 
@@ -108,7 +104,7 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  3:HASH JOIN");
         sqlList.add("select t0.* from t0 left join t1 on t0.v1 = t1.v4 join t2 on t0.v1 = t2.v7 " +
                 "where t0.v2 in (select max(v10) from t3) and t1.v5 is null;");
-        planList.add("14:HASH JOIN\n" +
+        planList.add(" 14:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: v2 = 13: max\n" +
@@ -140,7 +136,19 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  |  other predicates: 8: v8 <=> 2: v2\n" +
                 "  |  \n" +
                 "  |----13:EXCHANGE");
-        List<Pair<String, String>> zips = zipSqlAndPlan(sqlList, planList);
-        return zips.stream().map(e -> Arguments.of(e));
+        sqlList.add("select * from (select t0.*, concat(abs(abs(v7)), ifnull(v8, 1), null) from colocate_t0 t0 left join" +
+                " t2 on v2 = v7) t left join colocate_t1 on v1 = v4");
+        planList.add("4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 7> : concat(CAST(abs(abs(4: v7)) AS VARCHAR), CAST(ifnull(5: v8, 1) AS VARCHAR), NULL)\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 4: v7");
+        List<Arguments> zips = zipSqlAndPlan(sqlList, planList);
+        return zips.stream();
     }
 }

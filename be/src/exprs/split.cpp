@@ -40,6 +40,16 @@ struct SplitState {
     const void* (*find_delimiter)(const void* big, size_t big_len, const void* little, size_t little_len);
 };
 
+static inline std::vector<std::string> split_utf8_characters(const Slice& str) {
+    std::vector<std::string> chars;
+    for (int i = 0; i < str.size;) {
+        auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])];
+        chars.emplace_back(str.data + i, char_size);
+        i += char_size;
+    }
+    return chars;
+}
+
 Status StringFunctions::split_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
@@ -51,11 +61,12 @@ Status StringFunctions::split_prepare(FunctionContext* context, FunctionContext:
     if (context->is_notnull_constant_column(0) && context->is_notnull_constant_column(1)) {
         Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
         Slice delimiter = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
-        std::vector<std::string> const_split_strings =
-                strings::Split(StringPiece(haystack.get_data(), haystack.get_size()),
-                               StringPiece(delimiter.get_data(), delimiter.get_size()));
-
-        state->const_split_strings = const_split_strings;
+        if (delimiter.empty() && !validate_ascii_fast(haystack.data, haystack.size)) {
+            state->const_split_strings = split_utf8_characters(haystack);
+        } else {
+            state->const_split_strings = strings::Split(StringPiece(haystack.get_data(), haystack.get_size()),
+                                                        StringPiece(delimiter.get_data(), delimiter.get_size()));
+        }
     } else if (context->is_notnull_constant_column(1)) {
         Slice delimiter = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
 
@@ -93,12 +104,12 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
 
     //Array Offset
     int offset = 0;
-    UInt32Column::Ptr array_offsets = UInt32Column::create();
+    UInt32Column::MutablePtr array_offsets = UInt32Column::create();
     array_offsets->reserve(row_nums + 1);
 
     //Array Binary
-    auto* haystack_columns = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[0].get()));
-    BinaryColumn::Ptr array_binary_column = BinaryColumn::create();
+    const auto* haystack_columns = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+    BinaryColumn::MutablePtr array_binary_column = BinaryColumn::create();
 
     auto state = reinterpret_cast<SplitState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (context->is_notnull_constant_column(0) && context->is_notnull_constant_column(1)) {
@@ -114,8 +125,9 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
         }
         array_offsets->append(offset);
 
-        return ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),
-                                   array_offsets);
+        return ArrayColumn::create(
+                NullableColumn::create(std::move(array_binary_column), NullColumn::create(std::move(offset), 0)),
+                std::move(array_offsets));
     } else if (columns[1]->is_constant()) {
         Slice delimiter = state->delimiter;
 
@@ -130,14 +142,14 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
 
                 for (int h = 0; h < haystack.size;) {
                     auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[h])];
-                    v.emplace_back(Slice(haystack.data + h, char_size));
+                    v.emplace_back(haystack.data + h, char_size);
                     h += char_size;
                     ++offset;
                 }
             }
             array_offsets->append(offset);
 
-            array_binary_column->append_continuous_strings(v);
+            array_binary_column->append_continuous_strings(v.data(), v.size());
         } else {
             //row_nums * 5 is an estimated value, because the true value cannot be obtained for the time being here
             array_binary_column->reserve(row_nums * 5, haystack_columns->get_bytes().size());
@@ -167,12 +179,14 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             array_offsets->append(offset);
         }
         if (!columns[0]->has_null()) {
-            return ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),
-                                       array_offsets);
+            return ArrayColumn::create(
+                    NullableColumn::create(std::move(array_binary_column), NullColumn::create(std::move(offset), 0)),
+                    std::move(array_offsets));
         } else {
             return NullableColumn::create(
-                    ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),
-                                        array_offsets),
+                    ArrayColumn::create(NullableColumn::create(std::move(array_binary_column),
+                                                               NullColumn::create(std::move(offset), 0)),
+                                        std::move(array_offsets)),
                     NullColumn::create(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()));
         }
     } else {
@@ -180,7 +194,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
 
         auto result_array = ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
                                                 UInt32Column::create());
-        NullColumnPtr null_array = NullColumn::create();
+        NullColumn::MutablePtr null_array = NullColumn::create();
         for (int row = 0; row < row_nums; ++row) {
             array_offsets->append(offset);
 
@@ -210,9 +224,10 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             }
         }
         array_offsets->append(offset);
-        result_array = ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),
-                                           array_offsets);
-        return NullableColumn::create(result_array, null_array);
+        result_array = ArrayColumn::create(
+                NullableColumn::create(std::move(array_binary_column), NullColumn::create(std::move(offset), 0)),
+                std::move(array_offsets));
+        return NullableColumn::create(std::move(result_array), std::move(null_array));
     }
 }
 

@@ -79,3 +79,21 @@ select * from v_unnest_subquery;
 3
 4
 -- !result
+-- name: test_array_of_struct
+select c_struct.c1 from TABLE(unnest(array<struct<c1 int>>[named_struct('c1', 10), named_struct('c1', 20)] )) t(c_struct);
+-- result:
+10
+20
+-- !result
+-- name: test_array_of_map
+select c_map['a'], c_map['b'] from TABLE(unnest(array<map<string, int>>[map{'a':1,'b':2}, map{'a':2, 'b':3}])) t(c_map);
+-- result:
+1	2
+2	3
+-- !result
+-- name: test_array_of_json
+select c_json->'name', c_json->'age' from TABLE(unnest(array<json>[json_object('name','abc','age',23), json_object('age', 23)])) t(c_json);
+-- result:
+"abc"	23
+None	23
+-- !result

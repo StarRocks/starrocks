@@ -14,12 +14,15 @@
 
 #include "formats/parquet/group_reader.h"
 
+#include <formats/parquet/scalar_column_reader.h>
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
 #include <memory>
 
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
+#include "formats/parquet/column_reader_factory.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 
@@ -35,17 +38,17 @@ public:
 
 class MockColumnReader : public ColumnReader {
 public:
-    MockColumnReader() = default;
-    explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
+    explicit MockColumnReader(tparquet::Type::type type) : ColumnReader(nullptr), _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) override {
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        size_t num_rows = static_cast<size_t>(range.span_size());
         if (_step > 1) {
-            *num_records = 0;
             return Status::EndOfFile("");
         }
         size_t start = 0;
-        size_t num_rows = 0;
         if (_step == 0) {
             start = 0;
             num_rows = 8;
@@ -55,29 +58,31 @@ public:
         }
 
         if (_type == tparquet::Type::type::INT32) {
-            _append_int32_column(column, start, num_rows);
+            _append_int32_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::INT64) {
-            _append_int64_column(column, start, num_rows);
+            _append_int64_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::INT96) {
-            _append_int96_column(column, start, num_rows);
+            _append_int96_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::BYTE_ARRAY) {
-            _append_binary_column(column, start, num_rows);
+            _append_binary_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::FLOAT) {
-            _append_float_column(column, start, num_rows);
+            _append_float_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::DOUBLE) {
-            _append_double_column(column, start, num_rows);
+            _append_double_column(dst.get(), start, num_rows);
         }
 
         _step++;
-        *num_records = num_rows;
         return Status::OK();
     }
-
-    Status finish_batch() override { return Status::OK(); }
 
     void set_need_parse_levels(bool need_parse_levels) override{};
 
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
 private:
     static void _append_int32_column(Column* column, size_t start, size_t num_rows) {
@@ -154,8 +159,8 @@ private:
 ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     for (auto& column : param->read_cols) {
-        auto c = ColumnHelper::create_column(column.col_type_in_chunk, true);
-        chunk->append_column(c, column.col_idx_in_chunk);
+        auto c = ColumnHelper::create_column(column.slot_type(), true);
+        chunk->append_column(std::move(c), column.slot_id());
     }
     return chunk;
 }
@@ -214,7 +219,7 @@ void GroupReaderTest::_check_chunk(GroupReaderParam* param, const ChunkPtr& chun
     ASSERT_EQ(param->read_cols.size(), chunk->num_columns());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto column = chunk->columns()[i].get();
-        auto _type = param->read_cols[i].col_type_in_parquet;
+        auto _type = param->read_cols[i].type_in_parquet;
         size_t num_rows = count;
 
         if (_type == tparquet::Type::type::INT32) {
@@ -295,7 +300,7 @@ tparquet::FileMetaData* GroupReaderTest::_create_t_filemeta(GroupReaderParam* pa
     schema_elements.emplace_back(*_create_root_schema_element(param));
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         std::string name = "c" + std::to_string(i);
-        auto type = param->read_cols[i].col_type_in_parquet;
+        auto type = param->read_cols[i].type_in_parquet;
         schema_elements.emplace_back(*_create_schema_element(name, type));
     }
 
@@ -314,31 +319,32 @@ Status GroupReaderTest::_create_filemeta(FileMetaData** file_meta, GroupReaderPa
     return (*file_meta)->init(*t_file_meta, true);
 }
 
-static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tparquet::Type::type par_type,
+static GroupReaderParam::Column _create_group_reader_param_of_column(ObjectPool* pool, int idx,
+                                                                     tparquet::Type::type par_type,
                                                                      LogicalType prim_type) {
+    SlotDescriptor* slot =
+            pool->add(new SlotDescriptor(idx, fmt::format("col{}", idx), TypeDescriptor::from_logical_type(prim_type)));
     GroupReaderParam::Column c;
-    c.field_idx_in_parquet = idx;
-    c.col_idx_in_chunk = idx;
-    c.col_type_in_parquet = par_type;
-    c.col_type_in_chunk = TypeDescriptor::from_logical_type(prim_type);
-    c.slot_id = idx;
+    c.idx_in_parquet = idx;
+    c.type_in_parquet = par_type;
+    c.slot_desc = slot;
     return c;
 }
 
 static HdfsScanStats g_hdfs_scan_stats;
 GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c1 =
-            _create_group_reader_param_of_column(0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);
+            _create_group_reader_param_of_column(&_pool, 0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);
     GroupReaderParam::Column c2 =
-            _create_group_reader_param_of_column(1, tparquet::Type::type::INT64, LogicalType::TYPE_BIGINT);
-    GroupReaderParam::Column c3 =
-            _create_group_reader_param_of_column(2, tparquet::Type::type::BYTE_ARRAY, LogicalType::TYPE_VARCHAR);
+            _create_group_reader_param_of_column(&_pool, 1, tparquet::Type::type::INT64, LogicalType::TYPE_BIGINT);
+    GroupReaderParam::Column c3 = _create_group_reader_param_of_column(&_pool, 2, tparquet::Type::type::BYTE_ARRAY,
+                                                                       LogicalType::TYPE_VARCHAR);
     GroupReaderParam::Column c4 =
-            _create_group_reader_param_of_column(3, tparquet::Type::type::INT96, LogicalType::TYPE_DATETIME);
+            _create_group_reader_param_of_column(&_pool, 3, tparquet::Type::type::INT96, LogicalType::TYPE_DATETIME);
     GroupReaderParam::Column c5 =
-            _create_group_reader_param_of_column(4, tparquet::Type::type::FLOAT, LogicalType::TYPE_FLOAT);
+            _create_group_reader_param_of_column(&_pool, 4, tparquet::Type::type::FLOAT, LogicalType::TYPE_FLOAT);
     GroupReaderParam::Column c6 =
-            _create_group_reader_param_of_column(5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
+            _create_group_reader_param_of_column(&_pool, 5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
 
     auto* param = _pool.add(new GroupReaderParam());
     param->read_cols.emplace_back(c1);
@@ -365,11 +371,13 @@ TEST_F(GroupReaderTest, TestInit) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<int64_t> need_skip_rowids;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     // init row group reader
     status = group_reader->init();
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
     // timezone is empty
     ASSERT_FALSE(status.ok());
     //ASSERT_TRUE(status.is_end_of_file());
@@ -378,12 +386,18 @@ TEST_F(GroupReaderTest, TestInit) {
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
     group_reader->_active_column_indices.clear();
-    group_reader->_dict_filter_ctx.init(param->read_cols.size());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
-        auto r = std::make_unique<MockColumnReader>(param->read_cols[i].col_type_in_parquet);
+        auto r = std::make_unique<MockColumnReader>(param->read_cols[i].type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
         group_reader->_active_column_indices.push_back(i);
     }
+}
+
+static void prepare_row_range(GroupReader* group_reader) {
+    group_reader->_range =
+            SparseRange<uint64_t>(group_reader->_row_group_first_row,
+                                  group_reader->_row_group_first_row + group_reader->_row_group_metadata->num_rows);
+    group_reader->_range_iter = group_reader->_range.new_iterator();
 }
 
 TEST_F(GroupReaderTest, TestGetNext) {
@@ -400,11 +414,13 @@ TEST_F(GroupReaderTest, TestGetNext) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<int64_t> need_skip_rowids;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     // init row group reader
     status = group_reader->init();
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
     ASSERT_FALSE(status.ok());
 
     // replace column readers
@@ -413,6 +429,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
     group_reader->_read_chunk = _create_chunk(param);
 
     auto chunk = _create_chunk(param);
+
+    prepare_row_range(group_reader);
     // get next
     size_t row_count = 8;
     status = group_reader->get_next(&chunk, &row_count);
@@ -427,6 +445,44 @@ TEST_F(GroupReaderTest, TestGetNext) {
     ASSERT_TRUE(status.is_end_of_file());
     ASSERT_EQ(row_count, 4);
     _check_chunk(param, chunk, 8, 4);
+}
+
+TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
+    ParquetField field;
+    field.name = "col0";
+    field.type = ColumnType::ARRAY;
+
+    TypeDescriptor col_type;
+    col_type.type = LogicalType::TYPE_VARCHAR;
+
+    ColumnReaderOptions options;
+    auto st = ColumnReaderFactory::create(options, &field, col_type, nullptr);
+    ASSERT_FALSE(st.ok()) << st;
+    std::cout << st.status().message() << "\n";
+}
+
+TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
+    auto col1 = std::make_unique<FixedValueColumnReader>(kNullDatum);
+    ASSERT_OK(col1->prepare());
+    col1->get_levels(nullptr, nullptr, nullptr);
+    col1->set_need_parse_levels(false);
+    col1->collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, true);
+    SparseRange<uint64_t> sparse_range;
+    col1->select_offset_index(sparse_range, 100);
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(100), true);
+    Range<uint64_t> range(0, 100);
+    ASSERT_FALSE(col1->read_range(range, nullptr, column).ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_INT);
+    ColumnPredicate* is_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, true));
+    ColumnPredicate* is_not_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, false));
+
+    std::vector<const ColumnPredicate*> predicates;
+    predicates.push_back(is_null_predicate);
+    predicates.push_back(is_not_null_predicate);
+
+    ASSERT_TRUE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::AND, 1, 100).value());
+    ASSERT_FALSE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::OR, 1, 100).value());
 }
 
 } // namespace starrocks::parquet

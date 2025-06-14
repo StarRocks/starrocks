@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Snapshot;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TWorkGroup;
@@ -28,39 +28,71 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 
 public class ResourceGroupMetricMgr {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMetricMgr.class);
 
     private static final String QUERY_RESOURCE_GROUP = "query_resource_group";
-    private static final String QUERY_RESOURCE_GROUP_LATENCY = "query_resource_group_latency";
     private static final String QUERY_RESOURCE_GROUP_ERR = "query_resource_group_err";
+    private static final String QUERY_RESOURCE_GROUP_LATENCY = "query_resource_group_latency";
+
+    private static final String RESOURCE_GROUP_QUERY_QUEUE_TOTAL = "resource_group_query_queue_total";
+    private static final String RESOURCE_GROUP_QUERY_QUEUE_PENDING = "resource_group_query_queue_pending";
+    private static final String RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT = "resource_group_query_queue_timeout";
+
     private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_COUNTER_MAP
-            = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, QueryResourceGroupLatencyMetrics> RESOURCE_GROUP_QUERY_LATENCY_MAP
             = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP
             = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, QueryResourceGroupLatencyMetrics> RESOURCE_GROUP_QUERY_LATENCY_MAP
+            = new ConcurrentHashMap<>();
 
-    //starrocks_fe_query_resource_group
-    public static void increaseQuery(ConnectContext ctx, Long num) {
-        LongCounterMetric metrics =
-                createQeuryResourceGroupMetrics(RESOURCE_GROUP_QUERY_COUNTER_MAP, QUERY_RESOURCE_GROUP,
-                        "query resource group", ctx);
-        if (metrics != null) {
-            metrics.increase(num);
-        }
+    private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_QUEUE_TOTAL_MAP
+            = new ConcurrentHashMap<>();
+
+    private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_QUEUE_PENDING_MAP
+            = new ConcurrentHashMap<>();
+
+    private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT_MAP
+            = new ConcurrentHashMap<>();
+
+    /**
+     * For the metric {@code starrocks_fe_query_resource_group}.
+     */
+    public static void increaseQuery(ConnectContext ctx, long delta) {
+        LongCounterMetric metrics = createQueryResourceGroupMetrics(
+                RESOURCE_GROUP_QUERY_COUNTER_MAP, QUERY_RESOURCE_GROUP, "query resource group", ctx);
+        metrics.increase(delta);
     }
 
-    //starrocks_fe_query_resource_group_err
-    public static void increaseQueryErr(ConnectContext ctx, Long num) {
-        LongCounterMetric metrics =
-                createQeuryResourceGroupMetrics(RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP, QUERY_RESOURCE_GROUP_ERR,
-                        "query err resource group", ctx);
-        if (metrics != null) {
-            metrics.increase(num);
+    /**
+     * For the metric {@code starrocks_fe_query_resource_group_err}.
+     */
+    public static void increaseQueryErr(ConnectContext ctx, long delta) {
+        LongCounterMetric metrics = createQueryResourceGroupMetrics(
+                RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP, QUERY_RESOURCE_GROUP_ERR, "query err resource group", ctx);
+        metrics.increase(delta);
+    }
+
+    public static void increaseQueuedQuery(ConnectContext ctx, long delta) {
+        if (delta > 0) {
+            LongCounterMetric metrics = createQueryResourceGroupMetrics(
+                    RESOURCE_GROUP_QUERY_QUEUE_TOTAL_MAP, RESOURCE_GROUP_QUERY_QUEUE_TOTAL,
+                    "the number of total history queued queries of this resource group", ctx);
+            metrics.increase(delta);
         }
+
+        LongCounterMetric metrics = createQueryResourceGroupMetrics(
+                RESOURCE_GROUP_QUERY_QUEUE_PENDING_MAP, RESOURCE_GROUP_QUERY_QUEUE_PENDING,
+                "the number of pending queries of this resource group", ctx);
+        metrics.increase(delta);
+    }
+
+    public static void increaseTimeoutQueuedQuery(ConnectContext ctx, long delta) {
+        LongCounterMetric metrics = createQueryResourceGroupMetrics(
+                RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT_MAP, RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT,
+                "the number of pending timeout queries of this resource group", ctx);
+        metrics.increase(delta);
     }
 
     public static void visitQueryLatency() {
@@ -70,79 +102,65 @@ public class ResourceGroupMetricMgr {
         }
     }
 
-    //starrocks_fe_query_resource_group_latency
+    /**
+     * For the metric {@code starrocks_fe_query_resource_group_latency}.
+     */
     public static void updateQueryLatency(ConnectContext ctx, Long elapseMs) {
         QueryResourceGroupLatencyMetrics metrics = createQueryResourceGroupLatencyMetrics(ctx);
-        if (metrics != null) {
-            metrics.histogram.update(elapseMs);
-        }
+        metrics.histogram.update(elapseMs);
     }
 
-    private static LongCounterMetric createQeuryResourceGroupMetrics(Map cacheMap, String metricsName,
+    private static LongCounterMetric createQueryResourceGroupMetrics(Map<String, LongCounterMetric> cacheMap, String metricsName,
                                                                      String metricsMsg, ConnectContext ctx) {
-        String resourceGroupName = checkAndGetWorkGroupName(ctx);
-        if (resourceGroupName == null || resourceGroupName.isEmpty()) {
-            return null;
-        }
-        if (!cacheMap.containsKey(resourceGroupName)) {
+        String groupName = getGroupName(ctx);
+        if (!cacheMap.containsKey(groupName)) {
             synchronized (ResourceGroupMetricMgr.class) {
-                if (!cacheMap.containsKey(resourceGroupName)) {
-                    LongCounterMetric metric = new LongCounterMetric(metricsName, Metric.MetricUnit.REQUESTS,
-                            metricsMsg);
-                    metric.addLabel(new MetricLabel("name", resourceGroupName));
-                    cacheMap.put(resourceGroupName, metric);
+                if (!cacheMap.containsKey(groupName)) {
+                    LongCounterMetric metric = new LongCounterMetric(metricsName, Metric.MetricUnit.REQUESTS, metricsMsg);
+                    metric.addLabel(new MetricLabel("name", groupName));
+                    cacheMap.put(groupName, metric);
                     MetricRepo.addMetric(metric);
-                    LOG.info("Add {} metric, resource group name is {}", metricsName, resourceGroupName);
+                    LOG.info("Add {} metric, resource group name is {}", metricsName, groupName);
                 }
             }
         }
-        return (LongCounterMetric) cacheMap.get(resourceGroupName);
+
+        return cacheMap.get(groupName);
     }
 
-    private static String checkAndGetWorkGroupName(ConnectContext ctx) {
+    private static String getGroupName(ConnectContext ctx) {
         SessionVariable sessionVariable = ctx.getSessionVariable();
         if (!sessionVariable.isEnableResourceGroup() || !sessionVariable.isEnablePipelineEngine()) {
-            return null;
+            return ResourceGroup.DISABLE_RESOURCE_GROUP_NAME;
         }
+
         TWorkGroup resourceGroup = ctx.getResourceGroup();
-        return resourceGroup == null ? "default_wg" : resourceGroup.getName();
+        return resourceGroup == null ? ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME : resourceGroup.getName();
     }
 
     private static QueryResourceGroupLatencyMetrics createQueryResourceGroupLatencyMetrics(ConnectContext ctx) {
-        String resourceGroupName = checkAndGetWorkGroupName(ctx);
-        if (resourceGroupName == null || resourceGroupName.isEmpty()) {
-            return null;
-        }
-        RESOURCE_GROUP_QUERY_LATENCY_MAP.computeIfAbsent(resourceGroupName, RESOURCE_GROUP_LATENCY_METRICS_FUNCTION);
-        return RESOURCE_GROUP_QUERY_LATENCY_MAP.get(resourceGroupName);
+        String groupName = getGroupName(ctx);
+        return RESOURCE_GROUP_QUERY_LATENCY_MAP.computeIfAbsent(groupName,
+                currGroupName -> new QueryResourceGroupLatencyMetrics(QUERY_RESOURCE_GROUP_LATENCY, currGroupName));
     }
 
-    private static final Function<String, QueryResourceGroupLatencyMetrics> RESOURCE_GROUP_LATENCY_METRICS_FUNCTION =
-            new Function<String, QueryResourceGroupLatencyMetrics>() {
-                @Override
-                public QueryResourceGroupLatencyMetrics apply(String resourceGroupName) {
-                    return new QueryResourceGroupLatencyMetrics(QUERY_RESOURCE_GROUP_LATENCY, resourceGroupName);
-                }
-            };
-
     private static final class QueryResourceGroupLatencyMetrics {
-        private static final String[] QUERY_LATENCY_LABLE =
+        private static final String[] QUERY_LATENCY_LABELS =
                 {"mean", "75_quantile", "95_quantile", "98_quantile", "99_quantile", "999_quantile"};
 
-        private MetricRegistry metricRegistry;
+        private final MetricRegistry metricRegistry;
         private Histogram histogram;
-        private List<GaugeMetricImpl> metricsList;
-        private String metricsName;
+        private final List<GaugeMetricImpl<Double>> metricsList;
+        private final String metricName;
 
-        private QueryResourceGroupLatencyMetrics(String metricsName, String resourceGroupName) {
-            this.metricsName = metricsName;
+        private QueryResourceGroupLatencyMetrics(String metricName, String resourceGroupName) {
+            this.metricName = metricName;
             this.metricRegistry = new MetricRegistry();
-            initHistogram(metricsName);
+            initHistogram(metricName);
             this.metricsList = new ArrayList<>();
-            for (String label : QUERY_LATENCY_LABLE) {
-                GaugeMetricImpl<Double> metrics =
-                        new GaugeMetricImpl<>(metricsName, Metric.MetricUnit.MILLISECONDS,
-                                label + " of resource group query latency");
+            for (String label : QUERY_LATENCY_LABELS) {
+                GaugeMetricImpl<Double> metrics = new GaugeMetricImpl<>(
+                        metricName, Metric.MetricUnit.MILLISECONDS, label + " of resource group query latency");
                 metrics.addLabel(new MetricLabel("type", label));
                 metrics.addLabel(new MetricLabel("name", resourceGroupName));
                 metrics.setValue(0.0);
@@ -158,8 +176,8 @@ public class ResourceGroupMetricMgr {
 
         private void update() {
             Histogram oldHistogram = this.histogram;
-            this.metricRegistry.remove(this.metricsName);
-            initHistogram(metricsName);
+            this.metricRegistry.remove(this.metricName);
+            initHistogram(metricName);
 
             Snapshot snapshot = oldHistogram.getSnapshot();
             metricsList.get(0).setValue(snapshot.getMedian());

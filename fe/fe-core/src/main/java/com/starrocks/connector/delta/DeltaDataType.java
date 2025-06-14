@@ -15,33 +15,32 @@
 
 package com.starrocks.connector.delta;
 
-import io.delta.standalone.types.ArrayType;
-import io.delta.standalone.types.BinaryType;
-import io.delta.standalone.types.BooleanType;
-import io.delta.standalone.types.ByteType;
-import io.delta.standalone.types.DataType;
-import io.delta.standalone.types.DateType;
-import io.delta.standalone.types.DecimalType;
-import io.delta.standalone.types.DoubleType;
-import io.delta.standalone.types.FloatType;
-import io.delta.standalone.types.IntegerType;
-import io.delta.standalone.types.LongType;
-import io.delta.standalone.types.MapType;
-import io.delta.standalone.types.NullType;
-import io.delta.standalone.types.ShortType;
-import io.delta.standalone.types.StringType;
-import io.delta.standalone.types.StructType;
-import io.delta.standalone.types.TimestampType;
+import io.delta.kernel.types.ArrayType;
+import io.delta.kernel.types.BinaryType;
+import io.delta.kernel.types.BooleanType;
+import io.delta.kernel.types.ByteType;
+import io.delta.kernel.types.DataType;
+import io.delta.kernel.types.DateType;
+import io.delta.kernel.types.DecimalType;
+import io.delta.kernel.types.DoubleType;
+import io.delta.kernel.types.FloatType;
+import io.delta.kernel.types.IntegerType;
+import io.delta.kernel.types.LongType;
+import io.delta.kernel.types.MapType;
+import io.delta.kernel.types.ShortType;
+import io.delta.kernel.types.StringType;
+import io.delta.kernel.types.StructType;
+import io.delta.kernel.types.TimestampNTZType;
+import io.delta.kernel.types.TimestampType;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * An Enum representing Delta's {@link DataType} class types.
- *
- * <p>
- * This Enum can be used for example to build switch statement based on Delta's DataType type.
  */
 public enum DeltaDataType {
     ARRAY(ArrayType.class),
@@ -55,12 +54,11 @@ public enum DeltaDataType {
     INTEGER(IntegerType.class),
     LONG(LongType.class),
     MAP(MapType.class),
-    NULL(NullType.class),
     SMALLINT(ShortType.class),
     TIMESTAMP(TimestampType.class),
-    TINYINT(ByteType.class),
     STRING(StringType.class),
     STRUCT(StructType.class),
+    TIMESTAMP_NTZ(TimestampNTZType.class),
     OTHER(null);
 
     private static final Map<Class<?>, DeltaDataType> LOOKUP_MAP;
@@ -81,10 +79,35 @@ public enum DeltaDataType {
 
     /**
      * @param deltaDataType A concrete implementation of {@link DataType} class that we would
-     *                        like to map to {@link com.starrocks.catalog.Type} instance.
+     *                      like to map to {@link com.starrocks.catalog.Type} instance.
      * @return mapped instance of {@link DeltaDataType} Enum.
      */
     public static DeltaDataType instanceFrom(Class<? extends DataType> deltaDataType) {
         return LOOKUP_MAP.getOrDefault(deltaDataType, OTHER);
+    }
+
+    public static final Set<DeltaDataType> PRIMITIVE_TYPES = new HashSet<>() {
+        {
+            add(DeltaDataType.BOOLEAN);
+            add(DeltaDataType.BYTE);
+            add(DeltaDataType.SMALLINT);
+            add(DeltaDataType.INTEGER);
+            add(DeltaDataType.LONG);
+            add(DeltaDataType.FLOAT);
+            add(DeltaDataType.DOUBLE);
+            add(DeltaDataType.DATE);
+            add(DeltaDataType.TIMESTAMP);
+            add(DeltaDataType.TIMESTAMP_NTZ);
+            add(DeltaDataType.BINARY);
+            add(DeltaDataType.STRING);
+        }
+    };
+
+    public static boolean isPrimitiveType(DataType type) {
+        return PRIMITIVE_TYPES.contains(instanceFrom(type.getClass()));
+    }
+
+    public static boolean canUseStatsType(DataType type) {
+        return isPrimitiveType(type) || type instanceof DecimalType;
     }
 }

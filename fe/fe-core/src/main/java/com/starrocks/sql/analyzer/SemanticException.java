@@ -24,9 +24,11 @@ import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
 
-    private final String detailMsg;
+    protected final String detailMsg;
 
-    private final NodePosition pos;
+    protected final NodePosition pos;
+
+    protected boolean canAppend = true;
 
 
     public SemanticException(String formatString) {
@@ -38,6 +40,19 @@ public class SemanticException extends StarRocksPlannerException {
         super(detailMsg, ErrorType.USER_ERROR);
         this.detailMsg = detailMsg;
         this.pos = pos;
+    }
+
+    public SemanticException(String detailMsg, NodePosition pos, boolean canAppend) {
+        super(detailMsg, ErrorType.USER_ERROR);
+        this.detailMsg = detailMsg;
+        this.pos = pos;
+        this.canAppend = canAppend;
+    }
+
+    public SemanticException(String detailMsg, Exception cause) {
+        super(detailMsg, ErrorType.USER_ERROR, cause);
+        this.detailMsg = detailMsg;
+        this.pos = NodePosition.ZERO;
     }
 
     public SemanticException(String formatString, Object... args) {
@@ -72,4 +87,13 @@ public class SemanticException extends StarRocksPlannerException {
         return detailMsg;
     }
 
+    // append msg to previous exception msg, bug just only once.
+    SemanticException appendOnlyOnceMsg(String appendMsg, NodePosition pos) {
+        if (this.canAppend) {
+            return new SemanticException(this.getDetailMsg() + " in " + appendMsg, pos, false);
+        } else {
+            return this;
+        }
+    }
 }
+

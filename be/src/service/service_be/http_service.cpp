@@ -34,11 +34,13 @@
 
 #include "http_service.h"
 
+#include "cache/datacache.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
 #include "http/action/compaction_action.h"
+#include "http/action/datacache_action.h"
 #include "http/action/greplog_action.h"
 #include "http/action/health_action.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
@@ -62,28 +64,36 @@
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
-#include "runtime/load_path_mgr.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
-HttpServiceBE::HttpServiceBE(ExecEnv* env, int port, int num_threads)
-        : _env(env),
+HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, int port, int num_threads)
+        : _cache_env(cache_env),
+          _env(env),
           _ev_http_server(new EvHttpServer(port, num_threads)),
-          _web_page_handler(new WebPageHandler(_ev_http_server.get())) {}
+          _web_page_handler(new WebPageHandler(_ev_http_server.get())),
+          _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
 
 HttpServiceBE::~HttpServiceBE() {
-    _ev_http_server->stop();
     _ev_http_server.reset();
     _web_page_handler.reset();
     STLDeleteElements(&_http_handlers);
 }
 
+void HttpServiceBE::stop() {
+    _ev_http_server->stop();
+}
+
+void HttpServiceBE::join() {
+    _ev_http_server->join();
+}
+
 Status HttpServiceBE::start() {
-    add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
+    add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
 
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env);
+    auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
@@ -139,7 +149,7 @@ Status HttpServiceBE::start() {
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
-        fs::create_directories(config::pprof_profile_dir);
+        RETURN_IF_ERROR(fs::create_directories(config::pprof_profile_dir));
     }
 
     auto* heap_action = new HeapAction();
@@ -172,6 +182,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
     _http_handlers.emplace_back(symbol_action);
 
+    auto* ioprofile_action = new IOProfileAction();
+    _ev_http_server->register_handler(HttpMethod::GET, "/ioprofile", ioprofile_action);
+    _http_handlers.emplace_back(ioprofile_action);
+
     // register metrics
     {
         auto action = new MetricsAction(StarRocksMetrics::instance()->metrics());
@@ -189,7 +203,7 @@ Status HttpServiceBE::start() {
 
 #ifndef BE_TEST
     // Register BE checksum action
-    auto* checksum_action = new ChecksumAction(_env);
+    auto* checksum_action = new ChecksumAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 
@@ -248,6 +262,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/query_cache/{action}", query_cache_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/query_cache/{action}", query_cache_action);
     _http_handlers.emplace_back(query_cache_action);
+
+    auto* datacache_action = new DataCacheAction(_cache_env->local_cache());
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
+    _http_handlers.emplace_back(datacache_action);
 
     auto* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",

@@ -39,11 +39,11 @@
 #include "runtime/mem_tracker.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -52,17 +52,13 @@ const std::string kTestDir = "/bloom_filter_index_reader_writer_test";
 class BloomFilterIndexReaderWriterTest : public testing::Test {
 protected:
     void SetUp() override {
-        _mem_tracker = std::make_unique<MemTracker>();
-        StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
 
-        _opts.fs = _fs.get();
         _opts.use_page_cache = true;
-        _opts.kept_in_memory = false;
-        _opts.skip_fill_local_cache = false;
+        _opts.stats = &_stats;
     }
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 
     template <LogicalType type>
     void write_bloom_filter_index_file(const std::string& file_name, const void* values, size_t value_count,
@@ -97,12 +93,14 @@ protected:
     void get_bloom_filter_reader_iter(const std::string& file_name, const ColumnIndexMetaPB& meta,
                                       std::unique_ptr<RandomAccessFile>* rfile, BloomFilterIndexReader** reader,
                                       std::unique_ptr<BloomFilterIndexIterator>* iter) {
-        _opts.file_name = kTestDir + "/" + file_name;
+        auto filename = kTestDir + "/" + file_name;
+        ASSIGN_OR_ABORT(*rfile, _fs->new_random_access_file(filename))
+        _opts.read_file = (*rfile).get();
 
         *reader = new BloomFilterIndexReader();
         ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bloom_filter_index()));
         ASSERT_TRUE(r);
-        ASSERT_OK((*reader)->new_iterator(iter));
+        ASSERT_OK((*reader)->new_iterator(_opts, iter));
     }
 
     template <LogicalType Type>
@@ -163,9 +161,9 @@ protected:
         }
     }
 
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     IndexReadOptions _opts;
+    OlapReaderStatistics _stats;
 };
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_int) {

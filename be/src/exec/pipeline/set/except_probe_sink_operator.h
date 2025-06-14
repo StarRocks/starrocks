@@ -26,7 +26,7 @@ public:
     ExceptProbeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                             std::shared_ptr<ExceptContext> except_ctx, const std::vector<ExprContext*>& dst_exprs,
                             const int32_t dependency_index)
-            : Operator(factory, id, "except_probe_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "except_probe_sink", plan_node_id, false, driver_sequence),
               _except_ctx(std::move(except_ctx)),
               _buffer_state(std::make_unique<ExceptBufferState>()),
               _dst_exprs(dst_exprs),
@@ -51,6 +51,8 @@ public:
     }
 
     Status set_finishing(RuntimeState* state) override {
+        auto notify_src = _except_ctx->observable().defer_notify_source();
+        auto notify = _except_ctx->observable().defer_notify_sink();
         _is_finished = true;
         _except_ctx->finish_probe_ht(_dependency_index);
         return Status::OK();
@@ -79,6 +81,7 @@ public:
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ExceptContextPtr except_ctx = _except_partition_ctx_factory->get(driver_sequence);

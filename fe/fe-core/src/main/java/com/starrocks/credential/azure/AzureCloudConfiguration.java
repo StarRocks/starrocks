@@ -18,14 +18,12 @@ import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.Map;
 
-public class AzureCloudConfiguration implements CloudConfiguration {
+public class AzureCloudConfiguration extends CloudConfiguration {
 
     private final AzureStorageCloudCredential azureStorageCloudCredential;
 
@@ -35,15 +33,16 @@ public class AzureCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-
-        List<TCloudProperty> properties = new LinkedList<>();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         azureStorageCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         azureStorageCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -54,14 +53,12 @@ public class AzureCloudConfiguration implements CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support azure credential
         return azureStorageCloudCredential.toFileStoreInfo();
     }
 
     @Override
-    public String getCredentialString() {
-        return "AzureCloudConfiguration{" +
-                "azureStorageCloudCredential=" + azureStorageCloudCredential +
-                '}';
+    public String toConfString() {
+        return String.format("AzureCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                azureStorageCloudCredential.toCredString());
     }
 }

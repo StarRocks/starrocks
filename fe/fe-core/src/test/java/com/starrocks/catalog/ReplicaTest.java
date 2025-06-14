@@ -218,5 +218,19 @@ public class ReplicaTest {
         assertEquals(18, originalReplica.getVersion());
         assertEquals(-1, originalReplica.getLastFailedVersion());
     }
+
+    @Test
+    public void testUpdateVersion4() {
+        Replica originalReplica = new Replica(10000, 20000, 3, 0, 100, 78, ReplicaState.NORMAL, 0, 6);
+        originalReplica.updateForRestore(2, 10, 20);
+        assertEquals(2, originalReplica.getMinReadableVersion());
+    }
+
+    @Test
+    public void testSetChecksum() {
+        Replica originalReplica = new Replica(10000, 20000, 3, 0, 100, 78, ReplicaState.NORMAL, 0, 6);
+        originalReplica.setChecksum(1024);
+        assertEquals(1024, originalReplica.getChecksum());
+    }
 }
 

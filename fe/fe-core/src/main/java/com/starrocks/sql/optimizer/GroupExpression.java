@@ -20,19 +20,21 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.common.DebugOperatorTracer;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.OutputPropertyGroup;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
-import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 /**
@@ -52,6 +54,7 @@ public class GroupExpression {
     private final List<Group> inputs;
     private final Operator op;
     private final BitSet ruleMasks = new BitSet(RuleType.NUM_RULES.ordinal() + 1);
+    private final BitSet appliedRuleMasks = new BitSet(RuleType.NUM_RULES.ordinal() + 1);
     private boolean statsDerived = false;
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
     // required property by parent -> output property
@@ -63,6 +66,10 @@ public class GroupExpression {
     private final Map<OutputPropertyGroup, Integer> propertiesPlanCountMap;
 
     private boolean isUnused = false;
+
+    private Optional<Boolean> isAppliedMVRules = Optional.empty();
+    // all mv rewrite rules
+    private static final List<Rule> ALL_MV_REWRITE_RULES = RuleSet.ALL_MV_REWRITE_RULES.predecessorRules();
 
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
@@ -127,6 +134,22 @@ public class GroupExpression {
 
     public boolean hasRuleExplored(Rule rule) {
         return ruleMasks.get(rule.type().ordinal());
+    }
+
+    public BitSet getAppliedRuleMasks() {
+        return this.appliedRuleMasks;
+    }
+
+    public void mergeAppliedRules(BitSet bitSet) {
+        appliedRuleMasks.or(bitSet);
+    }
+
+    public void addNewAppliedRule(Rule rule) {
+        appliedRuleMasks.set(rule.type().ordinal());
+    }
+
+    public boolean hasRuleApplied(Rule rule) {
+        return appliedRuleMasks.get(rule.type().ordinal());
     }
 
     public PhysicalPropertySet getOutputProperty(PhysicalPropertySet requiredPropertySet) {
@@ -312,21 +335,22 @@ public class GroupExpression {
         return sb.toString();
     }
 
-    public String toPrettyString(String headlineIndent, String detailIndent) {
+    public String debugString(String headlineIndent, String detailIndent) {
         StringBuilder sb = new StringBuilder();
         sb.append(detailIndent)
-                .append(op.accept(new OptimizerTraceUtil.OperatorTracePrinter(), null)).append("\n");
+                .append(op.accept(new DebugOperatorTracer(), null)).append("\n");
         String childHeadlineIndent = detailIndent + "->  ";
         String childDetailIndent = detailIndent + "    ";
         for (Group input : inputs) {
-            sb.append(input.toPrettyString(childHeadlineIndent, childDetailIndent));
+            sb.append(input.debugString(childHeadlineIndent, childDetailIndent));
         }
         return sb.toString();
     }
 
-    public String printExploredRules() {
-        StringJoiner joiner = new StringJoiner(", ", "{", "}");
-        ruleMasks.stream().forEach(e -> joiner.add(RuleType.values()[e].name()));
-        return joiner.toString();
+    public boolean hasAppliedMVRules() {
+        if (isAppliedMVRules.isEmpty()) {
+            isAppliedMVRules = Optional.of(ALL_MV_REWRITE_RULES.stream().anyMatch(this::hasRuleApplied));
+        }
+        return isAppliedMVRules.get();
     }
 }

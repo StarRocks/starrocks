@@ -12,41 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.TextFileFormatDesc;
-import org.apache.iceberg.FileScanTask;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class RemoteFileDesc {
-    private String fileName;
-    private String compression;
-    private long length;
-    private ImmutableList<RemoteFileBlockDesc> blockDescs;
-    private boolean splittable;
-    private TextFileFormatDesc textFileFormatDesc;
-    private ImmutableList<String> hudiDeltaLogs;
+    protected final String fileName;
+    // Optional.
+    // The full path of the remote file.
+    protected String fullPath;
+    protected final String compression;
+    protected final long length;
+    protected final long modificationTime;
+    protected final ImmutableList<RemoteFileBlockDesc> blockDescs;
+    protected boolean splittable;
+    protected TextFileFormatDesc textFileFormatDesc;
 
-    // Only this single RemoteFileDesc instance is used to record all iceberg scanTask
-    // to reduce the memory usage of RemoteFileInfo
-    private List<FileScanTask> icebergScanTasks = new ArrayList<>();
-
-    public RemoteFileDesc(String fileName, String compression, long length,
-                          ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs) {
+    public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
+                          ImmutableList<RemoteFileBlockDesc> blockDescs) {
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
+        this.modificationTime = modificationTime;
         this.blockDescs = blockDescs;
-        this.hudiDeltaLogs = hudiDeltaLogs;
-    }
-
-    public RemoteFileDesc(List<FileScanTask> tasks) {
-        icebergScanTasks = Lists.newArrayList(tasks);
     }
 
     public String getFileName() {
@@ -61,6 +50,10 @@ public class RemoteFileDesc {
         return length;
     }
 
+    public long getModificationTime() {
+        return modificationTime;
+    }
+
     public ImmutableList<RemoteFileBlockDesc> getBlockDescs() {
         return blockDescs;
     }
@@ -69,13 +62,13 @@ public class RemoteFileDesc {
         return splittable;
     }
 
-    public TextFileFormatDesc getTextFileFormatDesc() {
-        return textFileFormatDesc;
-    }
-
     public RemoteFileDesc setSplittable(boolean splittable) {
         this.splittable = splittable;
         return this;
+    }
+
+    public TextFileFormatDesc getTextFileFormatDesc() {
+        return textFileFormatDesc;
     }
 
     public RemoteFileDesc setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {
@@ -83,25 +76,26 @@ public class RemoteFileDesc {
         return this;
     }
 
-    public ImmutableList<String> getHudiDeltaLogs() {
-        return hudiDeltaLogs;
+    public String getFullPath() {
+        return this.fullPath;
     }
 
-    public List<FileScanTask> getIcebergScanTasks() {
-        return icebergScanTasks;
+    public RemoteFileDesc setFullPath(String fullPath) {
+        this.fullPath = fullPath;
+        return this;
     }
 
     @Override
     public String toString() {
-        final StringBuilder sb = new StringBuilder("RemoteFileDesc{");
-        sb.append("fileName='").append(fileName).append('\'');
-        sb.append(", compression='").append(compression).append('\'');
-        sb.append(", length=").append(length);
-        sb.append(", blockDescs=").append(blockDescs);
-        sb.append(", splittable=").append(splittable);
-        sb.append(", textFileFormatDesc=").append(textFileFormatDesc);
-        sb.append(", hudiDeltaLogs=").append(hudiDeltaLogs);
-        sb.append('}');
-        return sb.toString();
+        return "RemoteFileDesc{" + "fileName='" + fileName + '\'' +
+                "fullPath='" + fullPath + '\'' +
+                ", compression='" + compression + '\'' +
+                ", length=" + length +
+                ", modificationTime=" + modificationTime +
+                ", blockDescs=" + blockDescs +
+                ", splittable=" + splittable +
+                ", textFileFormatDesc=" + textFileFormatDesc +
+                '}';
     }
 }
+

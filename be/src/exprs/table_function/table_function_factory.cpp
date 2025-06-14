@@ -22,8 +22,10 @@
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/list_rowsets.h"
 #include "exprs/table_function/multi_unnest.h"
+#include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
+#include "exprs/table_function/unnest_bitmap.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
@@ -58,6 +60,8 @@ public:
         }
         return pair->second.get();
     }
+    TableFunctionResolver(const TableFunctionResolver&) = delete;
+    const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;
 
     void add_function_mapping(std::string&& name, const std::vector<LogicalType>& arg_type,
                               const std::vector<LogicalType>& return_type, const TableFunctionPtr& table_func) {
@@ -68,8 +72,6 @@ private:
     std::unordered_map<std::tuple<std::string, std::vector<LogicalType>, std::vector<LogicalType>>, TableFunctionPtr,
                        TableFunctionMapHash>
             _infos_mapping;
-    TableFunctionResolver(const TableFunctionResolver&) = delete;
-    const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;
 };
 
 TableFunctionResolver::TableFunctionResolver() {
@@ -91,6 +93,9 @@ TableFunctionResolver::TableFunctionResolver() {
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_DATETIME}, func_unnest);
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_BOOLEAN}, func_unnest);
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_ARRAY}, func_unnest);
+    add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_STRUCT}, func_unnest);
+    add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_MAP}, func_unnest);
+    add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_JSON}, func_unnest);
 
     // Use special invalid as the parameter of multi_unnest, because multi_unnest is a variable parameter function,
     // and there is no special treatment for different types of input parameters,
@@ -98,41 +103,29 @@ TableFunctionResolver::TableFunctionResolver() {
     TableFunctionPtr multi_unnest = std::make_shared<MultiUnnest>();
     add_function_mapping("unnest", {}, {}, multi_unnest);
 
+    TableFunctionPtr unnest_bitmap = std::make_shared<UnnestBitmap>();
+    add_function_mapping("unnest_bitmap", {TYPE_OBJECT}, {TYPE_BIGINT}, std::make_shared<UnnestBitmap>());
+
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);
 
+#define M(TYPE)                                                                  \
+    add_function_mapping("subdivide_bitmap", {TYPE_OBJECT, TYPE}, {TYPE_OBJECT}, \
+                         std::make_shared<SubdivideBitmap<TYPE>>());
+    APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
+
     // ----=====---- generate_series ----====----
     // implicit step size
-    add_function_mapping("generate_series", {TYPE_TINYINT, TYPE_TINYINT}, {TYPE_TINYINT},
-                         std::make_shared<GenerateSeries<TYPE_TINYINT>>());
-
-    add_function_mapping("generate_series", {TYPE_SMALLINT, TYPE_SMALLINT}, {TYPE_SMALLINT},
-                         std::make_shared<GenerateSeries<TYPE_SMALLINT>>());
-
-    add_function_mapping("generate_series", {TYPE_INT, TYPE_INT}, {TYPE_INT},
-                         std::make_shared<GenerateSeries<TYPE_INT>>());
-
-    add_function_mapping("generate_series", {TYPE_BIGINT, TYPE_BIGINT}, {TYPE_BIGINT},
-                         std::make_shared<GenerateSeries<TYPE_BIGINT>>());
-
-    add_function_mapping("generate_series", {TYPE_LARGEINT, TYPE_LARGEINT}, {TYPE_LARGEINT},
-                         std::make_shared<GenerateSeries<TYPE_LARGEINT>>());
+#define M(TYPE) add_function_mapping("generate_series", {TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
+    APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
 
     // explicit step size
-    add_function_mapping("generate_series", {TYPE_TINYINT, TYPE_TINYINT, TYPE_TINYINT}, {TYPE_TINYINT},
-                         std::make_shared<GenerateSeries<TYPE_TINYINT>>());
-
-    add_function_mapping("generate_series", {TYPE_SMALLINT, TYPE_SMALLINT, TYPE_SMALLINT}, {TYPE_SMALLINT},
-                         std::make_shared<GenerateSeries<TYPE_SMALLINT>>());
-
-    add_function_mapping("generate_series", {TYPE_INT, TYPE_INT, TYPE_INT}, {TYPE_INT},
-                         std::make_shared<GenerateSeries<TYPE_INT>>());
-
-    add_function_mapping("generate_series", {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT}, {TYPE_BIGINT},
-                         std::make_shared<GenerateSeries<TYPE_BIGINT>>());
-
-    add_function_mapping("generate_series", {TYPE_LARGEINT, TYPE_LARGEINT, TYPE_LARGEINT}, {TYPE_LARGEINT},
-                         std::make_shared<GenerateSeries<TYPE_LARGEINT>>());
+#define M(TYPE) \
+    add_function_mapping("generate_series", {TYPE, TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
+    APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
 
     // ----=====---- list_rowsets ----====----
     add_function_mapping("list_rowsets", {TYPE_BIGINT, TYPE_BIGINT},

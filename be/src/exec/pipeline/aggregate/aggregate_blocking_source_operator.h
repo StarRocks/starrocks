@@ -25,7 +25,8 @@ public:
     AggregateBlockingSourceOperator(AggregatorPtr aggregator, OperatorFactory* factory, int32_t id,
                                     int32_t plan_node_id, int32_t driver_sequence,
                                     const char* name = "aggregate_blocking_source")
-            : SourceOperator(factory, id, name, plan_node_id, driver_sequence), _aggregator(std::move(aggregator)) {
+            : SourceOperator(factory, id, name, plan_node_id, false, driver_sequence),
+              _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
 
@@ -33,6 +34,7 @@ public:
 
     bool has_output() const override;
     bool is_finished() const override;
+    Status prepare(RuntimeState* state) override;
 
     Status set_finished(RuntimeState* state) override;
 
@@ -56,6 +58,7 @@ public:
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateBlockingSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateBlockingSourceOperator>(_aggregator_factory->get_or_create(driver_sequence),

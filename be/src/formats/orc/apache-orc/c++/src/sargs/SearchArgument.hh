@@ -212,6 +212,7 @@ public:
      */
     SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
                               const std::initializer_list<Literal>& literals) override;
+    SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type, const std::vector<Literal>& literals) override;
 
     /**
      * Add an is null leaf to the current item on the stack.
@@ -273,9 +274,8 @@ private:
     template <typename T>
     SearchArgumentBuilder& compareOperator(PredicateLeaf::Operator op, const T& column, PredicateDataType type,
                                            const Literal& literal);
-    template <typename T>
-    SearchArgumentBuilder& addChildForIn(T column, PredicateDataType type,
-                                         const std::initializer_list<Literal>& literals);
+    template <typename T, typename CONTAINER>
+    SearchArgumentBuilder& addChildForIn(T column, PredicateDataType type, const CONTAINER& literals);
 
     template <typename T>
     SearchArgumentBuilder& addChildForIsNull(T column, PredicateDataType type);

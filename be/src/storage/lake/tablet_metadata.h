@@ -18,10 +18,10 @@
 
 #include "gen_cpp/lake_types.pb.h"
 
-namespace starrocks::lake {
+namespace starrocks {
 
 using TabletMetadata = TabletMetadataPB;
-using TabletMetadataPtr = std::shared_ptr<TabletMetadata>;
+using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
 using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 
-} // namespace starrocks::lake
+} // namespace starrocks

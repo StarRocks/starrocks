@@ -100,7 +100,7 @@ public class Analyzer {
     // a tuple is outer/semi joined, etc. Remove the maps in favor of making
     // them properties of the tuple descriptor itself.
     private static class GlobalState {
-        private final DescriptorTable descTbl = new DescriptorTable();
+        private DescriptorTable descTbl = new DescriptorTable();
         private final GlobalStateMgr globalStateMgr;
         private final ConnectContext context;
 
@@ -229,11 +229,11 @@ public class Analyzer {
     }
 
     public Table getTable(TableName tblName) {
-        Database db = globalState.globalStateMgr.getDb(tblName.getDb());
+        Database db = globalState.globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
         if (db == null) {
             return null;
         }
-        return db.getTable(tblName.getTbl());
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
     }
 
     public TupleDescriptor getTupleDesc(TupleId id) {
@@ -335,6 +335,10 @@ public class Analyzer {
         return globalState.descTbl;
     }
 
+    public void setDescTbl(DescriptorTable descTbl) {
+        this.globalState.descTbl = descTbl;
+    }
+
     public GlobalStateMgr getCatalog() {
         return globalState.globalStateMgr;
     }
@@ -361,10 +365,6 @@ public class Analyzer {
 
     public String getDefaultCatalog() {
         return globalState.context.getCurrentCatalog();
-    }
-
-    public String getQualifiedUser() {
-        return globalState.context.getQualifiedUser();
     }
 
     public ConnectContext getContext() {

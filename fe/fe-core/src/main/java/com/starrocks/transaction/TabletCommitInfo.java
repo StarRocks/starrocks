@@ -36,6 +36,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TTabletCommitInfo;
 
@@ -43,6 +44,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 public class TabletCommitInfo implements Writable {
 
@@ -50,8 +53,12 @@ public class TabletCommitInfo implements Writable {
     private long backendId;
 
     // For low cardinality string column with global dict
-    private List<String> invalidDictCacheColumns = Lists.newArrayList();
-    private List<String> validDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> invalidDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> validDictCacheColumns = Lists.newArrayList();
+    private List<Long> validDictCollectedVersions = Lists.newArrayList();
+
+    public TabletCommitInfo() {
+    }
 
     public TabletCommitInfo(long tabletId, long backendId) {
         super();
@@ -59,12 +66,13 @@ public class TabletCommitInfo implements Writable {
         this.backendId = backendId;
     }
 
-    public TabletCommitInfo(long tabletId, long backendId, List<String> invalidDictCacheColumns,
-                            List<String> validDictCacheColumns) {
+    public TabletCommitInfo(long tabletId, long backendId, List<ColumnId> invalidDictCacheColumns,
+                            List<ColumnId> validDictCacheColumns, List<Long> validDictCollectedVersions) {
         this.tabletId = tabletId;
         this.backendId = backendId;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
         this.validDictCacheColumns = validDictCacheColumns;
+        this.validDictCollectedVersions = validDictCollectedVersions;
     }
 
     public long getTabletId() {
@@ -75,22 +83,46 @@ public class TabletCommitInfo implements Writable {
         return backendId;
     }
 
-    public List<String> getInvalidDictCacheColumns() {
+    public List<ColumnId> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
 
-    public List<String> getValidDictCacheColumns() {
+    public List<ColumnId> getValidDictCacheColumns() {
         return validDictCacheColumns;
     }
 
+    public List<Long> getValidDictCollectedVersions() {
+        return validDictCollectedVersions;
+    }
+
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
+    }
+
+    @NotNull
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        if (tTabletCommitInfos == null) {
+            return commitInfos;
+        }
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
             if (tTabletCommitInfo.isSetInvalid_dict_cache_columns()) {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
                         tTabletCommitInfo.getBackendId(),
-                        tTabletCommitInfo.getInvalid_dict_cache_columns(),
-                        tTabletCommitInfo.getValid_dict_cache_columns()));
+                        tTabletCommitInfo.getInvalid_dict_cache_columns()
+                                .stream()
+                                .map(ColumnId::create)
+                                .collect(Collectors.toList()),
+                        tTabletCommitInfo.getValid_dict_cache_columns()
+                                .stream()
+                                .map(ColumnId::create)
+                                .collect(Collectors.toList()),
+                        tTabletCommitInfo.getValid_dict_collected_versions()
+                ));
             } else {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
                         tTabletCommitInfo.getBackendId()));
@@ -115,5 +147,23 @@ public class TabletCommitInfo implements Writable {
     public String toString() {
         Gson gson = new Gson();
         return gson.toJson(this);
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(tabletId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof TabletCommitInfo)) {
+            return false;
+        }
+
+        TabletCommitInfo info = (TabletCommitInfo) obj;
+        return (tabletId == info.tabletId) && (backendId == info.backendId);
     }
 }

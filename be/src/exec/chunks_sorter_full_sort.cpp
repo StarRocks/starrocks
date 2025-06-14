@@ -17,12 +17,9 @@
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -43,8 +40,8 @@ void ChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* pr
     _runtime_profile = profile;
     _parent_mem_tracker = parent_mem_tracker;
     _object_pool = std::make_unique<ObjectPool>();
-    _runtime_profile->add_info_string("MaxBufferedRows", strings::Substitute("$0", max_buffered_rows));
-    _runtime_profile->add_info_string("MaxBufferedBytes", strings::Substitute("$0", max_buffered_bytes));
+    _runtime_profile->add_info_string("MaxBufferedRows", std::to_string(max_buffered_rows));
+    _runtime_profile->add_info_string("MaxBufferedBytes", std::to_string(max_buffered_bytes));
     _profiler = _object_pool->add(new ChunksSorterFullSortProfiler(profile, parent_mem_tracker));
 }
 
@@ -130,16 +127,17 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     SCOPED_TIMER(_merge_timer);
     _profiler->num_sorted_runs->set((int64_t)_sorted_chunks.size());
+    // TODO: introduce an extra merge before cascading merge to handle the case that has a lot of sortruns
     // In cascading merging phase, the height of merging tree is ceiling(log2(num_sorted_runs)) + 1,
     // so when num_sorted_runs is 1 or 2, the height merging tree is less than 2, the sorted runs just be processed
     // in at most one pass. there is no need to enable lazy materialization which eliminates non-order-by output
     // columns's permutation in multiple passes.
     if (_early_materialized_slots.empty() || _sorted_chunks.size() < 3) {
         _early_materialized_slots.clear();
-        _runtime_profile->add_info_string("LateMaterialization", "false");
+        _runtime_profile->add_info_string("LateMaterialization", "False");
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
     } else {
-        _runtime_profile->add_info_string("LateMaterialization", "true");
+        _runtime_profile->add_info_string("LateMaterialization", "True");
         _split_late_and_early_chunks();
         _assign_ordinals();
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
@@ -187,7 +185,7 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
         for (T offset = 0; offset < num_rows; ++offset) {
             ordinal_data[offset] = static_cast<T>((chunk_idx << _offset_in_chunk_bits) | offset);
         }
-        partial_sort_chunk->append_column(ordinal_column, ORDINAL_COLUMN_SLOT_ID);
+        partial_sort_chunk->append_column(std::move(ordinal_column), Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
         ++chunk_idx;
     }
 }
@@ -232,7 +230,7 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
     static_assert(type_is_ordinal<T>, "T must be uint32_t or uint64_t");
     const auto num_rows = sorted_eager_chunk->num_rows();
     auto sorted_lazy_chunk = _late_materialized_chunks[0]->clone_empty(num_rows);
-    auto ordinal_column = sorted_eager_chunk->get_column_by_slot_id(ORDINAL_COLUMN_SLOT_ID);
+    auto ordinal_column = sorted_eager_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
     auto& ordinal_data = down_cast<OrdinalColumn<T>*>(ordinal_column.get())->get_data();
     T _offset_in_chunk_mask = static_cast<T>((1L << _offset_in_chunk_bits) - 1);
     for (auto i = 0; i < num_rows; ++i) {

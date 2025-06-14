@@ -34,6 +34,7 @@
 
 #include "runtime/user_function_cache.h"
 
+#include <any>
 #include <atomic>
 #include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <memory>
@@ -55,10 +56,11 @@ static const int kLibShardNum = 128;
 
 // function cache entry, store information for
 struct UserFunctionCacheEntry {
-    UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_)
-            : function_id(fid_), checksum(std::move(checksum_)), lib_file(std::move(lib_file_)) {
-        function_type = UserFunctionCache::get_function_type(lib_file);
-    }
+    UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_, int function_type_)
+            : function_id(fid_),
+              checksum(std::move(checksum_)),
+              lib_file(std::move(lib_file_)),
+              function_type(function_type_) {}
     ~UserFunctionCacheEntry();
 
     int64_t function_id = 0;
@@ -90,11 +92,7 @@ struct UserFunctionCacheEntry {
     // function type
     int function_type;
 
-    SpinLock map_lock;
-
-    // from symbol_name to function pointer
-    // used for native function
-    std::unordered_map<std::string, void*> fptr_map;
+    std::any cache_handle;
 };
 
 UserFunctionCacheEntry::~UserFunctionCacheEntry() {
@@ -135,14 +133,24 @@ Status UserFunctionCache::init(const std::string& lib_dir) {
 Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const std::string& checksum,
                                       std::string* libpath) {
     UserFunctionCacheEntryPtr entry;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry));
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry,
+                                     [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }));
     *libpath = entry->lib_file;
     return Status::OK();
 }
 
+StatusOr<std::any> UserFunctionCache::load_cacheable_java_udf(
+        int64_t fid, const std::string& url, const std::string& checksum,
+        const std::function<StatusOr<std::any>(const std::string& path)>& loader) {
+    UserFunctionCacheEntryPtr entry;
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry, loader));
+    return entry->cache_handle;
+}
+
 // Now we only support JAVA_UDF
 Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std::string& file) {
-    if (!boost::algorithm::ends_with(file, JAVA_UDF_SUFFIX)) {
+    int type = get_function_type(file);
+    if (type != UDF_TYPE_JAVA) {
         return Status::InternalError(fmt::format("unknown library file format {}", file));
     }
 
@@ -159,7 +167,7 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
         return Status::InternalError("duplicate function id");
     }
     // create a cache entry and put it into entry map
-    auto entry = std::make_shared<UserFunctionCacheEntry>(function_id, checksum, dir + "/" + file);
+    auto entry = std::make_shared<UserFunctionCacheEntry>(function_id, checksum, dir + "/" + file, type);
     entry->is_downloaded = true;
     _entry_map[function_id] = entry;
 
@@ -168,6 +176,8 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
 int UserFunctionCache::get_function_type(const std::string& url) {
     if (boost::algorithm::ends_with(url, JAVA_UDF_SUFFIX)) {
         return UDF_TYPE_JAVA;
+    } else if (boost::algorithm::ends_with(url, PY_UDF_SUFFIX)) {
+        return UDF_TYPE_PYTHON;
     }
     return UDF_TYPE_UNKNOWN;
 }
@@ -194,13 +204,17 @@ Status UserFunctionCache::_load_cached_lib() {
     }
     return Status::OK();
 }
-
+template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                                           UserFunctionCacheEntryPtr* output_entry) {
-    std::string shuffix = "tmp";
+                                           UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
+    std::string suffix = ".unk";
     int type = get_function_type(url);
     if (type == UDF_TYPE_JAVA) {
-        shuffix = JAVA_UDF_SUFFIX;
+        suffix = JAVA_UDF_SUFFIX;
+    }
+    if (type != UDF_TYPE_JAVA && type != UDF_TYPE_PYTHON) {
+        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
+                                                type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
 
     UserFunctionCacheEntryPtr entry;
@@ -210,11 +224,12 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
         if (it != _entry_map.end()) {
             entry = it->second;
         } else {
-            entry = std::make_shared<UserFunctionCacheEntry>(fid, checksum, _make_lib_file(fid, checksum, shuffix));
+            entry = std::make_shared<UserFunctionCacheEntry>(fid, checksum, _make_lib_file(fid, checksum, suffix),
+                                                             type);
             _entry_map.emplace(fid, entry);
         }
     }
-    auto st = _load_cache_entry(url, entry);
+    auto st = _load_cache_entry(url, entry, loader);
     if (!st.ok()) {
         LOG(WARNING) << "fail to load cache entry, fid=" << fid;
         // if we load a cache entry failed, I think we should delete this entry cache
@@ -236,7 +251,8 @@ void UserFunctionCache::_destroy_cache_entry(UserFunctionCacheEntryPtr& entry) {
     entry->should_delete_library.store(true);
 }
 
-Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry) {
+template <class Loader>
+Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader) {
     if (entry->is_loaded.load()) {
         return Status::OK();
     }
@@ -246,7 +262,9 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
         RETURN_IF_ERROR(_download_lib(url, entry));
     }
 
-    RETURN_IF_ERROR(_load_cache_entry_internal(entry));
+    if (!entry->is_loaded.load()) {
+        RETURN_IF_ERROR(_load_cache_entry_internal(url, entry, loader));
+    }
     return Status::OK();
 }
 
@@ -254,10 +272,9 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
 Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry) {
     DCHECK(!entry->is_downloaded);
 
-    std::string tmp_file = entry->lib_file + ".tmp";
     std::string target_file = entry->lib_file;
     std::string expected_checksum = entry->checksum;
-    RETURN_IF_ERROR(DownloadUtil::download(url, tmp_file, target_file, expected_checksum));
+    RETURN_IF_ERROR(DownloadUtil::download(url, target_file, expected_checksum));
 
     entry->function_type = get_function_type(url);
 
@@ -267,11 +284,15 @@ Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCach
 }
 
 // entry's lock must be held
-Status UserFunctionCache::_load_cache_entry_internal(UserFunctionCacheEntryPtr& entry) {
-    if (entry->function_type == UDF_TYPE_JAVA) {
+template <class Loader>
+Status UserFunctionCache::_load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry,
+                                                     Loader&& loader) {
+    if (entry->function_type == UDF_TYPE_JAVA || entry->function_type == UDF_TYPE_PYTHON) {
         // nothing to do
+        ASSIGN_OR_RETURN(entry->cache_handle, loader(entry->lib_file));
     } else {
-        return Status::InternalError(fmt::format("unsupport udf type: {}", entry->function_type));
+        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
+                                                entry->function_type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
     entry->is_loaded.store(true);
     return Status::OK();

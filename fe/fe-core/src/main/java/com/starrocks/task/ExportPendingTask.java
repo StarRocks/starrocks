@@ -42,8 +42,10 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -55,6 +57,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TypesConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.util.List;
 
@@ -77,7 +80,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
         }
 
         long dbId = job.getDbId();
-        db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "database does not exist");
             return;
@@ -124,18 +127,17 @@ public class ExportPendingTask extends PriorityLeaderTask {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
-                if (backend == null) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNodeWithBePort(host, port);
+                if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkNodeAvailable(node)) {
                     return Status.CANCELLED;
                 }
-                long backendId = backend.getId();
-                if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
-                    return Status.CANCELLED;
-                }
-                this.job.setBeStartTime(backendId, backend.getLastStartTime());
+
+                long nodeId = node.getId();
+                this.job.setBeStartTime(nodeId, node.getLastStartTime());
                 Status status;
                 if (job.exportLakeTable()) {
-                    status = lockTabletMetadata(internalScanRange, backend);
+                    status = lockTabletMetadata(internalScanRange, node);
                 } else {
                     status = makeSnapshot(internalScanRange, address);
                 }
@@ -147,7 +149,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
         return Status.OK;
     }
 
-    private Status lockTabletMetadata(TInternalScanRange internalScanRange, Backend backend) {
+    private Status lockTabletMetadata(TInternalScanRange internalScanRange, ComputeNode backend) {
         try {
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             LockTabletMetadataRequest request = new LockTabletMetadataRequest();
@@ -172,15 +174,26 @@ public class ExportPendingTask extends PriorityLeaderTask {
         snapshotRequest.setTimeout(job.getTimeoutSecond());
         snapshotRequest.setPreferred_snapshot_format(TypesConstants.TPREFER_SNAPSHOT_REQ_VERSION);
 
-        AgentClient client = new AgentClient(host, port);
-        TAgentResult result = client.makeSnapshot(snapshotRequest);
-        if (result == null || result.getStatus().getStatus_code() != TStatusCode.OK) {
+        TAgentResult result;
+        try {
+            result = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.backendPool,
+                    new TNetworkAddress(host, port),
+                    client -> client.make_snapshot(snapshotRequest));
+            if (result.getStatus().getStatus_code() != TStatusCode.OK) {
+                String err = "snapshot for tablet " + internalScanRange.getTablet_id() + " failed on backend "
+                        + address + ". reason: "
+                        + result.getStatus().error_msgs;
+                LOG.warn("{}, export job: {}", err, job.getId());
+                return new Status(TStatusCode.CANCELLED, err);
+            }
+        } catch (TException e) {
             String err = "snapshot for tablet " + internalScanRange.getTablet_id() + " failed on backend "
-                    + address.toString() + ". reason: "
-                    + (result == null ? "unknown" : result.getStatus().error_msgs);
+                    + address + ". reason: " + e.getMessage();
             LOG.warn("{}, export job: {}", err, job.getId());
             return new Status(TStatusCode.CANCELLED, err);
         }
+
         job.addSnapshotPath(new Pair<TNetworkAddress, String>(address, result.getSnapshot_path()));
         return Status.OK;
     }

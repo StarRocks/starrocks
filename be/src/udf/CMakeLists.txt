@@ -20,9 +20,13 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 
 set(UDF_FILES
+  java/utils.cpp
   java/java_udf.cpp
   java/java_data_converter.cpp
   java/java_native_method.cpp
+  python/env.cpp
+  python/callstub.cpp
+  udf_call_stub.cpp
 )
 
-add_library(Udf java/utils.cpp ${UDF_FILES})
+add_library(Udf STATIC ${UDF_FILES})

@@ -48,7 +48,7 @@ bool ColumnOrPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
 }
 
 Status ColumnOrPredicate::_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
-    _child[0]->evaluate(column, selection, from, to);
+    RETURN_IF_ERROR(_child[0]->evaluate(column, selection, from, to));
     for (size_t i = 1; i < _child.size(); i++) {
         RETURN_IF_ERROR(_child[i]->evaluate_or(column, selection, from, to));
     }
@@ -66,6 +66,19 @@ Status ColumnOrPredicate::convert_to(const ColumnPredicate** output, const TypeI
     }
     *output = new_pred;
     return Status::OK();
+}
+
+std::string ColumnOrPredicate::debug_string() const {
+    std::stringstream ss;
+    ss << "OR(";
+    for (size_t i = 0; i < _child.size(); i++) {
+        if (i != 0) {
+            ss << ", ";
+        }
+        ss << i << ":" << _child[i]->debug_string();
+    }
+    ss << ")";
+    return ss.str();
 }
 
 } // namespace starrocks

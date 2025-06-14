@@ -56,10 +56,6 @@ class ParquetScannerTest : public ::testing::Test {
                                                         int32_t num_columns_from_file,
                                                         const std::vector<std::string>& columns_from_path) {
         std::vector<TBrokerRangeDesc> ranges;
-        int total_size = 0;
-        for (auto s : file_sizes) {
-            total_size += s;
-        }
         int split_size = 128 * 1024;
 
         for (auto i = 0; i < file_names.size(); ++i) {
@@ -171,6 +167,8 @@ class ParquetScannerTest : public ::testing::Test {
             num_rows += chunk->num_rows();
             check_func(chunk);
         }
+        ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
+        ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
         scanner->close();
     }
 
@@ -201,6 +199,7 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_uint32", TypeDescriptor::create_json_type()},
                 {"col_json_uint64", TypeDescriptor::create_json_type()},
                 {"col_json_timestamp", TypeDescriptor::create_json_type()},
+                {"col_json_timestamp_not_normalized", TypeDescriptor::create_json_type()},
 
                 {"col_json_float32", TypeDescriptor::create_json_type()},
                 {"col_json_float64", TypeDescriptor::create_json_type()},
@@ -223,7 +222,9 @@ class ParquetScannerTest : public ::testing::Test {
                 {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))}};
+                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
+                {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                            TypeDescriptor::create_varchar_type(1048576))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -246,12 +247,12 @@ class ParquetScannerTest : public ::testing::Test {
         }
         std::vector<std::string> column_names;
         column_names.reserve(columns_from_file.size() + columns_from_path.size());
-        column_names.template insert(column_names.end(), columns_from_file.begin(), columns_from_file.end());
-        column_names.template insert(column_names.end(), columns_from_path.begin(), columns_from_path.end());
+        column_names.insert(column_names.end(), columns_from_file.begin(), columns_from_file.end());
+        column_names.insert(column_names.end(), columns_from_path.begin(), columns_from_path.end());
 
         auto src_slot_infos = select_columns(columns_from_file, is_nullable);
         for (const auto& i : columns_from_path) {
-            src_slot_infos.template emplace_back(i, TypeDescriptor::from_logical_type(TYPE_VARCHAR), is_nullable);
+            src_slot_infos.emplace_back(i, TypeDescriptor::from_logical_type(TYPE_VARCHAR), is_nullable);
         }
 
         auto dst_slot_infos = select_columns(column_names, is_nullable);
@@ -304,7 +305,7 @@ class ParquetScannerTest : public ::testing::Test {
     }
 
     void check_schema(const std::string& path,
-                      const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
+                      const std::vector<std::pair<std::string, TypeDescriptor>>& expected_schema) {
         RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
         ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
         auto query_globals = TQueryGlobals();
@@ -315,15 +316,17 @@ class ParquetScannerTest : public ::testing::Test {
         broker_scan_range->ranges = ranges;
 
         auto scanner = ParquetScanner(state, profile, *broker_scan_range, counter, true);
-        ASSERT_OK(scanner.open());
+        EXPECT_OK(scanner.open());
         DeferOp defer([&scanner] { scanner.close(); });
 
         std::vector<SlotDescriptor> schema;
-        ASSERT_OK(scanner.get_schema(&schema));
-        ASSERT_EQ(schema.size(), expected_schema.size());
+        EXPECT_OK(scanner.get_schema(&schema));
+        EXPECT_EQ(schema.size(), expected_schema.size());
         for (size_t i = 0; i < expected_schema.size(); ++i) {
-            ASSERT_EQ(schema[i].col_name(), expected_schema[i].first);
-            ASSERT_EQ(schema[i].type().type, expected_schema[i].second);
+            EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
+            EXPECT_TRUE(schema[i].type() == expected_schema[i].second)
+                    << schema[i].col_name() << " got: " << schema[i].type().debug_string()
+                    << " expect: " << expected_schema[i].second.debug_string();
         }
     }
 
@@ -459,7 +462,7 @@ TEST_F(ParquetScannerTest, test_parquet_data) {
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
-            ASSERT_TRUE(!col->is_nullable() && !col->is_constant());
+            ASSERT_TRUE(col->is_nullable() && !col->is_constant());
         }
     };
     validate(scanner, 36865, check);
@@ -550,6 +553,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
             {"col_json_int32", {"1", "2", "3"}},
             {"col_json_uint64", {"1", "2", "3"}},
             {"col_json_timestamp", {"1659962123000", "1659962124000", "1659962125000"}},
+            {"col_json_timestamp_not_normalized", {"1659962123000", "1659962124000", "1659962125000"}},
 
             {"col_json_float32", {"1.100000023841858", "2.0999999046325684", "3.0999999046325684"}},
             {"col_json_float64", {"1.1", "2.1", "3.1"}},
@@ -625,7 +629,7 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
-            ASSERT_TRUE(!col->is_nullable() && !col->is_constant());
+            ASSERT_TRUE(col->is_nullable() && !col->is_constant());
         }
     };
     validate(scanner, 36865, check);
@@ -647,7 +651,7 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
 TEST_F(ParquetScannerTest, int96_timestamp) {
     const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet";
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
-            {"col_datetime", {"9999-12-31 23:59:59", "2006-01-02 15:04:05"}}};
+            {"col_datetime", {"9999-12-31 23:59:59.009999", "2006-01-02 15:04:05"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
@@ -669,36 +673,157 @@ TEST_F(ParquetScannerTest, int96_timestamp) {
 }
 
 TEST_F(ParquetScannerTest, get_file_schema) {
-    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
-            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet", {{"col_datetime", TYPE_DATETIME}}},
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
+            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet",
+             {{"col_datetime", TypeDescriptor::from_logical_type(TYPE_DATETIME)}}},
             {test_exec_dir + "/test_data/parquet_data/data_json.parquet",
-             {{"col_json_int8", TYPE_INT},
-              {"col_json_int16", TYPE_INT},
-              {"col_json_int32", TYPE_INT},
-              {"col_json_int64", TYPE_BIGINT},
-              {"col_json_uint8", TYPE_INT},
-              {"col_json_uint16", TYPE_INT},
-              {"col_json_uint32", TYPE_BIGINT},
-              {"col_json_uint64", TYPE_BIGINT},
-              {"col_json_timestamp", TYPE_DATETIME},
-              {"col_json_float32", TYPE_FLOAT},
-              {"col_json_float64", TYPE_DOUBLE},
-              {"col_json_bool", TYPE_BOOLEAN},
-              {"col_json_string", TYPE_VARCHAR},
-              // complex type is treat as VARCHAR now.
-              {"col_json_list", TYPE_VARCHAR},
-              {"col_json_map", TYPE_VARCHAR},
-              {"col_json_map_timestamp", TYPE_VARCHAR},
-              {"col_json_struct", TYPE_VARCHAR},
-              {"col_json_list_list", TYPE_VARCHAR},
-              {"col_json_map_list", TYPE_VARCHAR},
-              {"col_json_list_struct", TYPE_VARCHAR},
-              {"col_json_struct_struct", TYPE_VARCHAR},
-              {"col_json_struct_string", TYPE_VARCHAR},
-              {"col_json_json_string", TYPE_VARCHAR}}}};
+             {{"col_json_int8", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_int16", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_int32", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_int64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_json_uint8", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_uint16", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_uint64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_json_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_json_timestamp_not_normalized", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_json_float32", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+              {"col_json_float64", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+              {"col_json_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+              {"col_json_string", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_json_list", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_json_map", TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                               TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_json_map_timestamp",
+               TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_DATETIME),
+                                               TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_json_struct",
+               TypeDescriptor::create_struct_type({"s0", "s1"}, {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                                 TypeDescriptor::create_varchar_type(1048576)})},
+              {"col_json_list_list", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                             TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_json_map_list",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_json_list_struct", TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+                                               {"s0", "s1"}, {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                              TypeDescriptor::create_varchar_type(1048576)}))},
+              {"col_json_struct_struct",
+               TypeDescriptor::create_struct_type(
+                       {"s0", "s1"},
+                       {TypeDescriptor::from_logical_type(TYPE_INT),
+                        TypeDescriptor::create_struct_type({"s2"}, {TypeDescriptor::from_logical_type(TYPE_INT)})})},
+              {"col_json_struct_string",
+               TypeDescriptor::create_struct_type({"s0", "s1"}, {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                                 TypeDescriptor::create_varchar_type(1048576)})},
+              {"col_json_json_string", TypeDescriptor::create_varchar_type(1048576)}}},
+            {test_exec_dir + "/test_data/parquet_data/decimal.parquet",
+             {{"col_decimal32", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2)},
+              {"col_decimal64", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2)},
+              {"col_decimal128_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)},
+              {"col_decimal128_fixed_len_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)}}},
+            {test_exec_dir + "/test_data/parquet_data/nested.parquet",
+             {{"col_int", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_int", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                                     TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_map_string_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                       TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_list_map_string_int",
+               TypeDescriptor::create_array_type(TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_list_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)))}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
+    }
+}
+
+TEST_F(ParquetScannerTest, datetime) {
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/datetime.parquet";
+    std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
+            {"col_datetime",
+             {"2006-01-02 15:04:05", "2006-01-02 15:04:05.900000", "2006-01-02 15:04:05.999900",
+              "2006-01-02 15:04:05.999990", "2006-01-02 15:04:05.999999"}}};
+
+    std::vector<std::string> columns_from_path;
+    std::vector<std::string> path_values;
+    std::unordered_map<size_t, TExpr> slot_map;
+
+    for (auto& [column_name, expected] : test_cases) {
+        std::vector<std::string> column_names{column_name};
+
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 5);
+        ASSERT_EQ(1, chunk->num_columns());
+
+        auto col = chunk->columns()[0];
+        for (int i = 0; i < col->size(); i++) {
+            std::string result = col->debug_item(i);
+            std::string expect = expected[i];
+            EXPECT_EQ(expect, result);
+        }
+    }
+}
+
+TEST_F(ParquetScannerTest, optional_map_key) {
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/optional_map_key.parquet";
+    std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
+            {"col_int", {"1", "2", "6", "3", "4", "5", "7", "8", "9", "1", "2", "3", "4", "5", "7", "8", "9", "6"}},
+            {"col_map",
+             {"{' ':' '}",
+              "{'                                            aAbBcC':'                                            "
+              "aAbBcC'}",
+              "{'你好，中国！':NULL}",
+              "{'aAbBcC                                            ':'aAbBcC                                           "
+              " '}",
+              "{'                    aAbBcCdDeE                    ':'                    aAbBcCdDeE                   "
+              " '}",
+              "{'null':NULL}",
+              "{'                                                  ':'                                                 "
+              " '}",
+              "{'Hello, world!你好':'Hello, world!你好'}",
+              "{'Total MapReduce CPU Time Spent: 2 seconds 120 msec':'Total MapReduce CPU Time Spent: 2 seconds 120 "
+              "msec'}",
+              "{' ':' '}",
+              "{'                                            aAbBcC':'                                            "
+              "aAbBcC'}",
+              "{'aAbBcC                                            ':'aAbBcC                                           "
+              " '}",
+              "{'                    aAbBcCdDeE                    ':'                    aAbBcCdDeE                   "
+              " '}",
+              "{'null':NULL}",
+              "{'                                                  ':'                                                 "
+              " '}",
+              "{'Hello, world!你好':'Hello, world!你好'}",
+              "{'Total MapReduce CPU Time Spent: 2 seconds 120 msec':'Total MapReduce CPU Time Spent: 2 seconds 120 "
+              "msec'}",
+              "{'你好，中国！':NULL}"}}};
+
+    std::vector<std::string> columns_from_path;
+    std::vector<std::string> path_values;
+    std::unordered_map<size_t, TExpr> slot_map;
+
+    for (auto& [column_name, expected] : test_cases) {
+        std::vector<std::string> column_names{column_name};
+
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 18);
+        ASSERT_EQ(1, chunk->num_columns());
+
+        auto col = chunk->columns()[0];
+        for (int i = 0; i < col->size(); i++) {
+            std::string result = col->debug_item(i);
+            std::string expect = expected[i];
+            EXPECT_EQ(expect, result);
+        }
     }
 }
 

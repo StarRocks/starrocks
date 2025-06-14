@@ -158,7 +158,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
     tuple_builder.build(&dtb);
     TDescriptorTable tdesc_tbl = dtb.desc_tbl();
     DescriptorTbl* desc_tbl = nullptr;
-    DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size).ok());
     return &(desc_tbl->get_tuple_descriptor(0)->slots());
 }
 
@@ -215,12 +215,12 @@ public:
         writer_context.partition_id = 10;
         writer_context.rowset_path_prefix = _root_path;
         writer_context.rowset_state = VISIBLE;
-        writer_context.tablet_schema = _schema.get();
+        writer_context.tablet_schema = _schema;
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
-        _vectorized_schema = MemTable::convert_schema(_schema.get(), _slots);
+        _vectorized_schema = MemTable::convert_schema(_schema, _slots);
     }
 
     void TearDown() override {
@@ -271,7 +271,7 @@ public:
 };
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
-    const string path = "./ut_dir/MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
+    const string path = "./MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
@@ -289,7 +289,8 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(mem_table->finalize().ok());
 
     ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
@@ -300,7 +301,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
 }
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
-    const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
@@ -318,14 +319,15 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(mem_table->finalize().ok());
 
     size_t ret_num_rows = 0;
     bool ret_eos = true;
     ASSERT_TRUE(flush_token
                         ->submit(std::move(mem_table), false,
-                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                                      ret_num_rows = seg->num_rows();
                                      ret_eos = eos;
                                  })
@@ -340,7 +342,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
 }
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
-    const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
 
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
@@ -357,7 +359,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
     std::unique_ptr<SegmentPB> ret_seg = make_unique<SegmentPB>();
     ASSERT_TRUE(flush_token
                         ->submit(std::move(mem_table), true,
-                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                                      ret_seg = std::move(seg);
                                      ret_eos = eos;
                                  })
@@ -371,6 +373,30 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
     ASSERT_TRUE(flush_token->submit(nullptr, true, nullptr).ok());
 
     ASSERT_TRUE(flush_token->wait().ok());
+}
+
+TEST_F(MemTableFlushExecutorTest, testMemtableFlushStatusNotOk) {
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushStatusNotOk";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    ASSERT_TRUE(flush_token->status().ok());
+
+    flush_token->set_status(Status::OK());
+    ASSERT_TRUE(flush_token->status().ok());
+
+    flush_token->set_status(Status::NotSupported("Not Suppoted"));
+    ASSERT_FALSE(flush_token->status().ok());
+
+    flush_token->_flush_memtable(nullptr, nullptr, false, nullptr);
+
+    ASSERT_TRUE(MemTableFlushExecutor::calc_max_threads_for_lake_table(data_dirs) > 0);
 }
 
 } // namespace starrocks

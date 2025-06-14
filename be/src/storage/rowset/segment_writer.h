@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <storage/flat_json_config.h>
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -43,6 +45,8 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dict/types.h"
+#include "storage/row_store_encoder_factory.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -54,9 +58,16 @@ class MemTracker;
 class WritableFile;
 class Chunk;
 class ColumnWriter;
+class Schema;
 
 extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
+
+class SegmentFileMark {
+public:
+    std::string rowset_path_prefix;
+    std::string rowset_id;
+};
 
 struct SegmentWriterOptions {
 #ifdef BE_TEST
@@ -66,6 +77,10 @@ struct SegmentWriterOptions {
 #endif
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
+    SegmentFileMark segment_file_mark;
+    std::string encryption_meta;
+    bool is_compaction = false;
+    std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -93,7 +108,7 @@ struct SegmentWriterOptions {
 //
 class SegmentWriter {
 public:
-    SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, const TabletSchema* tablet_schema,
+    SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                   SegmentWriterOptions opts);
     ~SegmentWriter();
 
@@ -129,16 +144,23 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
-    std::string segment_path() const;
+    const std::string& segment_path() const;
+
+    uint64_t current_filesz() const;
+
+    const std::string& encryption_meta() const { return _opts.encryption_meta; }
+
+    int64_t bundle_file_offset() const;
 
 private:
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
+    void _verify_footer();
 
     uint32_t _segment_id;
-    const TabletSchema* _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     SegmentWriterOptions _opts;
 
     std::unique_ptr<WritableFile> _wfile;
@@ -149,6 +171,7 @@ private:
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
+    std::unique_ptr<Schema> _schema_without_full_row_column;
 
     // num rows written when appending [partial] columns
     uint32_t _num_rows_written = 0;

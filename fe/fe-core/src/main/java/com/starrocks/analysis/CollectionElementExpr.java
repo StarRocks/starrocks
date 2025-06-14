@@ -43,26 +43,32 @@ import com.starrocks.thrift.TExprNodeType;
 
 public class CollectionElementExpr extends Expr {
 
-    public CollectionElementExpr(Expr expr, Expr subscript) {
+    // For trino and presto, access out of bound in map/array, it will throw error msg
+    private final boolean checkIsOutOfBounds;
+
+    public CollectionElementExpr(Expr expr, Expr subscript, boolean checkIsOutOfBounds) {
         super(NodePosition.ZERO);
         this.children.add(expr);
         this.children.add(subscript);
+        this.checkIsOutOfBounds = checkIsOutOfBounds;
     }
 
-    public CollectionElementExpr(Type type, Expr expr, Expr subscript) {
-        this(type, expr, subscript, NodePosition.ZERO);
+    public CollectionElementExpr(Type type, Expr expr, Expr subscript, boolean checkIsOutOfBounds) {
+        this(type, expr, subscript, checkIsOutOfBounds, NodePosition.ZERO);
     }
 
 
-    public CollectionElementExpr(Type type, Expr expr, Expr subscript, NodePosition pos) {
+    public CollectionElementExpr(Type type, Expr expr, Expr subscript, boolean checkIsOutOfBounds, NodePosition pos) {
         super(pos);
         this.type = type;
         this.children.add(expr);
         this.children.add(subscript);
+        this.checkIsOutOfBounds = checkIsOutOfBounds;
     }
 
     public CollectionElementExpr(CollectionElementExpr other) {
         super(other);
+        this.checkIsOutOfBounds = other.checkIsOutOfBounds;
     }
 
     @Override
@@ -83,6 +89,7 @@ public class CollectionElementExpr extends Expr {
         } else {
             msg.setNode_type(TExprNodeType.MAP_ELEMENT_EXPR);
         }
+        msg.setCheck_is_out_of_bounds(checkIsOutOfBounds);
     }
 
     @Override
@@ -93,5 +100,18 @@ public class CollectionElementExpr extends Expr {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCollectionElementExpr(this, context);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        boolean ret = true;
+        for (Expr child : children) {
+            ret &= child.isSelfMonotonic();
+        }
+        return ret;
+    }
+
+    public boolean isCheckIsOutOfBounds() {
+        return checkIsOutOfBounds;
     }
 }

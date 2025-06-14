@@ -35,11 +35,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMySQLTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -47,16 +45,13 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.Adler32;
 
 public class MysqlTable extends Table {
-    private static final Logger LOG = LogManager.getLogger(OlapTable.class);
+    private static final Logger LOG = LogManager.getLogger(MysqlTable.class);
 
     private static final String ODBC_CATALOG_RESOURCE = "odbc_catalog_resource";
     private static final String MYSQL_HOST = "host";
@@ -189,11 +184,13 @@ public class MysqlTable extends Table {
         return getPropertyFromResource(MYSQL_PASSWORD);
     }
 
-    public String getMysqlDatabaseName() {
+    @Override
+    public String getCatalogDBName() {
         return mysqlDatabaseName;
     }
 
-    public String getMysqlTableName() {
+    @Override
+    public String getCatalogTableName() {
         return mysqlTableName;
     }
 
@@ -232,55 +229,17 @@ public class MysqlTable extends Table {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        Map<String, String> serializeMap = Maps.newHashMap();
-        serializeMap.put(ODBC_CATALOG_RESOURCE, odbcCatalogResourceName);
-        serializeMap.put(MYSQL_HOST, host);
-        serializeMap.put(MYSQL_PORT, port);
-        serializeMap.put(MYSQL_USER, userName);
-        serializeMap.put(MYSQL_PASSWORD, passwd);
-        serializeMap.put(MYSQL_DATABASE, mysqlDatabaseName);
-        serializeMap.put(MYSQL_TABLE, mysqlTableName);
-
-        int size = (int) serializeMap.values().stream().filter(v -> v != null).count();
-        out.writeInt(size);
-        for (Map.Entry<String, String> kv : serializeMap.entrySet()) {
-            if (kv.getValue() != null) {
-                Text.writeString(out, kv.getKey());
-                Text.writeString(out, kv.getValue());
-            }
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        // Read MySQL meta
-        int size = in.readInt();
-        Map<String, String> serializeMap = Maps.newHashMap();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            serializeMap.put(key, value);
-        }
-
-        odbcCatalogResourceName = serializeMap.get(ODBC_CATALOG_RESOURCE);
-        host = serializeMap.get(MYSQL_HOST);
-        port = serializeMap.get(MYSQL_PORT);
-        userName = serializeMap.get(MYSQL_USER);
-        passwd = serializeMap.get(MYSQL_PASSWORD);
-        mysqlDatabaseName = serializeMap.get(MYSQL_DATABASE);
-        mysqlTableName = serializeMap.get(MYSQL_TABLE);
-    }
-
-    @Override
     public boolean isSupported() {
         return true;
     }
 
     @Override
     public boolean supportInsert() {
+        return true;
+    }
+
+    @Override
+    public boolean isTemporal() {
         return true;
     }
 }

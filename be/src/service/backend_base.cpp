@@ -54,7 +54,6 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "service_be/backend_service.h"
-#include "service_cn/compute_service.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
 #include "util/blocking_queue.hpp"
@@ -82,7 +81,6 @@ std::unique_ptr<ThriftServer> BackendServiceBase::create(ExecEnv* exec_env, int 
                                           config::be_service_threads);
 }
 
-template std::unique_ptr<ThriftServer> BackendServiceBase::create<ComputeService>(ExecEnv* exec_env, int port);
 template std::unique_ptr<ThriftServer> BackendServiceBase::create<BackendService>(ExecEnv* exec_env, int port);
 
 void BackendServiceBase::exec_plan_fragment(TExecPlanFragmentResult& return_val,
@@ -155,7 +153,7 @@ void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenP
     TStatus t_status;
     TUniqueId fragment_instance_id = generate_uuid();
     std::shared_ptr<ScanContext> p_context;
-    _exec_env->external_scan_context_mgr()->create_scan_context(&p_context);
+    (void)_exec_env->external_scan_context_mgr()->create_scan_context(&p_context);
     p_context->fragment_instance_id = fragment_instance_id;
     p_context->offset = 0;
     p_context->last_access_time = time(nullptr);

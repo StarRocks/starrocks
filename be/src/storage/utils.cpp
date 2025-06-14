@@ -35,24 +35,17 @@
 #include "storage/utils.h"
 
 #include <bvar/bvar.h>
-#include <dirent.h>
 #include <fmt/format.h>
-#include <lz4/lz4.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <atomic>
 #include <boost/regex.hpp>
 #include <cerrno>
 #include <chrono>
-#include <cstdarg>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -61,6 +54,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/errno.h"
 #include "util/string_parser.hpp"
@@ -82,11 +76,11 @@ Status gen_timestamp_string(string* out_string) {
     tm local_tm;
 
     if (localtime_r(&now, &local_tm) == nullptr) {
-        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+        return Status::InternalError(fmt::format("localtime_r: {} ", std::strerror(errno)));
     }
     char time_suffix[16] = {0}; // Example: 20150706111404
     if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
-        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+        return Status::InternalError(fmt::format("localtime_r: {}", std::strerror(errno)));
     }
 
     *out_string = time_suffix;
@@ -329,7 +323,7 @@ bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
 bool valid_datetime(const string& value_str) {
     const char* datetime_pattern =
             "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
-            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
+            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2})(\\.(\\d{1,6}))?)?";
     boost::regex e(datetime_pattern);
     boost::smatch what;
 
@@ -395,6 +389,21 @@ std::string parent_name(const std::string& fullpath) {
 std::string file_name(const std::string& fullpath) {
     std::filesystem::path path(fullpath);
     return path.filename().string();
+}
+
+bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio) {
+    hard_limit_ratio = std::max(hard_limit_ratio, 1.0);
+    return tracker->limit_exceeded_by_ratio((int64_t)(hard_limit_ratio * 100)) ||
+           (tracker->parent() != nullptr && tracker->parent()->limit_exceeded());
+}
+
+int caculate_delta_writer_thread_num(int thread_num_from_config) {
+    if (thread_num_from_config > 0) {
+        return thread_num_from_config;
+    }
+
+    // The minimum value 16 is for compatibility with previous versions.
+    return std::max<int>(CpuInfo::num_cores() / 2, 16);
 }
 
 } // namespace starrocks

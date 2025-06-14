@@ -1,0 +1,63 @@
+-- name: test_mv_refresh_with_time_slice
+
+-- TODO(fixme): time_slice may generate interacted partitions even the selected partitions are incremental.
+-- mysql> SELECT time_slice(dt, interval 5 day) as dt1, sum(id) FROM t1 where dt > '2020-07-01'  GROUP BY dt1;
+-- +---------------------+---------+
+-- | dt1                 | sum(id) |
+-- +---------------------+---------+
+-- | 2020-07-20 00:00:00 |       7 |
+-- | 2020-06-30 00:00:00 |       3 |
+-- | 2020-07-15 00:00:00 |       8 |
+-- | 2020-07-05 00:00:00 |      12 |
+-- | 2020-07-10 00:00:00 |       9 |
+-- | 2020-07-25 00:00:00 |       9 |
+-- +---------------------+---------+
+-- 6 rows in set (0.05 sec)
+
+CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+      "replication_num" = "1"
+);
+INSERT INTO t1 VALUES
+ (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+ (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+ (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+ (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11"),
+ (2,"2020-07-16"),(3,"2020-07-19"),(4,"2020-07-22"),(5,"2020-07-25");
+
+CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc("month", dt1) 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+      "replication_num" = "1",
+      "session.insert_max_filter_ratio" = "1",
+      "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
+)
+AS SELECT time_slice(dt, interval 5 day) as dt1, sum(id) FROM t1 GROUP BY dt1;
+
+CREATE MATERIALIZED VIEW mv2 PARTITION BY date_trunc("month", dt1) 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+      "replication_num" = "1",
+      "session.insert_max_filter_ratio" = "1",
+      "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
+)
+AS SELECT dt as dt1, sum(id) FROM t1 GROUP BY dt1;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+select * from mv1 order by 1 limit 5;
+select * from mv2 order by 1 limit 5;
+INSERT INTO t1 VALUES (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11");
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+select * from mv1 order by 1 limit 5;
+select * from mv2 order by 1 limit 5;
+
+drop materialized view mv1;
+drop materialized view mv2;

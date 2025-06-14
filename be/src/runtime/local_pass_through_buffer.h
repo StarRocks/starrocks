@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h" // for PlanNodeId
+#include "util/hash.h"
 
 namespace starrocks {
 
@@ -32,7 +33,7 @@ public:
 
     struct KeyHash {
         size_t operator()(const Key& key) const {
-            uint64_t hash = CRC_HASH_SEED1;
+            uint64_t hash = CRC_HASH_SEEDS::CRC_HASH_SEED1;
             hash = crc_hash_uint64(std::get<0>(key).hi, hash);
             hash = crc_hash_uint64(std::get<0>(key).lo, hash);
             hash = crc_hash_uint64(std::get<1>(key), hash);
@@ -62,6 +63,7 @@ public:
     void init();
     void append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
+    int64_t total_bytes() const;
 
 private:
     // hold this chunk buffer to avoid early deallocation.
@@ -80,6 +82,7 @@ public:
     void open_fragment_instance(const TUniqueId& query_id);
     void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
+    void close();
 
 private:
     std::mutex _mutex;

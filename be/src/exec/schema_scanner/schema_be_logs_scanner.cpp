@@ -24,9 +24,11 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeLogsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},     {"LEVEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TIMESTAMP", TYPE_BIGINT, sizeof(int64_t), false}, {"TID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LOG", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LEVEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TIMESTAMP", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaBeLogsScanner::SchemaBeLogsScanner()
@@ -46,7 +48,7 @@ Status SchemaBeLogsScanner::start(RuntimeState* state) {
     if (_param->log_end_ts > 0) {
         end_ts = _param->log_end_ts;
     }
-    string level;
+    string level = "I";
     string pattern;
     if (_param->log_level != nullptr) {
         level = *_param->log_level;
@@ -67,11 +69,11 @@ Status SchemaBeLogsScanner::start(RuntimeState* state) {
     if (st.ok()) {
         VLOG(3) << msg;
     } else {
-        LOG(WARNING) << msg << " error:" << st.get_error_msg();
+        LOG(WARNING) << msg << " error:" << st.message();
         // send err info to client as log
         auto& err_log = _infos.emplace_back();
         err_log.log = strings::Substitute("grep_log failed pattern:$0 level:$1 limit:$2 error:$3", pattern, level,
-                                          _param->limit, st.get_error_msg());
+                                          _param->limit, st.message());
     }
     _cur_idx = 0;
     return Status::OK();

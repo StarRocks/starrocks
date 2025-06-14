@@ -15,8 +15,13 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -28,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
@@ -37,8 +43,12 @@ import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.OffsetDateTime;
+import java.math.RoundingMode;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -118,6 +128,27 @@ public class ScalarOperatorToIcebergExpr {
 
     private static class IcebergExprVisitor extends ScalarOperatorVisitor<Expression, IcebergContext> {
 
+        private static Type getResultType(String columnName, IcebergContext context) {
+            Preconditions.checkNotNull(context);
+            return getColumnType(columnName, context);
+        }
+
+        private static Type getColumnType(String qualifiedName, IcebergContext context) {
+            Types.StructType structType = context.getSchema().asStructType();
+            Type type = structType.fieldType(qualifiedName);
+            if (null != type) {
+                return type;
+            }
+            if (qualifiedName.contains(".")) {
+                type = context.getSchema();
+                String[] paths = qualifiedName.split("\\.");
+                for (String path : paths) {
+                    type = type.asStructType().fieldType(path);
+                }
+            }
+            return type;
+        }
+
         @Override
         public Expression visitCompoundPredicate(CompoundPredicateOperator operator, IcebergContext context) {
             CompoundPredicateOperator.CompoundType op = operator.getCompoundType();
@@ -125,14 +156,14 @@ public class ScalarOperatorToIcebergExpr {
                 if (operator.getChild(0) instanceof LikePredicateOperator) {
                     return null;
                 }
-                Expression expression = operator.getChild(0).accept(this, null);
+                Expression expression = operator.getChild(0).accept(this, context);
 
                 if (expression != null) {
                     return not(expression);
                 }
             } else {
-                Expression left = operator.getChild(0).accept(this, null);
-                Expression right = operator.getChild(1).accept(this, null);
+                Expression left = operator.getChild(0).accept(this, context);
+                Expression right = operator.getChild(1).accept(this, context);
                 if (left != null && right != null) {
                     return (op == CompoundPredicateOperator.CompoundType.OR) ? or(left, right) : and(left, right);
                 }
@@ -160,13 +191,15 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
-            Object literalValue = getLiteralValue(operator.getChild(1));
-            if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
-                literalValue = convertBoolLiteralValue(literalValue);
-            }
+            Type icebergType = getResultType(columnName, context);
+            Type.TypeID typeID = icebergType.typeId();
+            Object literalValue = getLiteralValue(operator.getChild(1), icebergType);
 
             if (literalValue == null) {
                 return null;
+            }
+            if (typeID == Type.TypeID.BOOLEAN) {
+                literalValue = convertBoolLiteralValue(literalValue);
             }
             switch (operator.getBinaryType()) {
                 case LT:
@@ -194,13 +227,22 @@ public class ScalarOperatorToIcebergExpr {
             }
 
             List<Object> literalValues = operator.getListChildren().stream()
-                    .map(childoperator -> {
-                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator);
-                        if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                    .map(childOperator -> {
+                        Type icebergType = getResultType(columnName, context);
+                        Type.TypeID typeID = icebergType.typeId();
+                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childOperator, icebergType);
+                        if (typeID == Type.TypeID.BOOLEAN) {
                             literalValue = convertBoolLiteralValue(literalValue);
                         }
                         return literalValue;
                     }).collect(Collectors.toList());
+
+            // It should not be pushed down if there is an implicit cast
+            // TODO: Some functions within ScalarOperatorFunctions could be computed on frontends.
+            // Maybe we can obtain the result first and then convert it into an Iceberg expression.
+            if (literalValues.stream().anyMatch(Objects::isNull)) {
+                return null;
+            }
 
             if (operator.isNotIn()) {
                 return notIn(columnName, literalValues);
@@ -218,7 +260,10 @@ public class ScalarOperatorToIcebergExpr {
 
             if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
                 if (operator.getChild(1).getType().isStringType()) {
-                    String literal = (String) getLiteralValue(operator.getChild(1));
+                    String literal = (String) getLiteralValue(operator.getChild(1), getResultType(columnName, context));
+                    if (literal == null) {
+                        return null;
+                    }
                     if (literal.indexOf("%") == literal.length() - 1) {
                         return startsWith(columnName, literal.substring(0, literal.length() - 1));
                     }
@@ -233,12 +278,12 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static Object getLiteralValue(ScalarOperator operator) {
+    private static Object getLiteralValue(ScalarOperator operator, Type icebergType) {
         if (operator == null) {
             return null;
         }
 
-        return operator.accept(new ExtractLiteralValue(), null);
+        return operator.accept(new ExtractLiteralValue(), icebergType);
     }
 
     private static Object convertBoolLiteralValue(Object literalValue) {
@@ -249,14 +294,101 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Void> {
+    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Type> {
+        private boolean needCast(PrimitiveType sourceType, Type.TypeID dstTypeID) {
+            switch (sourceType) {
+                case BOOLEAN:
+                    return dstTypeID != Type.TypeID.BOOLEAN;
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                    return dstTypeID != Type.TypeID.INTEGER;
+                case BIGINT:
+                    return dstTypeID != Type.TypeID.LONG;
+                case FLOAT:
+                    return dstTypeID != Type.TypeID.FLOAT;
+                case DOUBLE:
+                    return dstTypeID != Type.TypeID.DOUBLE;
+                case DECIMALV2:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    return dstTypeID != Type.TypeID.DECIMAL;
+                case HLL:
+                case VARCHAR:
+                case CHAR:
+                    return dstTypeID != Type.TypeID.STRING;
+                case DATE:
+                    return dstTypeID != Type.TypeID.DATE;
+                case DATETIME:
+                    return dstTypeID != Type.TypeID.TIMESTAMP;
+                case VARBINARY:
+                case BINARY:
+                    return dstTypeID != Type.TypeID.BINARY;
+                default:
+                    return true;
+            }
+        }
+
+        private ConstantOperator tryCastToResultType(ConstantOperator operator, Type.TypeID resultTypeID) {
+
+            Optional<ConstantOperator> res = Optional.empty();
+            switch (resultTypeID) {
+                case BOOLEAN:
+                    res = operator.castTo(com.starrocks.catalog.Type.BOOLEAN);
+                    break;
+                case DATE:
+                    res = operator.castTo(com.starrocks.catalog.Type.DATE);
+                    break;
+                case TIMESTAMP:
+                    res = operator.castTo(com.starrocks.catalog.Type.DATETIME);
+                    break;
+                case STRING:
+                case UUID:
+                    // num and string has different comparator
+                    if (operator.getType().isNumericType()) {
+                        return null;
+                    } else {
+                        res = operator.castTo(com.starrocks.catalog.Type.VARCHAR);
+                    }
+                    break;
+                case BINARY:
+                    res = operator.castTo(com.starrocks.catalog.Type.VARBINARY);
+                    break;
+                    // num usually don't need cast, and num and string has different comparator
+                    // cast is dangerous.
+                case DECIMAL:
+                    res = operator.castTo(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
+                    break;
+                case INTEGER:
+                case LONG:
+                case FLOAT:
+                case DOUBLE:
+                case STRUCT:
+                case LIST:
+                case MAP:
+                    // not supported
+                case FIXED:
+                case TIME:
+                    return null;
+            }
+
+            return res.orElse(null);
+        }
+
         @Override
-        public Object visit(ScalarOperator scalarOperator, Void context) {
+        public Object visit(ScalarOperator scalarOperator, Type context) {
             return null;
         }
 
         @Override
-        public Object visitConstant(ConstantOperator operator, Void context) {
+        public Object visitConstant(ConstantOperator operator, Type context) {
+            if (context != null && needCast(operator.getType().getPrimitiveType(), context.typeId())) {
+                operator = tryCastToResultType(operator, context.typeId());
+            }
+            if (operator == null) {
+                return null;
+            }
             switch (operator.getType().getPrimitiveType()) {
                 case BOOLEAN:
                     return operator.getBoolean();
@@ -276,7 +408,16 @@ public class ScalarOperatorToIcebergExpr {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
-                    return operator.getDecimal();
+                    if (context != null) {
+                        //In iceberg transform expr, the decimal's scale will influence the result, like truncate and bucket...
+                        //For column value 123.40 and const value 123.4, column = value should be true
+                        //But in iceberg transform, 123.40 and 123.4 are not the same, and the partition may be pruned incorretly.
+                        return operator.getDecimal().setScale(((Types.DecimalType) context).scale(), 
+                                RoundingMode.HALF_UP);
+                    } else {
+                        return operator.getDecimal().setScale(((ScalarType) operator.getType()).getScalarScale(), 
+                                RoundingMode.HALF_UP);
+                    }
                 case HLL:
                 case VARCHAR:
                 case CHAR:
@@ -284,8 +425,19 @@ public class ScalarOperatorToIcebergExpr {
                 case DATE:
                     return operator.getDate().toLocalDate().toEpochDay();
                 case DATETIME:
-                    long value = operator.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
-                    return TimeUnit.MICROSECONDS.convert(value, TimeUnit.SECONDS);
+                    ZoneId zoneId;
+                    if (Types.TimestampType.withZone().equals(context)) {
+                        zoneId = TimeUtils.getTimeZone().toZoneId();
+                    } else {
+                        zoneId = ZoneOffset.UTC;
+                    }
+
+                    long value = operator.getDatetime().atZone(zoneId).toEpochSecond() * 1000
+                            * 1000 * 1000 + operator.getDatetime().getNano();
+                    return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
+                case VARBINARY:
+                case BINARY:
+                    return operator.getBinary();
                 default:
                     return null;
             }
@@ -311,12 +463,27 @@ public class ScalarOperatorToIcebergExpr {
             return null;
         }
 
+        @Override
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
             return operator.getName();
         }
 
+        @Override
         public String visitCastOperator(CastOperator operator, Void context) {
             return operator.getChild(0).accept(this, context);
+        }
+
+        @Override
+        public String visitSubfield(SubfieldOperator operator, Void context) {
+            ScalarOperator child = operator.getChild(0);
+            if (!(child instanceof ColumnRefOperator)) {
+                return null;
+            }
+            ColumnRefOperator columnRefChild = ((ColumnRefOperator) child);
+            List<String> paths = new ImmutableList.Builder<String>()
+                    .add(columnRefChild.getName()).addAll(operator.getFieldNames())
+                    .build();
+            return String.join(".", paths);
         }
     }
 }

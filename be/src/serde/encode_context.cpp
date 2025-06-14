@@ -24,7 +24,6 @@ EncodeContext::EncodeContext(const int col_num, const int encode_level) : _sessi
         _raw_bytes.emplace_back(0);
         _encoded_bytes.emplace_back(0);
     }
-    DCHECK(_session_encode_level != 0);
     // the lowest bit is set and other bits are not zero, then enable adjust.
     if (_session_encode_level & 1 && (_session_encode_level >> 1)) {
         _enable_adjust = true;
@@ -32,7 +31,6 @@ EncodeContext::EncodeContext(const int col_num, const int encode_level) : _sessi
 }
 
 void EncodeContext::update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte) {
-    DCHECK(_session_encode_level != 0);
     if (!_enable_adjust) {
         return;
     }
@@ -52,10 +50,10 @@ void EncodeContext::_adjust(const int col_id) {
         _column_encode_level[col_id] = 0;
     }
     if (old_level != _column_encode_level[col_id] || _session_encode_level < -1) {
-        VLOG_ROW << "Old encode level " << old_level << " is changed to " << _column_encode_level[col_id]
-                 << " because the first " << EncodeSamplingNum << " of " << _frequency << " in total " << _times
-                 << " chunks' compression ratio is " << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id]
-                 << " higher than limit " << EncodeRatioLimit;
+        VLOG_ROW << "column " << col_id << " encode_level changed from " << old_level << " to "
+                 << _column_encode_level[col_id] << " because the first " << EncodeSamplingNum << " of " << _frequency
+                 << " in total " << _times << " chunks' compression ratio is "
+                 << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id] << " higher than limit " << EncodeRatioLimit;
     }
     _encoded_bytes[col_id] = 0;
     _raw_bytes[col_id] = 0;

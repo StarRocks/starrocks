@@ -32,6 +32,7 @@ public class ShowTabletTest {
     public void normalTest() {
         analyzeSuccess("SHOW TABLET 10000;");
         analyzeSuccess("SHOW TABLET FROM test_tbl;");
+        analyzeSuccess("SHOW TABLETS FROM test_tbl;");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name;");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name partition(p1, p2);");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name limit 10;");
@@ -40,6 +41,8 @@ public class ShowTabletTest {
                 "backendid=10000 and version=1 and state=\"NORMAL\";");
         analyzeSuccess("SHOW TABLET FROM test.t0 where backendid=10000 order by version;");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name where indexname=\"t1_rollup\";");
+        analyzeSuccess("SHOW TABLET FROM example_db.table_name where IsConsistent=true;");
+        analyzeSuccess("SHOW TABLET FROM example_db.table_name where IsConsistent=false;");
     }
 
     @Test
@@ -50,6 +53,8 @@ public class ShowTabletTest {
         analyzeFail("SHOW TABLET FROM test.t0 where backendid=10000 order by abc;");
         analyzeFail("SHOW TABLET FROM test.lake_table where backendid=10000 order by DataSize;",
                 "Table lake_table is not found");
+        analyzeFail("SHOW TABLET FROM example_db.table_name where IsConsistent=10;");
+        analyzeFail("SHOW TABLET FROM example_db.table_name where IsConsistent=\"haha\";");
     }
 
 }

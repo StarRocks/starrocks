@@ -45,6 +45,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -81,14 +82,14 @@ public class AnalyticExpr extends Expr {
     // in SQL, and hence, will fail analysis().
     private boolean resetWindow = false;
 
-    private final String partitionHint;
-    private final boolean useHashBasedPartition;
+    private String partitionHint;
+    private String skewHint;
+
+    private boolean useHashBasedPartition;
+    private boolean isSkewed;
 
     // SQL string of this AnalyticExpr before standardization. Returned in toSqlImpl().
     private String sqlString;
-
-    private static final String HINT_SORT = "sort";
-    private static final String HINT_HASH = "hash";
 
     public static String LEAD = "LEAD";
     public static String LAG = "LAG";
@@ -104,20 +105,23 @@ public class AnalyticExpr extends Expr {
     public static String MAX = "MAX";
     public static String SUM = "SUM";
     public static String COUNT = "COUNT";
+    public static String SESSION_NUMBER = "SESSION_NUMBER";
+    public static String APPROX_TOP_K = "approx_top_k";
 
     // The function of HLL_UNION_AGG can't be used with a window by now.
     public static String HLL_UNION_AGG = "HLL_UNION_AGG";
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
-                        AnalyticWindow window, String partitionHint) {
-        this(fnCall, partitionExprs, orderByElements, window, partitionHint, NodePosition.ZERO);
+                        AnalyticWindow window, List<String> hints) {
+        this(fnCall, partitionExprs, orderByElements, window, hints, NodePosition.ZERO);
     }
+
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
-                        AnalyticWindow window, String partitionHint, NodePosition pos) {
+                        AnalyticWindow window, List<String> hints, NodePosition pos) {
         super(pos);
         Preconditions.checkNotNull(fnCall);
         this.fnCall = fnCall;
-        this.partitionExprs = partitionExprs != null ? partitionExprs : new ArrayList<Expr>();
+        this.partitionExprs = partitionExprs != null ? partitionExprs : new ArrayList<>();
 
         if (orderByElements != null) {
             this.orderByElements.addAll(orderByElements);
@@ -125,19 +129,19 @@ public class AnalyticExpr extends Expr {
 
         this.window = window;
 
-        if (partitionHint == null || !this.orderByElements.isEmpty()) {
-            this.partitionHint = null;
-            this.useHashBasedPartition = false;
-        } else if (HINT_SORT.equalsIgnoreCase(partitionHint)) {
-            this.partitionHint = HINT_SORT;
-            this.useHashBasedPartition = false;
-        } else if (HINT_HASH.equalsIgnoreCase(partitionHint)) {
-            this.partitionHint = HINT_HASH;
-            this.useHashBasedPartition = true;
-        } else {
-            this.partitionHint = null;
-            this.useHashBasedPartition = false;
-            Preconditions.checkState(false, "partition by hint can only be 'sort' or 'hash'");
+        if (CollectionUtils.isNotEmpty(hints)) {
+            for (String hint : hints) {
+                if (HintNode.HINT_ANALYTIC_SORT.equalsIgnoreCase(hint) ||
+                        HintNode.HINT_ANALYTIC_HASH.equalsIgnoreCase(hint)) {
+                    this.partitionHint = hint;
+                    this.useHashBasedPartition = !HintNode.HINT_ANALYTIC_SORT.equalsIgnoreCase(hint);
+                } else if (HintNode.HINT_ANALYTIC_SKEW.equalsIgnoreCase(hint)) {
+                    this.skewHint = hint;
+                    this.isSkewed = true;
+                } else {
+                    Preconditions.checkState(false, "partition by hint can only be 'sort' or 'hash' or 'skew'");
+                }
+            }
         }
 
         setChildren();
@@ -158,7 +162,9 @@ public class AnalyticExpr extends Expr {
         window = (other.window != null ? other.window.clone() : null);
         resetWindow = other.resetWindow;
         partitionHint = other.partitionHint;
+        skewHint = other.skewHint;
         useHashBasedPartition = other.useHashBasedPartition;
+        isSkewed = other.isSkewed;
         sqlString = other.sqlString;
         setChildren();
     }
@@ -183,13 +189,21 @@ public class AnalyticExpr extends Expr {
         return partitionHint;
     }
 
+    public String getSkewHint() {
+        return skewHint;
+    }
+
     public boolean isUseHashBasedPartition() {
         return useHashBasedPartition;
     }
 
+    public boolean isSkewed() {
+        return isSkewed;
+    }
+
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
 
@@ -200,7 +214,9 @@ public class AnalyticExpr extends Expr {
                 Objects.equals(orderByElements, o.orderByElements) &&
                 Objects.equals(window, o.window) &&
                 Objects.equals(partitionHint, o.partitionHint) &&
-                Objects.equals(useHashBasedPartition, o.useHashBasedPartition);
+                Objects.equals(skewHint, o.skewHint) &&
+                Objects.equals(useHashBasedPartition, o.useHashBasedPartition) &&
+                Objects.equals(isSkewed, o.isSkewed);
     }
 
     /**
@@ -264,6 +280,14 @@ public class AnalyticExpr extends Expr {
         }
 
         return fn.functionName().equalsIgnoreCase(ROWNUMBER);
+    }
+
+    public static boolean isApproxTopKFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(APPROX_TOP_K);
     }
 
     /**
@@ -450,7 +474,7 @@ public class AnalyticExpr extends Expr {
         // all children information is contained in the group of fnCall, partitionExprs, orderByElements and window,
         // so need to calculate super's hashCode.
         // field window is correlated with field resetWindow, so no need to add resetWindow when calculating hashCode.
-        return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window, partitionHint,
-                useHashBasedPartition);
+        return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
+                useHashBasedPartition, isSkewed);
     }
 }

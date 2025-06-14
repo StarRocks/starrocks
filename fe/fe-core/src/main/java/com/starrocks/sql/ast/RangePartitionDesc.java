@@ -28,6 +28,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -42,6 +43,8 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
+    // For automatically created partitioned tables, the partition column type and expression type may be inconsistent.
+    protected Type partitionType;
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         this(partitionColNames, partitionDescs, NodePosition.ZERO);
@@ -67,6 +70,10 @@ public class RangePartitionDesc extends PartitionDesc {
 
     public List<SingleRangePartitionDesc> getSingleRangePartitionDescs() {
         return this.singleRangePartitionDescs;
+    }
+
+    public List<MultiRangePartitionDesc> getMultiRangePartitionDescs() {
+        return multiRangePartitionDescs;
     }
 
     public List<String> getPartitionColNames() {
@@ -124,7 +131,11 @@ public class RangePartitionDesc extends PartitionDesc {
                 }
                 PartitionConvertContext context = new PartitionConvertContext();
                 context.setAutoPartitionTable(isAutoPartitionTable);
-                context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                if (partitionType != null) {
+                    context.setFirstPartitionColumnType(partitionType);
+                } else {
+                    context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                }
                 context.setProperties(otherProperties);
 
                 this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.convertToSingle(context));
@@ -149,7 +160,7 @@ public class RangePartitionDesc extends PartitionDesc {
             } else if (partitionType != desc.getPartitionKeyDesc().getPartitionType()) {
                 throw new AnalysisException("You can only use one of these methods to create partitions");
             }
-            desc.analyze(columnDefs.size(), givenProperties);
+            desc.analyze(partitionColNames.size(), givenProperties);
         }
     }
 
@@ -189,7 +200,7 @@ public class RangePartitionDesc extends PartitionDesc {
         RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
         for (SingleRangePartitionDesc desc : singleRangePartitionDescs) {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
-            rangePartitionInfo.handleNewSinglePartitionDesc(desc, partitionId, isTemp);
+            rangePartitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), desc, partitionId, isTemp);
         }
         return rangePartitionInfo;
     }

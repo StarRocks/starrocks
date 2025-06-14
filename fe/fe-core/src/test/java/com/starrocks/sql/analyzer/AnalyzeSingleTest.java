@@ -16,12 +16,15 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
@@ -68,7 +71,7 @@ public class AnalyzeSingleTest {
         analyzeFail("select error from t0");
         analyzeFail("select v1 from t_error");
 
-        analyzeSuccess("select v1 from t0 temporary partition(t1,t2)");
+        analyzeFail("select v1 from t0 temporary partition(t1,t2)");
         analyzeFail("SELECT v1,v2,v3 FROM t0 INTO OUTFILE \"hdfs://path/to/result_\""
                 + "FORMAT AS PARQUET PROPERTIES" +
                 "(\"broker.name\" = \"my_broker\"," +
@@ -90,6 +93,11 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 as location from t0");
 
         analyzeSuccess("select v1 as rank from t0");
+
+        analyzeSuccess("select v1 as running from t0");
+        analyzeSuccess("select v1 as queries from t0");
+        analyzeSuccess("show running queries");
+        analyzeSuccess("show running queries limit 10");
     }
 
     @Test
@@ -571,11 +579,21 @@ public class AnalyzeSingleTest {
         StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
                 "current_timestamp() AS time");
         SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("Asia/Shanghai", selectRelation.getSelectList().getOptHints().get("time_zone"));
+        Assert.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
 
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
+        Assert.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
+
+        SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +
+                "create table temp as select count(*) as cnt from t0");
+        Assert.assertEquals("1", stmt.getProperties().get("broadcast_row_limit"));
+
+        LoadStmt loadStmt = (LoadStmt) analyzeSuccess("LOAD /*+ SET_VAR(broadcast_row_limit=1) */  LABEL test.testLabel " +
+                "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") " +
+                "INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
+
     }
 
     @Test
@@ -591,7 +609,7 @@ public class AnalyzeSingleTest {
     }
 
     @Test
-    public void testUnsupportedStatement() {
+    public void testTransaction() {
         analyzeSuccess("start transaction");
         analyzeSuccess("start transaction with consistent snapshot");
         analyzeSuccess("begin");
@@ -695,5 +713,67 @@ public class AnalyzeSingleTest {
 
         query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
         Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+    }
+
+    @Test
+    public void testRemoveLineSeparator1() {
+        String sql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* \n" +
+                "from    \n" +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeLineSeparator(sql);
+        String expect = "#comment\n" +
+                "select /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                " and /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n" +
+                "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';";
+        Assert.assertEquals(expect, res);
+    }
+
+    @Test
+    public void testRemoveLineSeparator2() {
+        String invalidSql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    \n" +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeLineSeparator(invalidSql);
+        Assert.assertEquals("#comment\n" +
+                "select /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                " and /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n" +
+                "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
+    }
+
+    @Test
+    public void testRemoveCommentsOrIllegalHint() {
+        analyzeSuccess("select /*+ SET */ v1 from t0");
+        analyzeSuccess("select /*+ SET */ v1 from t0");
+        analyzeSuccess("select /*+   abc*/ v1 from t0");
+
+        analyzeSuccess("select v1 /*+*/ from t0");
+        analyzeSuccess("select v1 /*+\n*/ from t0");
+        analyzeSuccess("select v1 /*+   \n\n*/ from t0");
+        analyzeSuccess("select v1 /**/ from t0");
+        analyzeSuccess("select v1 /*    */ from t0");
+        analyzeSuccess("select v1 /*    a*/ from t0");
+        analyzeSuccess("select v1 /*abc    '中文\n'*/ from t0");
+        analyzeSuccess("select /*+ SET_VAR ('abc' = 'abc')*/ v1  from t0");
     }
 }

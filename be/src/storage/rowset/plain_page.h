@@ -60,6 +60,11 @@ public:
         reset();
     }
 
+    void reserve_head(uint8_t head_size) override {
+        CHECK(_reserved_head_size == 0);
+        _reserved_head_size = head_size;
+    }
+
     bool is_page_full() override { return _buffer.size() > _options.data_page_size; }
 
     uint32_t add(const uint8_t* vals, uint32_t count) override {
@@ -80,7 +85,13 @@ public:
             _first_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE], SIZE_OF_TYPE);
             _last_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE + (_count - 1) * SIZE_OF_TYPE], SIZE_OF_TYPE);
         }
-        return &_buffer;
+        if (_reserved_head_size == 0) {
+            return &_buffer;
+        } else {
+            _plus_header_buffer.resize(_reserved_head_size + _buffer.size());
+            memcpy(&_plus_header_buffer[_reserved_head_size], _buffer.data(), _buffer.size());
+            return &_plus_header_buffer;
+        }
     }
 
     void reset() override {
@@ -119,10 +130,14 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
     faststring _first_value;
     faststring _last_value;
+    uint8_t _reserved_head_size{0};
+    faststring _plus_header_buffer;
 };
 
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
+    using ValueType = typename CppTypeTraits<Type>::CppType;
+
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
 
@@ -147,7 +162,7 @@ public:
 
         _parsed = true;
 
-        seek_to_position_in_page(0);
+        RETURN_IF_ERROR(seek_to_position_in_page(0));
         return Status::OK();
     }
 
@@ -204,15 +219,15 @@ public:
     }
 
     Status next_batch(size_t* count, Column* dst) override {
-        SparseRange read_range;
+        SparseRange<> read_range;
         uint32_t begin = current_index();
-        read_range.add(Range(begin, begin + *count));
+        read_range.add(Range<>(begin, begin + *count));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *count = current_index() - begin;
         return Status::OK();
     }
 
-    Status next_batch(const SparseRange& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
 
         size_t to_read = range.span_size();
@@ -220,10 +235,10 @@ public:
             return Status::OK();
         }
 
-        SparseRangeIterator iter = range.new_iterator();
+        SparseRangeIterator<> iter = range.new_iterator();
         while (iter.has_more() && _cur_idx < _num_elems) {
             _cur_idx = iter.begin();
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             uint32_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
             int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
                                         max_fetch * SIZE_OF_TYPE);
@@ -241,6 +256,10 @@ public:
     uint32_t current_index() const override {
         DCHECK(_parsed);
         return _cur_idx;
+    }
+
+    void at_index(uint32_t idx, ValueType* out) const {
+        memcpy(out, &_data[PLAIN_PAGE_HEADER_SIZE + idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
     }
 
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }

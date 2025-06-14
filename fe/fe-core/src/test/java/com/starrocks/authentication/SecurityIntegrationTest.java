@@ -12,173 +12,217 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
+import com.google.common.base.Joiner;
+import com.starrocks.analysis.InformationFunction;
 import com.starrocks.common.Config;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.persist.OperationType;
-import com.starrocks.persist.SecurityIntegrationInfo;
+import com.starrocks.common.DdlException;
+import com.starrocks.mysql.MysqlCodec;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.sql.parser.SqlParser;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class SecurityIntegrationTest {
-    private static ConnectContext connectContext;
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        UtFrameUtils.setUpForPersistTest();
-    }
+    private final MockTokenUtils mockTokenUtils = new MockTokenUtils();
 
-    private void createSecurityIntegration(String sql) throws Exception {
-        CreateSecurityIntegrationStatement createSecurityIntegrationStatement =
-                (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        DDLStmtExecutor.execute(createSecurityIntegrationStatement, connectContext);
+    @Test
+    public void testProperty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("group_provider", "A, B, C");
+        properties.put("permitted_groups", "B");
+
+        JWTSecurityIntegration oidcSecurityIntegration =
+                new JWTSecurityIntegration("oidc", properties);
+
+        List<String> groupProviderNameList = oidcSecurityIntegration.getGroupProviderName();
+        Assert.assertEquals("A,B,C", Joiner.on(",").join(groupProviderNameList));
+
+        List<String> permittedGroups = oidcSecurityIntegration.getGroupAllowedLoginList();
+        Assert.assertEquals("B", Joiner.on(",").join(permittedGroups));
+
+        oidcSecurityIntegration = new JWTSecurityIntegration("oidc", new HashMap<>());
+        Assert.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
+        Assert.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
+
+        properties = new HashMap<>();
+        properties.put("group_provider", "");
+        properties.put("permitted_groups", "");
+        oidcSecurityIntegration = new JWTSecurityIntegration("oidc", properties);
+        Assert.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
+        Assert.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
     }
 
     @Test
-    public void testCreateSecurityIntegrationNormal() throws Exception {
-        String sql = "create security integration ldap1 properties (" +
-                "\"type\" = \"ldap\"," +
-                "\"ldap_user_group_match_attr\" = \"memberUid\"," +
-                "\"ldap_user_search_attr\" = \"uid\"," +
-                "\"ldap_bind_root_dn\" = \"uid=admin\"," +
-                "\"ldap_bind_root_pwd\" = \"aaa\"," +
-                "\"ldap_bind_base_dn\" = \"dc=apple, dc=com\"," +
-                "\"ldap_cache_refresh_interval\" = \"1500\"" +
-                ")";
-        createSecurityIntegration(sql);
-        LDAPSecurityIntegration ldap1 = (LDAPSecurityIntegration)
-                GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration("ldap1");
-        Assert.assertEquals("ldap", ldap1.getType());
-        Assert.assertEquals("memberUid", ldap1.getLdapUserGroupMatchAttr());
-        Assert.assertEquals("uid", ldap1.getLdapUserSearchAttr());
-        Assert.assertEquals("uid=admin", ldap1.getLdapBindRootDn());
-        Assert.assertEquals("aaa", ldap1.getLdapBindRootPwd());
-        Assert.assertEquals("dc=apple, dc=com", ldap1.getLdapBindBaseDn());
-        Assert.assertEquals(1500, ldap1.getLdapCacheRefreshInterval());
+    public void testAuthentication() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
+
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        authenticationMgr.createSecurityIntegration("oidc2", properties, true);
+
+        Config.authentication_chain = new String[] {"native", "oidc2"};
+
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        MysqlCodec.writeInt1(outputStream, 1);
+        MysqlCodec.writeLenEncodedString(outputStream, idToken);
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
+        AuthenticationHandler.authenticate(
+                connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
     }
 
-    private void assertExceptionContains(String sql, String msg) {
-        try {
-            createSecurityIntegration(sql);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains(msg));
+    private String getOpenIdConnect(String fileName) throws IOException {
+        String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
+        File file = new File(path + "/" + fileName);
+        BufferedReader reader = new BufferedReader(new FileReader(file));
+
+        StringBuilder sb = new StringBuilder();
+        String tempStr;
+        while ((tempStr = reader.readLine()) != null) {
+            sb.append(tempStr);
         }
+
+        return sb.toString();
     }
 
     @Test
-    public void testCreateSecurityIntegrationAbnormal() throws Exception {
-        // missing type
-        String sql = "create security integration ldap1 properties (" +
-                "\"ldap_user_group_match_attr\" = \"memberUid\"," +
-                "\"ldap_user_search_attr\" = \"uid\"," +
-                "\"ldap_bind_root_dn\" = \"uid=admin\"," +
-                "\"ldap_bind_root_pwd\" = \"aaa\"," +
-                "\"ldap_bind_base_dn\" = \"dc=apple, dc=com\"," +
-                "\"ldap_cache_refresh_interval\" = \"1500\"" +
-                ")";
-        assertExceptionContains(sql, "missing required property: type");
+    public void testFileGroupProvider() throws DdlException, AuthenticationException, IOException, NoSuchMethodException {
+        new MockUp<FileGroupProvider>() {
+            @Mock
+            public InputStream getPath(String groupFileUrl) throws IOException {
+                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath() + "/" + "file_group";
+                return new FileInputStream(path);
+            }
+        };
 
-        // missing root dn
-        sql = "create security integration ldap1 properties (" +
-                "\"type\" = \"ldap\"," +
-                "\"ldap_user_group_match_attr\" = \"memberUid\"," +
-                "\"ldap_user_search_attr\" = \"uid\"," +
-                "\"ldap_bind_root_pwd\" = \"aaa\"," +
-                "\"ldap_bind_base_dn\" = \"dc=apple, dc=com\"," +
-                "\"ldap_cache_refresh_interval\" = \"1500\"" +
-                ")";
-        assertExceptionContains(sql, "missing required property: ldap_bind_root_dn");
+        String groupName = "g1";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(FileGroupProvider.GROUP_FILE_URL, "file_group");
+        FileGroupProvider fileGroupProvider = new FileGroupProvider(groupName, properties);
+        fileGroupProvider.init();
 
-        // unsupported type
-        sql = "create security integration ldap1 properties (" +
-                "\"type\" = \"oracle\"," +
-                "\"ldap_user_group_match_attr\" = \"memberUid\"," +
-                "\"ldap_user_search_attr\" = \"uid\"," +
-                "\"ldap_bind_root_dn\" = \"uid=admin\"," +
-                "\"ldap_bind_root_pwd\" = \"aaa\"," +
-                "\"ldap_bind_base_dn\" = \"dc=apple, dc=com\"," +
-                "\"ldap_cache_refresh_interval\" = \"1500\"" +
-                ")";
-        assertExceptionContains(sql, "unsupported security integration type 'oracle'");
-
-        // already exists
-        sql = "create security integration ldap2 properties (" +
-                "\"type\" = \"ldap\"," +
-                "\"ldap_user_group_match_attr\" = \"memberUid\"," +
-                "\"ldap_user_search_attr\" = \"uid\"," +
-                "\"ldap_bind_root_dn\" = \"uid=admin\"," +
-                "\"ldap_bind_root_pwd\" = \"aaa\"," +
-                "\"ldap_bind_base_dn\" = \"dc=apple, dc=com\"," +
-                "\"ldap_cache_refresh_interval\" = \"1500\"" +
-                ")";
-        createSecurityIntegration(sql);
-        assertExceptionContains(sql, "security integration 'ldap2' already exists");
+        Set<String> groups = fileGroupProvider.getGroup(new UserIdentity("harbor", "127.0.0.1"));
+        Assert.assertTrue(groups.contains("group1"));
+        Assert.assertTrue(groups.contains("group2"));
     }
 
     @Test
-    public void testCreateSecurityIntegrationPersist() throws Exception {
-        AuthenticationMgr masterManager = new AuthenticationMgr();
-        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(emptyImage.getDataOutputStream());
+    public void testGroupProvider() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
-        // master create security integration ldap3
-        String sql = "create security integration ldap3 properties (" +
-                "\"type\" = \"ldap\"," +
-                "\"ldap_user_group_match_attr\" = \"memberUid\"," +
-                "\"ldap_user_search_attr\" = \"uid\"," +
-                "\"ldap_bind_root_dn\" = \"uid=admin\"," +
-                "\"ldap_bind_root_pwd\" = \"aaa\"," +
-                "\"ldap_bind_base_dn\" = \"dc=apple, dc=com\"," +
-                "\"ldap_cache_refresh_interval\" = \"1500\"" +
-                ")";
-        CreateSecurityIntegrationStatement createSecurityIntegrationStatement =
-                (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        masterManager.createSecurityIntegration(createSecurityIntegrationStatement.getName(),
-                createSecurityIntegrationStatement.getPropertyMap());
+        Map<String, String> properties = new HashMap<>();
+        properties.put(JWTSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
 
-        // make final snapshot
-        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(finalImage.getDataOutputStream());
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        authenticationMgr.createSecurityIntegration("oidc", properties, true);
 
-        // test replay OP_CREATE_SECURITY_INTEGRATION edit log
-        AuthenticationMgr followerManager = AuthenticationMgr.load(emptyImage.getDataInputStream());
-        Assert.assertNull(followerManager.getSecurityIntegration("ldap3"));
-        SecurityIntegrationInfo info = (SecurityIntegrationInfo)
-                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_SECURITY_INTEGRATION);
-        followerManager.replayCreateSecurityIntegration(info.name, info.propertyMap);
-        Assert.assertNotNull(followerManager.getSecurityIntegration("ldap3"));
+        new MockUp<FileGroupProvider>() {
+            @Mock
+            public InputStream getPath(String groupFileUrl) throws IOException {
+                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath() + "/" + "file_group";
+                return new FileInputStream(path);
+            }
+        };
+        Map<String, String> groupProvider = new HashMap<>();
+        groupProvider.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "file");
+        groupProvider.put(FileGroupProvider.GROUP_FILE_URL, "file_group");
+        authenticationMgr.replayCreateGroupProvider("file_group_provider", groupProvider);
 
-        // simulate restart (load from image)
-        AuthenticationMgr imageManager = AuthenticationMgr.load(finalImage.getDataInputStream());
-        Assert.assertNotNull(imageManager.getSecurityIntegration("ldap3"));
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        MysqlCodec.writeInt1(outputStream, 1);
+        MysqlCodec.writeLenEncodedString(outputStream, idToken);
 
-        // check authentication with auth chain
-        System.out.println(Arrays.asList(Config.authentication_chain));
-        Config.authentication_chain = new String[] {"ldap3", "native"};
-        System.out.println(Arrays.asList(Config.authentication_chain));
-        byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
-        byte[] scramble = MysqlPassword.scramble(seed, "abc");
-        UserIdentity userIdentity =
-                imageManager.checkPassword("ldap_external_user", "192.168.0.1", scramble, seed);
-        System.out.println(userIdentity);
-        Assert.assertEquals("'ldap_external_user'@'ldap3'", userIdentity.toString());
-        Assert.assertTrue(userIdentity.isEphemeral());
+        Config.group_provider = new String[] {"file_group_provider"};
+        Config.authentication_chain = new String[] {"native", "oidc"};
+
+        try {
+            ConnectContext connectContext = new ConnectContext();
+            connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
+            AuthenticationHandler.authenticate(
+                    connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
+            StatementBase statementBase = SqlParser.parse("select current_group()", connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            InformationFunction informationFunction =
+                    (InformationFunction) queryStatement.getQueryRelation().getOutputExpression().get(0);
+            Assert.assertEquals("group2, group1", informationFunction.getStrValue());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+
+        Map<String, String> alterProperties = new HashMap<>();
+        alterProperties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group_5");
+        authenticationMgr.alterSecurityIntegration("oidc", alterProperties, true);
+        Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
+                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray()));
     }
 
+    @Test
+    public void testLDAPSecurityIntegration() throws DdlException, AuthenticationException, IOException {
+        Map<String, String> properties = new HashMap<>();
 
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_DN, "cn=admin,dc=example,dc=com");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD, "");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_BASE_DN, "");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR, "");
+        SimpleLDAPSecurityIntegration ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
+
+        SimpleLDAPSecurityIntegration finalLdapSecurityIntegration = ldapSecurityIntegration;
+        Assert.assertThrows(SemanticException.class, finalLdapSecurityIntegration::checkProperty);
+
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_ldap_simple");
+        ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
+        Assert.assertNotNull(ldapSecurityIntegration.getAuthenticationProvider());
+        Assert.assertNotNull(SecurityIntegrationFactory.createSecurityIntegration("ldap", properties));
+
+        LDAPAuthProvider ldapAuthProviderForNative =
+                (LDAPAuthProvider) ldapSecurityIntegration.getAuthenticationProvider();
+
+        ConnectContext context = new ConnectContext();
+        context.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
+
+        Assert.assertThrows(AuthenticationException.class, () ->
+                ldapAuthProviderForNative.authenticate(
+                        context,
+                        new UserIdentity("admin", "%"),
+                        "x".getBytes(StandardCharsets.UTF_8)));
+    }
 }

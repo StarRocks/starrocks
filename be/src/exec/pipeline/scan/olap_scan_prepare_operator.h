@@ -50,6 +50,8 @@ public:
                                    OlapScanContextFactoryPtr ctx_factory);
     ~OlapScanPrepareOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     bool with_morsels() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
@@ -57,7 +59,7 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     OlapScanNode* const _scan_node;

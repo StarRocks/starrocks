@@ -15,9 +15,14 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
@@ -25,11 +30,19 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.Config;
+import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
+import mockit.Expectations;
+import mockit.Injectable;
+import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -49,7 +62,8 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
     }
 
     @Test
-    public void testNormal() throws IOException {
+    public void testNormal(@Mocked GlobalStateMgr globalStateMgr,
+                           @Injectable Database db) throws IOException {
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
@@ -66,6 +80,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         partitionInfo.setIsInMemory(1, false);
         partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setMoment(MaterializedView.RefreshMoment.DEFERRED);
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
         asyncRefreshContext.setStartTime(1655732457);
         asyncRefreshContext.setStep(1);
@@ -87,6 +102,49 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getTimeUnit(), "DAY");
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getStep(), 1);
         in.close();
+
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getLocalMetastore().getDb(anyLong);
+                result = db;
+
+                globalStateMgr.getCurrentState().getLocalMetastore().getTable(anyLong, anyLong);
+                result = materializedView;
+
+                db.getId();
+                result = anyLong;
+
+                materializedView.getId();
+                result = anyLong;
+            }
+        };
+        new AlterJobMgr(null, null, null)
+                .replayChangeMaterializedViewRefreshScheme(changeLog);
+
+        Assert.assertEquals(materializedView.getRefreshScheme().getMoment(), MaterializedView.RefreshMoment.DEFERRED);
+    }
+
+    @Test
+    public void testFallBack() throws IOException {
+        Config.ignore_materialized_view_error = true;
+        String str = "bad data";
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        Text.writeString(new DataOutputStream(byteArrayOutputStream), str);
+        byteArrayOutputStream.close();
+        byte[] data = byteArrayOutputStream.toByteArray();
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+        ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
+        Assert.assertEquals(0, readChangeLog.getDbId());
+        Config.ignore_materialized_view_error = false;
+    }
+
+    @Test
+    public void testReplayWhenDbIsEmpty() {
+        AlterJobMgr alterJobMgr = new AlterJobMgr(
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler());
+        alterJobMgr.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
     }
 
 }

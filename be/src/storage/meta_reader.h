@@ -20,9 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
-#include "storage/tablet.h"
 
 namespace starrocks {
 
@@ -32,23 +30,26 @@ class RuntimeState;
 
 namespace starrocks {
 
-class Tablet;
+class ColumnIterator;
 class SegmentMetaCollecter;
 
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
     MetaReaderParams() = default;
-    ;
-    TabletSharedPtr tablet;
+
+    int64_t tablet_id;
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
     RuntimeState* runtime_state = nullptr;
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;
     const DescriptorTbl* desc_tbl = nullptr;
+    int32_t low_card_threshold;
 
     int chunk_size = config::vector_chunk_size;
+
+    void check_validation() const { LOG_IF(FATAL, version.first == -1) << "version is not set. tablet=" << tablet_id; }
 };
 
 struct SegmentMetaCollecterParams {
@@ -56,7 +57,9 @@ struct SegmentMetaCollecterParams {
     std::vector<ColumnId> cids;
     std::vector<bool> read_page;
     std::vector<LogicalType> field_type;
-    int32_t max_cid;
+    bool use_page_cache;
+    TabletSchemaCSPtr tablet_schema;
+    int32_t low_cardinality_threshold;
 };
 
 // MetaReader will implements
@@ -82,8 +85,6 @@ public:
     };
 
 protected:
-    Version _version;
-    int _chunk_size;
     CollectContext _collect_context;
     bool _is_init;
     bool _has_more;
@@ -97,6 +98,13 @@ protected:
     void _fill_empty_result(Chunk* chunk);
     Status _read(Chunk* chunk, size_t n);
 };
+
+static const std::string META_COUNT_ROWS = "rows";
+static const std::string META_MIN = "min";
+static const std::string META_MAX = "max";
+static const std::string META_DICT_MERGE = "dict_merge";
+static const std::string META_FLAT_JSON_META = "flat_json_meta";
+static const std::string META_COUNT_COL = "count";
 
 class SegmentMetaCollecter {
 public:
@@ -119,7 +127,9 @@ private:
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
-    Status _collect_count(Column* column, LogicalType type);
+    Status _collect_count(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_rows(Column* column, LogicalType type);
+    Status _collect_flat_json(ColumnId cid, Column* column);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
     SegmentSharedPtr _segment;

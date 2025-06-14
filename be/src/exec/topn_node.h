@@ -36,7 +36,7 @@ public:
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
@@ -44,7 +44,8 @@ public:
 private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context, bool is_partition, bool is_merging, bool enable_parallel_merge);
+            pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool is_partition_skewed,
+            bool is_merging, bool enable_parallel_merge);
 
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
     const TPlanNode& _tnode;
@@ -63,6 +64,8 @@ private:
     // also added to TopNNode to hint that local shuffle operator is prepended to TopNNode in
     // order to eliminate merging operation in pipeline execution engine.
     std::vector<ExprContext*> _analytic_partition_exprs;
+
+    std::vector<ExprContext*> _local_partition_exprs;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;

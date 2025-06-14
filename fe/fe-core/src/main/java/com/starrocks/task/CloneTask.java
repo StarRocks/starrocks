@@ -46,28 +46,33 @@ public class CloneTask extends AgentTask {
     public static final int VERSION_1 = 1;
     public static final int VERSION_2 = 2;
 
-    private int schemaHash;
-    private List<TBackend> srcBackends;
-    private TStorageMedium storageMedium;
+    private final int schemaHash;
+    private final List<TBackend> srcBackends;
+    private final TStorageMedium storageMedium;
 
-    private long visibleVersion;
+    private final long visibleVersion;
 
     private long srcPathHash = -1;
     private long destPathHash = -1;
+    private String destBackendHost;
 
-    private int timeoutS;
+    private final int timeoutS;
 
     private int taskVersion = VERSION_1;
 
     // Migration between different disks on the same backend
     private boolean isLocal = false;
 
-    public CloneTask(long backendId, long dbId, long tableId, long partitionId, long indexId,
+    // Rebuild persistent index at the end of clone task
+    private boolean needRebuildPkIndex = false;
+
+    public CloneTask(long backendId, String destBackendHost, long dbId, long tableId, long partitionId, long indexId,
                      long tabletId, int schemaHash, List<TBackend> srcBackends, TStorageMedium storageMedium,
                      long visibleVersion, int timeoutS) {
         super(null, backendId, TTaskType.CLONE, dbId, tableId, partitionId, indexId, tabletId);
         this.schemaHash = schemaHash;
         this.srcBackends = srcBackends;
+        this.destBackendHost = destBackendHost;
         this.storageMedium = storageMedium;
         this.visibleVersion = visibleVersion;
         this.timeoutS = timeoutS;
@@ -103,6 +108,10 @@ public class CloneTask extends AgentTask {
         this.isLocal = isLocal;
     }
 
+    public void setNeedRebuildPkIndex(boolean needRebuildPkIndex) {
+        this.needRebuildPkIndex = needRebuildPkIndex;
+    }
+
     public TCloneReq toThrift() {
         TCloneReq request = new TCloneReq(tabletId, schemaHash, srcBackends);
         request.setStorage_medium(storageMedium);
@@ -114,7 +123,7 @@ public class CloneTask extends AgentTask {
         }
         request.setTimeout_s(timeoutS);
         request.setIs_local(isLocal);
-
+        request.setNeed_rebuild_pk_index(needRebuildPkIndex);
         return request;
     }
 
@@ -126,8 +135,8 @@ public class CloneTask extends AgentTask {
         sb.append(", visible version(hash): ").append(visibleVersion).append("-").append(0);
         sb.append(", src backend: ").append(srcBackends.get(0).getHost()).append(", src path hash: ")
                 .append(srcPathHash);
-        sb.append(", dest backend: ").append(backendId).append(", dest path hash: ").append(destPathHash);
-        sb.append(", is local: ").append(isLocal);
+        sb.append(", dest backend: ").append(destBackendHost).append(", dest path hash: ").append(destPathHash);
+        sb.append(", is local: ").append(isLocal).append(", need rebuild pk index: ").append(needRebuildPkIndex);
         return sb.toString();
     }
 }

@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hudi;
 
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.hive.CachingHiveMetastore;
@@ -27,10 +29,15 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.hudi.HudiConnector.SUPPORTED_METASTORE_TYPE;
 
 public class HudiConnectorInternalMgr {
     private final String catalogName;
@@ -43,6 +50,7 @@ public class HudiConnectorInternalMgr {
     private CachingRemoteFileConf remoteFileConf;
 
     private ExecutorService refreshHiveMetastoreExecutor;
+    private ExecutorService refreshHudiExternalTableExecutor;
     private ExecutorService refreshRemoteFileExecutor;
     private ExecutorService pullRemoteFileExecutor;
 
@@ -50,6 +58,8 @@ public class HudiConnectorInternalMgr {
     private final int loadRemoteFileMetadataThreadNum;
 
     private final boolean enableBackgroundRefreshHudiMetadata;
+
+    private final MetastoreType metastoreType;
 
     public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
@@ -61,17 +71,32 @@ public class HudiConnectorInternalMgr {
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
         this.remoteFileConf = new CachingRemoteFileConf(properties);
 
-        this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "false"));
+        this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "true"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
 
         this.enableBackgroundRefreshHudiMetadata = Boolean.parseBoolean(properties.getOrDefault(
                 "enable_background_refresh_connector_metadata", "true"));
+
+        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
+        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+        }
+
+        if (hiveMetastoreType.equals("hive")) {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+        }
+        this.metastoreType = MetastoreType.get(hiveMetastoreType);
     }
 
     public void shutdown() {
         if (enableMetastoreCache && refreshHiveMetastoreExecutor != null) {
             refreshHiveMetastoreExecutor.shutdown();
+        }
+        if (enableMetastoreCache && refreshHudiExternalTableExecutor != null) {
+            refreshHudiExternalTableExecutor.shutdown();
         }
         if (enableRemoteFileCache && refreshRemoteFileExecutor != null) {
             refreshRemoteFileExecutor.shutdown();
@@ -83,17 +108,20 @@ public class HudiConnectorInternalMgr {
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(properties);
-        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
             baseHiveMetastore = hiveMetastore;
         } else {
             refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(
                     new ThreadFactoryBuilder().setNameFormat("hive-metastore-refresh-%d").build());
+            refreshHudiExternalTableExecutor = Executors.newCachedThreadPool(
+                    new ThreadFactoryBuilder().setNameFormat("hudi-external-table-refresh-%d").build());
             baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                     hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
+                    new ReentrantExecutor(refreshHudiExternalTableExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
                     hmsConf.getCacheRefreshIntervalSec(),
                     hmsConf.getCacheMaxNum(),
@@ -147,5 +175,9 @@ public class HudiConnectorInternalMgr {
 
     public boolean isEnableBackgroundRefreshHudiMetadata() {
         return enableBackgroundRefreshHudiMetadata;
+    }
+
+    public MetastoreType getMetastoreType() {
+        return metastoreType;
     }
 }

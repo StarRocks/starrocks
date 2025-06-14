@@ -17,6 +17,7 @@ package com.starrocks.server;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -24,9 +25,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -63,11 +65,11 @@ public class CatalogLevelTest {
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb("hive_catalog", "hive_db");
+                metadataMgr.getDb((ConnectContext) any, "hive_catalog", "hive_db");
                 result = new Database(111, "hive_db");
                 minTimes = 0;
 
-                metadataMgr.getTable("hive_catalog", "hive_db", "hive_table");
+                metadataMgr.getTable((ConnectContext) any, "hive_catalog", "hive_db", "hive_table");
                 result = hiveTable;
             }
         };
@@ -81,22 +83,22 @@ public class CatalogLevelTest {
         GlobalStateMgr.getCurrentState().getAuthenticationMgr().createUser(createUserStmt);
 
         AnalyzeTestUtil.getConnectContext().setCurrentUserIdentity(new UserIdentity("u1", "%"));
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         String grantSql = "grant all on CATALOG hive_catalog to u1";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         grantSql = "grant ALL on DATABASE hive_catalog.hive_db to u1";
         grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(
-                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
+        Authorizer.checkAnyActionOnOrInDb(
+                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db");
     }
 
     @Test
@@ -111,17 +113,17 @@ public class CatalogLevelTest {
 
         org.apache.iceberg.Table tbl = new org.apache.iceberg.BaseTable(hiveTableOperations, "iceberg_table");
         com.starrocks.catalog.Table icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
-                "resource_name", "iceberg_db", "iceberg_table",
+                "resource_name", "iceberg_db", "iceberg_table", "",
                 Lists.newArrayList(new Column("col1", Type.LARGEINT)), tbl, Maps.newHashMap());
 
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                metadataMgr.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
                 result = new Database(111, "iceberg_db");
                 minTimes = 0;
 
-                metadataMgr.getTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+                metadataMgr.getTable((ConnectContext) any, "iceberg_catalog", "iceberg_db", "iceberg_table");
                 result = icebergTable;
             }
         };

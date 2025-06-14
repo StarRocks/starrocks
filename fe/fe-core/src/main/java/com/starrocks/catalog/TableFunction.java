@@ -18,7 +18,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -31,6 +35,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Vector;
 import java.util.stream.Collectors;
 
 /**
@@ -48,12 +53,32 @@ public class TableFunction extends Function {
     private String symbolName = "";
 
     // only used for serialization
+
+    // not serialized
+    private boolean isLeftJoin = false;
+
     protected TableFunction() {
+    }
+
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr) {
+        this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, defaultArgExpr, false);
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
-        this(fnName, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+        this(fnName, null, defaultColumnNames, argTypes, tableFnReturnTypes, null, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
+                         List<Type> argTypes, List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr,
+                         boolean varArgs) {
+        super(fnName, argTypes, Type.INVALID, varArgs);
+        this.tableFnReturnTypes = tableFnReturnTypes;
+        this.defaultColumnNames = defaultColumnNames;
+        setArgNames(argNames);
+        setDefaultNamedArgs(defaultArgExpr);
+        setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
@@ -61,7 +86,6 @@ public class TableFunction extends Function {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
-
         setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
@@ -82,18 +106,28 @@ public class TableFunction extends Function {
         functionSet.addBuiltin(jsonEach);
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
-            // generate_series with default step size: 1
-            TableFunction func = new TableFunction(new FunctionName("generate_series"),
-                                                   Lists.newArrayList("generate_series"),
-                                                   Lists.newArrayList(type, type),
-                                                   Lists.newArrayList(type));
+            TableFunction func = new TableFunction(new FunctionName("subdivide_bitmap"), Lists.newArrayList("subdivide_bitmap"),
+                    Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
             functionSet.addBuiltin(func);
+        }
 
-            // generate_series with explicit step size
-            func = new TableFunction(new FunctionName("generate_series"),
+        TableFunction funcUnnestBitmap = new TableFunction(new FunctionName(FunctionSet.UNNEST_BITMAP),
+                Lists.newArrayList(FunctionSet.UNNEST_BITMAP), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
+        functionSet.addBuiltin(funcUnnestBitmap);
+
+        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+            // set default arguments' const expressions in order
+            Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
+            try {
+                defaultArgs.add(new Pair("step", LiteralExpr.create("1", type)));
+            } catch (AnalysisException ex) { //ignored
+            }
+            // for both named arguments and positional arguments
+            TableFunction func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("start", "end", "step"),
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
-                    Lists.newArrayList(type));
+                    Lists.newArrayList(type), defaultArgs);
             functionSet.addBuiltin(func);
         }
 
@@ -114,6 +148,10 @@ public class TableFunction extends Function {
 
     public void setSymbolName(String symbolName) {
         this.symbolName = symbolName;
+    }
+
+    public void setIsLeftJoin(boolean isLeftJoin) {
+        this.isLeftJoin = isLeftJoin;
     }
 
     @Override
@@ -140,6 +178,7 @@ public class TableFunction extends Function {
         TTableFunction tableFn = new TTableFunction();
         tableFn.setSymbol(symbolName);
         tableFn.setRet_types(tableFnReturnTypes.stream().map(Type::toThrift).collect(Collectors.toList()));
+        tableFn.setIs_left_join(isLeftJoin);
         fn.setTable_fn(tableFn);
         return fn;
     }

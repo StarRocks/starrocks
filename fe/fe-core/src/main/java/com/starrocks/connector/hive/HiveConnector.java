@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -27,44 +23,30 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
-    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("glue", "dlf");
+    public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
+    public static final String HIVE_METASTORE_CONNECTION_POOL_SIZE = "hive.metastore.connection.pool.size";
     private final Map<String, String> properties;
-    private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
+    private final CatalogNameType catalogNameType;
     private final HiveConnectorInternalMgr internalMgr;
     private final HiveMetadataFactory metadataFactory;
 
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        this.catalogNameType = new CatalogNameType(catalogName, "hive");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
-        this.metadataFactory = createMetadataFactory();
-        validate();
+        this.metadataFactory = createMetadataFactory(hdfsEnvironment);
         onCreate();
-    }
-
-    public void validate() {
-        if (properties.containsKey(HIVE_METASTORE_TYPE)) {
-            String hiveMetastoreType = properties.get(HIVE_METASTORE_TYPE).toLowerCase();
-            if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
-                throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
-            }
-        } else {
-            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
-            Util.validateMetastoreUris(hiveMetastoreUris);
-        }
     }
 
     @Override
@@ -72,10 +54,9 @@ public class HiveConnector implements Connector {
         return metadataFactory.create();
     }
 
-    private HiveMetadataFactory createMetadataFactory() {
+    private HiveMetadataFactory createMetadataFactory(HdfsEnvironment hdfsEnvironment) {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
-
         return new HiveMetadataFactory(
                 catalogName,
                 metastore,
@@ -83,13 +64,19 @@ public class HiveConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
+                internalMgr.getupdateRemoteFilesExecutor(),
+                internalMgr.getUpdateStatisticsExecutor(),
+                internalMgr.getRefreshOthersFeExecutor(),
                 internalMgr.isSearchRecursive(),
-                internalMgr.enableHmsEventsIncrementalSync()
+                internalMgr.enableHmsEventsIncrementalSync(),
+                hdfsEnvironment,
+                internalMgr.getMetastoreType(),
+                properties
         );
     }
 
     public void onCreate() {
-        Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+        Optional<HiveCacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
         if (internalMgr.enableHmsEventsIncrementalSync()) {
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
@@ -98,7 +85,7 @@ public class HiveConnector implements Connector {
                     internalMgr.isEnableBackgroundRefreshHiveMetadata()) {
                 updateProcessor
                         .ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                                .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+                                .registerCacheUpdateProcessor(catalogNameType, updateProcessor.get()));
             }
         }
     }
@@ -106,12 +93,8 @@ public class HiveConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
-        metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
+        metadataFactory.getCacheUpdateProcessor().ifPresent(HiveCacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
-    }
-
-    public CloudConfiguration getCloudConfiguration() {
-        return cloudConfiguration;
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
     }
 }

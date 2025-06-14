@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -44,15 +45,16 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.DropResourceOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
@@ -61,7 +63,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
@@ -116,11 +117,11 @@ public class ResourceMgr implements Writable {
     }
 
     public void createResource(CreateResourceStmt stmt) throws DdlException {
+        Resource resource = Resource.fromStmt(stmt);
+
         this.writeLock();
         try {
-            Resource resource = Resource.fromStmt(stmt);
             String resourceName = stmt.getResourceName();
-
             String typeName = resource.getType().name().toLowerCase(Locale.ROOT);
             if (resource.needMappingCatalog()) {
                 try {
@@ -310,11 +311,7 @@ public class ResourceMgr implements Writable {
         return procNode;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static ResourceMgr read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -336,7 +333,9 @@ public class ResourceMgr implements Writable {
                     continue;
                 }
 
-                if (!PrivilegeActions.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
+                try {
+                    Authorizer.checkAnyActionOnResource(ConnectContext.get(), resource.getName());
+                } catch (AccessDeniedException e) {
                     continue;
                 }
                 resource.getProcNodeData(result);
@@ -350,8 +349,8 @@ public class ResourceMgr implements Writable {
         return checksum;
     }
 
-    public void saveResourcesV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_MGR, 1);
+    public void saveResourcesV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.RESOURCE_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

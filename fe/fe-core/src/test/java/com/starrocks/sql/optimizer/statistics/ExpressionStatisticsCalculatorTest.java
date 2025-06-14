@@ -20,6 +20,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -39,6 +41,7 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testVariableReference() {
         Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         double min = 0.0;
         double max = 100.0;
         double distinctValue = 100;
@@ -385,6 +388,11 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), 100, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        // test upper function
+        callOperator = new CallOperator(FunctionSet.UPPER, Type.VARCHAR, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assert.assertEquals(columnStatistic.getMaxValue(), 100, 0.001);
+        Assert.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
     }
 
     @Test
@@ -394,6 +402,7 @@ public class ExpressionStatisticsCalculatorTest {
         Statistics.Builder builder = Statistics.builder();
         ColumnStatistic leftStatistic = new ColumnStatistic(-100, 100, 0, 0, 100);
         ColumnStatistic rightStatistic = new ColumnStatistic(100, 200, 0, 0, 100);
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
 
@@ -497,10 +506,23 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-1, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
+        
+        callOperator = new CallOperator(FunctionSet.LIKE, Type.BOOLEAN, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
+        Assert.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
+        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+
+        callOperator = new CallOperator(FunctionSet.ILIKE, Type.BOOLEAN, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
+        Assert.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
+        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
         // test multiply/divide column rang is negative
         builder = Statistics.builder();
         leftStatistic = new ColumnStatistic(-100, -10, 0, 0, 20);
         rightStatistic = new ColumnStatistic(-2, 0, 0, 0, 1);
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
         callOperator = new CallOperator(FunctionSet.MULTIPLY, Type.BIGINT, Lists.newArrayList(left, right));
@@ -515,11 +537,60 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testWeek() {
+        ColumnRefOperator left = new ColumnRefOperator(0, Type.DATETIME, "left", true);
+        ColumnRefOperator right = new ColumnRefOperator(1, Type.INT, "right", true);
+        double min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2021-09-01", DateUtils.DATE_FORMATTER_UNIX));
+        double max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-07-01", DateUtils.DATE_FORMATTER_UNIX));
+        ColumnStatistic leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        ColumnStatistic rightStatistic = new ColumnStatistic(1, 1, 0, 1, 1);
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        CallOperator week = new CallOperator(FunctionSet.WEEK, Type.INT, Lists.newArrayList(left, right));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(45, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(29, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(54, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 2);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.1);
+
+    }
+
+    @Test
     public void testCastOperator() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.INT, "id", true);
         CastOperator callOperator = new CastOperator(Type.VARCHAR, columnRefOperator);
 
         Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(columnRefOperator, new ColumnStatistic(-100, 100, 0, 0, 100));
 
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
@@ -553,11 +624,36 @@ public class ExpressionStatisticsCalculatorTest {
         CallOperator callOperator = new CallOperator(FunctionSet.FROM_DAYS, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
 
         Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(columnRefOperator, new ColumnStatistic(Double.NEGATIVE_INFINITY,
                 Double.POSITIVE_INFINITY, 0, 0, 100));
 
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(columnStatistic.getMaxValue(), 2.534021856E11, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), -28800.0, 0.001);
+    }
+
+    @Test
+    public void testIF() {
+        ColumnRefOperator column = new ColumnRefOperator(1, Type.INT, "column", true);
+        BinaryPredicateOperator condition = new BinaryPredicateOperator(BinaryType.EQ, column, ConstantOperator.createInt(1));
+        ColumnRefOperator left = new ColumnRefOperator(0, Type.INT, "left", true);
+        ColumnRefOperator right = new ColumnRefOperator(1, Type.INT, "right", true);
+
+        ColumnStatistic columnStatistic = new ColumnStatistic(-300, 300, 0, 0, 300);
+        ColumnStatistic leftStatistic = new ColumnStatistic(-100, 100, 0, 0, 100);
+        ColumnStatistic rightStatistic = new ColumnStatistic(100, 200, 0, 0, 100);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(300);
+        builder.addColumnStatistic(column, columnStatistic);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+
+        CallOperator callOperator = new CallOperator(FunctionSet.IF, Type.INT, Lists.newArrayList(condition, left, right));
+        ColumnStatistic ifStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(ifStatistic.getDistinctValuesCount(), 200, 0.001);
+        Assert.assertEquals(ifStatistic.getMaxValue(), 200, 0.001);
+        Assert.assertEquals(ifStatistic.getMinValue(), -100, 0.001);
     }
 }

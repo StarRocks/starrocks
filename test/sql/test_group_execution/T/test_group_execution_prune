@@ -1,0 +1,127 @@
+-- name: test_group_execution_prune
+set enable_group_execution = true;
+[UC]set enable_predicate_move_around = false;
+
+CREATE TABLE t0 (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into t0 select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into t0 select k1 + 20000 from t0;
+insert into t0 select k1 + 40000 from t0;
+insert into t0 select k1 + 80000 from t0;
+
+-- prune left
+with
+    t1 as (select * from t0 where k1 = 1),
+    t2 as (select * from t0)
+select count(1) from t1 join [colocate] t2 using(k1);
+
+with
+    t1 as (select * from t0 where k1 in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(1) from t1 join [colocate] t2 using(k1);
+
+with
+    t1 as (select * from t0 where k1 not in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(1) from t1 join [colocate] t2 using(k1);
+
+with
+    t1 as (select * from t0 where k1 != 1),
+    t2 as (select * from t0)
+select count(1) from t1 join [colocate] t2 using(k1);
+
+with
+    t1 as (select * from t0 where k1 > 1),
+    t2 as (select * from t0)
+select count(1) from t1 join [colocate] t2 using(k1);
+
+with
+    t1 as (select * from t0 where k1 < 1),
+    t2 as (select * from t0)
+select count(1) from t1 join [colocate] t2 using(k1);
+
+with
+    t1 as (select * from t0 where k1 = 1),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 >= 1),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 < 1),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 not in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t1 join [bucket] t2 using(k1) group by t1.k1) tb;
+-- prune right
+with
+    t1 as (select * from t0 where k1 = 1),
+    t2 as (select * from t0)
+select count(1) from t2 join [colocate] t1 using(k1);
+
+with
+    t1 as (select * from t0 where k1 in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(1) from t2 join [colocate] t1 using(k1);
+
+with
+    t1 as (select * from t0 where k1 not in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(1) from t2 join [colocate] t1 using(k1);
+
+with
+    t1 as (select * from t0 where k1 != 1),
+    t2 as (select * from t0)
+select count(1) from t2 join [colocate] t1 using(k1);
+
+with
+    t1 as (select * from t0 where k1 > 1),
+    t2 as (select * from t0)
+select count(1) from t2 join [colocate] t1 using(k1);
+
+with
+    t1 as (select * from t0 where k1 < 1),
+    t2 as (select * from t0)
+select count(1) from t2 join [colocate] t1 using(k1);
+
+with
+    t1 as (select * from t0 where k1 = 1),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 >= 1),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 < 1),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;
+
+with
+    t1 as (select * from t0 where k1 not in (1,2,3,4)),
+    t2 as (select * from t0)
+select count(*) from (select count(1) from t2 join [bucket] t1 using(k1) group by t1.k1) tb;

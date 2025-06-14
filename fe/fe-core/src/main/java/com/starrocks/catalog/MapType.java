@@ -208,5 +208,28 @@ public class MapType extends Type {
             return new MapType(keyType, valueType);
         }
     }
+
+    public String toMysqlDataTypeString() {
+        return "map";
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
+    public String toMysqlColumnTypeString() {
+        return toSql();
+    }
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "map<...>";
+        }
+        return String.format("map<%s,%s>",
+                keyType.toTypeString(depth + 1), valueType.toTypeString(depth + 1));
+    }
+
+    @Override
+    public int getMaxUniqueId() {
+        return Math.max(keyType.getMaxUniqueId(), valueType.getMaxUniqueId());
+    }
 }
 

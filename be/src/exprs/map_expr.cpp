@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "util/raw_container.h"
@@ -33,10 +34,12 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
         num_rows = chunk->num_rows();
     }
 
-    std::vector<ColumnPtr> pairs_columns(num_pairs);
+    bool all_const = true;
+    Columns pairs_columns(num_pairs);
     for (size_t i = 0; i < num_pairs; i++) {
         ASSIGN_OR_RETURN(auto col, _children[i]->evaluate_checked(context, chunk));
         num_rows = std::max(num_rows, col->size());
+        all_const &= col->is_constant();
         pairs_columns[i] = std::move(col);
     }
 
@@ -71,8 +74,8 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
             offsets->append(curr_offset);
         }
     } else if (num_pairs > 0) { // avoid copying for only one pair
-        key_col = pairs_columns[0];
-        value_col = pairs_columns[1];
+        key_col = pairs_columns[0]->as_mutable_ptr();
+        value_col = pairs_columns[1]->as_mutable_ptr();
         for (size_t i = 0; i < num_rows; ++i) {
             curr_offset++;
             offsets->append(curr_offset);
@@ -83,7 +86,12 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
         }
     }
 
-    return std::make_shared<MapColumn>(std::move(key_col), std::move(value_col), std::move(offsets));
+    auto res = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets));
+
+    if (all_const) {
+        res->assign(num_rows, 0);
+    }
+    return res;
 }
 
 Expr* MapExprFactory::from_thrift(const TExprNode& node) {

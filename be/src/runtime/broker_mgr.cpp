@@ -42,8 +42,10 @@
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -80,27 +82,13 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
     request.__set_clientId(_client_id);
 
     TBrokerOperationStatus response;
-    try {
-        Status status;
-        // 500ms is enough
-        BrokerServiceConnection client(_exec_env->broker_client_cache(), addr, 500, &status);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create broker client failed. broker=" << addr << ", status=" << status.get_error_msg();
-            return;
-        }
+    Status rpc_status;
 
-        try {
-            client->ping(response, request);
-        } catch (apache::thrift::transport::TTransportException& e) {
-            status = client.reopen();
-            if (!status.ok()) {
-                LOG(WARNING) << "Create broker client failed. broker=" << addr << ", status=" << status.get_error_msg();
-                return;
-            }
-            client->ping(response, request);
-        }
-    } catch (apache::thrift::TException& e) {
-        LOG(WARNING) << "Broker ping failed, broker:" << addr << " failed:" << e.what();
+    // 500ms is enough
+    rpc_status = ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+            addr, [&response, &request](BrokerServiceConnection& client) { client->ping(response, request); }, 500);
+    if (!rpc_status.ok()) {
+        LOG(WARNING) << "Broker ping failed, broker:" << addr << " failed:" << rpc_status;
     }
 }
 
@@ -116,7 +104,7 @@ void BrokerMgr::ping_worker() {
         for (auto& addr : addresses) {
             ping(addr);
         }
-        sleep(5);
+        nap_sleep(5, [this] { return _thread_stop; });
     }
 }
 

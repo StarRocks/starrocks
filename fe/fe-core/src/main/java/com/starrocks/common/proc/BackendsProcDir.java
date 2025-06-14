@@ -45,24 +45,28 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 public class BackendsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES;
+    public static final ImmutableList<String> TITLE_NAMES_SHARED_DATA;
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                 .add("BackendId").add("IP").add("HeartbeatPort")
@@ -70,11 +74,17 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
-                .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
-        if (RunMode.allowCreateLakeTable()) {
-            builder.add("StarletPort").add("WorkerId");
-        }
+                .add("DataUsedPct").add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataCacheMetrics")
+                .add("Location")
+                .add("StatusCode");
         TITLE_NAMES = builder.build();
+        builder = new ImmutableList.Builder<String>()
+                .addAll(TITLE_NAMES)
+                .add("StarletPort")
+                .add("WorkerId")
+                .add("WarehouseName");
+        TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
     private SystemInfoService clusterInfoService;
@@ -83,12 +93,20 @@ public class BackendsProcDir implements ProcDirInterface {
         this.clusterInfoService = clusterInfoService;
     }
 
+    public static List<String> getMetadata() {
+        if (RunMode.isSharedDataMode()) {
+            return TITLE_NAMES_SHARED_DATA;
+        } else {
+            return TITLE_NAMES;
+        }
+    }
+
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         Preconditions.checkNotNull(clusterInfoService);
 
         BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
+        result.setNames(getMetadata());
 
         final List<List<String>> backendInfos = getClusterBackendInfos();
         for (List<String> backendInfo : backendInfos) {
@@ -101,7 +119,7 @@ public class BackendsProcDir implements ProcDirInterface {
 
     // get backends of cluster
     public static List<List<String>> getClusterBackendInfos() {
-        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<List<String>> backendInfos = new LinkedList<>();
         List<Long> backendIds = clusterInfoService.getBackendIds(false);
         if (backendIds == null) {
@@ -111,6 +129,7 @@ public class BackendsProcDir implements ProcDirInterface {
         long start = System.currentTimeMillis();
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
+        long tabletNum = 0;
         for (long backendId : backendIds) {
             Backend backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
@@ -118,7 +137,12 @@ public class BackendsProcDir implements ProcDirInterface {
             }
 
             watch.start();
-            long tabletNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
+            if (RunMode.isSharedDataMode()) {
+                String workerAddr = backend.getHost() + ":" + backend.getStarletPort();
+                tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
+            } else {
+                tabletNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletNumByBackendId(backendId);
+            }
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
@@ -187,17 +211,40 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.format("%.2f", dataUsed) + " %");
 
             // Num CPU cores
-            backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+            backendInfo.add(backend.getCpuCores());
+            backendInfo.add(DebugUtil.getPrettyStringBytes(backend.getMemLimitBytes()));
 
             backendInfo.add(backend.getNumRunningQueries());
             double memUsedPct = backend.getMemUsedPct();
             backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
 
-            if (RunMode.allowCreateLakeTable()) {
+            Optional<DataCacheMetrics> dataCacheMetrics = backend.getDataCacheMetrics();
+            if (dataCacheMetrics.isPresent()) {
+                DataCacheMetrics.Status status = dataCacheMetrics.get().getStatus();
+                if (status != DataCacheMetrics.Status.DISABLED) {
+                    backendInfo.add(String.format("Status: %s, DiskUsage: %s, MemUsage: %s",
+                            dataCacheMetrics.get().getStatus(),
+                            dataCacheMetrics.get().getDiskUsageStr(),
+                            dataCacheMetrics.get().getMemUsageStr()));
+                } else {
+                    // DataCache is disabled
+                    backendInfo.add(String.format("Status: %s", DataCacheMetrics.Status.DISABLED));
+                }
+            } else {
+                // Didn't receive any datacache report from be
+                backendInfo.add("N/A");
+            }
+
+            backendInfo.add(PropertyAnalyzer.convertLocationMapToString(backend.getLocation()));
+            backendInfo.add(backend.getStatus().name());
+
+            if (RunMode.isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(backendId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(backendId);
                 backendInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(backend.getWarehouseId());
+                backendInfo.add(wh.getName());
             }
 
             comparableBackendInfos.add(backendInfo);

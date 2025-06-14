@@ -34,7 +34,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PhysicalDecodeOperator extends PhysicalOperator {
-    private final ImmutableMap<ColumnRefOperator, ColumnRefOperator> dictToStrings;
+    private final Map<ColumnRefOperator, ColumnRefOperator> dictToStrings;
     private final Map<ColumnRefOperator, ScalarOperator> stringFunctions;
 
     public PhysicalDecodeOperator(ImmutableMap<ColumnRefOperator, ColumnRefOperator> dictToStrings,
@@ -108,12 +108,16 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
 
     }
 
-    public ImmutableMap<Integer, Integer> getDictToStrings() {
-        Map<Integer, Integer> res = Maps.newHashMap();
+    public ImmutableMap<Integer, Integer> getDictIdToStringsId() {
+        ImmutableMap.Builder<Integer, Integer> builder = ImmutableMap.builder();
         for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : dictToStrings.entrySet()) {
-            res.put(entry.getKey().getId(), entry.getValue().getId());
+            builder.put(entry.getKey().getId(), entry.getValue().getId());
         }
-        return ImmutableMap.copyOf(res);
+        return builder.build();
+    }
+
+    public Map<ColumnRefOperator, ColumnRefOperator> getDictToStrings() {
+        return dictToStrings;
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getStringFunctions() {

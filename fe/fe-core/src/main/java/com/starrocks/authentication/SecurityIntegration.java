@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,8 +25,10 @@ import java.util.Map;
  * Authentication for this integration is provided by corresponding `getAuthenticationProvider()`.
  */
 public abstract class SecurityIntegration {
-    public static final String SECURITY_INTEGRATION_TYPE_LDAP = "ldap";
     public static final String SECURITY_INTEGRATION_PROPERTY_TYPE_KEY = "type";
+    public static final String SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER = "group_provider";
+    public static final String SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN = "permitted_groups";
+
     @SerializedName(value = "n")
     protected String name;
     /**
@@ -43,6 +46,10 @@ public abstract class SecurityIntegration {
         return propertyMap;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public String getComment() {
         return propertyMap.getOrDefault("comment", "");
     }
@@ -51,9 +58,32 @@ public abstract class SecurityIntegration {
         return propertyMap.get(SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
     }
 
-    abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
+    public abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
 
     public Map<String, String> getPropertyMapWithMasking() {
         return propertyMap;
+    }
+
+    public void checkProperty() throws SemanticException {
+        if (!propertyMap.containsKey(SECURITY_INTEGRATION_PROPERTY_TYPE_KEY)) {
+            throw new SemanticException("missing required property: " + SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
+        }
+    }
+
+    public List<String> getGroupProviderName() {
+        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER);
+        if (property == null || property.isBlank()) {
+            return List.of();
+        }
+        return List.of(property.split(",\\s*"));
+    }
+
+    public List<String> getGroupAllowedLoginList() {
+        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN);
+        if (property == null || property.isBlank()) {
+            return List.of();
+        } else {
+            return List.of(property.split(",\\s*"));
+        }
     }
 }

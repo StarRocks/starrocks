@@ -53,8 +53,8 @@ public class MysqlTableSink extends DataSink {
         port = Integer.parseInt(mysqlTable.getPort());
         user = mysqlTable.getUserName();
         passwd = mysqlTable.getPasswd();
-        db = mysqlTable.getMysqlDatabaseName();
-        tbl = mysqlTable.getMysqlTableName();
+        db = mysqlTable.getCatalogDBName();
+        tbl = mysqlTable.getCatalogTableName();
     }
 
     @Override
@@ -81,10 +81,5 @@ public class MysqlTableSink extends DataSink {
     @Override
     public DataPartition getOutputPartition() {
         return null;
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return true;
     }
 }

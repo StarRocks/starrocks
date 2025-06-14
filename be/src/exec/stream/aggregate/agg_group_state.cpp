@@ -133,9 +133,8 @@ Status AggGroupState::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AggGroupState::process_chunk(size_t chunk_size, const Columns& group_by_columns,
-                                    const Buffer<uint8_t>& keys_not_in_map, const StreamRowOp* ops,
-                                    const std::vector<std::vector<ColumnPtr>>& agg_columns,
+Status AggGroupState::process_chunk(size_t chunk_size, const Columns& group_by_columns, const Filter& keys_not_in_map,
+                                    const StreamRowOp* ops, const std::vector<Columns>& agg_columns,
                                     std::vector<std::vector<const Column*>>& raw_columns,
                                     const Buffer<AggDataPtr>& agg_group_state) const {
     DCHECK(!_agg_states.empty());
@@ -246,14 +245,14 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             auto agg_col = ColumnHelper::create_column(agg_func_type.result_type,
                                                        agg_func_type.has_nullable_child & agg_func_type.is_nullable);
             auto count_col = Int64Column::create();
-            Columns detail_cols{agg_col, count_col};
+            Columns detail_cols{std::move(agg_col), std::move(count_col)};
 
             // record each column's map count which is used to expand group by columns.
             auto result_count = Int64Column::create();
-            agg_state->output_detail(chunk_size, agg_group_state, detail_cols, result_count.get());
+            RETURN_IF_ERROR(agg_state->output_detail(chunk_size, agg_group_state, detail_cols, result_count.get()));
 
             auto result_count_data = reinterpret_cast<Int64Column*>(result_count.get())->get_data();
-            std::vector<uint32_t> replicate_offsets;
+            Buffer<uint32_t> replicate_offsets;
             replicate_offsets.reserve(result_count_data.size() + 1);
             int offset = 0;
             for (auto count : result_count_data) {
@@ -265,12 +264,13 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             auto detail_result_chunk = std::make_shared<Chunk>();
             SlotId slot_id = 0;
             for (size_t j = 0; j < group_by_columns.size(); j++) {
-                auto replicated_col = group_by_columns[j]->replicate(replicate_offsets);
+                ASSIGN_OR_RETURN(auto replicated_col,
+                                 group_by_columns[j]->as_mutable_ptr()->replicate(replicate_offsets))
                 detail_result_chunk->append_column(replicated_col, slot_id++);
             }
             // TODO: take care slot_ids.
-            detail_result_chunk->append_column(std::move(agg_col), slot_id++);
-            detail_result_chunk->append_column(std::move(count_col), slot_id++);
+            detail_result_chunk->append_column(detail_cols[0], slot_id++);
+            detail_result_chunk->append_column(detail_cols[1], slot_id++);
             detail_chunks->emplace_back(std::move(detail_result_chunk));
         }
         // only output intermediate result if intermediate agg group is not empty
@@ -316,7 +316,7 @@ Status AggGroupState::write(RuntimeState* state, StreamChunkPtr* result_chunk, C
     // Need mock slot id
     auto new_result_chunk = std::make_shared<Chunk>();
     int32_t slot_id = 0;
-    for (auto col : (*result_chunk)->columns()) {
+    for (const auto& col : (*result_chunk)->columns()) {
         new_result_chunk->append_column(col, slot_id++);
     }
     if (StreamChunkConverter::has_ops_column(*result_chunk)) {

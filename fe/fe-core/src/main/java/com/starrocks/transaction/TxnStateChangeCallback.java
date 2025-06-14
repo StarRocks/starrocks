@@ -34,7 +34,7 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
 public interface TxnStateChangeCallback {
 
@@ -63,7 +63,7 @@ public interface TxnStateChangeCallback {
      *
      * @param txnState
      */
-    void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException;
+    void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException;
 
     void replayOnCommitted(TransactionState txnState);
 
@@ -75,7 +75,7 @@ public interface TxnStateChangeCallback {
      * @return
      */
     void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException;
+            throws StarRocksException;
 
     void replayOnAborted(TransactionState txnState);
 
@@ -83,10 +83,9 @@ public interface TxnStateChangeCallback {
 
     void replayOnVisible(TransactionState txnState);
 
-
     void beforePrepared(TransactionState txnState) throws TransactionException;
 
-    void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException;
+    void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException;
 
     void replayOnPrepared(TransactionState txnState);
 }

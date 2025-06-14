@@ -1,47 +1,3 @@
-[sql]
-select
-    s_acctbal,
-    s_name,
-    n_name,
-    p_partkey,
-    p_mfgr,
-    s_address,
-    s_phone,
-    s_comment
-from
-    part,
-    supplier,
-    partsupp,
-    nation,
-    region
-where
-        p_partkey = ps_partkey
-  and s_suppkey = ps_suppkey
-  and p_size = 12
-  and p_type like '%COPPER'
-  and s_nationkey = n_nationkey
-  and n_regionkey = r_regionkey
-  and r_name = 'AMERICA'
-  and ps_supplycost = (
-    select
-        min(ps_supplycost)
-    from
-        partsupp,
-        supplier,
-        nation,
-        region
-    where
-            p_partkey = ps_partkey
-      and s_suppkey = ps_suppkey
-      and s_nationkey = n_nationkey
-      and n_regionkey = r_regionkey
-      and r_name = 'AMERICA'
-)
-order by
-    s_acctbal desc,
-    n_name,
-    s_name,
-    p_partkey limit 100;
 [fragment statistics]
 PLAN FRAGMENT 0(F10)
 Output Exprs:16: S_ACCTBAL | 12: S_NAME | 26: N_NAME | 1: P_PARTKEY | 3: P_MFGR | 13: S_ADDRESS | 15: S_PHONE | 17: S_COMMENT
@@ -61,7 +17,7 @@ column statistics:
 * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
 * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
 * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * min-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
@@ -86,7 +42,7 @@ OutPut Exchange Id: 25
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * min-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
@@ -110,7 +66,7 @@ OutPut Exchange Id: 25
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 22:SELECT
 |  predicates: 22: PS_SUPPLYCOST = 59: min
@@ -124,7 +80,7 @@ OutPut Exchange Id: 25
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * min-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
@@ -142,13 +98,14 @@ OutPut Exchange Id: 25
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * min-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
 |
 20:SORT
 |  order by: [1, INT, false] ASC
+|  analytic partition by: [1: P_PARTKEY, INT, false]
 |  offset: 0
 |  cardinality: 80240
 |  column statistics:
@@ -160,7 +117,7 @@ OutPut Exchange Id: 25
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
@@ -196,7 +153,7 @@ OutPut Exchange Id: 19
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 17:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -214,7 +171,7 @@ OutPut Exchange Id: 19
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
@@ -240,7 +197,7 @@ OutPut Exchange Id: 19
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -253,12 +210,12 @@ OutPut Exchange Id: 19
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----7:EXCHANGE
 |       distribution type: BROADCAST
@@ -358,8 +315,8 @@ cardinality: 100300
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
 * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 1.0] ESTIMATE
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[SMALL ANODIZED TIN:134400][MEDIUM BRUSHED BRASS:133900][STANDARD BRUSHED BRASS:133900][PROMO BURNISHED TIN:133800][SMALL ANODIZED COPPER:133800]] ESTIMATE
+* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 50.0] MCV: [[12:401200]] ESTIMATE
 
 PLAN FRAGMENT 5(F01)
 
@@ -373,8 +330,8 @@ OutPut Exchange Id: 07
 |  26 <-> [26: N_NAME, CHAR, false]
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -384,8 +341,8 @@ OutPut Exchange Id: 07
 |  output columns: 25, 26
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
@@ -402,8 +359,8 @@ cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (27: N_REGIONKEY)
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 6(F02)
@@ -428,6 +385,5 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[AMERICA:1]] ESTIMATE
 [end]
-

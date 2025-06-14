@@ -59,6 +59,7 @@ public:
         // TODO: user configurable.
         bool bool_alpha = true;
 
+        bool is_hive = false;
         // Here used to control array parse format.
         // Considering Hive array format is different from traditional array format,
         // so here we provide some variables to customize array format, and you can
@@ -97,9 +98,9 @@ public:
         return true;
     }
 
-    virtual bool read_string(Column* column, Slice s, const Options& options) const = 0;
+    virtual bool read_string(Column* column, const Slice& s, const Options& options) const = 0;
 
-    virtual bool read_quoted_string(Column* column, Slice s, const Options& options) const = 0;
+    virtual bool read_quoted_string(Column* column, const Slice& s, const Options& options) const = 0;
 
 protected:
     template <char quote>

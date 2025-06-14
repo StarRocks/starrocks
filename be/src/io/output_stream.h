@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/ownership.h"
 #include "common/statusor.h"
 #include "io/writable.h"
 #include "util/slice.h"
@@ -50,6 +51,43 @@ public:
     // returns NULL. The return pointer is invalidated as soon as any other
     // non-const method of OutputStream is called.
     virtual StatusOr<Position> get_direct_buffer_and_advance(int64_t size) = 0;
+};
+
+class OutputStreamWrapper : public OutputStream {
+public:
+    OutputStreamWrapper(std::unique_ptr<OutputStream> stream) : _impl(stream.release()), _ownership(kTakesOwnership) {}
+
+    OutputStreamWrapper(std::unique_ptr<OutputStream> stream, Ownership ownership)
+            : _impl(stream.release()), _ownership(ownership) {}
+
+    ~OutputStreamWrapper() override {
+        if (_ownership == kTakesOwnership) delete _impl;
+    }
+
+    OutputStreamWrapper(const OutputStreamWrapper&) = delete;
+    void operator=(const OutputStreamWrapper&) = delete;
+    OutputStreamWrapper(OutputStreamWrapper&&) = delete;
+    void operator=(OutputStreamWrapper&&) = delete;
+
+    Status write(const void* data, int64_t size) override { return _impl->write(data, size); }
+
+    bool allows_aliasing() const override { return _impl->allows_aliasing(); }
+
+    Status write_aliased(const void* data, int64_t size) override { return _impl->write_aliased(data, size); }
+
+    Status close() override { return _impl->close(); }
+
+    Status skip(int64_t count) override { return _impl->skip(count); }
+
+    StatusOr<Buffer> get_direct_buffer() override { return _impl->get_direct_buffer(); }
+
+    StatusOr<Position> get_direct_buffer_and_advance(int64_t size) override {
+        return _impl->get_direct_buffer_and_advance(size);
+    }
+
+private:
+    OutputStream* _impl;
+    Ownership _ownership;
 };
 
 } // namespace starrocks::io

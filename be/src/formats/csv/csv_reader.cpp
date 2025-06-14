@@ -229,33 +229,9 @@ Status CSVReader::more_rows() {
                 _buff.skip(1);
                 READ_MORE()
                 column_start = _buff.position_offset();
-                if (*(_buff.position()) != _parse_options.enclose) {
-                    curState = ENCLOSE;
-                    is_enclose_column = true;
-                    break;
-                } else {
-                    // ""something
-                    // We need to determine whether the column is empty or escaped.
-                    _buff.skip(1);
-                    READ_MORE_ENCLOSE()
-                    // ""rowseperator
-                    if (is_row_delimiter(notGetLine)) {
-                        is_enclose_column = true;
-                        curState = NEWROW;
-                        break;
-                    }
-
-                    // ""delimiter
-                    if (is_column_delimiter(notGetLine)) {
-                        is_enclose_column = true;
-                        curState = COLUMN_DELIMITER;
-                        break;
-                    }
-
-                    // ""ordinary characters
-                    curState = ORDINARY;
-                    break;
-                }
+                curState = ENCLOSE;
+                is_enclose_column = true;
+                break;
             }
             curState = ORDINARY;
             _buff.skip(1);
@@ -518,7 +494,7 @@ Status CSVReader::next_record(Record* record) {
     }
     char* d;
     size_t pos = 0;
-    while ((d = _buff.find(_parse_options.row_delimiter, pos)) == nullptr) {
+    while ((d = _find_line_delimiter(_buff, pos)) == nullptr) {
         pos = _buff.available();
         _buff.compact();
         if (_buff.free_space() == 0) {
@@ -615,6 +591,10 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
     } else {
         columns->emplace_back(value, ptr - value);
     }
+}
+
+size_t CSVReader::buff_capacity() const {
+    return _buff.capacity();
 }
 
 } // namespace starrocks

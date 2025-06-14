@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Need help or have a question?
+    url: https://try.starrocks.com/join-starrocks-on-slack
+    about: Visit our slack channel.

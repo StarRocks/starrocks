@@ -1,41 +1,3 @@
-[sql]
-select
-    s_suppkey,
-    s_name,
-    s_address,
-    s_phone,
-    total_revenue
-from
-    supplier,
-    (	select
-             l_suppkey as supplier_no,
-             sum(l_extendedprice * (1 - l_discount)) as total_revenue
-         from
-             lineitem
-         where
-                 l_shipdate >= date '1995-07-01'
-           and l_shipdate < date '1995-10-01'
-         group by
-             l_suppkey) a
-where
-        s_suppkey = supplier_no
-  and total_revenue = (
-    select
-        max(total_revenue)
-    from
-        (	select
-                 l_suppkey as supplier_no,
-                 sum(l_extendedprice * (1 - l_discount)) as total_revenue
-             from
-                 lineitem
-             where
-                     l_shipdate >= date '1995-07-01'
-               and l_shipdate < date '1995-10-01'
-             group by
-                 l_suppkey) b
-)
-order by
-    s_suppkey;
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
@@ -261,8 +223,8 @@ cardinality: 23339376
 column statistics:
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-* L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0] ESTIMATE
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+* L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0] MCV: [[1995-09-18:267300][1995-09-26:265700][1995-09-03:260100][1995-09-04:258600][1995-09-27:258300]] ESTIMATE
 * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 6(F01)
@@ -299,7 +261,7 @@ cardinality: 23339376
 column statistics:
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-* L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0] ESTIMATE
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+* L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0] MCV: [[1995-09-18:267300][1995-09-26:265700][1995-09-03:260100][1995-09-04:258600][1995-09-27:258300]] ESTIMATE
 * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 [end]

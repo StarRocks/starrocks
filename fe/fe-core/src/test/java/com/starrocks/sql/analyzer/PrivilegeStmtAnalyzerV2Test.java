@@ -14,8 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -81,21 +83,21 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testCreateUser() throws Exception {
         String sql = "create user test";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test", stmt.getUserIdentity().getUser());
         Assert.assertEquals("%", stmt.getUserIdentity().getHost());
-        Assert.assertEquals("", stmt.getOriginalPassword());
+        Assert.assertNull(stmt.getAuthOption());
 
         sql = "create user 'test'@'10.1.1.1'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test", stmt.getUserIdentity().getUser());
         Assert.assertEquals("10.1.1.1", stmt.getUserIdentity().getHost());
-        Assert.assertEquals("", stmt.getOriginalPassword());
+        Assert.assertNull(stmt.getAuthOption());
 
         sql = "create user 'test'@'%' identified by 'abc'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test", stmt.getUserIdentity().getUser());
         Assert.assertEquals("%", stmt.getUserIdentity().getHost());
-        Assert.assertEquals("abc", stmt.getOriginalPassword());
+        Assert.assertEquals("abc", stmt.getAuthOption().getAuthString());
 
         sql = "create user 'aaa~bbb'";
         try {
@@ -111,7 +113,16 @@ public class PrivilegeStmtAnalyzerV2Test {
                 new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
 
         sql = "create user u2 identified with mysql_native_password as '123456'";
-        analyzeFail(sql, "Password hash should be a 41-digit hexadecimal number");
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(sql,
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, ctx);
+            Assert.fail("Miss semantic error exception");
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Password hash should be a 41-digit hexadecimal number"));
+        } catch (Exception e) {
+            Assert.fail("analyze exception: " + e);
+        }
 
         sql = "create user u2 identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
@@ -124,7 +135,16 @@ public class PrivilegeStmtAnalyzerV2Test {
                 new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
 
         sql = "create user u4 identified by password '123456'";
-        analyzeFail(sql, "Password hash should be a 41-digit hexadecimal number");
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(sql,
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, ctx);
+            Assert.fail("Miss semantic error exception");
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Password hash should be a 41-digit hexadecimal number"));
+        } catch (Exception e) {
+            Assert.fail("analyze exception: " + e);
+        }
 
         sql = "create user u4 identified by password '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
@@ -229,9 +249,9 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testAlterDropUser() throws Exception {
         String sql = "alter user test_user identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", alterUserStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test_user", alterUserStmt.getUserIdentity().getUser());
         Assert.assertEquals("%", alterUserStmt.getUserIdentity().getHost());
-        Assert.assertEquals("abc", alterUserStmt.getOriginalPassword());
+        Assert.assertEquals("abc", alterUserStmt.getAuthOption().getAuthString());
 
         sql = "alter user 'test'@'10.1.1.1' identified by 'abc'";
         try {
@@ -252,7 +272,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "drop user test_user";
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", dropUserStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test_user", dropUserStmt.getUserIdentity().getUser());
 
         sql = "drop user root";
         try {

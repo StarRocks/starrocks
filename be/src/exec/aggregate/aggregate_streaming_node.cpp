@@ -83,14 +83,16 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
                 RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
-                TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
+                TRY_CATCH_ALLOC_SCOPE_START()
+                _aggregator->build_hash_map(input_chunk_size);
                 if (_aggregator->is_none_group_by_exprs()) {
                     RETURN_IF_ERROR(_aggregator->compute_single_agg_state(input_chunk.get(), input_chunk_size));
                 } else {
                     RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(input_chunk.get(), input_chunk_size));
                 }
 
-                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+                _aggregator->try_convert_to_two_level_map();
+                TRY_CATCH_ALLOC_SCOPE_END()
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
 
@@ -117,21 +119,24 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
-                    TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
+                    TRY_CATCH_ALLOC_SCOPE_START()
+                    _aggregator->build_hash_map(input_chunk_size);
                     if (_aggregator->is_none_group_by_exprs()) {
                         RETURN_IF_ERROR(_aggregator->compute_single_agg_state(input_chunk.get(), input_chunk_size));
                     } else {
                         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(input_chunk.get(), input_chunk_size));
                     }
 
-                    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+                    _aggregator->try_convert_to_two_level_map();
+                    TRY_CATCH_ALLOC_SCOPE_END()
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
                     continue;
                 } else {
+                    TRY_CATCH_ALLOC_SCOPE_START()
                     // TODO: direct call the function may affect the performance of some aggregated cases
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(input_chunk_size));
+                        _aggregator->build_hash_map_with_selection(input_chunk_size);
                     }
 
                     size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
@@ -153,6 +158,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                                     _aggregator->output_chunk_by_streaming_with_selection(input_chunk.get(), chunk));
                         }
                     }
+                    TRY_CATCH_ALLOC_SCOPE_END()
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
                     if (*chunk != nullptr && (*chunk)->num_rows() > 0) {
@@ -212,10 +218,11 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     size_t degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
 
-    auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    if (!should_cache && _tnode.agg_node.__isset.interpolate_passthrough && _tnode.agg_node.interpolate_passthrough &&
-        context->could_local_shuffle(ops_with_sink)) {
-        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink,
+    auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
+    bool could_local_shuffle = !should_cache && !context->enable_group_execution();
+    if (could_local_shuffle && _tnode.agg_node.__isset.interpolate_passthrough &&
+        _tnode.agg_node.interpolate_passthrough && context->could_local_shuffle(ops_with_sink)) {
+        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink,
                                                                               degree_of_parallelism, true);
     }
 
@@ -225,8 +232,8 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         auto aggr_mode = should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                     aggregator_factory);
+        auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(
+                context->next_operator_id(), id(), aggregator_factory, _build_runtime_filters);
         auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(),
                                                                                          id(), aggregator_factory);
         context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
@@ -246,7 +253,8 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
-        ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
+        ops_with_source =
+                context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
 
@@ -254,6 +262,7 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
         ops_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
+    ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
     return ops_with_source;
 }
 

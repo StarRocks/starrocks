@@ -28,14 +28,12 @@ skip_res_cmd = [
     "select connection_id()",
     "select connection_id();",
     ".*explain costs select.*",
-    "EXPLAIN SELECT.*",
     "rand()",
-    "show stats meta",
     "SHOW RESOURCES",
     "show alter table column",
     "select db_id, table_id, column_name,.* from _statistics_.column_statistics.*",
     "SELECT \\* FROM .* LIMIT 1.*",
-    "explain .*",
+    "explain(?! select).*",
     "select \\* from t2 where c1 = \\(select c1 from t2 limit 1\\).*",
     "SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1.*",
     "show load.*",
@@ -59,4 +57,10 @@ skip_res_cmd = [
     "select current_time\\(\\)",
     "select curdate\\(\\)",
     "select current_date\\(\\)",
+    "refresh materialized view.*",
+    "REFRESH MATERIALIZED VIEW.*"
 ]
+
+skip_files = set([
+    # 'test_parquet_dict_null_predicate'
+])

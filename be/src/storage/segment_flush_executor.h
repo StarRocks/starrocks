@@ -20,6 +20,7 @@
 
 #include "common/status.h"
 #include "storage/olap_define.h"
+#include "util/spinlock.h"
 #include "util/threadpool.h"
 
 namespace brpc {
@@ -40,21 +41,49 @@ class ThreadPoolToken;
 
 class DeltaWriter;
 
+struct SegmentFlushStat {
+    std::atomic_int32_t num_pending_tasks = 0;
+    std::atomic_int32_t num_running_tasks = 0;
+    std::atomic_int32_t num_finished_tasks = 0;
+    std::atomic_int64_t pending_time_ns = 0;
+    std::atomic_int64_t execute_time_ns = 0;
+};
+
 class SegmentFlushToken {
 public:
-    SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token,
-                      std::shared_ptr<starrocks::DeltaWriter> delta_writer);
+    SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token);
 
-    Status submit(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+    Status submit(DeltaWriter* writer, brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
-    void cancel();
+    Status status() const {
+        std::lock_guard l(_status_lock);
+        return _status;
+    }
 
-    void wait();
+    void set_status(const Status& status) {
+        if (status.ok()) return;
+        std::lock_guard l(_status_lock);
+        if (_status.ok()) _status = status;
+    }
+
+    void cancel(const Status& st);
+
+    void shutdown();
+
+    Status wait();
+
+    const SegmentFlushStat& get_stat() const { return _stat; }
 
 private:
+    friend class SegmentFlushTask;
+
     std::unique_ptr<ThreadPoolToken> _flush_token;
-    std::shared_ptr<DeltaWriter> _writer;
+
+    mutable SpinLock _status_lock;
+    // Records the current flush status of the tablet.
+    Status _status;
+    SegmentFlushStat _stat;
 };
 
 class SegmentFlushExecutor {
@@ -69,8 +98,9 @@ public:
     Status update_max_threads(int max_threads);
 
     std::unique_ptr<SegmentFlushToken> create_flush_token(
-            const std::shared_ptr<starrocks::DeltaWriter>& delta_writer,
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::CONCURRENT);
+
+    ThreadPool* get_thread_pool() { return _flush_pool.get(); }
 
 private:
     std::unique_ptr<ThreadPool> _flush_pool;

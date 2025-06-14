@@ -1,0 +1,118 @@
+name: REVIEW CHECKER
+
+on:
+
+  pull_request_review:
+    types:
+      - submitted
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+jobs:
+
+  info:
+    if: >
+      (github.event.pull_request && github.event.requested_team) ||
+      (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved')
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
+      HEAD_REF: ${{ steps.pr.outputs.HEAD_REF }}
+      BASE_REF: ${{ steps.pr.outputs.BASE_REF }}
+      TITLE: ${{ steps.pr_info.outputs.title }}
+      LABELS: ${{ steps.pr_info.outputs.labels }}
+      DIFF_LINES: ${{ steps.pr_info.outputs.diff_lines }}
+
+
+    steps:
+      - name: PR
+        id: pr
+        run: |
+          if [[ "${{ github.event.number }}" != "" ]]; then
+            echo "PR_NUMBER=${{ github.event.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "HEAD_REF=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+            echo "BASE_REF=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: INFO
+        id: pr_info
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
+        run: |
+          pr_info=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels,title,files)
+          labels=$(echo ${pr_info} | jq -r '.labels[].name')
+          title=$(echo ${pr_info} | jq -r '.title')
+          diff_lines=$(echo ${pr_info} | jq -r '([.files[].additions, .files[].deletions] | add)')
+          
+          echo "diff_lines=${diff_lines}" >> $GITHUB_OUTPUT
+          
+          echo "labels<<EOF" >> $GITHUB_OUTPUT
+          echo "$labels" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "title<<EOF" >> $GITHUB_OUTPUT
+          echo "${title}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+                    
+          cat $GITHUB_OUTPUT
+
+  meta-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event_name == 'pull_request_review' && 
+      contains(needs.info.outputs.LABELS, 'META-REVIEW') && 
+      !contains(needs.info.outputs.LABELS, 'sync') && 
+      !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
+    name: META-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: meta-committer
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: META-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  proto-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event_name == 'pull_request_review' && 
+      contains(needs.info.outputs.LABELS, 'PROTO-REVIEW') && 
+      !contains(needs.info.outputs.LABELS, 'sync') && 
+      !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
+    name: PROTO-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: proto-team
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: PROTO-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh

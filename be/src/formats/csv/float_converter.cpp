@@ -34,7 +34,7 @@ Status FloatConverter<T>::write_quoted_string(OutputStream* os, const Column& co
 }
 
 template <typename T>
-bool FloatConverter<T>::read_string(Column* column, Slice s, const Options& options) const {
+bool FloatConverter<T>::read_string(Column* column, const Slice& s, const Options& options) const {
     StringParser::ParseResult r;
     auto v = StringParser::string_to_float<DataType>(s.data, s.size, &r);
     if (r == StringParser::PARSE_SUCCESS) {
@@ -44,7 +44,7 @@ bool FloatConverter<T>::read_string(Column* column, Slice s, const Options& opti
 }
 
 template <typename T>
-bool FloatConverter<T>::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool FloatConverter<T>::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 

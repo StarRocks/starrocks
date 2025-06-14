@@ -38,6 +38,8 @@
 #include <cstring>
 #include <type_traits>
 
+#include "gutil/strings/fastmem.h"
+
 // Must include headers out of namespace
 #if defined(__SSE4_1__) && !defined(ADDRESS_SANITIZER)
 #include <smmintrin.h>
@@ -56,10 +58,11 @@ inline int compare(T lhs, T rhs) {
     }
 }
 
-// mem_equal is used to optimize the comparastion between the two strings.
+// memequal is used to optimize the comparison between the two strings.
 //  1. If the length is equal and larger than 16, use SSE4.1
 //  2. If the length is small than 16, convert the address to int16/int32/int64
-//     to comparasion
+//     to comparison
+// so it does not need to consider extra padding bytes for SIMD, which is required by memequal_padded().
 // TODO: If know the size in advance, call the function by constant parameter
 //       like memequal(p1, 10, p2, 10) is efficient
 
@@ -153,7 +156,38 @@ inline int memcompare(const char* p1, size_t size1, const char* p2, size_t size2
     size_t min_size = std::min(size1, size2);
     auto res = memcmp(p1, p2, min_size);
     if (res != 0) {
-        return res;
+        return res > 0 ? 1 : -1;
+    }
+    return compare(size1, size2);
+}
+
+#if defined(__SSE4_2__)
+inline int sse_memcmp2(const char* p1, const char* p2, size_t size) {
+    __m128i left = _mm_lddqu_si128((__m128i*)(p1));
+    __m128i right = _mm_lddqu_si128((__m128i*)(p2));
+    __m128i nz = ~_mm_cmpeq_epi8(left, right);
+    unsigned short mask = _mm_movemask_epi8(nz);
+    int index = __builtin_ctz(mask);
+    if (mask == 0 || index >= size) return 0;
+    return (int)(uint8_t)p1[index] - (int)(uint8_t)p2[index];
+}
+#endif
+
+constexpr size_t PADDED_SIZE = 16;
+// memcmp has special inline optimizations for bytes <= 16.
+// Requires input to be overflow readable. (Allocate memory aligned to 16 byte size or tail length of 16.)
+inline int memcompare_padded(const char* p1, size_t size1, const char* p2, size_t size2) {
+    size_t min_size = std::min(size1, size2);
+#if defined(__SSE4_2__)
+    if (min_size > 0 && min_size <= 16) {
+        auto res = sse_memcmp2(p1, p2, min_size);
+        if (res == 0) return compare(size1, size2);
+        return res > 0 ? 1 : -1;
+    }
+#endif
+    auto res = memcmp(p1, p2, min_size);
+    if (res != 0) {
+        return res > 0 ? 1 : -1;
     }
     return compare(size1, size2);
 }

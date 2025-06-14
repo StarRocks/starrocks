@@ -23,18 +23,18 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -52,7 +53,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class UpdateAnalyzer {
-
     private static boolean checkIfUsePartialUpdate(int updateColumnCnt, int tableColumnCnt) {
         if (updateColumnCnt <= 3 && updateColumnCnt < tableColumnCnt * 0.3) {
             return true;
@@ -61,16 +61,28 @@ public class UpdateAnalyzer {
         }
     }
 
+    private static void analyzeProperties(UpdateStmt updateStmt, ConnectContext session) {
+        Map<String, String> properties = updateStmt.getProperties();
+        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
+    }
+
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
+        analyzeProperties(updateStmt, session);
+
         TableName tableName = updateStmt.getTableName();
-        MetaUtils.normalizationTableName(session, tableName);
-        MetaUtils.getDatabase(session, tableName);
-        Table table = MetaUtils.getTable(session, tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
+        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof MaterializedView) {
-            throw new SemanticException(
-                    "The data of '%s' cannot be modified because '%s' is a materialized view," +
-                            "and the data of materialized view must be consistent with the base table.",
+            throw new SemanticException("The data of '%s' cannot be modified because '%s' is a materialized view,"
+                    + "and the data of materialized view must be consistent with the base table.",
                     tableName.getTbl(), tableName.getTbl());
         }
 
@@ -79,42 +91,47 @@ public class UpdateAnalyzer {
         }
 
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
-        Map<String, ColumnAssignment> assignmentByColName = assignmentList.stream().collect(
-                Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
+        Map<String, ColumnAssignment> assignmentByColName = new HashMap<>();
+        for (ColumnAssignment col : assignmentList) {
+            assignmentByColName.put(col.getColumn().toLowerCase(), col);
+        }
         for (String colName : assignmentByColName.keySet()) {
             if (table.getColumn(colName) == null) {
                 throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
             }
         }
 
-        if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
-            // use partial update by column
-            updateStmt.setUsePartialUpdate();
-        } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
-            // decide by default rules
-            if (updateStmt.getWherePredicate() == null) {
-                if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
-                    // use partial update if:
-                    // 1. Columns updated are less than 4
-                    // 2. The proportion of columns updated is less than 30%
-                    // 3. No where predicate in update stmt
-                    updateStmt.setUsePartialUpdate();
-                } else {
-                    throw new SemanticException("must specify where clause to prevent full table update");
+        if (table.isOlapTable() || table.isCloudNativeTable()) {
+            if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
+                // use partial update by column
+                updateStmt.setUsePartialUpdate();
+                if (((OlapTable) table).hasRowStorageType()) {
+                    throw new SemanticException("column_with_row table do not support column mode update");
+                }
+            } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
+                // decide by default rules
+                if (updateStmt.getWherePredicate() == null) {
+                    if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
+                        if (!((OlapTable) table).hasRowStorageType()) {
+                            // use partial update if:
+                            // 1. Columns updated are less than 4
+                            // 2. The proportion of columns updated is less than 30%
+                            // 3. No where predicate in update stmt
+                            updateStmt.setUsePartialUpdate();
+                        }
+                    }
                 }
             }
-        } else {
-            // when var `partial_update_mode` == row, use full columns update instead of partial update
-            if (updateStmt.getWherePredicate() == null) {
-                throw new SemanticException("must specify where clause to prevent full table update");
-            }
+        }
+        if (!updateStmt.usePartialUpdate() && updateStmt.getWherePredicate() == null) {
+            throw new SemanticException("must specify where clause to prevent full table update");
         }
 
         SelectList selectList = new SelectList();
         List<Column> assignColumnList = Lists.newArrayList();
         boolean nullExprInAutoIncrement = false;
         Column autoIncrementColumn = null;
-        Map<Column, SelectListItem>  mcToItem = Maps.newHashMap();
+        Map<Column, SelectListItem> mcToItem = Maps.newHashMap();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
             ColumnAssignment assign = assignmentByColName.get(col.getName().toLowerCase());
@@ -132,13 +149,14 @@ public class UpdateAnalyzer {
                     break;
                 }
 
-                if (col.isMaterializedColumn()) {
-                    throw new SemanticException("materialized column cannot be updated: " + col.getName());
+                if (col.isGeneratedColumn()) {
+                    throw new SemanticException("generated column cannot be updated: " + col.getName());
                 }
 
                 if (assign.getExpr() instanceof DefaultValueExpr) {
                     if (!col.isAutoIncrement()) {
-                        assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
+                        assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()),
+                                col.getType()));
                     } else {
                         assign.setExpr(TypeManager.addCastExpr(new NullLiteral(), col.getType()));
                     }
@@ -147,10 +165,11 @@ public class UpdateAnalyzer {
                 item = new SelectListItem(assign.getExpr(), col.getName());
                 selectList.addItem(item);
                 assignColumnList.add(col);
-            } else if (col.isMaterializedColumn()) {
-                Expr expr = col.materializedColumnExpr();
+            } else if (col.isGeneratedColumn()) {
+                Expr expr = col.getGeneratedColumnExpr(table.getIdToColumn());
                 item = new SelectListItem(expr, col.getName());
                 mcToItem.put(col, item);
+                selectList.addItem(item);
                 assignColumnList.add(col);
             } else if (!updateStmt.usePartialUpdate() || col.isKey()) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
@@ -160,22 +179,54 @@ public class UpdateAnalyzer {
         }
 
         if (autoIncrementColumn != null && nullExprInAutoIncrement) {
-            throw new SemanticException("AUTO_INCREMENT column: " + autoIncrementColumn.getName() +
-                                        " must not be NULL");
+            throw new SemanticException(
+                    "AUTO_INCREMENT column: " + autoIncrementColumn.getName() + " must not be NULL");
         }
 
         /*
-         * The Substitution here is needed because the materialized column
+         * The Substitution here is needed because the generated column
          * needed to be re-calculated by the 'new value' of the ref column,
          * which is the specified expression in UPDATE statment.
          */
         for (Column column : table.getBaseSchema()) {
-            if (!column.isMaterializedColumn()) {
+            if (!column.isGeneratedColumn()) {
                 continue;
             }
 
             SelectListItem item = mcToItem.get(column);
             Expr orginExpr = item.getExpr();
+
+            ExpressionAnalyzer.analyzeExpression(orginExpr, new AnalyzeState(),
+                    new Scope(RelationId.anonymous(),
+                            new RelationFields(
+                                    table.getBaseSchema()
+                                            .stream()
+                                            .map(col -> new Field(col.getName(), col.getType(), tableName, null))
+                                            .collect(Collectors.toList()))),
+                    session);
+
+            // check if all the expression refers are sepecfied in
+            // partial update mode
+            if (updateStmt.usePartialUpdate()) {
+                List<SlotRef> checkSlots = Lists.newArrayList();
+                orginExpr.collect(SlotRef.class, checkSlots);
+                int matchCount = 0;
+                if (checkSlots.size() != 0) {
+                    for (SlotRef slot : checkSlots) {
+                        Column refColumn = table.getColumn(slot.getColumnName());
+                        for (Column assignColumn : assignColumnList) {
+                            if (assignColumn.equals(refColumn)) {
+                                ++matchCount;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (matchCount != checkSlots.size()) {
+                    throw new SemanticException("All ref Column must be sepecfied in partial update mode");
+                }
+            }
 
             List<Expr> outputExprs = Lists.newArrayList();
             for (Column col : table.getBaseSchema()) {
@@ -189,10 +240,11 @@ public class UpdateAnalyzer {
             // sourceScope must be set null tableName for its Field in RelationFields
             // because we hope slotRef can not be resolved in sourceScope but can be
             // resolved in outputScope to force to replace the node using outputExprs.
-            Scope sourceScope = new Scope(RelationId.anonymous(), 
-                                    new RelationFields(table.getBaseSchema().stream().map(col ->
-                                        new Field(col.getName(), col.getType(), null, null))
-                                            .collect(Collectors.toList())));
+            Scope sourceScope = new Scope(RelationId.anonymous(),
+                    new RelationFields(table.getBaseSchema()
+                            .stream()
+                            .map(col -> new Field(col.getName(), col.getType(), null, null))
+                            .collect(Collectors.toList())));
 
             // outputScope should be resolved for the column with assign expr in update statement.
             List<Field> fields = Lists.newArrayList();
@@ -205,9 +257,7 @@ public class UpdateAnalyzer {
             }
             Scope outputScope = new Scope(RelationId.anonymous(), new RelationFields(fields));
 
-            RewriteAliasVisitor visitor =
-                                new RewriteAliasVisitor(sourceScope, outputScope,
-                                    outputExprs, session);
+            RewriteAliasVisitor visitor = new RewriteAliasVisitor(sourceScope, outputScope, outputExprs, session);
 
             Expr expr = orginExpr.accept(visitor, null);
 
@@ -235,7 +285,7 @@ public class UpdateAnalyzer {
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
         Preconditions.checkState(outputExpression.size() == assignColumnList.size());
         if (!updateStmt.usePartialUpdate()) {
-            Preconditions.checkState(table.getBaseSchema().size() == assignColumnList.size());   
+            Preconditions.checkState(table.getBaseSchema().size() == assignColumnList.size());
         }
         List<Expr> castOutputExpressions = Lists.newArrayList();
         for (int i = 0; i < assignColumnList.size(); ++i) {

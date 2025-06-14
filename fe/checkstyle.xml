@@ -48,7 +48,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     <module name="SuppressWarningsFilter"/>
     <module name="BeforeExecutionExclusionFileFilter">
         <property name="fileNamePattern"
-                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreClient.java|Platform.java|.*[\\/]udf-extensions[\\/].*"/>
+                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreClient.java|DeleteFileIndex.java|ManifestGroup.java|ManifestReader.java|PartitionData.java|Platform.java|FSDataInputStreamWrapper.java|.*[\\/]udf-extensions[\\/].*"/>
     </module>
 
     <module name="FileTabCharacter">
@@ -314,6 +314,16 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
         </module>
         <module name="CommentsIndentation">
             <property name="tokens" value="SINGLE_LINE_COMMENT, BLOCK_COMMENT_BEGIN"/>
+        </module>
+        <module name="UnnecessarySemicolonAfterOuterTypeDeclaration"/>
+        <module name="UnnecessarySemicolonAfterTypeMemberDeclaration"/>
+        <module name="UnnecessarySemicolonInEnumeration"/>
+        <module name="UnnecessarySemicolonInTryWithResources"/>
+        <module name="Regexp">
+            <property name="format" value=";{2,}[\r\n]+"/>
+            <property name="illegalPattern" value="true"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message" value="Two or more semicolons appear, which is a duplicate."/>
         </module>
     </module>
 </module>

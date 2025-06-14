@@ -176,9 +176,17 @@ pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::Pip
     using namespace pipeline;
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
-
-    auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
+    size_t degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
+    auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
     auto* upstream_source_op = context->source_operator(ops_with_sink);
+
+    bool could_local_shuffle = !should_cache && !context->enable_group_execution();
+    if (could_local_shuffle && _tnode.agg_node.__isset.interpolate_passthrough &&
+        _tnode.agg_node.interpolate_passthrough && context->could_local_shuffle(ops_with_sink)) {
+        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink,
+                                                                              degree_of_parallelism, true);
+    }
+
     auto operators_generator = [this, should_cache, upstream_source_op, context](bool post_cache) {
         // shared by sink operator factory and source operator factory
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
@@ -206,13 +214,15 @@ pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::Pip
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
-        ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
+        ops_with_source =
+                context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
     if (limit() != -1) {
         ops_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
+    ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
     return ops_with_source;
 }
 

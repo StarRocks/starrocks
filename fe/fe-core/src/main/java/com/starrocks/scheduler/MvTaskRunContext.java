@@ -14,9 +14,11 @@
 
 package com.starrocks.scheduler;
 
-import com.google.common.collect.Range;
-import com.starrocks.catalog.PartitionKey;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -24,43 +26,54 @@ import java.util.Set;
 
 public class MvTaskRunContext extends TaskRunContext {
 
-    Map<String, Set<String>> baseToMvNameRef;
-    Map<String, Set<String>> mvToBaseNameRef;
-    Map<String, Range<PartitionKey>> basePartitionMap;
+    // all the RefBaseTable's partition name to its intersected materialized view names.
+    //baseTable -> basePartition -> mvPartitions
+    private Map<Table, Map<String, Set<String>>> refBaseTableMVIntersectedPartitions;
+    // all the materialized view's partition name to its intersected RefBaseTable's partition names.
+    //mvPartition -> baseTable -> basePartitions
+    private Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions;
+    // all the RefBaseTable's partition name to its partition range/list cell.
+    private Map<Table, Map<String, PCell>> refBaseTableToCellMap;
+    // mv to its partition range/list cell.
+    private Map<String, PCell> mvToCellMap;
 
-    String nextPartitionStart = null;
-    String nextPartitionEnd = null;
-    ExecPlan execPlan = null;
+    // the external ref base table's mv partition name to original partition names map because external
+    // table supports multi partition columns, one converted partition name(mv partition name) may have
+    // multi original partition names.
+    private Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap;
 
-    int partitionTTLNumber = TableProperty.INVALID;
+    private String nextPartitionStart = null;
+    private String nextPartitionEnd = null;
+    // The next list partition values to be processed
+    private String nextPartitionValues = null;
+    private ExecPlan execPlan = null;
+
+    private int partitionTTLNumber = TableProperty.INVALID;
 
     public MvTaskRunContext(TaskRunContext context) {
-        this.ctx = context.ctx;
-        this.definition = context.definition;
-        this.remoteIp = context.remoteIp;
-        this.properties = context.properties;
-        this.type = context.type;
-        this.status = context.status;
+        super(context);
     }
 
-    public Map<String, Set<String>> getBaseToMvNameRef() {
-        return baseToMvNameRef;
+    public Map<Table, Map<String, Set<String>>> getRefBaseTableMVIntersectedPartitions() {
+        return refBaseTableMVIntersectedPartitions;
     }
 
-    public void setBaseToMvNameRef(Map<String, Set<String>> baseToMvNameRef) {
-        this.baseToMvNameRef = baseToMvNameRef;
+    public void setRefBaseTableMVIntersectedPartitions(
+            Map<Table, Map<String, Set<String>>> refBaseTableMVIntersectedPartitions) {
+        this.refBaseTableMVIntersectedPartitions = refBaseTableMVIntersectedPartitions;
     }
 
-    public Map<String, Set<String>> getMvToBaseNameRef() {
-        return mvToBaseNameRef;
+    public Map<String, Map<Table, Set<String>>> getMvRefBaseTableIntersectedPartitions() {
+        return mvRefBaseTableIntersectedPartitions;
     }
 
-    public void setMvToBaseNameRef(Map<String, Set<String>> mvToBaseNameRef) {
-        this.mvToBaseNameRef = mvToBaseNameRef;
+    public void setMvRefBaseTableIntersectedPartitions(
+            Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions) {
+        this.mvRefBaseTableIntersectedPartitions = mvRefBaseTableIntersectedPartitions;
     }
 
     public boolean hasNextBatchPartition() {
-        return nextPartitionStart != null && nextPartitionEnd != null;
+        return (nextPartitionStart != null && nextPartitionEnd != null) || (nextPartitionValues != null);
     }
 
     public String getNextPartitionStart() {
@@ -79,12 +92,37 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
-    public void setBasePartitionMap(Map<String, Range<PartitionKey>> basePartitionMap) {
-        this.basePartitionMap = basePartitionMap;
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
     }
 
-    public Map<String, Range<PartitionKey>> getBasePartitionMap() {
-        return this.basePartitionMap;
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
+    }
+
+    public Map<Table, Map<String, PCell>> getRefBaseTableToCellMap() {
+        return refBaseTableToCellMap;
+    }
+
+    public void setRefBaseTableToCellMap(Map<Table, Map<String, PCell>> refBaseTableToCellMap) {
+        this.refBaseTableToCellMap = refBaseTableToCellMap;
+    }
+
+    public Map<Table, Map<String, Set<String>>> getExternalRefBaseTableMVPartitionMap() {
+        return externalRefBaseTableMVPartitionMap;
+    }
+
+    public void setExternalRefBaseTableMVPartitionMap(
+            Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap) {
+        this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
+    }
+
+    public Map<String, PCell> getMVToCellMap() {
+        return mvToCellMap;
+    }
+
+    public void setMVToCellMap(Map<String, PCell> mvToCellMap) {
+        this.mvToCellMap = mvToCellMap;
     }
 
     public ExecPlan getExecPlan() {
@@ -105,5 +143,24 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
+    }
+
+    /**
+     * For external table, the partition name is normalized which should convert it into original partition name.
+     * <p>
+     * For multi-partition columns, `refTableAndPartitionNames` is not fully exact to describe which partitions
+     * of ref base table are refreshed, use `getSelectedPartitionInfosOfExternalTable` later if we can solve the multi
+     * partition columns problem.
+     * eg:
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public Set<String> getExternalTableRealPartitionName(Table table, String mvPartitionName) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            Preconditions.checkState(externalRefBaseTableMVPartitionMap.containsKey(table));
+            return externalRefBaseTableMVPartitionMap.get(table).get(mvPartitionName);
+        } else {
+            return Sets.newHashSet(mvPartitionName);
+        }
     }
 }

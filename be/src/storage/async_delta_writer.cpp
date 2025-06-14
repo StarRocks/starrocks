@@ -19,6 +19,7 @@
 #include "runtime/current_thread.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -32,7 +33,14 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         return 0;
     }
     auto writer = static_cast<DeltaWriter*>(meta);
+    bool flush_after_write = false;
+    int num_tasks = 0;
+    int64_t pending_time_ns = 0;
+    MonotonicStopWatch watch;
+    watch.start();
     for (; iter; ++iter) {
+        num_tasks += 1;
+        pending_time_ns += MonotonicNanos() - iter->create_time_ns;
         Status st;
         if (iter->abort) {
             writer->abort(iter->abort_with_log);
@@ -40,6 +48,11 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         }
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
+        }
+
+        if (iter->flush_after_write) {
+            flush_after_write = true;
+            continue;
         }
         FailedRowsetInfo failed_info{.tablet_id = writer->tablet()->tablet_id(),
                                      .replicate_token = writer->replicate_token()};
@@ -70,6 +83,16 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id: " << writer->txn_id()
                                 << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
+    if (flush_after_write) {
+        auto st = writer->manual_flush();
+        LOG_IF(WARNING, !st.ok()) << "Fail to flush. txn_id: " << writer->txn_id()
+                                  << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
+    }
+    writer->update_task_stat(num_tasks, pending_time_ns);
+    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() / 1000);
+    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns / 1000);
     return 0;
 }
 
@@ -96,12 +119,6 @@ Status AsyncDeltaWriter::_init() {
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, _execute, _writer.get()); r != 0) {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
-    if (replica_state() == Secondary) {
-        _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
-        if (_segment_flush_executor == nullptr) {
-            return Status::InternalError("SegmentFlushExecutor init failed");
-        }
-    }
     return Status::OK();
 }
 
@@ -121,8 +138,20 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     }
 }
 
+void AsyncDeltaWriter::flush() {
+    Task task;
+    task.chunk = nullptr;
+    task.indexes = nullptr;
+    task.indexes_size = 0;
+    task.flush_after_write = true;
+    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute tablet_id: " << _writer->tablet()->tablet_id()
+                     << " ret: " << r;
+    }
+}
+
 void AsyncDeltaWriter::write_segment(const AsyncDeltaWriterSegmentRequest& req) {
-    auto st = _segment_flush_executor->submit(req.cntl, req.request, req.response, req.done);
+    auto st = _writer->segment_flush_token()->submit(_writer.get(), req.cntl, req.request, req.response, req.done);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to submit write segment, err=" << st;
     }
@@ -157,10 +186,6 @@ void AsyncDeltaWriter::abort(bool with_log) {
     int r = bthread::execution_queue_execute(_queue_id, task, &options);
     LOG_IF(WARNING, r != 0) << "Fail to execution_queue_execute: " << r;
 
-    if (_segment_flush_executor != nullptr) {
-        _segment_flush_executor->cancel();
-    }
-
     // Wait until all background tasks finished
     // https://github.com/StarRocks/starrocks/issues/8906
     _close();
@@ -176,10 +201,6 @@ void AsyncDeltaWriter::_close() {
         LOG_IF(WARNING, r != 0) << "Fail to stop execution queue: " << r;
         r = bthread::execution_queue_join(_queue_id);
         LOG_IF(WARNING, r != 0) << "Fail to join execution queue: " << r;
-    }
-    // wait is thread-safe
-    if (_segment_flush_executor != nullptr) {
-        _segment_flush_executor->wait();
     }
 }
 

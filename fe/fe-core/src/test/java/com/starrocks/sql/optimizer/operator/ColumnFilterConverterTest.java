@@ -37,6 +37,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -127,8 +128,8 @@ public class ColumnFilterConverterTest {
         assertTrue(result.containsKey("name"));
         assertTrue(result.containsKey("sex"));
 
-        assertEquals(new IntLiteral(1), result.get("age").lowerBound);
-        assertEquals(new IntLiteral(1), result.get("age").upperBound);
+        assertEquals(new IntLiteral(1), result.get("age").getLowerBound());
+        assertEquals(new IntLiteral(1), result.get("age").getUpperBound());
 
         assertEquals(4, result.get("name").getInPredicateLiterals().size());
         assertEquals(new StringLiteral("1"), result.get("name").getInPredicateLiterals().get(0));
@@ -136,8 +137,8 @@ public class ColumnFilterConverterTest {
         assertEquals(new StringLiteral("3"), result.get("name").getInPredicateLiterals().get(2));
         assertEquals(new StringLiteral("4"), result.get("name").getInPredicateLiterals().get(3));
 
-        assertEquals(new NullLiteral(), result.get("sex").lowerBound);
-        assertEquals(new NullLiteral(), result.get("sex").upperBound);
+        assertEquals(new NullLiteral(), result.get("sex").getLowerBound());
+        assertEquals(new NullLiteral(), result.get("sex").getUpperBound());
     }
 
     @Test
@@ -158,8 +159,8 @@ public class ColumnFilterConverterTest {
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 1);
             PartitionColumnFilter filter = result.get("c0");
-            assertEquals(filter.lowerBound, new NullLiteral());
-            assertEquals(filter.upperBound, new NullLiteral());
+            assertEquals(filter.getLowerBound(), new NullLiteral());
+            assertEquals(filter.getUpperBound(), new NullLiteral());
         }
     }
 
@@ -234,7 +235,7 @@ public class ColumnFilterConverterTest {
     }
 
     private OlapTable buildOlapTable(String timeKey) {
-        List<Expr> exprList = new ArrayList<>();
+        List<ColumnIdExpr> exprList = new ArrayList<>();
         List<Expr> params = new ArrayList<>();
         List<Column> columns = new ArrayList<>();
         StringLiteral stringLiteral = new StringLiteral(timeKey);
@@ -245,12 +246,12 @@ public class ColumnFilterConverterTest {
         params.add(slotRefDate);
         FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
                 params);
-        exprList.add(zdtestCallExpr);
+        exprList.add(ColumnIdExpr.create(zdtestCallExpr));
         columns.add(new Column("date_col", ScalarType.DATE));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList, columns,
                 PartitionType.RANGE);
 
-        return new OlapTable(1L, "table1", new ArrayList<>(), KeysType.AGG_KEYS, expressionRangePartitionInfo,
+        return new OlapTable(1L, "table1", columns, KeysType.AGG_KEYS, expressionRangePartitionInfo,
                 new RandomDistributionInfo(10));
     }
 
@@ -263,9 +264,9 @@ public class ColumnFilterConverterTest {
         argument.add(constantOperator);
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, argument);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("bill_detail");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("bill_detail");
         ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();
-        ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo);
+        ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo, table.getIdToColumn());
         Assert.assertEquals(2921712368984L, ((ConstantOperator) afterConvert.getChild(1)).getValue());
     }
 

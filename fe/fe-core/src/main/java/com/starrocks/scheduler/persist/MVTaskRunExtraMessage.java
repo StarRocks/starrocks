@@ -19,28 +19,57 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 
 public class MVTaskRunExtraMessage implements Writable {
+
     @SerializedName("forceRefresh")
     private boolean forceRefresh;
     @SerializedName("partitionStart")
     private String partitionStart;
     @SerializedName("partitionEnd")
     private String partitionEnd;
+
+    // refreshed partitions of materialized view in this task run
     @SerializedName("mvPartitionsToRefresh")
     private Set<String> mvPartitionsToRefresh = Sets.newHashSet();
+    // refreshed partitions of the ref base table in this task run which should only have one table for now.
+    @SerializedName("refBasePartitionsToRefreshMap")
+    private Map<String, Set<String>> refBasePartitionsToRefreshMap = Maps.newHashMap();
+    // refreshed partitions of all the base tables which are optimized by optimizer and the real partitions in executing.
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
+
+    @SerializedName("nextPartitionStart")
+    private String nextPartitionStart;
+    @SerializedName("nextPartitionEnd")
+    private String nextPartitionEnd;
+    @SerializedName("nextPartitionValues")
+    private String nextPartitionValues;
+
+    // task run starts to process time
+    // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
+    @SerializedName("processStartTime")
+    private long processStartTime = 0;
+
+    @SerializedName("executeOption")
+    private ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+            false, Maps.newHashMap());
+
+    @SerializedName("planBuilderMessage")
+    public Map<String, String> planBuilderMessage = Maps.newHashMap();
 
     public MVTaskRunExtraMessage() {
     }
@@ -74,11 +103,25 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        this.mvPartitionsToRefresh = mvPartitionsToRefresh;
+        if (mvPartitionsToRefresh == null) {
+            return;
+        }
+        this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh,
+                Config.max_mv_task_run_meta_message_values_length));
     }
 
     public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
         return basePartitionsToRefreshMap;
+    }
+
+    public Map<String, Set<String>> getRefBasePartitionsToRefreshMap() {
+        return refBasePartitionsToRefreshMap;
+    }
+
+
+    public void setRefBasePartitionsToRefreshMap(Map<String, Set<String>> refBasePartitionsToRefreshMap) {
+        this.refBasePartitionsToRefreshMap = MvUtils.shrinkToSize(refBasePartitionsToRefreshMap,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     public String getMvPartitionsToRefreshString() {
@@ -99,9 +142,9 @@ public class MVTaskRunExtraMessage implements Writable {
         }
     }
 
-    public void setBasePartitionsToRefreshMap(
-            Map<String, Set<String>> basePartitionsToRefreshMap) {
-        this.basePartitionsToRefreshMap = basePartitionsToRefreshMap;
+    public void setBasePartitionsToRefreshMap(Map<String, Set<String>> basePartitionsToRefreshMap) {
+        this.basePartitionsToRefreshMap = MvUtils.shrinkToSize(basePartitionsToRefreshMap,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
@@ -109,12 +152,52 @@ public class MVTaskRunExtraMessage implements Writable {
         return GsonUtils.GSON.fromJson(json, MVTaskRunExtraMessage.class);
     }
 
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
     }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
+    }
+
+    public String getNextPartitionStart() {
+        return nextPartitionStart;
+    }
+
+    public void setNextPartitionStart(String nextPartitionStart) {
+        this.nextPartitionStart = nextPartitionStart;
+    }
+
+    public String getNextPartitionEnd() {
+        return nextPartitionEnd;
+    }
+
+    public void setNextPartitionEnd(String nextPartitionEnd) {
+        this.nextPartitionEnd = nextPartitionEnd;
+    }
+
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
+    }
+
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
+    }
+
+    public long getProcessStartTime() {
+        return processStartTime;
+    }
+
+    public void setProcessStartTime(long processStartTime) {
+        this.processStartTime = processStartTime;
+    }
+
+    public void setPlanBuilderMessage(Map<String, String> planBuilderMessage) {
+        this.planBuilderMessage = MvUtils.shrinkToSize(planBuilderMessage,
+                Config.max_mv_task_run_meta_message_values_length);
+    }
+
+
 
     @Override
     public String toString() {

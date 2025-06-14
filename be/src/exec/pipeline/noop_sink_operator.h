@@ -24,7 +24,7 @@ namespace starrocks::pipeline {
 class NoopSinkOperator final : public Operator {
 public:
     NoopSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : Operator(factory, id, "noop_sink", plan_node_id, driver_sequence) {}
+            : Operator(factory, id, "noop_sink", plan_node_id, true, driver_sequence) {}
 
     ~NoopSinkOperator() override = default;
 
@@ -54,6 +54,8 @@ public:
     NoopSinkOperatorFactory(int32_t id, int32_t plan_node_id) : OperatorFactory(id, "noop_sink", plan_node_id) {}
 
     ~NoopSinkOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<NoopSinkOperator>(this, _id, _plan_node_id, driver_sequence);

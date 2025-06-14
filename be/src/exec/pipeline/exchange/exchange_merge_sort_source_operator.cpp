@@ -23,13 +23,14 @@
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
-    SourceOperator::prepare(state);
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
     auto query_statistic_recv = state->query_recv();
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, _unique_metrics, true, query_statistic_recv, true,
-            // ExchangeMergeSort will never perform pipeline level shuffle
-            DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, true);
+            config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, 1, true);
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
+    _stream_recvr->attach_observer(state, this->observer());
+    _stream_recvr->attach_query_ctx(state->query_ctx());
     return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
 }
 

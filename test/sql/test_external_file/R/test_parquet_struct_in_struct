@@ -1,0 +1,87 @@
+-- name: testParquetStructInStruct
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/test_parquet_struct_in_struct.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 139,974. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE struct_in_struct (
+c0 int,
+c1 int,
+c_struct struct<c0 string, c1 string>,
+c_struct_struct struct<c0 string, c_struct struct<c0 string, c1 string>>
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/test_parquet_struct_in_struct.parquet",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select c_struct_struct from struct_in_struct where c_struct_struct.c_struct.c0 = '55' and c0 = 155;
+-- result:
+{"c0":"55","c_struct":{"c0":"55","c1":"46"}}
+-- !result
+select * from struct_in_struct where c0 = 100;
+-- result:
+100	9901	None	None
+-- !result
+select * from struct_in_struct where c0 > 100 and c1 > 9899;
+-- result:
+101	9900	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
+-- !result
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 = '55';
+-- result:
+100
+-- !result
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct.c0 in ('56', '57');
+-- result:
+100
+-- !result
+select * from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c0 = 155;
+-- result:
+155	9846	{"c0":"55","c1":"46"}	{"c0":"55","c_struct":{"c0":"55","c1":"46"}}
+-- !result
+select * from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct.c0 in ('56', '57') and c0 < 1000;
+-- result:
+56	9945	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+156	9845	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+256	9745	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+356	9645	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+456	9545	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+556	9445	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+656	9345	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+756	9245	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+856	9145	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+956	9045	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
+-- !result
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct_struct.c_struct.c0 = c_struct.c0;
+-- result:
+200
+-- !result
+select * from struct_in_struct where (c0 in (101, 1000)) or (c0 > 5000 and c0 < 5005) or (c0 in (9001, 10000));
+-- result:
+101	9900	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
+1000	9001	None	None
+5001	5000	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
+5002	4999	{"c0":"2","c1":"99"}	{"c0":"2","c_struct":{"c0":"2","c1":"99"}}
+5003	4998	{"c0":"3","c1":"98"}	{"c0":"3","c_struct":{"c0":"3","c1":"98"}}
+5004	4997	{"c0":"4","c1":"97"}	{"c0":"4","c_struct":{"c0":"4","c1":"97"}}
+9001	1000	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
+10000	1	None	None
+-- !result
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 < '55' and (c_struct_struct.c_struct.c0 > '15' or c_struct_struct.c_struct.c1 = '90');
+-- result:
+4000
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

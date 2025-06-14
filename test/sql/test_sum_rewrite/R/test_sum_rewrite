@@ -1,0 +1,79 @@
+-- name: test_rewrite_sum_by_associative_rule
+create table t0 (
+    c0 int,
+    c1 int not null
+) duplicate key(c0) distributed by hash(c0) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create table t1 (
+    c0 int,
+    c1 int not null
+) duplicate key(c0) distributed by hash(c0) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t0 values (1,1),(2,2),(3,3);
+-- result:
+-- !result
+insert into t1 values (1,1),(2,2),(NULL,4);
+-- result:
+-- !result
+select sum(c0),sum(c0+1),sum(c0+2) from t1;
+-- result:
+3	5	7
+-- !result
+select c1, sum(c0),sum(c0+1),sum(c0+2) from t1 group by c1 order by c1;
+-- result:
+1	1	2	3
+2	2	3	4
+4	None	None	None
+-- !result
+select sum(c1),sum(c1+1),sum(c1+2) from t1;
+-- result:
+7	10	13
+-- !result
+select c0, sum(c1),sum(c1+1),sum(c1+2) from t1 group by c0 order by c0;
+-- result:
+None	4	5	6
+1	1	2	3
+2	2	3	4
+-- !result
+select sum(t0.c0+1),sum(t0.c1+1) from t0 left outer join t1 on t0.c1 = t1.c1;
+-- result:
+9	9
+-- !result
+select t1.c0,sum(t0.c0+1),sum(t0.c1+1) from t0 left outer join t1 on t0.c1 = t1.c1 group by t1.c0 order by t1.c0;
+-- result:
+None	4	4
+1	2	2
+2	3	3
+-- !result
+select sum(t1.c0+1),sum(t1.c1+1) from t0 left outer join t1 on t0.c0 = t1.c0;
+-- result:
+5	5
+-- !result
+select t0.c0,sum(t1.c0+1),sum(t1.c1+1) from t0 left outer join t1 on t0.c0 = t1.c0 group by t0.c0 order by t0.c0;
+-- result:
+1	2	2
+2	3	3
+3	None	None
+-- !result
+select sum(t0.c0+1),sum(t0.c1+1) from t0 right outer join t1 on t0.c1 = t1.c1;
+-- result:
+5	5
+-- !result
+select t1.c0,sum(t0.c0+1),sum(t0.c1+1) from t0 right outer join t1 on t0.c1 = t1.c1 group by t1.c0 order by t1.c0;
+-- result:
+None	None	None
+1	2	2
+2	3	3
+-- !result
+select sum(t1.c0+1),sum(t1.c1+1) from t0 right outer join t1 on t0.c0 = t1.c0;
+-- result:
+5	10
+-- !result
+select t0.c0,sum(t1.c0+1),sum(t1.c1+1) from t0 right outer join t1 on t0.c0 = t1.c0 group by t0.c0 order by t0.c0;
+-- result:
+None	None	5
+1	2	2
+2	3	3
+-- !result

@@ -20,15 +20,28 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 set(EXEC_FILES
     fd_cache.cpp
     fs.cpp
+    encrypt_file.cpp
+    key_cache.cpp
     fs_posix.cpp
     fs_broker.cpp
     fs_memory.cpp
     fs_s3.cpp
+    azure/azblob_uri.cpp
+    azure/fs_azblob.cpp
+    azure/utils.cpp
+    credential/cloud_configuration_factory.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
+    s3/poco_http_client_factory.cpp
+    s3/poco_http_client.cpp
+    s3/poco_common.cpp
     fs_util.cpp
-    fs_starlet.cpp
+    bundle_file.cpp
     )
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND EXEC_FILES fs_starlet.cpp)
+endif()
 
 add_library(FileSystem STATIC
     ${EXEC_FILES}

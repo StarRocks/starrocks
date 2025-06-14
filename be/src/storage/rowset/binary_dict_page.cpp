@@ -42,6 +42,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "types/logical_type.h"
 #include "util/slice.h" // for Slice
 #include "util/unaligned_access.h"
 
@@ -219,16 +220,16 @@ void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
 
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, Column* dst) {
-    SparseRange read_range;
+    SparseRange<> read_range;
     uint32_t begin = current_index();
-    read_range.add(Range(begin, begin + *n));
+    read_range.add(Range<>(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin;
     return Status::OK();
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch(range, dst);
     }
@@ -245,8 +246,10 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange& range, Column*
     size_t nread = _vec_code_buf->size();
     using cast_type = CppTypeTraits<TYPE_INT>::CppType;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
-    std::vector<Slice> slices;
-    raw::stl_vector_resize_uninitialized(&slices, nread);
+
+    static_assert(sizeof(Slice) == sizeof(int128_t));
+    auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(nread * sizeof(Slice));
+    Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
 
     if constexpr (Type == TYPE_CHAR) {
         for (int i = 0; i < nread; ++i) {
@@ -256,12 +259,26 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange& range, Column*
             slices[i] = element;
         }
     } else {
-        for (int i = 0; i < nread; ++i) {
-            slices[i] = _dict_decoder->string_at_index(codewords[i]);
-        }
+        _dict_decoder->batch_string_at_index(slices, codewords, nread);
     }
 
-    CHECK(dst->append_strings_overflow(slices, _max_value_legth));
+    class SliceContainerAdaptor {
+    public:
+        using value_type = Slice;
+        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+        Slice* data() const { return _slices; }
+        size_t size() const { return _size; }
+
+    private:
+        Slice* _slices;
+        size_t _size;
+    };
+
+    SliceContainerAdaptor adaptor(slices, nread);
+    bool ok = dst->append_strings_overflow(adaptor, _max_value_legth);
+    DCHECK(ok) << "append_strings_overflow failed";
+    RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch failed"));
     return Status::OK();
 }
 
@@ -273,7 +290,7 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, Column* dst) {
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange& range, Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);
@@ -281,5 +298,6 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange& range, Co
 
 template class BinaryDictPageDecoder<TYPE_CHAR>;
 template class BinaryDictPageDecoder<TYPE_VARCHAR>;
+template class BinaryDictPageDecoder<TYPE_JSON>;
 
 } // namespace starrocks

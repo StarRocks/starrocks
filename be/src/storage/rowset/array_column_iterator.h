@@ -16,18 +16,18 @@
 
 #include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 
 namespace starrocks {
 
 class Column;
+class ColumnAccessPath;
 
 class ArrayColumnIterator final : public ColumnIterator {
 public:
-    ArrayColumnIterator(std::unique_ptr<ColumnIterator> null_iterator,
+    ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iterator,
                         std::unique_ptr<ColumnIterator> array_size_iterator,
-                        std::unique_ptr<ColumnIterator> element_iterator);
-    ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
-                        ColumnIterator* element_iterator);
+                        std::unique_ptr<ColumnIterator> element_iterator, const ColumnAccessPath* paths);
 
     ~ArrayColumnIterator() override = default;
 
@@ -35,7 +35,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     Status seek_to_first() override;
 
@@ -43,19 +43,45 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _array_size_iterator->get_current_ordinal(); }
 
-    /// for vectorized engine
-    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
-        CHECK(false) << "array column does not has zone map index";
-        return Status::OK();
-    }
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+    // for support array<string>
+    bool all_page_dict_encoded() const override;
+
+    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+
+    Status next_dict_codes(size_t* n, Column* dst) override;
+
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
+
+    int dict_size() override { return _element_iterator->dict_size(); }
+
+    ColumnReader* get_column_reader() override { return _reader; }
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
 private:
+    Status next_batch_null_offsets(size_t* n, UInt32Column* offsets, UInt8Column* nulls, size_t* element_rows);
+    Status next_batch_null_offsets(const SparseRange<>& range, UInt32Column* offsets, UInt8Column* nulls,
+                                   SparseRange<>* element_range, size_t* element_rows);
+
+private:
+    ColumnReader* _reader;
+
     std::unique_ptr<ColumnIterator> _null_iterator;
     std::unique_ptr<ColumnIterator> _array_size_iterator;
     std::unique_ptr<ColumnIterator> _element_iterator;
+    const ColumnAccessPath* _path;
+
+    bool _access_values = true;
+    bool _is_string_element = false;
 };
 
 } // namespace starrocks

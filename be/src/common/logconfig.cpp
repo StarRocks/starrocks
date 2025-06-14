@@ -17,6 +17,7 @@
 
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
+#include <jemalloc/jemalloc.h>
 
 #include <cerrno>
 #include <cstdio>
@@ -25,9 +26,12 @@
 #include <iostream>
 #include <mutex>
 
+#include "cache/datacache.h"
+#include "cache/object_cache/page_cache.h"
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+#include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/logging.h"
@@ -86,13 +90,13 @@ static void dump_trace_info() {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-        const std::string custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
+        const std::string& custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
         // write build version
         int res = get_build_version(buffer, sizeof(buffer));
-        [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
+        std::ignore = write(STDERR_FILENO, buffer, res);
 
         res = sprintf(buffer, "query_id:");
         res = print_unique_id(buffer + res, query_id) + res;
@@ -107,27 +111,72 @@ static void dump_trace_info() {
             res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "%s\n", custom_coredump_msg.c_str()) + res;
         }
 
-        wt = write(STDERR_FILENO, buffer, res);
-        // dump memory usage
-        // copy trackers
-        auto trackers = ExecEnv::GetInstance()->mem_trackers();
-        for (const auto& tracker : trackers) {
-            if (tracker) {
-                size_t len = tracker->debug_string(buffer, sizeof(buffer));
-                wt = write(STDERR_FILENO, buffer, len);
-            }
-        }
+        std::ignore = write(STDERR_FILENO, buffer, res);
     }
     start_dump = true;
 }
 
-static void failure_writer(const char* data, int size) {
-    dump_trace_info();
-    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
+#define FMT_LOG(msg, ...)                                                                                      \
+    fmt::format_to(std::back_inserter(mbuffer), "[{}.{}][thread: {}] " msg "\n", tv.tv_sec, tv.tv_usec / 1000, \
+                   tid __VA_OPT__(, ) __VA_ARGS__);                                                            \
+    DCHECK(mbuffer.size() < 500);                                                                              \
+    std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());                                        \
+    mbuffer.clear();
+
+static void dontdump_unused_pages() {
+    size_t prev_allocate_size = CurrentThread::current().get_consumed_bytes();
+    static bool start_dump = false;
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    pthread_t tid = pthread_self();
+    const uint32_t MAX_BUFFER_SIZE = 1024;
+    char buffer[MAX_BUFFER_SIZE] = {};
+    // memory_buffer allocate 500 bytes from stack
+    fmt::memory_buffer mbuffer;
+    if (!start_dump) {
+        int res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.purge", MALLCTL_ARENAS_ALL);
+        buffer[res] = '\0';
+        int ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+
+        if (ret != 0) {
+            FMT_LOG("je_mallctl execute purge failed, errno:{}", ret);
+        } else {
+            FMT_LOG("je_mallctl execute purge success");
+        }
+
+        res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
+        buffer[res] = '\0';
+        ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+
+        if (ret != 0) {
+            FMT_LOG("je_mallctl execute dontdump failed, errno:{}", ret);
+        } else {
+            FMT_LOG("je_mallctl execute dontdump success");
+        }
+    }
+    DCHECK_EQ(prev_allocate_size, CurrentThread::current().get_consumed_bytes());
+    start_dump = true;
 }
 
+static void failure_handler_after_output_log() {
+    static bool start_dump = false;
+    if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        ExecEnv::GetInstance()->try_release_resource_before_core_dump();
+        DataCache::GetInstance()->try_release_resource_before_core_dump();
+        dontdump_unused_pages();
+    }
+    start_dump = true;
+}
+
+static void failure_writer(const char* data, size_t size) {
+    dump_trace_info();
+    std::ignore = write(STDERR_FILENO, data, size);
+}
+
+// MUST not add LOG(XXX) in this function, may cause deadlock.
 static void failure_function() {
     dump_trace_info();
+    failure_handler_after_output_log();
     std::abort();
 }
 
@@ -142,8 +191,8 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         google::InstallFailureSignalHandler();
     }
 
-    // Don't log to stderr.
-    FLAGS_stderrthreshold = 5;
+    // only write fatal log to stderr
+    FLAGS_stderrthreshold = 3;
     // Set glog log dir.
     FLAGS_log_dir = config::sys_log_dir;
     // 0 means buffer INFO only.
@@ -154,7 +203,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
 
     // Set log level.
-    std::string& loglevel = config::sys_log_level;
+    std::string loglevel = config::sys_log_level;
     if (iequals(loglevel, "INFO")) {
         FLAGS_minloglevel = 0;
     } else if (iequals(loglevel, "WARNING")) {
@@ -228,7 +277,8 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
-        google::InstallFailureFunction(failure_function);
+        google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
+        google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
     }
 
     logging_initialized = true;
@@ -249,6 +299,20 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
 
     return StringPrintf("%02d%02d %02d:%02d:%02d.%06ld", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
                         tm_time.tm_min, tm_time.tm_sec, usecs);
+}
+
+void update_logging() {
+    if (iequals(config::sys_log_level, "INFO")) {
+        FLAGS_minloglevel = 0;
+    } else if (iequals(config::sys_log_level, "WARNING")) {
+        FLAGS_minloglevel = 1;
+    } else if (iequals(config::sys_log_level, "ERROR")) {
+        FLAGS_minloglevel = 2;
+    } else if (iequals(config::sys_log_level, "FATAL")) {
+        FLAGS_minloglevel = 3;
+    } else {
+        LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
+    }
 }
 
 } // namespace starrocks

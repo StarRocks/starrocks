@@ -59,7 +59,6 @@ public:
     static const std::string default_time_zone;
 
 private:
-    // RE2 obj is thread safe
-    static RE2 time_zone_offset_format_reg;
+    static bool _match_cctz_time_zone(std::string_view timezone, cctz::time_zone& ctz);
 };
 } // namespace starrocks

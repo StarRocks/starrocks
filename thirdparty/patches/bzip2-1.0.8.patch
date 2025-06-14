@@ -1,0 +1,12 @@
+diff -Nru bzip2-1.0.8.origin/Makefile bzip2-1.0.8/Makefile
+--- bzip2-1.0.8.origin/Makefile	2023-11-06 13:20:45.395060940 +0000
++++ bzip2-1.0.8/Makefile	2023-11-06 13:21:03.013111354 +0000
+@@ -21,7 +21,7 @@
+ LDFLAGS=
+ 
+ BIGFILES=-D_FILE_OFFSET_BITS=64
+-CFLAGS=-Wall -Winline -O2 -g $(BIGFILES)
++CFLAGS=-Wall -Winline -O2 -g $(BIGFILES) -fPIC
+ 
+ # Where you want it installed when you do 'make install'
+ PREFIX=/usr/local

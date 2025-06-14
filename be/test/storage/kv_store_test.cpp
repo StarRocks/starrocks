@@ -41,6 +41,7 @@
 #include <string>
 
 #include "fs/fs_util.h"
+#include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 
 #ifndef BE_TEST
@@ -54,7 +55,7 @@ namespace starrocks {
 class KVStoreTest : public testing::Test {
 public:
     void SetUp() override {
-        _root_path = "./ut_dir/kv_store_test";
+        _root_path = "./kv_store_test";
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
 
@@ -76,7 +77,7 @@ private:
 
 TEST_F(KVStoreTest, TestGetRootPath) {
     std::string root_path = _kv_store->get_root_path();
-    ASSERT_EQ("./ut_dir/kv_store_test", root_path);
+    ASSERT_EQ("./kv_store_test", root_path);
 }
 
 TEST_F(KVStoreTest, TestPutAndGet) {
@@ -125,6 +126,49 @@ TEST_F(KVStoreTest, TestIterate) {
                                   })
                         .ok());
     ASSERT_EQ(false, error_flag);
+}
+
+TEST_F(KVStoreTest, TestOpDeleteRange) {
+    // insert 10 keys
+    for (int i = 0; i < 10; i++) {
+        std::string key = fmt::format("key_{:016x}", i);
+        std::string value = fmt::format("val_{:016x}", i);
+        ASSERT_TRUE(_kv_store->put(META_COLUMN_FAMILY_INDEX, key, value).ok());
+    }
+    for (int i = 0; i < 10; i++) {
+        std::string key = fmt::format("key_{:016x}", i);
+        std::string value_get;
+        ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).ok());
+        ASSERT_TRUE(value_get == fmt::format("val_{:016x}", i));
+    }
+    // delete range from 0 ~ 9
+    rocksdb::WriteBatch wb;
+    ASSERT_TRUE(_kv_store
+                        ->OptDeleteRange(META_COLUMN_FAMILY_INDEX, fmt::format("key_{:016x}", 0),
+                                         fmt::format("key_{:016x}", 10), &wb)
+                        .ok());
+    ASSERT_TRUE(_kv_store->write_batch(&wb).ok());
+    // check result
+    for (int i = 0; i < 10; i++) {
+        std::string key = fmt::format("key_{:016x}", i);
+        std::string value_get;
+        ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).is_not_found());
+    }
+}
+
+TEST_F(KVStoreTest, calc_rocksdb_write_buffer_size_test) {
+    MemTracker mem_tracker(4294967296);
+
+    // case1: only one path
+    auto size = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
+    ASSERT_EQ(size, 4294967296 * config::rocksdb_write_buffer_memory_percent / 100 / 2);
+
+    // case2: two paths
+    std::string old_val2 = config::storage_root_path;
+    config::storage_root_path = "/storage;/storage2";
+    auto size2 = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
+    ASSERT_EQ(size2, 67108864L);
+    config::storage_root_path = old_val2;
 }
 
 } // namespace starrocks

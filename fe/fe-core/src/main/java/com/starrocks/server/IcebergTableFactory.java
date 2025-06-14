@@ -40,6 +40,16 @@ public class IcebergTableFactory extends ExternalTableFactory {
 
     }
 
+    public static void copyFromCatalogTable(IcebergTable.Builder tableBuilder, IcebergTable catalogTable,
+                                            Map<String, String> properties) {
+        tableBuilder.setCatalogName(catalogTable.getCatalogName())
+                .setResourceName(properties.get(RESOURCE))
+                .setCatalogDBName(catalogTable.getCatalogDBName())
+                .setCatalogTableName(catalogTable.getCatalogTableName())
+                .setIcebergProperties(properties)
+                .setNativeTable(catalogTable.getNativeTable());
+    }
+
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
@@ -63,13 +73,9 @@ public class IcebergTableFactory extends ExternalTableFactory {
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
                 .setId(tableId)
                 .setSrTableName(tableName)
-                .setCatalogName(oIcebergTable.getCatalogName())
-                .setResourceName(oIcebergTable.getResourceName())
-                .setRemoteDbName(oIcebergTable.getRemoteDbName())
-                .setRemoteTableName(oIcebergTable.getRemoteTableName())
-                .setFullSchema(columns)
-                .setIcebergProperties(properties)
-                .setNativeTable(oIcebergTable.getNativeTable());
+                .setFullSchema(columns);
+
+        copyFromCatalogTable(tableBuilder, oIcebergTable, properties);
 
         IcebergTable icebergTable = tableBuilder.build();
 
@@ -84,7 +90,7 @@ public class IcebergTableFactory extends ExternalTableFactory {
         return icebergTable;
     }
 
-    private static void validateIcebergColumnType(List<Column> columns, IcebergTable oTable) throws DdlException {
+    public static void validateIcebergColumnType(List<Column> columns, IcebergTable oTable) throws DdlException {
         for (Column column : columns) {
             Map<String, Types.NestedField> icebergColumns = oTable.getNativeTable().schema().columns().stream()
                     .collect(Collectors.toMap(Types.NestedField::name, field -> field));
@@ -105,6 +111,12 @@ public class IcebergTableFactory extends ExternalTableFactory {
 
             if (!column.isAllowNull()) {
                 throw new DdlException("iceberg extern table not support no-nullable column: [" + column.getName() + "]");
+            }
+
+            for (String partName : oTable.getPartitionColumnNames()) {
+                if (!columns.stream().map(Column::getName).collect(Collectors.toList()).contains(partName)) {
+                    throw new DdlException("partition column [" + partName + "] must exist in column list");
+                }
             }
         }
     }

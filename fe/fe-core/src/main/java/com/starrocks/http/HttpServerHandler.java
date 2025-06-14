@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.starrocks.common.Config;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
 import io.netty.buffer.Unpooled;
@@ -42,22 +43,23 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
-
-    private ActionController controller = null;
-    protected FullHttpRequest fullRequest = null;
+    // keep connectContext when channel is open
+    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
+            AttributeKey.valueOf("httpContextKey");
     protected HttpRequest request = null;
+    private final ActionController controller;
     private BaseAction action = null;
 
     public HttpServerHandler(ActionController controller) {
@@ -72,7 +74,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (msg instanceof HttpRequest) {
+        try {
+            if (!(msg instanceof HttpRequest)) {
+                return;
+            }
+
             this.request = (HttpRequest) msg;
             if (LOG.isDebugEnabled()) {
                 LOG.debug("request: url:[{}]", request.uri());
@@ -84,17 +90,52 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
                 return;
             }
-            BaseRequest req = new BaseRequest(ctx, request);
+
+            // get HttpConnectContext from channel, HttpConnectContext's lifetime is same as channel
+            HttpConnectContext connectContext = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
+            BaseRequest req = new BaseRequest(ctx, request, connectContext);
             action = getAction(req);
             if (action != null) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-                action.handleRequest(req);
+
+                HttpServerHandlerMetrics metrics = HttpServerHandlerMetrics.getInstance();
+                long startTime = System.currentTimeMillis();
+                try {
+                    metrics.handlingRequestsNum.increase(1L);
+                    action.handleRequest(req);
+                } finally {
+                    long latency = System.currentTimeMillis() - startTime;
+                    metrics.handlingRequestsNum.increase(-1L);
+                    metrics.requestHandleLatencyMs.update(latency);
+                    if (latency >= Config.http_slow_request_threshold_ms) {
+                        LOG.warn("receive slow http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
+                                WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
+                                startTime, latency);
+                    }
+                }
             }
-        } else {
+        } finally {
             ReferenceCountUtil.release(msg);
         }
+    }
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
+        // create HttpConnectContext when channel is established, and store it in channel attr
+        ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
+        super.channelActive(ctx);
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
+        if (action != null) {
+            action.handleChannelInactive(ctx);
+        }
+        super.channelInactive(ctx);
     }
 
     private void validateRequest(ChannelHandlerContext ctx, HttpRequest request) {
@@ -115,8 +156,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        LOG.warn(cause);
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        LOG.warn(String.format("[remote=%s] Exception caught: %s",
+                ctx.channel().remoteAddress(), cause.getMessage()), cause);
         ctx.close();
     }
 

@@ -44,6 +44,7 @@ public:
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
@@ -66,6 +67,8 @@ public:
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;

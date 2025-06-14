@@ -41,6 +41,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
+import com.starrocks.connector.PartitionUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,20 +66,22 @@ import java.util.Set;
 public class HashDistributionPruner implements DistributionPruner {
     private static final Logger LOG = LogManager.getLogger(HashDistributionPruner.class);
 
-    // partition list, sort by the hash code
-    private List<Long> bucketsList;
-    // partition columns
-    private List<Column> distributionColumns;
-    // partition column filters
-    private Map<String, PartitionColumnFilter> distributionColumnFilters;
-    private int hashMod;
+    // virtual bucket list, sort by the hash code
+    private final List<Long> virtualBuckets;
+    // tablet id list (physical bucket list), has no order
+    private final List<Long> tabletIds;
+    // distribution columns
+    private final List<Column> distributionColumns;
+    // distribution column filters
+    private final Map<String, PartitionColumnFilter> distributionColumnFilters;
 
-    public HashDistributionPruner(List<Long> bucketsList, List<Column> columns,
-                                  Map<String, PartitionColumnFilter> filters, int hashMod) {
-        this.bucketsList = bucketsList;
+    // virtualBuckets must be in order, tabletIds has no order
+    public HashDistributionPruner(List<Long> virtualBuckets, List<Long> tabletIds,
+                                  List<Column> columns, Map<String, PartitionColumnFilter> filters) {
+        this.virtualBuckets = virtualBuckets;
+        this.tabletIds = tabletIds;
         this.distributionColumns = columns;
         this.distributionColumnFilters = filters;
-        this.hashMod = hashMod;
     }
 
     // columnId: which column to compute
@@ -87,36 +90,44 @@ public class HashDistributionPruner implements DistributionPruner {
         if (columnId == distributionColumns.size()) {
             // compute Hash Key
             long hashValue = hashKey.getHashValue();
-            return Lists.newArrayList(bucketsList.get((int) ((hashValue & 0xffffffff) % hashMod)));
+            return Lists.newArrayList(virtualBuckets.get((int) ((hashValue & 0xffffffff) % virtualBuckets.size())));
         }
         Column keyColumn = distributionColumns.get(columnId);
         PartitionColumnFilter filter = distributionColumnFilters.get(keyColumn.getName());
         if (null == filter) {
             // no filter in this column, no partition Key
-            // return all subPartition
-            return Lists.newArrayList(bucketsList);
+            // return all subPartition, should return physical buckets
+            return tabletIds;
         }
 
         List<LiteralExpr> inPredicateLiterals = filter.getInPredicateLiterals();
         if (null == inPredicateLiterals ||
                 inPredicateLiterals.size() * complex > Config.max_distribution_pruner_recursion_depth) {
+            LiteralExpr lowerBound = filter.getLowerBound();
+            LiteralExpr upperBound = filter.getUpperBound();
             // equal one value
             if (filter.lowerBoundInclusive && filter.upperBoundInclusive
-                    && filter.lowerBound != null && filter.upperBound != null
-                    && 0 == filter.lowerBound.compareLiteral(filter.upperBound)) {
-                hashKey.pushColumn(filter.lowerBound, keyColumn.getType());
-                Collection<Long> result = prune(columnId + 1, hashKey, complex);
-                hashKey.popColumn();
-                return result;
+                    && lowerBound != null && upperBound != null
+                    && 0 == lowerBound.compareLiteral(upperBound)) {
+                try {
+                    boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn.getType(), lowerBound.getType());
+                    hashKey.pushColumn(filter.getLowerBound(isConvertToDate), keyColumn.getType());
+                    Collection<Long> result = prune(columnId + 1, hashKey, complex);
+                    hashKey.popColumn();
+                    return result;
+                } catch (Exception e) {
+                    LOG.warn("Prune distribution key {} with predicate {} failed:", keyColumn, filter, e);
+                    return tabletIds;
+                }
             }
             // return all SubPartition
-            return Lists.newArrayList(bucketsList);
+            return tabletIds;
         }
 
         InPredicate inPredicate = filter.getInPredicate();
         if (null != inPredicate && !(inPredicate.getChild(0) instanceof SlotRef)) {
             // return all SubPartition
-            return Lists.newArrayList(bucketsList);
+            return tabletIds;
         }
 
         Set<Long> resultSet = Sets.newHashSet();
@@ -127,7 +138,7 @@ public class HashDistributionPruner implements DistributionPruner {
             Collection<Long> subList = prune(columnId + 1, hashKey, newComplex);
             resultSet.addAll(subList);
             hashKey.popColumn();
-            if (resultSet.size() >= bucketsList.size()) {
+            if (resultSet.size() >= tabletIds.size()) {
                 break;
             }
         }

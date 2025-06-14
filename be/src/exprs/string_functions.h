@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <hs/hs.h>
+#include <re2/re2.h>
 #include <runtime/decimalv3.h>
 
 #include <iomanip>
@@ -22,9 +24,12 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "runtime/current_thread.h"
+#include "util/phmap/phmap.h"
 #include "util/url_parser.h"
 
 namespace starrocks {
+class RegexpSplit;
 
 struct PadState {
     bool is_const;
@@ -46,7 +51,67 @@ struct ConcatState {
     std::string tail;
 };
 
-struct StringFunctionsState;
+template <LogicalType T>
+struct FieldFuncState {
+    bool all_const = false;
+    bool list_all_const = false;
+    std::map<RunTimeCppType<T>, int> mp;
+};
+
+struct StringFunctionsState {
+    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
+                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
+                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
+
+    std::string pattern;
+    std::unique_ptr<re2::RE2> regex;
+    std::unique_ptr<re2::RE2::Options> options;
+    bool const_pattern{false};
+    DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
+
+    bool use_hyperscan = false;
+    int size_of_pattern = -1;
+
+    // a pointer to the generated database that responsible for parsed expression.
+    hs_database_t* database = nullptr;
+    // a type containing error details that is returned by the compile calls on failure.
+    hs_compile_error_t* compile_err = nullptr;
+    // A Hyperscan scratch space, Used to call hs_scan,
+    // one scratch space per thread, or concurrent caller, is required
+    hs_scratch_t* scratch = nullptr;
+
+    StringFunctionsState() : regex(), options() {}
+
+    // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
+    re2::RE2* get_or_prepare_regex() {
+        DCHECK(const_pattern);
+        int32_t driver_id = CurrentThread::current().get_driver_id();
+        if (driver_id == 0) {
+            return regex.get();
+        }
+        re2::RE2* res = nullptr;
+        driver_regex_map.lazy_emplace_l(
+                driver_id, [&](auto& value) { res = value.get(); },
+                [&](auto build) {
+                    auto regex = std::make_unique<re2::RE2>(pattern, *options);
+                    DCHECK(regex->ok());
+                    res = regex.get();
+                    build(driver_id, std::move(regex));
+                });
+        DCHECK(!!res);
+        return res;
+    }
+
+    ~StringFunctionsState() {
+        if (scratch != nullptr) {
+            hs_free_scratch(scratch);
+        }
+
+        if (database != nullptr) {
+            hs_free_database(database);
+        }
+    }
+};
 
 struct MatchInfo {
     size_t from;
@@ -55,7 +120,10 @@ struct MatchInfo {
 
 struct MatchInfoChain {
     std::vector<MatchInfo> info_chain;
-    unsigned long long last_to = 0;
+};
+
+struct LowerUpperState {
+    std::function<StatusOr<ColumnPtr>(const ColumnPtr&)> impl_func;
 };
 
 class StringFunctions {
@@ -166,6 +234,8 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(lower);
+    static Status lower_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status lower_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value]
@@ -173,6 +243,8 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(upper);
+    static Status upper_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status upper_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value]
@@ -217,6 +289,13 @@ public:
      * Get symbols from binary numbers
      */
     DEFINE_VECTORIZED_FN(get_char);
+
+    /**
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(inet_aton);
 
     /**
      * Return the index of the first occurrence of substring
@@ -292,8 +371,16 @@ public:
     * @paramType: [ArrayBinaryColumn, BinaryColumn]
     * @return: MapColumn map<string,string>
     */
+    DEFINE_VECTORIZED_FN(str_to_map_v1);
 
+    /**
+    * @param: [string, delimiter, map_delimiter]
+    * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
     DEFINE_VECTORIZED_FN(str_to_map);
+    static Status str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, delimiter, field]
@@ -302,9 +389,17 @@ public:
      */
     DEFINE_VECTORIZED_FN(split_part);
 
+    /**
+     * @param: [string_value, delimiter, field]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(substring_index);
+
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_count_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
@@ -315,11 +410,36 @@ public:
     DEFINE_VECTORIZED_FN(regexp_extract);
 
     /**
+     * return all match sub-string
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_extract_all);
+
+    /**
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(regexp_replace);
+
+    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns);
+    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
+
+    /**
+     * @param: [string_value, pattern, max_split]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_split);
+
+    /**
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_count);
 
     /**
      * @param: [string_value, pattern_value, replace_value]
@@ -329,6 +449,15 @@ public:
     DEFINE_VECTORIZED_FN(replace);
     static Status replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * @param: [string_value, from_value, to_value]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(translate);
+    static Status translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [DOUBLE]
@@ -371,6 +500,10 @@ public:
 
     static Status sub_str_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status url_extract_parameter_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status url_extract_parameter_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static Status sub_str_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static Status left_or_right_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -393,6 +526,10 @@ public:
    * @return: BinaryColumn
    */
     DEFINE_VECTORIZED_FN(parse_url);
+
+    DEFINE_VECTORIZED_FN(url_extract_parameter);
+
+    DEFINE_VECTORIZED_FN(url_extract_host);
 
     /**
      * @param: [BigIntColumn]
@@ -431,7 +568,44 @@ public:
      */
     DEFINE_VECTORIZED_FN(strcmp);
 
+    /**
+     * params are one strings. Returns string for url encode string,
+     *
+     * @param: [string_value]
+     * @paramType: [StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_encode);
+    static std::string url_encode_func(const std::string& value);
+
+    /**
+     * params are one strings. Returns string for url decode string,
+     *
+     * @param: [string_value]
+     * @paramType: [StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_decode);
+    static std::string url_decode_func(const std::string& value);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
+
+    DEFINE_VECTORIZED_FN(crc32);
+
+    DEFINE_VECTORIZED_FN(ngram_search);
+
+    DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(field);
+    template <LogicalType Type>
+    static Status field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    template <LogicalType Type>
+    static Status field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
+                                                        FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
@@ -463,14 +637,29 @@ private:
         ParseUrlState() : url_part() {}
     };
 
+    struct UrlExtractParameterState {
+        std::optional<std::string> opt_const_result;
+        bool result_is_null{false};
+        std::optional<std::string> opt_const_param_key;
+        std::optional<std::string> opt_const_query_params;
+        UrlExtractParameterState() = default;
+    };
+
     static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
-    static StatusOr<ColumnPtr> parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                               const starrocks::Columns& columns);
+    static StatusOr<ColumnPtr> parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
+                                                   const starrocks::Columns& columns);
 
     template <LogicalType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                  size_t num_rows, int adjust_scale,
                                                  ColumnBuilder<TYPE_VARCHAR>* result);
+};
+
+template <bool to_upper>
+struct StringCaseToggleFunction {
+public:
+    template <LogicalType Type, LogicalType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1);
 };
 
 template <LogicalType Type, bool scale_up, bool check_overflow>
@@ -526,6 +715,110 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* conte
         // scale up
         money_format_decimal_impl<Type, true, true>(context, money_viewer, num_rows, 2 - scale, &result);
     }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType Type>
+Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new FieldFuncState<Type>();
+    context->set_function_state(scope, state);
+    state->list_all_const = true;
+    for (int i = 1; i < context->get_num_constant_columns(); i++) {
+        if (!context->is_constant_column(i)) {
+            state->list_all_const = false;
+            break;
+        }
+    }
+
+    if (state->list_all_const) {
+        if (context->is_constant_column(0)) {
+            state->all_const = true;
+        }
+        for (int i = 1; i < context->get_num_args(); i++) {
+            const auto list_col = context->get_constant_column(i);
+            if (list_col->only_null()) {
+                continue;
+            } else {
+                const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
+                state->mp.emplace(list_val, i);
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status StringFunctions::field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = reinterpret_cast<FieldFuncState<Type>*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    delete state;
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Columns& columns) {
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
+    const FieldFuncState<Type>* state =
+            reinterpret_cast<const FieldFuncState<Type>*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (columns[0]->only_null()) {
+        result.append(0);
+        return result.build(true);
+    } else if (state != nullptr) {
+        if (state->all_const) {
+            const auto list_col = context->get_constant_column(0);
+            const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
+            auto it = state->mp.find(list_val);
+            if (it != state->mp.end()) {
+                result.append(it->second);
+            } else {
+                result.append(0);
+            }
+            return result.build(true);
+        } else if (state->list_all_const) {
+            const auto viewer = ColumnViewer<Type>(columns[0]);
+            for (int i = 0; i < size; i++) {
+                const auto& list_val = viewer.value(i);
+                auto it = state->mp.find(list_val);
+                if (it != state->mp.end()) {
+                    result.append(it->second);
+                } else {
+                    result.append(0);
+                }
+            }
+            return result.build(false);
+        }
+    }
+
+    std::vector<ColumnViewer<Type>> list;
+    list.reserve(columns.size());
+    for (const ColumnPtr& col : columns) {
+        list.emplace_back(ColumnViewer<Type>(col));
+    }
+
+    for (int row = 0; row < size; row++) {
+        auto value = list[0].value(row);
+        int res = 0, id = 1;
+        for (auto it = std::next(list.begin()); it != list.end(); it++) {
+            if (!it->is_null(row) && value == it->value(row)) {
+                res = id;
+                break;
+            }
+            id++;
+        }
+
+        result.append(res);
+    }
+
     return result.build(ColumnHelper::is_all_const(columns));
 }
 

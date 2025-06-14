@@ -46,16 +46,20 @@
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
+#include "fs/key_cache.h"
 #include "io/io_error.h"
-#include "runtime/exec_env.h"
+#include "runtime/load_fail_point.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/empty_iterator.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/merge_iterator.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
@@ -114,16 +118,27 @@ Status RowsetWriter::init() {
     }
     *(_rowset_meta_pb->mutable_tablet_uid()) = _context.tablet_uid.to_proto();
 
+    _writer_options.segment_file_mark.rowset_path_prefix = _context.rowset_path_prefix;
+    _writer_options.segment_file_mark.rowset_id = _context.rowset_id.to_string();
+
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
-
+    _writer_options.is_compaction = _context.is_compaction;
+    _writer_options.flat_json_config = _context.flat_json_config;
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-        (_context.partial_update_tablet_schema || !_context.merge_condition.empty() ||
-         _context.miss_auto_increment_column)) {
+        (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column)) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+
+    if (_context.is_pk_compaction) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+        if (tablet != nullptr) {
+            _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(
+                    local_rows_mapper_filename(tablet.get(), _context.rowset_id.to_string()));
+        }
+    }
     return Status::OK();
 }
 
@@ -133,36 +148,53 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     }
     _rowset_meta_pb->set_num_rows(_num_rows_written);
     _rowset_meta_pb->set_total_row_size(_total_row_size);
-    _rowset_meta_pb->set_total_disk_size(_total_data_size);
+    _rowset_meta_pb->set_total_disk_size(_total_data_size + _total_index_size);
     _rowset_meta_pb->set_data_disk_size(_total_data_size);
     _rowset_meta_pb->set_index_disk_size(_total_index_size);
     // TODO write zonemap to meta
     _rowset_meta_pb->set_empty(_num_rows_written == 0);
     _rowset_meta_pb->set_creation_time(time(nullptr));
     _rowset_meta_pb->set_num_segments(_num_segment);
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    for (auto& encryption_meta : _segment_encryption_metas) {
+        _rowset_meta_pb->add_segment_encryption_metas(encryption_meta);
+    }
     // newly created rowset do not have rowset_id yet, use 0 instead
     _rowset_meta_pb->set_rowset_seg_id(0);
+    _rowset_meta_pb->set_gtid(_context.gtid);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         DCHECK(_delfile_idxes.size() == _num_delfile);
         if (!_delfile_idxes.empty()) {
             _rowset_meta_pb->mutable_delfile_idxes()->Add(_delfile_idxes.begin(), _delfile_idxes.end());
         }
+        DCHECK(_delfile_encryption_metas.size() == _num_delfile);
+        for (auto& encryption_meta : _delfile_encryption_metas) {
+            _rowset_meta_pb->add_delfile_encryption_metas(encryption_meta);
+        }
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
+        DCHECK(_updatefile_encryption_metas.size() == _num_uptfile);
+        for (auto& encryption_meta : _updatefile_encryption_metas) {
+            _rowset_meta_pb->add_updatefile_encryption_metas(encryption_meta);
+        }
         _rowset_meta_pb->set_num_update_files(_num_uptfile);
         _rowset_meta_pb->set_total_update_row_size(_total_update_row_size);
+        _rowset_meta_pb->set_num_rows_upt(_num_rows_upt);
         if (_num_segment <= 1) {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
         // if load only has delete, we can skip the partial update logic
-        if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
-            DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
+        if (_context.is_partial_update && _flush_chunk_state != FlushChunkState::DELETE) {
+            DCHECK(_context.referenced_column_ids.size() == _context.tablet_schema->columns().size());
             RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
                       Status::InternalError(fmt::format("segment number {} not equal to partial_rowset_footers size {}",
                                                         _num_segment,
                                                         _rowset_txn_meta_pb->partial_rowset_footers().size())));
-            for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
-                const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
+            for (auto i = 0; i < _context.tablet_schema->columns().size(); ++i) {
+                const auto& tablet_column = _context.tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
@@ -173,6 +205,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                     auto col = _context.tablet_schema->column(i);
                     if (col.is_auto_increment()) {
+                        /*
+                            The auto increment id set here is inconsistent with the id in
+                            full tablet schema. The id here is indicate the offset id of
+                            auto increment column in partial segment file.
+                        */
                         _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                         break;
                     }
@@ -180,6 +217,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             }
             // set partial update mode
             _rowset_txn_meta_pb->set_partial_update_mode(_context.partial_update_mode);
+            if (_context.column_to_expr_value != nullptr) {
+                for (auto& [name, value] : (*_context.column_to_expr_value)) {
+                    _rowset_txn_meta_pb->mutable_column_to_expr_value()->insert({name, value});
+                }
+            }
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         } else if (!_context.merge_condition.empty()) {
             _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
@@ -188,6 +230,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                 auto col = _context.tablet_schema->column(i);
                 if (col.is_auto_increment()) {
+                    // same above
                     _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                     break;
                 }
@@ -204,10 +247,20 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     } else {
         _rowset_meta_pb->set_rowset_state(VISIBLE);
     }
+    TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
+    if (_context.full_tablet_schema != nullptr) {
+        _context.full_tablet_schema->to_schema_pb(ts_pb);
+    } else {
+        _context.tablet_schema->to_schema_pb(ts_pb);
+    }
+
     auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
     RETURN_IF_ERROR(
             RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->finalize());
+    }
     _already_built = true;
     return rowset;
 }
@@ -244,7 +297,7 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     }
     RETURN_IF_ERROR(wfile->close());
 
-    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
         partial_rowset_footer->set_position(segment_pb.partial_footer_position());
         partial_rowset_footer->set_size(segment_pb.partial_footer_size());
@@ -257,11 +310,69 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
         _total_index_size += segment_pb.index_size();
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
+        DCHECK(_segment_encryption_metas.size() == _num_segment);
+        RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                           Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                             _segment_encryption_metas.size(), _num_segment)));
+        _segment_encryption_metas.emplace_back(segment_pb.encryption_meta());
         _num_segment++;
     }
 
     VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
 
+    return Status::OK();
+}
+
+Status RowsetWriter::_flush_index_files(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    for (const auto& index : segment_pb.seg_indexes()) {
+        // 1. create segment file
+        auto res = IndexDescriptor::get_index_file_path(index.index_type(), _context.rowset_path_prefix,
+                                                        _context.rowset_id.to_string(), segment_pb.segment_id(),
+                                                        index.index_id());
+        if (!res.ok()) {
+            if (res.status().is_not_supported()) {
+                return Status::OK();
+            } else {
+                return res.status();
+            }
+        }
+
+        auto path = res.value();
+
+        // use MUST_CREATE make sure atomic
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path))
+
+        // 2. flush segment file
+        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+        butil::IOBuf index_data;
+        int64_t remaining_bytes = data.cutn(&index_data, index.index_file_size());
+        if (remaining_bytes != index.index_file_size()) {
+            return Status::InternalError(fmt::format("segment index {} file size {} not equal attachment size {}", path,
+                                                     remaining_bytes, index.index_file_size()));
+        }
+        while (remaining_bytes > 0) {
+            auto written_bytes = index_data.cut_into_writer(writer.get(), remaining_bytes);
+            if (written_bytes < 0) {
+                return io::io_error(wfile->filename(), errno);
+            }
+            remaining_bytes -= written_bytes;
+        }
+        if (remaining_bytes != 0) {
+            return Status::InternalError(fmt::format("index segment {} write size {} not equal expected size {}",
+                                                     wfile->filename(), index.index_file_size() - remaining_bytes,
+                                                     index.index_file_size()));
+        }
+        RETURN_IF_ERROR(wfile->close());
+
+        // 3. update statistic
+        {
+            std::lock_guard<std::mutex> l(_lock);
+            _num_indexfile++;
+        }
+
+        VLOG(2) << "Flush segment index " << index.index_id() << " to " << path << " size " << index.index_file_size();
+    }
     return Status::OK();
 }
 
@@ -301,6 +412,8 @@ Status RowsetWriter::_flush_delete_file(const SegmentPB& segment_pb, butil::IOBu
     // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
     // new delete file
     _delfile_idxes.emplace_back(_num_segment + _num_delfile);
+    DCHECK(_delfile_encryption_metas.size() == _num_delfile);
+    _delfile_encryption_metas.emplace_back(segment_pb.delete_encryption_meta());
     _num_delfile++;
     _num_rows_del += segment_pb.delete_num_rows();
 
@@ -344,6 +457,8 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
     // 3. update statistic
     {
         std::lock_guard<std::mutex> l(_lock);
+        DCHECK(_updatefile_encryption_metas.size() == _num_uptfile);
+        _updatefile_encryption_metas.emplace_back(segment_pb.update_encryption_meta());
         _num_uptfile++;
         _num_rows_upt += segment_pb.update_num_rows();
         _total_update_row_size += segment_pb.update_row_size();
@@ -355,10 +470,14 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
 }
 
 Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
-    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size()) {
+    FAIL_POINT_TRIGGER_EXECUTE(load_segment_flush, SEGMENT_FLUSH_FP_ACTION(_context.txn_id, _context.tablet_id));
+    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size() +
+                               segment_pb.seg_index_data_size()) {
         return Status::InternalError(fmt::format(
-                "segment size {} + delete file size {} + update file size {} not equal attachment size {}",
-                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(), data.size()));
+                "segment size {} + delete file size {} + update file size {} + seg_index file size {} not equal "
+                "attachment size {}",
+                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(),
+                segment_pb.seg_index_data_size(), data.size()));
     }
 
     if (segment_pb.has_path()) {
@@ -371,6 +490,10 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
 
     if (segment_pb.has_update_path()) {
         RETURN_IF_ERROR(_flush_update_file(segment_pb, data));
+    }
+
+    if (!segment_pb.seg_indexes().empty()) {
+        RETURN_IF_ERROR(_flush_index_files(segment_pb, data));
     }
 
     return Status::OK();
@@ -414,6 +537,23 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                         << "Fail to delete file=" << path << ", " << st.to_string();
             }
         }
+
+        if (_context.tablet_schema != nullptr) {
+            const auto& indexes = *_context.tablet_schema->indexes();
+            if (!indexes.empty()) {
+                for (int i = 0; i < _num_segment; i++) {
+                    for (const auto& index : indexes) {
+                        if (index.index_type() == GIN) {
+                            std::string index_path = IndexDescriptor::inverted_index_file_path(
+                                    _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
+                            auto index_st = _fs->delete_dir_recursive(index_path);
+                            LOG_IF(WARNING, !(index_st.ok() || index_st.is_not_found()))
+                                    << "Fail to delete file=" << index_path << ", " << index_st.to_string();
+                        }
+                    }
+                }
+            }
+        }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
         StorageEngine::instance()->release_rowset_id(_context.rowset_id);
     }
@@ -431,15 +571,31 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
         // temporary segment files.
         path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     }
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
-    const auto* schema = _context.tablet_schema;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        _writer_options.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, path));
+    const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    _segment_encryption_metas.emplace_back(_writer_options.encryption_meta);
     ++_num_segment;
     return std::move(segment_writer);
 }
 
 Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
+    std::vector<uint64_t> empty_rssid_rowids;
+    return add_chunk(chunk, empty_rssid_rowids);
+}
+
+Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) {
     if (_segment_writer == nullptr) {
         ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
@@ -449,6 +605,9 @@ Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
     }
 
     RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+    }
     _num_rows_written += static_cast<int64_t>(chunk.num_rows());
     _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
     return Status::OK();
@@ -519,8 +678,15 @@ Status HorizontalRowsetWriter::_flush_chunk(const Chunk& chunk, SegmentPB* seg_i
 Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                                         SegmentPB* seg_info) {
     auto flush_del_file = [&](const Column& deletes, SegmentPB* seg_info) {
-        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_del_file_path(
-                                             _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
+        WritableFileOptions wopts;
+        string encryption_meta;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            wopts.encryption_info = pair.info;
+            encryption_meta = std::move(pair.encryption_meta);
+        }
+        auto file_path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
         if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
@@ -536,10 +702,13 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             seg_info->set_delete_id(_num_delfile);
             seg_info->set_delete_data_size(content.size());
             seg_info->set_delete_path(wfile->filename());
+            seg_info->set_delete_encryption_meta(encryption_meta);
         }
         // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
         // new delete file
         _delfile_idxes.emplace_back(_num_segment + _num_delfile);
+        DCHECK(_delfile_encryption_metas.size() == _num_delfile);
+        _delfile_encryption_metas.emplace_back(encryption_meta);
         _num_delfile++;
         _num_rows_del += deletes.size();
         return Status::OK();
@@ -586,11 +755,32 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
 }
 
 Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+    RETURN_IF_ERROR(rowset->link_files_to(tablet == nullptr ? nullptr : tablet->data_dir()->get_meta(),
+                                          _context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
     _total_index_size += static_cast<int64_t>(rowset->rowset_meta()->index_disk_size());
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    auto& meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+    if (meta_pb.segment_encryption_metas_size() == 0) {
+        for (int i = 0; i < rowset->num_segments(); ++i) {
+            _segment_encryption_metas.emplace_back(string());
+        }
+    } else {
+        DCHECK_EQ(meta_pb.segment_encryption_metas_size(), rowset->num_segments());
+        RETURN_IF_UNLIKELY(
+                meta_pb.segment_encryption_metas_size() != rowset->num_segments(),
+                Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                  meta_pb.segment_encryption_metas_size(), rowset->num_segments())));
+        for (int i = 0; i < rowset->num_segments(); ++i) {
+            _segment_encryption_metas.emplace_back(meta_pb.segment_encryption_metas(i));
+        }
+    }
     _num_segment += static_cast<int>(rowset->num_segments());
     // TODO update zonemap
     if (rowset->rowset_meta()->has_delete_predicate()) {
@@ -649,7 +839,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         std::string tmp_segment_file =
                 Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-        auto segment_ptr = Segment::open(_fs, tmp_segment_file, seg_id, _context.tablet_schema);
+        FileInfo tmp_segment_info{.path = tmp_segment_file, .encryption_meta = _segment_encryption_metas[seg_id]};
+        auto segment_ptr = Segment::open(_fs, tmp_segment_info, seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();
@@ -675,7 +866,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                     _context.tablet_schema->num_columns(), _context.tablet_schema->sort_key_idxes(),
                     config::vertical_compaction_max_columns_per_group, &column_groups);
         }
-        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[0]);
+        auto schema = ChunkHelper::convert_schema(_context.tablet_schema, column_groups[0]);
         if (!_context.merge_condition.empty()) {
             for (int i = _context.tablet_schema->num_key_columns(); i < _context.tablet_schema->num_columns(); ++i) {
                 if (_context.tablet_schema->schema()->field(i)->name() == _context.merge_condition) {
@@ -715,7 +906,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), true);
         }
-        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
@@ -723,6 +914,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
+        _segment_encryption_metas.clear();
+        _delfile_encryption_metas.clear();
         _num_segment = 0;
         _num_delfile = 0;
         _num_rows_written = 0;
@@ -759,7 +952,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, _context.tablet_schema, chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
                 if (auto st = _vertical_rowset_writer->add_columns(*chunk, column_groups[0], true); !st.ok()) {
@@ -782,11 +975,11 @@ Status HorizontalRowsetWriter::_final_merge() {
         RETURN_IF_ERROR(mask_buffer->flush());
 
         for (size_t i = 1; i < column_groups.size(); ++i) {
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
 
             seg_iterators.clear();
 
-            auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[i]);
+            auto schema = ChunkHelper::convert_schema(_context.tablet_schema, column_groups[i]);
 
             for (const auto& segment : segments) {
                 auto res = segment->new_iterator(schema, seg_options);
@@ -813,7 +1006,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             } else {
                 itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
             }
-            itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
             auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
@@ -826,7 +1019,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                 if (st.is_end_of_file()) {
                     break;
                 } else if (st.ok()) {
-                    ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
+                    ChunkHelper::padding_char_columns(char_field_indexes, schema, _context.tablet_schema, chunk);
                     if (auto st = _vertical_rowset_writer->add_columns(*chunk, column_groups[i], false); !st.ok()) {
                         LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
                         return st;
@@ -857,7 +1050,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                   << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
                   << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
     } else {
-        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema);
+        auto schema = ChunkHelper::convert_schema(_context.tablet_schema);
 
         for (const auto& segment : segments) {
             auto res = segment->new_iterator(schema, seg_options);
@@ -869,7 +1062,9 @@ Status HorizontalRowsetWriter::_final_merge() {
 
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
-        if (_context.schema_change_sorting) {
+        if (seg_iterators.empty()) {
+            itr = new_empty_iterator(schema, config::vector_chunk_size);
+        } else if (_context.schema_change_sorting) {
             if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
                 _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);
@@ -885,11 +1080,13 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), 0);
         }
-        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+        RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
         auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
+        _segment_encryption_metas.clear();
+        _delfile_encryption_metas.clear();
         _num_segment = 0;
         _num_delfile = 0;
         _num_rows_written = 0;
@@ -918,7 +1115,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, _context.tablet_schema, chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
                 if (auto st = add_chunk(*chunk); !st.ok()) {
@@ -964,7 +1161,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size, &footer_position));
     _num_rows_of_tmp_segment_files.push_back(_num_rows_written - _num_rows_flushed);
     _num_rows_flushed = _num_rows_written;
-    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
         uint64_t footer_size = segment_size - footer_position;
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
         partial_rowset_footer->set_position(footer_position);
@@ -998,6 +1195,23 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         seg_info->set_index_size(index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
         seg_info->set_path((*segment_writer)->segment_path());
+        seg_info->set_encryption_meta((*segment_writer)->encryption_meta());
+        if (_context.tablet_schema && !_context.tablet_schema->indexes()->empty()) {
+            auto mutable_indexes = seg_info->mutable_seg_indexes();
+            for (const auto& index : *(_context.tablet_schema->indexes())) {
+                if (index.index_type() == VECTOR) {
+                    SegmentIndexPB seg_index_pb;
+                    seg_index_pb.set_index_id(index.index_id());
+                    auto index_path = IndexDescriptor::vector_index_file_path(
+                            _writer_options.segment_file_mark.rowset_path_prefix,
+                            _writer_options.segment_file_mark.rowset_id, (*segment_writer)->segment_id(),
+                            index.index_id());
+                    seg_index_pb.set_index_path(index_path);
+                    seg_index_pb.set_index_type(index.index_type());
+                    mutable_indexes->Add(std::move(seg_index_pb));
+                }
+            }
+        }
     }
 
     (*segment_writer).reset();
@@ -1017,6 +1231,20 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
             auto st = _fs->delete_file(path);
             LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                     << "Fail to delete file=" << path << ", " << st.to_string();
+            if (_context.tablet_schema != nullptr) {
+                const auto* indexes = _context.tablet_schema->indexes();
+                if (!indexes->empty()) {
+                    for (const auto& index : *indexes) {
+                        if (index.index_type() == GIN) {
+                            std::string index_path = IndexDescriptor::inverted_index_file_path(
+                                    _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
+                            auto index_st = _fs->delete_dir_recursive(index_path);
+                            LOG_IF(WARNING, !(index_st.ok() || index_st.is_not_found()))
+                                    << "Fail to delete file=" << index_path << ", " << index_st.to_string();
+                        }
+                    }
+                }
+            }
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
         StorageEngine::instance()->release_rowset_id(_context.rowset_id);
@@ -1024,6 +1252,12 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
 }
 
 Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
+    std::vector<uint64_t> empty_rssid_rowids;
+    return add_columns(chunk, column_indexes, is_key, empty_rssid_rowids);
+}
+
+Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
+                                         const std::vector<uint64_t>& rssid_rowids) {
     const size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
@@ -1032,6 +1266,9 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
         _segment_writers.emplace_back(std::move(segment_writer).value());
         _current_writer_index = 0;
         RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
+        if (_rows_mapper_builder != nullptr) {
+            RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+        }
     } else if (is_key) {
         // key columns
         if (_segment_writers[_current_writer_index]->num_rows_written() + chunk_num_rows >=
@@ -1043,6 +1280,9 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
             ++_current_writer_index;
         }
         RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
+        if (_rows_mapper_builder != nullptr) {
+            RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+        }
     } else {
         // non key columns
         uint32_t num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();
@@ -1111,7 +1351,7 @@ Status VerticalRowsetWriter::final_flush() {
             LOG(WARNING) << "Fail to finalize segment footer, " << st;
             return st;
         }
-        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
             auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);
@@ -1142,11 +1382,23 @@ Status VerticalRowsetWriter::final_flush() {
 StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_file_path(_context.rowset_path_prefix,
-                                                                                  _context.rowset_id, _num_segment)));
-    const auto* schema = _context.tablet_schema;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        _writer_options.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile,
+                     _fs->new_writable_file(wopts, Rowset::segment_file_path(_context.rowset_path_prefix,
+                                                                             _context.rowset_id, _num_segment)));
+    const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    _segment_encryption_metas.emplace_back(_writer_options.encryption_meta);
     ++_num_segment;
     return std::move(segment_writer);
 }

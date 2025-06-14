@@ -17,15 +17,20 @@
 #include <util/time.h>
 
 #include "column/chunk.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
+#include "util/failpoint/fail_point.h"
+#include "util/race_detect.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -34,10 +39,12 @@ namespace starrocks::pipeline {
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                            ScanNode* scan_node)
-        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), false, driver_sequence),
           _scan_node(scan_node),
           _dop(dop),
+          _output_chunk_by_bucket(scan_node->output_chunk_by_bucket()),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
+          _is_asc(scan_node->is_asc_hint()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
           _is_io_task_running(_io_tasks_per_scan_operator),
           _chunk_sources(_io_tasks_per_scan_operator) {
@@ -63,26 +70,44 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
-    _unique_metrics->add_info_string("BufferUnplugThreshold", std::to_string(_buffer_unplug_threshold()));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
             RuntimeProfile::ROOT_COUNTER);
 
+    _peak_buffer_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakChunkBufferMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_ALL),
+            RuntimeProfile::ROOT_COUNTER);
+
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
-    _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
     _peak_scan_task_queue_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakScanTaskQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
     _peak_io_tasks_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakIOTasks", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
 
+    _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
+    _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
+
+    if (_scan_node->is_enable_topn_filter_back_pressure()) {
+        if (auto* runtime_filters = runtime_bloom_filters(); runtime_filters != nullptr) {
+            auto has_topn_filters =
+                    std::any_of(runtime_filters->descriptors().begin(), runtime_filters->descriptors().end(),
+                                [](const auto& e) { return e.second->is_stream_build_filter(); });
+            if (has_topn_filters) {
+                _topn_filter_back_pressure = std::make_unique<TopnRfBackPressure>(
+                        0.1, _scan_node->get_back_pressure_throttle_time_upper_bound(),
+                        _scan_node->get_back_pressure_max_rounds(), _scan_node->get_back_pressure_throttle_time(),
+                        _scan_node->get_back_pressure_num_rows());
+            }
+        }
+    }
     RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         std::lock_guard guard(_task_mutex);
@@ -127,6 +152,10 @@ bool ScanOperator::has_output() const {
         return true;
     }
 
+    if (!_morsel_queue->empty() && _topn_filter_back_pressure && _topn_filter_back_pressure->should_throttle()) {
+        return false;
+    }
+
     // Try to buffer enough chunks for exec thread, to reduce scheduling overhead.
     // It's like the Linux Block-Scheduler's Unplug algorithm, so we just name it unplug.
     // The default threshould of unpluging is BufferCapacity/DOP/4, and its range is [1, 16]
@@ -146,7 +175,6 @@ bool ScanOperator::has_output() const {
         _unpluging = false;
     }
     if (chunk_number >= _buffer_unplug_threshold()) {
-        COUNTER_UPDATE(_buffer_unplug_counter, 1);
         _unpluging = true;
         return true;
     }
@@ -163,8 +191,13 @@ bool ScanOperator::has_output() const {
 
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
-        return true;
+        std::shared_lock guard(_task_mutex);
+        auto status_or_is_ready = _morsel_queue->ready_for_next();
+        if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+            return true;
+        }
     }
+
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
@@ -190,7 +223,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
-    if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
         return false;
     }
 
@@ -215,38 +248,65 @@ void ScanOperator::_detach_chunk_sources() {
     }
 }
 
+void ScanOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
+}
+
 Status ScanOperator::set_finishing(RuntimeState* state) {
+    auto notify = scan_defer_notify(this);
+    // check when expired, are there running io tasks or submitted tasks
+    if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
+                 (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
+        LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
+                     << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
+                     << " _submit_task_counter= " << _submit_task_counter->value()
+                     << " _morsels_counter= " << _morsels_counter->value()
+                     << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
+                                                                          : "");
+    }
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
+    set_buffer_finished();
     _is_finished = true;
     return Status::OK();
 }
 
 StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    RACE_DETECT(race_pull_chunk);
     RETURN_IF_ERROR(_get_scan_status());
-
+    auto defer = scan_defer_notify(this);
     _peak_buffer_size_counter->set(buffer_size());
+    _peak_buffer_memory_usage->set(buffer_memory_usage());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     ChunkPtr res = get_chunk_from_buffer();
     if (res != nullptr) {
         begin_pull_chunk(res);
         // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
-        auto [tablet_id, is_eos] = _should_emit_eos(res);
+        auto [owner_id, is_eos] = _should_emit_eos(res);
+        evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());
-        res->owner_info().set_owner_id(tablet_id, is_eos);
+        res->owner_info().set_owner_id(owner_id, is_eos);
     }
 
     return res;
 }
 
 std::tuple<int64_t, bool> ScanOperator::_should_emit_eos(const ChunkPtr& chunk) {
-    auto tablet_id = chunk->owner_info().owner_id();
+    auto owner_id = chunk->owner_info().owner_id();
     auto is_last_chunk = chunk->owner_info().is_last_chunk();
     if (is_last_chunk && _ticket_checker != nullptr) {
-        is_last_chunk = _ticket_checker->leave(tablet_id);
+        is_last_chunk = _ticket_checker->leave(owner_id);
     }
-    return {tablet_id, is_last_chunk};
+    return {owner_id, is_last_chunk};
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
@@ -271,47 +331,53 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
 
-    int cnt = _io_tasks_per_scan_operator;
     int to_sched[_io_tasks_per_scan_operator];
     int size = 0;
 
-    // pick up already started chunk source.
-    while (--cnt >= 0) {
-        _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
-        int i = _chunk_source_idx;
-        if (_is_io_task_running[i]) {
-            total_cnt -= 1;
-            continue;
+    // right here, we want total running io tasks as `total_cnt`
+    {
+        bool skip[_io_tasks_per_scan_operator];
+        // check if we can return earlier.
+        for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
+            if (!_is_io_task_running[i] && _chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+                return Status::OK();
+            }
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
-            return Status::OK();
+        // update skip vector, and pick up already started chunk source.
+        for (int i = 0; i < _io_tasks_per_scan_operator && total_cnt > 0; i++) {
+            if (_is_io_task_running[i]) {
+                skip[i] = true;
+                total_cnt -= 1;
+            } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
+                RETURN_IF_ERROR(_trigger_next_scan(state, i));
+                skip[i] = true;
+                total_cnt -= 1;
+            } else {
+                skip[i] = false;
+            }
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
-            RETURN_IF_ERROR(_trigger_next_scan(state, i));
-            total_cnt -= 1;
-        } else {
-            to_sched[size++] = i;
+
+        // now skip vector includes already started chunk source
+        // we are going to pick up `total_cnt` new chunk source to start.
+        for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
+            _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
+            int idx = _chunk_source_idx;
+            if (skip[idx]) continue;
+            to_sched[size++] = idx;
         }
     }
 
-    size = std::min(size, total_cnt);
     // pick up new chunk source.
-    for (int i = 0; i < size; i++) {
-        int idx = to_sched[i];
-        RETURN_IF_ERROR(_pickup_morsel(state, idx));
+    ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
+    if (size > 0 && morsel_ready) {
+        for (int i = 0; i < size; i++) {
+            int idx = to_sched[i];
+            RETURN_IF_ERROR(_pickup_morsel(state, idx));
+        }
     }
 
     _peak_io_tasks_counter->set(_num_running_io_tasks);
     return Status::OK();
-}
-
-// this is a more efficient way to check if a weak_ptr has been initialized
-// ref: https://stackoverflow.com/a/45507610
-// after compiler optimization, it generates far fewer instructions than std::weak_ptr::expired() and std::weak_ptr::lock()
-// see: https://godbolt.org/z/16bWqqM5n
-inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
-    using wp = std::weak_ptr<QueryContext>;
-    return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
 void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
@@ -342,6 +408,7 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+            _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;
@@ -364,20 +431,19 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
-    task.workgroup = _workgroup.get();
+    task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
-                          io_task_start_nano]() {
+                          io_task_start_nano](auto& ctx) {
         if (auto sp = wp.lock()) {
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
@@ -385,19 +451,37 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             [[maybe_unused]] std::string category;
             category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
             QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
-
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+            FAIL_POINT_SCOPE(mem_alloc_error);
+#endif
             DeferOp timer_defer([chunk_source]() {
                 COUNTER_SET(chunk_source->scan_timer(),
                             chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
             });
+            auto notify = scan_defer_notify(this);
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
             SCOPED_TIMER(chunk_source->io_task_exec_timer());
 
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
-            auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+
+            // kick start this chunk source
+            auto start_status = chunk_source->start(state);
+            if (!start_status.ok()) {
+                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
+                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                _set_scan_status(start_status);
+            }
+            Status status;
+
+            if (start_status.ok()) {
+                status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+            }
+
             if (!status.ok() && !status.is_end_of_file()) {
+                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -412,7 +496,13 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     };
 
-    if (_scan_executor->submit(std::move(task))) {
+    bool submit_success;
+    {
+        SCOPED_TIMER(_submit_io_task_timer);
+        submit_success = _scan_executor->submit(std::move(task));
+    }
+
+    if (submit_success) {
         _io_task_retry_cnt = 0;
     } else {
         _chunk_sources[chunk_source_index]->unpin_chunk_token();
@@ -442,6 +532,10 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         }
     });
 
+    // if current morsel not ready for get next. we should wait current bucket finish. just return directly
+    ASSIGN_OR_RETURN(auto ready, _morsel_queue->ready_for_next());
+    RETURN_IF(!ready, Status::OK());
+
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
 
     if (_lane_arbiter != nullptr) {
@@ -462,7 +556,12 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
                     // created from rowsets passed in to itself instead of capturing it from TabletManager again.
                     morsel->set_from_version(delta_version);
-                    morsel->set_delta_rowsets(std::move(delta_rowsets));
+
+                    std::vector<BaseRowsetSharedPtr> drs;
+                    for (auto& rs : delta_rowsets) {
+                        drs.emplace_back(rs);
+                    }
+                    morsel->set_delta_rowsets(std::move(drs));
                     break;
                 } else {
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
@@ -476,7 +575,11 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
                     morsel->set_from_version(delta_verrsion);
-                    morsel->set_delta_rowsets(std::move(delta_rowsets));
+                    std::vector<BaseRowsetSharedPtr> drs;
+                    for (auto& rs : delta_rowsets) {
+                        drs.emplace_back(rs);
+                    }
+                    morsel->set_delta_rowsets(std::move(drs));
                 }
                 break;
             }
@@ -485,13 +588,18 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
-        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
-        auto status = _chunk_sources[chunk_source_index]->prepare(state);
-        if (!status.ok()) {
-            _chunk_sources[chunk_source_index] = nullptr;
-            set_finishing(state);
-            return status;
+
+        {
+            SCOPED_TIMER(_prepare_chunk_source_timer);
+            _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
+            auto status = _chunk_sources[chunk_source_index]->prepare(state);
+            if (!status.ok()) {
+                _chunk_sources[chunk_source_index] = nullptr;
+                static_cast<void>(set_finishing(state));
+                return status;
+            }
         }
+
         need_detach = false;
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }
@@ -502,24 +610,35 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     auto query_ctx = _query_ctx.lock();
     // _query_ctx uses lazy initialization, maybe it is not initialized
-    // under certian circumstance
+    // under certain circumstance
     if (query_ctx == nullptr) {
         query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
-    if (!query_ctx->is_report_profile()) {
+    if (!query_ctx->enable_profile()) {
         return;
     }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
     for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
 
-    RuntimeProfile* merged_profile = profiles[0];
+    ObjectPool obj_pool;
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
+
+    // Copy all data source's metrics
+    auto* data_source_profile = merged_profile->get_child(connector::DataSource::PROFILE_NAME);
+    if (data_source_profile != nullptr) {
+        _unique_metrics->copy_all_info_strings_from(data_source_profile);
+        if (_unique_metrics->get_counter("IOTaskExecTime") != nullptr) {
+            _unique_metrics->copy_all_counters_from(data_source_profile, "IOTaskExecTime");
+        } else {
+            _unique_metrics->copy_all_counters_from(data_source_profile);
+        }
+    }
 }
 
 void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
@@ -534,6 +653,8 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
           _scan_task_group(std::make_shared<workgroup::ScanTaskGroup>()) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
+    TEST_SUCC_POINT("ScanOperatorFactory::prepare");
+
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(do_prepare(state));
 
@@ -572,7 +693,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
         ExecNode::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
-    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), ops);
+    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), scan_node->id(), ops);
 
     return ops;
 }

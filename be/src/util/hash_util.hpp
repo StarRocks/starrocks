@@ -46,6 +46,7 @@
 #endif
 #include <zlib.h>
 
+#include "boost/container_hash/hash.hpp"
 #include "gen_cpp/Types_types.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
@@ -131,6 +132,7 @@ public:
 
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
     static const uint32_t MURMUR3_32_SEED = 104729;
+    static const uint64_t XXHASH3_64_SEED = 0;
 
     ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) { return (x << r) | (x >> (32 - r)); }
 
@@ -185,6 +187,9 @@ public:
         h1 = fmix32(h1);
         return h1;
     }
+
+    static uint64_t xx_hash3_64(const void* key, int32_t len, uint64_t seed);
+    static uint64_t xx_hash64(const void* key, int32_t len, uint64_t seed);
 
     // default values recommended by http://isthe.com/chongo/tech/comp/fnv/
     static const uint32_t FNV_PRIME = 0x01000193;    //   16777619
@@ -394,6 +399,17 @@ struct hash<std::pair<starrocks::TUniqueId, int64_t>> {
         seed = starrocks::HashUtil::hash(&pair.first.hi, sizeof(pair.first.hi), seed);
         seed = starrocks::HashUtil::hash(&pair.second, sizeof(pair.second), seed);
         return seed;
+    }
+};
+
+template <typename T>
+struct hash<std::vector<T>> {
+    size_t operator()(const std::vector<T>& ts) const noexcept {
+        std::size_t hash_value = 0; // seed
+        for (auto& t : ts) {
+            boost::hash_combine<T>(hash_value, t);
+        }
+        return hash_value;
     }
 };
 

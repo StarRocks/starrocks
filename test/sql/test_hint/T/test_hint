@@ -1,0 +1,203 @@
+-- name: test_hint
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4");
+
+CREATE TABLE all_type (
+    date_col DATE,
+    datetime_col DATETIME,
+    int_col int,
+    float_col FLOAT,
+    double_col DOUBLE,
+    decimal_col DECIMAL(10, 2),
+    varchar_col VARCHAR(255),
+    char_col CHAR(10),
+    array_col ARRAY<STRING>
+) ENGINE=OLAP
+  DUPLICATE KEY(date_col)
+  COMMENT "OLAP"
+  DISTRIBUTED BY HASH(date_col) BUCKETS 5
+  PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t1 (c0, c1, c2, c3) VALUES
+  (1, 'a', 'Value1', 10),
+  (2, 'b', 'Value2', 20),
+  (null, 'c', 'Value3', 30),
+  (4, 'd', 'Value4', 40),
+  (5, null, 'Value5', 50),
+  (5, 'f', 'Value6', 60);
+
+insert into all_type values('2021-01-01', '2021-01-01 12:00:01.123', 111111, -1.23, 1.54654, 120.26, '测试 test"', '测试\'', ['测试', '测试', 'abc'] );
+
+
+insert into t2 select c0, 'a', c2, 60 from t1;
+
+select @a, @b from t1;
+
+select * from t2;
+
+select /*+ set_user_variable(@a = (select max(c3) from t1)) */ /*+ set_user_variable(@b = (select min(c3) from t1)) */ @a, @b from t1;
+
+with cte_1 as (select * from t2) select /*+ set_user_variable(@a = (select max(c3) from t1)) */ /*+ set_user_variable(@b = (select min(c3) from t1)) */ @a, @b from cte_1;
+
+with cte_1 as (select * from t1)
+select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */  /*+ set_var(sql_mode ='GROUP_CONCAT_LEGACY') */
+group_concat(@a) from cte_1;
+
+with cte_1 as (select * from t1)
+select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */
+group_concat(@a) from cte_1;
+
+
+select /*+ set_user_variable(@a = select from t0) */ @a from t1;
+
+set @a = 1;
+select /*+ set_user_variable(@a = 1) */ @a from t1;
+
+select /*+ set_user_variable(@b = 1) */ @a, @b from t1;
+
+select  @a, @b from t1;
+
+with cte_1 as (select * from t1)
+select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */
+group_concat(@a, @b, @c) from cte_1;
+
+CREATE MATERIALIZED VIEW test_mv
+REFRESH DEFERRED MANUAL
+properties (
+    "replication_num" = "1",
+    "partition_refresh_number" = "1"
+) as select /*+ set_user_variable(@c = (select min(c3) from t1)) */ * from t1;
+
+
+set @test = (select date_col from all_type);
+select @test;
+
+set @test = (select datetime_col from all_type);
+select @test;
+
+set @test = (select int_col from all_type);
+select @test;
+
+set @test = (select float_col from all_type);
+select @test;
+
+set @test = (select double_col from all_type);
+select @test;
+
+set @test = (select decimal_col from all_type);
+select @test;
+
+set @test = (select varchar_col from all_type);
+select @test;
+
+set @test = (select char_col from all_type);
+select @test;
+
+set @test = (select array_col from all_type);
+select @test;
+
+set @test = (select array_col from all_type where date_col > '2021-01-01');
+select @test;
+
+set @test= (select JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25));
+select @test;
+
+set @test = (select array_agg(c2) from (select t2.c2 from t2 join t2 tt join t2 ttt join t2 tttt) t);
+select array_length(@test);
+
+set @test= (select cast(50 as boolean));
+select @test;
+
+set @test= (select cast(50 as time));
+
+set @test= ["{\"m\":{\"cal\":[{\"thur\":{\"use\":true,\"shift\":{\"begin\":0,\"end\":36}},\"id\":\"ID1\"}]}}", "{\"\\a\"}"];
+select @test = ["{\"m\":{\"cal\":[{\"thur\":{\"use\":true,\"shift\":{\"begin\":0,\"end\":36}},\"id\":\"ID1\"}]}}", "{\"\\a\"}"];
+
+set @test= concat(upper('a'), '\\', '"', '\'', 'b');
+select @test = concat(upper('a'), '\\', '"', '\'', 'b');
+
+set @test = ["abc\\"];
+select @test = ["abc\\"];
+
+set @test = ["abc'"];
+select @test = ["abc'"];
+
+set @test = ["abc\\'"];
+select @test = ["abc\\'"];
+
+set @test = concat(upper('a'), '\'', '\\' 'b', '"');
+select @test = concat(upper('a'), '\'', '\\' 'b', '"');
+
+SELECT /*+ set_user_variable(@c = 1, @d = 1) */c1,  lag(c1, @c, @d) over (ORDER BY c2), lead(c1, 1, @d) over (ORDER BY c2), lead(@c, 1, @d) over (ORDER BY c2) from t1;
+SELECT /*+ set_user_variable(@c = 1, @d = 1) */c1,  lag(c1, @c, @d) over (ORDER BY c2), lead(c1, 1, @d) over (ORDER BY c2), lead(@c, 1, @d) over (ORDER BY c2) from t1;
+select /*+ set_user_variable(@c = 1, @d = 100000) */ APPROX_TOP_K(c1, @c), APPROX_TOP_K(c2, @a, @d) from (select c1, c2 from t1 where c0 = 1) t1;
+select /*+ set_user_variable(@c = 1, @d = 10) */ c1, ntile(@c) over (partition by c2 order by c3) as bucket_id from t1;
+
+set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1;
+select @aVar, @bVar, @cVar;
+
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1;
+select @aVar, @bVar, @cVar;
+
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @eVar + 1;
+select @aVar, @bVar, @cVar;
+
+select /*+ SET_USER_VARIABLE (@aVarHint = 5, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+select /*+ SET_USER_VARIABLE (@aVarHint = 6, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+select @xVar, @yVar, @zVar;
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+select @xVar, @yVar, @zVar;
+
+create table cities (
+    city_id int NOT NULL,
+     population int NOT NULL,
+    city string NOT NULL
+   ) PRIMARY KEY (city_id)
+DISTRIBUTED BY HASH(city_id);
+
+insert into cities(city_id, population, city) values(1, 2000,"beijing");
+insert into cities(city_id, population, city) values(2, 2000,"shanghai");
+insert into cities(city_id, population, city) values(3, 2000,"guangzhou");
+insert into cities(city_id, population, city) values(4, 1000,"shenzhen");
+insert into cities(city_id, population, city) values(5, 2000, "chengdu");
+
+select /*+ SET_USER_VARIABLE (@aVarHint = (select max(population) from cities), @bVarHint = (select  max(city_id) from cities where population =  @aVarHint)) */  @aVarHint, @bVarHint;
+select @aVarHint, @bVarHint;
+set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
+select @secondVar,@thirdVar;
+
+

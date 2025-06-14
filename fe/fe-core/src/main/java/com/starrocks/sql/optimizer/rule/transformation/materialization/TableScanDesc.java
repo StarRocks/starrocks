@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 
 import java.util.Objects;
@@ -27,17 +29,19 @@ public class TableScanDesc {
     private final int index;
     private final LogicalScanOperator scanOperator;
     // join type of LogicalJoinOperator above scan operator
-    private final JoinOperator parentJoinType;
+    private final OptExpression joinOptExpression;
     private final boolean isLeft;
+    private final Integer relationid;
 
     public TableScanDesc(Table table, int index,
-                         LogicalScanOperator scanOperator, JoinOperator parentJoinType,
-                         boolean isLeft) {
+                         LogicalScanOperator scanOperator, OptExpression joinOptExpression,
+                         boolean isLeft, Integer relationid) {
         this.table = table;
         this.index = index;
         this.scanOperator = scanOperator;
-        this.parentJoinType = parentJoinType;
+        this.joinOptExpression = joinOptExpression;
         this.isLeft = isLeft;
+        this.relationid = relationid;
     }
 
     public Table getTable() {
@@ -48,8 +52,8 @@ public class TableScanDesc {
         return index;
     }
 
-    public JoinOperator getParentJoinType() {
-        return parentJoinType;
+    public OptExpression getJoinOptExpression() {
+        return joinOptExpression;
     }
 
     public String getName() {
@@ -58,6 +62,32 @@ public class TableScanDesc {
 
     public LogicalScanOperator getScanOperator() {
         return scanOperator;
+    }
+
+    public JoinOperator getJoinType() {
+        if (joinOptExpression == null) {
+            return null;
+        }
+        LogicalJoinOperator joinOperator = joinOptExpression.getOp().cast();
+        return joinOperator.getJoinType();
+    }
+
+    public Integer getRelationid() {
+        return relationid;
+    }
+
+    public boolean isCompatible(TableScanDesc other) {
+        if (isMatch(other)) {
+            return true;
+        }
+
+        JoinOperator joinOperator = getJoinType();
+        JoinOperator otherJoinOperator = other.getJoinType();
+        if (!MaterializedViewRewriter.JOIN_COMPATIBLE_MAP.containsKey(joinOperator) ||
+                !MaterializedViewRewriter.JOIN_COMPATIBLE_MAP.get(joinOperator).contains(otherJoinOperator)) {
+            return false;
+        }
+        return true;
     }
 
     public boolean isMatch(TableScanDesc other) {
@@ -69,16 +99,24 @@ public class TableScanDesc {
         // for
         // query: a left join c
         // mv: a inner join b left join c
-        if (parentJoinType.isInnerJoin()) {
-            return other.parentJoinType.isInnerJoin() || (other.parentJoinType.isLeftOuterJoin() && other.isLeft);
+        JoinOperator joinOperator = getJoinType();
+        JoinOperator otherJoinOperator = other.getJoinType();
+        if (joinOperator == null && otherJoinOperator == null) {
+            return true;
+        } else if (joinOperator == null || otherJoinOperator == null) {
+            return false;
+        }
+        if (joinOperator.isInnerJoin()) {
+            return otherJoinOperator.isInnerJoin()
+                    || (otherJoinOperator.isLeftOuterJoin() && other.isLeft);
         }
 
         // for
         // query: a inner join c
         // mv: a left outer join b inner join c
-        if (parentJoinType.isLeftOuterJoin()) {
-            return (isLeft && other.parentJoinType.isInnerJoin())
-                    || (other.parentJoinType.isLeftOuterJoin() && isLeft == other.isLeft);
+        if (joinOperator.isLeftOuterJoin()) {
+            return (isLeft && otherJoinOperator.isInnerJoin())
+                    || (otherJoinOperator.isLeftOuterJoin() && isLeft == other.isLeft);
         }
 
         return false;

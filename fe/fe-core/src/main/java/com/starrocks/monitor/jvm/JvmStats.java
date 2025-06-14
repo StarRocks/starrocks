@@ -36,6 +36,7 @@ package com.starrocks.monitor.jvm;
 
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.monitor.unit.TimeValue;
+import org.jetbrains.annotations.NotNull;
 
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ClassLoadingMXBean;
@@ -82,7 +83,7 @@ public class JvmStats {
                 MemoryUsage usage = memoryPoolMXBean.getUsage();
                 MemoryUsage peakUsage = memoryPoolMXBean.getPeakUsage();
                 String name = GcNames.getByMemoryPoolName(memoryPoolMXBean.getName(), null);
-                if (name == null) { // if we can't resolve it, its not interesting.... (Per Gen, Code Cache)
+                if (name == null) { // if we can't resolve it, it's not interesting.... (Per Gen, Code Cache)
                     continue;
                 }
                 pools.add(new MemoryPool(name,
@@ -128,6 +129,15 @@ public class JvmStats {
 
         return new JvmStats(System.currentTimeMillis(), RUNTIME_MX_BEAN.getUptime(), mem, threads,
                 garbageCollectors, bufferPoolsList, classes);
+    }
+
+    public static float getJvmHeapUsedPercent() {
+        MemoryUsage memUsage = MEMORY_MX_BEAN.getHeapMemoryUsage();
+        if (memUsage.getCommitted() <= 0) {
+            return 0.0f;
+        } else {
+            return memUsage.getUsed() / (float) memUsage.getCommitted();
+        }
     }
 
     private final long timestamp;
@@ -177,56 +187,6 @@ public class JvmStats {
         return classes;
     }
 
-    static final class Fields {
-        static final String JVM = "jvm";
-        static final String TIMESTAMP = "timestamp";
-        static final String UPTIME = "uptime";
-        static final String UPTIME_IN_MILLIS = "uptime_in_millis";
-
-        static final String MEM = "mem";
-        static final String HEAP_USED = "heap_used";
-        static final String HEAP_USED_IN_BYTES = "heap_used_in_bytes";
-        static final String HEAP_USED_PERCENT = "heap_used_percent";
-        static final String HEAP_MAX = "heap_max";
-        static final String HEAP_MAX_IN_BYTES = "heap_max_in_bytes";
-        static final String HEAP_COMMITTED = "heap_committed";
-        static final String HEAP_COMMITTED_IN_BYTES = "heap_committed_in_bytes";
-
-        static final String NON_HEAP_USED = "non_heap_used";
-        static final String NON_HEAP_USED_IN_BYTES = "non_heap_used_in_bytes";
-        static final String NON_HEAP_COMMITTED = "non_heap_committed";
-        static final String NON_HEAP_COMMITTED_IN_BYTES = "non_heap_committed_in_bytes";
-
-        static final String POOLS = "pools";
-        static final String USED = "used";
-        static final String USED_IN_BYTES = "used_in_bytes";
-        static final String MAX = "max";
-        static final String MAX_IN_BYTES = "max_in_bytes";
-        static final String PEAK_USED = "peak_used";
-        static final String PEAK_USED_IN_BYTES = "peak_used_in_bytes";
-        static final String PEAK_MAX = "peak_max";
-        static final String PEAK_MAX_IN_BYTES = "peak_max_in_bytes";
-
-        static final String THREADS = "threads";
-        static final String COUNT = "count";
-        static final String PEAK_COUNT = "peak_count";
-
-        static final String GC = "gc";
-        static final String COLLECTORS = "collectors";
-        static final String COLLECTION_COUNT = "collection_count";
-        static final String COLLECTION_TIME = "collection_time";
-        static final String COLLECTION_TIME_IN_MILLIS = "collection_time_in_millis";
-
-        static final String BUFFER_POOLS = "buffer_pools";
-        static final String TOTAL_CAPACITY = "total_capacity";
-        static final String TOTAL_CAPACITY_IN_BYTES = "total_capacity_in_bytes";
-
-        static final String CLASSES = "classes";
-        static final String CURRENT_LOADED_COUNT = "current_loaded_count";
-        static final String TOTAL_LOADED_COUNT = "total_loaded_count";
-        static final String TOTAL_UNLOADED_COUNT = "total_unloaded_count";
-    }
-
     public static class GarbageCollectors implements Iterable<GarbageCollector> {
 
         private final GarbageCollector[] collectors;
@@ -239,6 +199,7 @@ public class JvmStats {
             return this.collectors;
         }
 
+        @NotNull
         @Override
         public Iterator<GarbageCollector> iterator() {
             return Arrays.stream(collectors).iterator();
@@ -326,32 +287,54 @@ public class JvmStats {
             return this.name;
         }
 
-        public ByteSizeValue getUsed() {
+        public long getUsed() {
+            return used;
+        }
+
+        public ByteSizeValue getByteSizeUsed() {
             return new ByteSizeValue(used);
         }
 
-        public ByteSizeValue getMax() {
+        public long getMax() {
+            return max;
+        }
+
+        public ByteSizeValue getByteSizeMax() {
             return new ByteSizeValue(max);
         }
 
-        public ByteSizeValue getCommitted() {
+
+        public long getCommitted() {
+            return committed;
+        }
+
+        public ByteSizeValue getByteSizeCommitted() {
             return new ByteSizeValue(committed);
         }
 
-        public ByteSizeValue getPeakUsed() {
+        public long getPeakUsed() {
+            return peakUsed;
+        }
+
+        public ByteSizeValue getByteSizePeakUsed() {
             return new ByteSizeValue(peakUsed);
         }
 
-        public ByteSizeValue getPeakMax() {
+        public long getPeakMax() {
+            return peakMax;
+        }
+
+        public ByteSizeValue getByteSizePeakMax() {
             return new ByteSizeValue(peakMax);
         }
 
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            sb.append("name: ").append(name).append(", used: ").append(getUsed().toString());
-            sb.append(", max: ").append(getMax().toString()).append(", peak used: ").append(getPeakUsed().toString());
-            sb.append(", peak max: ").append(getPeakMax().toString());
+            sb.append("name: ").append(name).append(", used: ").append(getByteSizeUsed().toString());
+            sb.append(", max: ").append(getByteSizeMax().toString())
+                    .append(", peak used: ").append(getByteSizePeakUsed().toString());
+            sb.append(", peak max: ").append(getByteSizePeakMax().toString());
             return sb.toString();
         }
     }
@@ -375,23 +358,36 @@ public class JvmStats {
             this.pools = pools;
         }
 
+        @NotNull
         @Override
         public Iterator<MemoryPool> iterator() {
             return pools.iterator();
         }
 
-        public ByteSizeValue getHeapCommitted() {
+        public long getHeapCommitted() {
+            return heapCommitted;
+        }
+
+        public ByteSizeValue getByteSizeHeapCommitted() {
             return new ByteSizeValue(heapCommitted);
         }
 
-        public ByteSizeValue getHeapUsed() {
+        public long getHeapUsed() {
+            return heapUsed;
+        }
+
+        public ByteSizeValue getByteSizeHeapUsed() {
             return new ByteSizeValue(heapUsed);
+        }
+
+        public long getHeapMax() {
+            return heapMax;
         }
 
         /**
          * returns the maximum heap size. 0 bytes signals unknown.
          */
-        public ByteSizeValue getHeapMax() {
+        public ByteSizeValue getByteSizeHeapMax() {
             return new ByteSizeValue(heapMax);
         }
 
@@ -405,22 +401,30 @@ public class JvmStats {
             return (short) (heapUsed * 100 / heapMax);
         }
 
-        public ByteSizeValue getNonHeapCommitted() {
+        public long getNonHeapCommitted() {
+            return nonHeapCommitted;
+        }
+
+        public ByteSizeValue getByteSizeNonHeapCommitted() {
             return new ByteSizeValue(nonHeapCommitted);
         }
 
-        public ByteSizeValue getNonHeapUsed() {
+        public long getNonHeapUsed() {
+            return nonHeapUsed;
+        }
+
+        public ByteSizeValue getByteSizeNonHeapUsed() {
             return new ByteSizeValue(nonHeapUsed);
         }
 
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            sb.append("heap committed: ").append(getHeapCommitted().toString());
-            sb.append(", heap used: ").append(getHeapUsed().toString());
-            sb.append(", heap max: ").append(getHeapMax().toString());
-            sb.append(", non heap committed: ").append(getNonHeapCommitted().toString());
-            sb.append(", non heap used: ").append(getNonHeapUsed().toString());
+            sb.append("heap committed: ").append(getByteSizeHeapCommitted().toString());
+            sb.append(", heap used: ").append(getByteSizeHeapUsed().toString());
+            sb.append(", heap max: ").append(getByteSizeHeapMax().toString());
+            sb.append(", non heap committed: ").append(getByteSizeNonHeapCommitted().toString());
+            sb.append(", non heap used: ").append(getByteSizeNonHeapUsed().toString());
             sb.append("\nMem pools: ");
             for (MemoryPool memoryPool : pools) {
                 sb.append(memoryPool.toString()).append("\n");
@@ -451,11 +455,19 @@ public class JvmStats {
             return this.count;
         }
 
-        public ByteSizeValue getTotalCapacity() {
+        public long getTotalCapacity() {
+            return totalCapacity;
+        }
+
+        public ByteSizeValue getByteSizeTotalCapacity() {
             return new ByteSizeValue(totalCapacity);
         }
 
-        public ByteSizeValue getUsed() {
+        public long getUsed() {
+            return used;
+        }
+
+        public ByteSizeValue getByteSizeUsed() {
             return new ByteSizeValue(used);
         }
 

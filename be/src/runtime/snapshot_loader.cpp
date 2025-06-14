@@ -50,6 +50,8 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -86,15 +88,11 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
                               std::map<int64_t, std::vector<std::string>>* tablet_files) {
     if (!upload.__isset.use_broker || upload.use_broker) {
         LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size()
-                  << ", broker addr: " << upload.broker_addr << ", job: " << _job_id << ", task" << _task_id;
+                  << ", broker addr: " << upload.broker_addr << ", job id: " << _job_id << ", task id: " << _task_id;
     } else {
-        LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size() << ", job: " << _job_id
-                  << ", task" << _task_id;
+        LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size() << ", job id: " << _job_id
+                  << ", task id: " << _task_id;
     }
-
-    // check if job has already been cancelled
-    int tmp_counter = 1;
-    RETURN_IF_ERROR(_report_every(0, &tmp_counter, 0, 0, TTaskType::type::UPLOAD));
 
     Status status = Status::OK();
     // 1. validate local tablet snapshot paths
@@ -109,7 +107,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
-               << "broker addr: " << upload.broker_addr << ". msg: " << status.get_error_msg();
+               << "broker addr: " << upload.broker_addr << ". msg: " << status.message();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -184,30 +182,37 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             // open broker writer. file name end with ".part"
             // it will be renamed to ".md5sum" after upload finished
             auto full_remote_file = dest_path + "/" + local_file;
-            auto tmp_broker_file_name = full_remote_file + ".part";
+            auto tmp_remote_file_name = full_remote_file + ".part";
+            auto final_remote_file_name = full_remote_file + "." + md5sum;
             auto local_file_path = src_path + "/" + local_file;
             std::unique_ptr<WritableFile> remote_writable_file;
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             if (!upload.__isset.use_broker || upload.use_broker) {
                 BrokerFileSystem fs_broker(upload.broker_addr, upload.broker_prop);
-                ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_broker_file_name));
+                ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_remote_file_name));
             } else {
-                ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, tmp_broker_file_name));
+                if (fs->type() != FileSystem::S3) {
+                    ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, tmp_remote_file_name));
+                } else {
+                    // Not need rename for S3
+                    ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, final_remote_file_name));
+                }
             }
             ASSIGN_OR_RETURN(auto input_file, FileSystem::Default()->new_sequential_file(local_file_path));
-            auto res = fs::copy(input_file.get(), remote_writable_file.get(), 1024 * 1024);
-            if (!res.ok()) {
-                return res.status();
-            }
-            LOG(INFO) << "finished to write file via broker. file: " << local_file_path << ", length: " << *res;
+            ASSIGN_OR_RETURN(auto file_size,
+                             fs::copy(input_file.get(), remote_writable_file.get(), config::upload_buffer_size));
             RETURN_IF_ERROR(remote_writable_file->close());
+            LOG(INFO) << "finished to upload file: " << local_file_path << ", length: " << file_size;
+
             // rename file to end with ".md5sum"
             if (!upload.__isset.use_broker || upload.use_broker) {
-                RETURN_IF_ERROR(_rename_remote_file(*client, full_remote_file + ".part",
-                                                    full_remote_file + "." + md5sum, upload.broker_prop));
+                RETURN_IF_ERROR(
+                        _rename_remote_file(*client, tmp_remote_file_name, final_remote_file_name, upload.broker_prop));
             } else {
-                RETURN_IF_ERROR(_rename_remote_file_without_broker(fs, full_remote_file + ".part",
-                                                                   full_remote_file + "." + md5sum));
+                if (fs->type() != FileSystem::S3) {
+                    RETURN_IF_ERROR(
+                            _rename_remote_file_without_broker(fs, tmp_remote_file_name, final_remote_file_name));
+                }
             }
         } // end for each tablet's local files
 
@@ -216,7 +221,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
         LOG(INFO) << "finished to write tablet to remote. local path: " << src_path << ", remote path: " << dest_path;
     } // end for each tablet path
 
-    LOG(INFO) << "finished to upload snapshots. job: " << _job_id << ", task id: " << _task_id;
+    LOG(INFO) << "finished to upload snapshots. job id: " << _job_id << ", task id: " << _task_id;
     return status;
 }
 
@@ -229,15 +234,11 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
                                 const TDownloadReq& download, std::vector<int64_t>* downloaded_tablet_ids) {
     if (!download.__isset.use_broker || download.use_broker) {
         LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size()
-                  << ", broker addr: " << download.broker_addr << ", job: " << _job_id << ", task id: " << _task_id;
+                  << ", broker addr: " << download.broker_addr << ", job id: " << _job_id << ", task id: " << _task_id;
     } else {
-        LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size() << ", job: " << _job_id
+        LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size() << ", job id: " << _job_id
                   << ", task id: " << _task_id;
     }
-
-    // check if job has already been cancelled
-    int tmp_counter = 1;
-    RETURN_IF_ERROR(_report_every(0, &tmp_counter, 0, 0, TTaskType::type::DOWNLOAD));
 
     Status status = Status::OK();
     // 1. validate local tablet snapshot paths
@@ -253,7 +254,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
-               << "broker addr: " << download.broker_addr << ". msg: " << status.get_error_msg();
+               << "broker addr: " << download.broker_addr << ". msg: " << status.message();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -381,11 +382,8 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             // 3. open local file for write
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             ASSIGN_OR_RETURN(auto local_file, FileSystem::Default()->new_writable_file(opts, full_local_file));
-
-            auto res = fs::copy(remote_sequential_file.get(), local_file.get(), 1024 * 1024);
-            if (!res.ok()) {
-                return res.status();
-            }
+            ASSIGN_OR_RETURN(auto file_size,
+                             fs::copy(remote_sequential_file.get(), local_file.get(), config::download_buffer_size));
             RETURN_IF_ERROR(local_file->close());
 
             // 5. check md5 of the downloaded file
@@ -401,7 +399,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // local_files always keep the updated local files
             local_files.push_back(local_file_name);
-            LOG(INFO) << "finished to download file via broker. file: " << full_local_file << ", length: " << file_len;
+            LOG(INFO) << "finished to download the file: " << full_local_file << ", length: " << file_size;
         } // end for all remote files
 
         // finally, delete local files which are not in remote
@@ -411,8 +409,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             std::string new_name;
             Status st = _replace_tablet_id(local_file, remote_tablet_id, &new_name);
             if (!st.ok()) {
-                LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.get_error_msg()
-                             << ". ignore it";
+                LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.message() << ". ignore it";
                 continue;
             }
             VLOG(2) << "new file name after replace tablet id: " << new_name;
@@ -432,7 +429,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         finished_num++;
     } // end for src_to_dest_path
 
-    LOG(INFO) << "finished to download snapshots. job: " << _job_id << ", task id: " << _task_id;
+    LOG(INFO) << "finished to download snapshots. job id: " << _job_id << ", task id: " << _task_id;
     return status;
 }
 
@@ -442,7 +439,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     std::string tablet_path = tablet->schema_hash_path();
     std::string store_path = tablet->data_dir()->path();
     LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
-              << ", store: " << store_path << ", job: " << _job_id << ", task id: " << _task_id;
+              << ", store: " << store_path << ", job id: " << _job_id << ", task id: " << _task_id;
 
     Status status = Status::OK();
 
@@ -499,6 +496,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     }
     snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
 
+    // Do not need to copy GIN in pk table because it does not support GIN now
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path));
 
     if (overwrite) {
@@ -548,17 +546,17 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         LOG(FATAL) << "only support overwrite now";
     }
 
-    // We just replace the table_schema in tabletMeta using the schema
-    // in snapshot_meta.
-    TabletMetaSharedPtr new_tablet_meta = std::make_shared<TabletMeta>();
-    std::shared_lock rdlock(tablet->get_header_lock());
-    tablet->generate_tablet_meta_copy_unlocked(new_tablet_meta);
-    rdlock.unlock();
-
-    TabletMetaPB metapb;
-    new_tablet_meta->to_meta_pb(&metapb);
-    new_tablet_meta->init_from_pb(&metapb, &snapshot_meta.tablet_meta().schema());
-    tablet->set_tablet_meta(new_tablet_meta);
+    /*
+     * just reset the tablet_schema using the schema in snapshot_meta
+     * 
+     * we do not use tablet_meta copy to avoid the TabletUpdates
+     * inconsistent problem.
+     * 
+     * we also do not use the snapshot_meta to construct a new
+     * tablet to replace the old one here, because it may easy
+     * to forget reset some variable in the snapshot_meta.
+    */
+    tablet->tablet_meta()->reset_tablet_schema_for_restore(snapshot_meta.tablet_meta().schema());
     tablet->save_meta();
 
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
@@ -579,7 +577,7 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
     std::string tablet_path = tablet->schema_hash_path();
     std::string store_path = tablet->data_dir()->path();
     LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
-              << ", store: " << store_path << ", job: " << _job_id << ", task id: " << _task_id;
+              << ", store: " << store_path << ", job id: " << _job_id << ", task id: " << _task_id;
 
     Status status = Status::OK();
 
@@ -655,9 +653,20 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
         // link files one by one
         // files in snapshot dir will be moved in snapshot clean process
         std::vector<std::string> linked_files;
+        std::string dcg_file;
         for (auto& file : snapshot_files) {
+            // A tablet can have at most one dcgs snapshot file
+            if (_end_with(file, ".dcgs_snapshot")) {
+                dcg_file = file;
+                continue;
+            }
             std::string full_src_path = snapshot_path + "/" + file;
             std::string full_dest_path = tablet_path + "/" + file;
+            if (_end_with(file, "ivt")) {
+                RETURN_IF_ERROR(FileSystem::Default()->rename_file(full_src_path, full_dest_path));
+                VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
+                continue;
+            }
             if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
                 LOG(WARNING) << "failed to link file from " << full_src_path << " to " << full_dest_path
                              << ", err: " << std::strerror(errno);
@@ -673,6 +682,48 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
             VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
         }
 
+        if (dcg_file.size() != 0) {
+            DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+            std::string full_path = snapshot_path + "/" + dcg_file;
+            auto st = DeltaColumnGroupListHelper::parse_snapshot(full_path, dcg_snapshot_pb);
+            if (!st.ok()) {
+                return Status::InternalError("failed to parse dcgs meta");
+            }
+
+            if (dcg_snapshot_pb.dcg_lists().size() != 0) {
+                int idx = 0;
+                auto data_dir = tablet->data_dir();
+                rocksdb::WriteBatch wb;
+
+                RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_dir, &wb, tablet_id));
+
+                for (const auto& dcg_list_pb : dcg_snapshot_pb.dcg_lists()) {
+                    // dcgs for each segment
+                    DeltaColumnGroupList dcgs;
+                    RETURN_IF_ERROR(
+                            DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
+
+                    if (dcgs.size() == 0) {
+                        ++idx;
+                        continue;
+                    }
+
+                    // tablet id and rowsetid in PB have been replace by the new one here.
+                    RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(
+                            data_dir, &wb, dcg_snapshot_pb.tablet_id(idx), dcg_snapshot_pb.rowset_id(idx),
+                            dcg_snapshot_pb.segment_id(idx), dcgs));
+                    ++idx;
+                }
+                st = data_dir->get_meta()->write_batch(&wb);
+                if (!st.ok()) {
+                    std::stringstream ss;
+                    ss << "save dcgs meta failed, tablet id: " << tablet->tablet_id();
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
+            }
+        }
+
     } else {
         LOG(FATAL) << "only support overwrite now";
     }
@@ -680,8 +731,13 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
     // snapshot loader not need to change tablet uid
     // fixme: there is no header now and can not call load_one_tablet here
     // reload header
-    status = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(store, tablet_id, schema_hash,
-                                                                               tablet_path, true);
+    {
+        std::unique_lock l(tablet->get_meta_store_lock());
+        // prevet the concurrent issue with tablet meta checkpoint
+        tablet->set_will_be_force_replaced();
+        status = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(store, tablet_id, schema_hash,
+                                                                                   tablet_path, true);
+    }
     if (!status.ok()) {
         LOG(WARNING) << "Fail to reload header of tablet. tablet_id=" << tablet_id << " err=" << status.to_string();
         return status;
@@ -802,6 +858,7 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -857,7 +914,7 @@ Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_p
     Status status = FileSystem::Default()->get_children(local_path, local_files);
     if (!status.ok()) {
         std::stringstream ss;
-        ss << "failed to list files in local path: " << local_path << ", msg: " << status.get_error_msg();
+        ss << "failed to list files in local path: " << local_path << ", msg: " << status.message();
         LOG(WARNING) << ss.str();
         return status;
     }
@@ -890,6 +947,7 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
@@ -942,8 +1000,17 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         ss << tablet_id << ".hdr";
         *new_file_name = ss.str();
         return Status::OK();
+    } else if (_end_with(file_name, ".dcgs_snapshot")) {
+        std::stringstream ss;
+        ss << tablet_id << ".dcgs_snapshot";
+        *new_file_name = ss.str();
+        return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
-               _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt")) {
+               _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt") ||
+               _end_with(file_name, ".vi")) {
+        *new_file_name = file_name;
+        return Status::OK();
+    } else if (CLucenePlugin::is_index_files(file_name)) {
         *new_file_name = file_name;
         return Status::OK();
     } else {

@@ -52,11 +52,14 @@ public class SparkEtlJob {
     private static final String BITMAP_DICT_FUNC = "bitmap_dict";
     private static final String TO_BITMAP_FUNC = "to_bitmap";
     private static final String BITMAP_HASH = "bitmap_hash";
+    private static final String BITMAP_HASH64 = "bitmap_hash64";
+    private static final String BITMAP_FROM_BINARY = "bitmap_from_binary";
 
     private String jobConfigFilePath;
     private EtlJobConfig etlJobConfig;
     private Set<Long> hiveSourceTables;
     private Map<Long, Set<String>> tableToBitmapDictColumns;
+    private Map<Long, Set<String>> tableToBitmapBinaryColumns;
     private SparkSession spark;
 
     private SparkEtlJob(String jobConfigFilePath) {
@@ -64,6 +67,7 @@ public class SparkEtlJob {
         this.etlJobConfig = null;
         this.hiveSourceTables = Sets.newHashSet();
         this.tableToBitmapDictColumns = Maps.newHashMap();
+        this.tableToBitmapBinaryColumns = Maps.newHashMap();
     }
 
     private void initSparkEnvironment() {
@@ -95,13 +99,15 @@ public class SparkEtlJob {
 
     /*
      * 1. check bitmap column
-     * 2. fill tableToBitmapDictColumns
-     * 3. remove bitmap_dict and to_bitmap mapping from columnMappings
+     * 2. fill tableToBitmapDictColumns and tableToBitmapBinaryColumns
+     * 3. remove bitmap_dict, bitmap_from_binary and to_bitmap mapping from columnMappings
      */
     private void checkConfig() throws Exception {
         for (Map.Entry<Long, EtlTable> entry : etlJobConfig.tables.entrySet()) {
             boolean isHiveSource = false;
             Set<String> bitmapDictColumns = Sets.newHashSet();
+            Set<String> bitmapBinaryColumns = Sets.newHashSet();
+
             for (EtlFileGroup fileGroup : entry.getValue().fileGroups) {
                 if (fileGroup.sourceType == EtlJobConfig.SourceType.HIVE) {
                     isHiveSource = true;
@@ -111,11 +117,13 @@ public class SparkEtlJob {
                     String columnName = mappingEntry.getKey();
                     String exprStr = mappingEntry.getValue().toDescription();
                     String funcName = functions.expr(exprStr).expr().prettyName();
-                    if (funcName.equalsIgnoreCase(BITMAP_HASH)) {
-                        throw new SparkDppException("spark load not support bitmap_hash now");
+                    if (funcName.equalsIgnoreCase(BITMAP_HASH) || funcName.equalsIgnoreCase(BITMAP_HASH64)) {
+                        throw new SparkDppException("spark load not support bitmap_hash or bitmap_hash64 now");
                     }
                     if (funcName.equalsIgnoreCase(BITMAP_DICT_FUNC)) {
                         bitmapDictColumns.add(columnName.toLowerCase());
+                    } else if (funcName.equalsIgnoreCase(BITMAP_FROM_BINARY)) {
+                        bitmapBinaryColumns.add(columnName.toLowerCase());
                     } else if (!funcName.equalsIgnoreCase(TO_BITMAP_FUNC)) {
                         newColumnMappings.put(mappingEntry.getKey(), mappingEntry.getValue());
                     }
@@ -129,6 +137,9 @@ public class SparkEtlJob {
             if (!bitmapDictColumns.isEmpty()) {
                 tableToBitmapDictColumns.put(entry.getKey(), bitmapDictColumns);
             }
+            if (!bitmapBinaryColumns.isEmpty()) {
+                tableToBitmapBinaryColumns.put(entry.getKey(), bitmapBinaryColumns);
+            }
         }
         LOG.info("init hiveSourceTables: " + hiveSourceTables + ", tableToBitmapDictColumns: " +
                 tableToBitmapDictColumns);
@@ -140,7 +151,7 @@ public class SparkEtlJob {
     }
 
     private void processDpp() throws Exception {
-        SparkDpp sparkDpp = new SparkDpp(spark, etlJobConfig, tableToBitmapDictColumns);
+        SparkDpp sparkDpp = new SparkDpp(spark, etlJobConfig, tableToBitmapDictColumns, tableToBitmapBinaryColumns);
         sparkDpp.init();
         sparkDpp.doDpp();
     }
@@ -244,8 +255,9 @@ public class SparkEtlJob {
         try {
             new SparkEtlJob(args[0]).run();
         } catch (Exception e) {
-            System.err.println("spark etl job run failed");
-            LOG.warn(e);
+            String msg = "spark etl job run failed";
+            System.err.println(msg);
+            LOG.warn(msg, e);
             System.exit(-1);
         }
     }

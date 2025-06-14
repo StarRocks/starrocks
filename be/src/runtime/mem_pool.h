@@ -115,7 +115,11 @@ public:
     /// Allocates a section of memory of 'size' bytes with DEFAULT_ALIGNMENT at the end
     /// of the the current chunk. Creates a new chunk if there aren't any chunks
     /// with enough capacity.
-    uint8_t* allocate(int64_t size) { return allocate<false>(size, DEFAULT_ALIGNMENT); }
+    uint8_t* allocate(int64_t size) { return allocate<false>(size, DEFAULT_ALIGNMENT, 0); }
+
+    uint8_t* allocate_with_reserve(int64_t size, int reserve) {
+        return allocate<false>(size, DEFAULT_ALIGNMENT, reserve);
+    }
 
     // Don't check memory limit
     uint8_t* allocate_aligned(int64_t size, int alignment) {
@@ -123,7 +127,7 @@ public:
         DCHECK_LE(alignment, config::memory_max_alignment);
         // alignment should be a power of 2
         DCHECK((alignment & (alignment - 1)) == 0);
-        return allocate<false>(size, alignment);
+        return allocate<false>(size, alignment, 0);
     }
 
     /// Makes all allocated chunks available for re-use, but doesn't delete any chunks.
@@ -193,14 +197,14 @@ private:
     }
 
     template <bool CHECK_LIMIT_FIRST>
-    uint8_t* ALWAYS_INLINE allocate(int64_t size, int alignment) {
+    uint8_t* ALWAYS_INLINE allocate(int64_t size, int alignment, int reserve) {
         DCHECK_GE(size, 0);
         if (UNLIKELY(size == 0)) return reinterpret_cast<uint8_t*>(&k_zero_length_region_);
 
         if (current_chunk_idx_ != -1) {
             ChunkInfo& info = chunks_[current_chunk_idx_];
             int64_t aligned_allocated_bytes = BitUtil::RoundUpToPowerOf2(info.allocated_bytes, alignment);
-            if (aligned_allocated_bytes + size <= info.chunk.size) {
+            if (aligned_allocated_bytes + size + reserve <= info.chunk.size) {
                 // Ensure the requested alignment is respected.
                 int64_t padding = aligned_allocated_bytes - info.allocated_bytes;
                 uint8_t* result = info.chunk.data + aligned_allocated_bytes;
@@ -218,7 +222,7 @@ private:
         // guarantee alignment.
         //static_assert(
         //INITIAL_CHUNK_SIZE >= config::FLAGS_MEMORY_MAX_ALIGNMENT, "Min chunk size too low");
-        if (UNLIKELY(!find_chunk(size, CHECK_LIMIT_FIRST))) return nullptr;
+        if (UNLIKELY(!find_chunk(size + reserve, CHECK_LIMIT_FIRST))) return nullptr;
 
         ChunkInfo& info = chunks_[current_chunk_idx_];
         uint8_t* result = info.chunk.data + info.allocated_bytes;
@@ -255,6 +259,6 @@ private:
 };
 
 // Stamp out templated implementations here so they're included in IR module
-template uint8_t* MemPool::allocate<false>(int64_t size, int alignment);
-template uint8_t* MemPool::allocate<true>(int64_t size, int alignment);
+template uint8_t* MemPool::allocate<false>(int64_t size, int alignment, int reserve);
+template uint8_t* MemPool::allocate<true>(int64_t size, int alignment, int reserve);
 } // namespace starrocks

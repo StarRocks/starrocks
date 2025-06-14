@@ -14,6 +14,8 @@
 
 #include "column/binary_column.h"
 
+#include "column/column_view/column_view.h"
+
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -24,12 +26,12 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
+#include "gutil/strings/substitute.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
-
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
@@ -46,22 +48,46 @@ void BinaryColumnBase<T>::check_or_die() const {
 }
 
 template <typename T>
+void BinaryColumnBase<T>::append(const Slice& str) {
+    _bytes.insert(_bytes.end(), str.data, str.data + str.size);
+    _offsets.emplace_back(_bytes.size());
+    _slices_cache = false;
+}
+
+template <typename T>
 void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
+    DCHECK(offset + count <= src.size());
     const auto& b = down_cast<const BinaryColumnBase<T>&>(src);
+
     const unsigned char* p = &b._bytes[b._offsets[offset]];
     const unsigned char* e = &b._bytes[b._offsets[offset + count]];
-
     _bytes.insert(_bytes.end(), p, e);
 
-    for (size_t i = offset; i < offset + count; i++) {
-        size_t l = b._offsets[i + 1] - b._offsets[i];
-        _offsets.emplace_back(_offsets.back() + l);
+    // `new_offsets[i] = offsets[(num_prev_offsets + i - 1) + 1]` is the end offset of the new i-th string.
+    // new_offsets[i] = new_offsets[i - 1] + (b._offsets[offset + i + 1] - b._offsets[offset + i])
+    //    = b._offsets[offset + i + 1] + (new_offsets[i - 1] - b._offsets[offset + i])
+    //    = b._offsets[offset + i + 1] + delta
+    // where `delta` is always the difference between the start offset of the num_prev_offsets-th destination string
+    // and the start offset of the offset-th source string.
+    const size_t num_prev_offsets = _offsets.size();
+    _offsets.resize(num_prev_offsets + count);
+    auto* new_offsets = _offsets.data() + num_prev_offsets;
+    strings::memcpy_inlined(new_offsets, b._offsets.data() + offset + 1, count * sizeof(Offset));
+
+    const auto delta = _offsets[num_prev_offsets - 1] - b._offsets[offset];
+    for (size_t i = 0; i < count; i++) {
+        new_offsets[i] += delta;
     }
+
     _slices_cache = false;
 }
 
 template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_binary_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     const auto& src_offsets = src_column.get_offset();
     const auto& src_bytes = src_column.get_bytes();
@@ -90,8 +116,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 }
 
 template <typename T>
-void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size,
-                                                      bool deep_copy) {
+void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     auto& src_offsets = src_column.get_offset();
     auto& src_bytes = src_column.get_bytes();
@@ -121,8 +146,8 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
-    auto dest = std::dynamic_pointer_cast<BinaryColumnBase<T>>(BinaryColumnBase<T>::create());
+StatusOr<ColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+    auto dest = BinaryColumnBase<T>::create();
     auto& dest_offsets = dest->get_offset();
     auto& dest_bytes = dest->get_bytes();
     auto src_size = offsets.size() - 1; // this->size() may be large than offsets->size() -1
@@ -131,6 +156,11 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
         auto bytes_size = _offsets[i + 1] - _offsets[i];
         total_size += bytes_size * (offsets[i + 1] - offsets[i]);
     }
+
+    if (total_size >= Column::MAX_CAPACITY_LIMIT) {
+        return Status::InternalError("replicated column size will exceed the limit");
+    }
+
     dest_bytes.resize(total_size);
     dest_offsets.resize(dest_offsets.size() + offsets.back());
 
@@ -143,16 +173,28 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
             dest_offsets[j + 1] = pos;
         }
     }
+
     return dest;
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::append_strings(const Buffer<Slice>& strs) {
-    for (const auto& s : strs) {
-        const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
-        _bytes.insert(_bytes.end(), p, p + s.size);
-        _offsets.emplace_back(_bytes.size());
+bool BinaryColumnBase<T>::append_strings(const Slice* data, size_t size) {
+    const size_t prev_num_offsets = _offsets.size();
+    _offsets.resize(prev_num_offsets + size);
+    // offsets[i] represents the beginning address (included) of the new `i`-th string.
+    // offsets[i + 1] represents the end address (excluded) of the new `i`-th string.
+    auto* offsets = _offsets.data() + prev_num_offsets - 1;
+    for (size_t i = 0; i < size; i++) {
+        offsets[i + 1] = offsets[i] + data[i].size;
     }
+
+    _bytes.resize(_offsets.back());
+    auto* bytes = _bytes.data();
+    for (size_t i = 0; i < size; i++) {
+        const auto* const p = reinterpret_cast<const Bytes::value_type*>(data[i].data);
+        strings::memcpy_inlined(bytes + offsets[i], p, data[i].size);
+    }
+
     _slices_cache = false;
     return true;
 }
@@ -160,26 +202,28 @@ bool BinaryColumnBase<T>::append_strings(const Buffer<Slice>& strs) {
 // NOTE: this function should not be inlined. If this function is inlined,
 // the append_strings_overflow will be slower by 30%
 template <typename T, size_t copy_length>
-void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename BinaryColumnBase<T>::Offsets* offsets)
-        __attribute__((noinline));
+void append_fixed_length(const Slice* data, size_t data_size, Bytes* bytes,
+                         typename BinaryColumnBase<T>::Offsets* offsets) __attribute__((noinline));
 
 template <typename T, size_t copy_length>
-void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename BinaryColumnBase<T>::Offsets* offsets) {
+void append_fixed_length(const Slice* data, size_t data_size, Bytes* bytes,
+                         typename BinaryColumnBase<T>::Offsets* offsets) {
     size_t size = bytes->size();
-    for (const auto& s : strs) {
+    for (size_t i = 0; i < data_size; i++) {
+        const auto& s = data[i];
         size += s.size;
     }
 
     size_t offset = bytes->size();
     bytes->resize(size + copy_length);
 
-    size_t rows = strs.size();
+    size_t rows = data_size;
     size_t length = offsets->size();
     raw::stl_vector_resize_uninitialized(offsets, offsets->size() + rows);
 
     for (size_t i = 0; i < rows; ++i) {
-        memcpy(&(*bytes)[offset], strs[i].get_data(), copy_length);
-        offset += strs[i].get_size();
+        memcpy(&(*bytes)[offset], data[i].get_data(), copy_length);
+        offset += data[i].get_size();
         (*offsets)[length++] = offset;
     }
 
@@ -187,19 +231,20 @@ void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename Binar
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
+bool BinaryColumnBase<T>::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
     if (max_length <= 8) {
-        append_fixed_length<T, 8>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 8>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 16) {
-        append_fixed_length<T, 16>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 16>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 32) {
-        append_fixed_length<T, 32>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 32>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 64) {
-        append_fixed_length<T, 64>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 64>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 128) {
-        append_fixed_length<T, 128>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 128>(data, size, &_bytes, &_offsets);
     } else {
-        for (const auto& s : strs) {
+        for (size_t i = 0; i < size; i++) {
+            const auto& s = data[i];
             const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
             _bytes.insert(_bytes.end(), p, p + s.size);
             _offsets.emplace_back(_bytes.size());
@@ -210,17 +255,18 @@ bool BinaryColumnBase<T>::append_strings_overflow(const Buffer<Slice>& strs, siz
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::append_continuous_strings(const Buffer<Slice>& strs) {
-    if (strs.empty()) {
+bool BinaryColumnBase<T>::append_continuous_strings(const Slice* data, size_t size) {
+    if (size == 0) {
         return true;
     }
     size_t new_size = _bytes.size();
-    const auto* p = reinterpret_cast<const uint8_t*>(strs.front().data);
-    const auto* q = reinterpret_cast<const uint8_t*>(strs.back().data + strs.back().size);
+    const auto* p = reinterpret_cast<const uint8_t*>(data[0].data);
+    const auto* q = reinterpret_cast<const uint8_t*>(data[size - 1].data + data[size - 1].size);
     _bytes.insert(_bytes.end(), p, q);
 
-    _offsets.reserve(_offsets.size() + strs.size());
-    for (const Slice& s : strs) {
+    _offsets.reserve(_offsets.size() + size);
+    for (size_t i = 0; i < size; i++) {
+        const auto& s = data[i];
         new_size += s.size;
         _offsets.emplace_back(new_size);
     }
@@ -291,14 +337,18 @@ void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t 
 
 template <typename T>
 void BinaryColumnBase<T>::_build_slices() const {
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        DCHECK_LT(_bytes.size(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+    }
+
     DCHECK(_offsets.size() > 0);
     _slices_cache = false;
     _slices.clear();
 
-    _slices.reserve(_offsets.size() - 1);
+    _slices.resize(_offsets.size() - 1);
 
     for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        _slices.emplace_back(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]);
+        _slices[i] = {_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]};
     }
 
     _slices_cache = true;
@@ -322,7 +372,7 @@ void BinaryColumnBase<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
-Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     size_t replace_num = src.size();
     bool need_resize = false;
@@ -360,8 +410,6 @@ Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* index
         }
         swap_column(*new_binary_column);
     }
-
-    return Status::OK();
 }
 
 template <typename T>
@@ -386,7 +434,7 @@ void BinaryColumnBase<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _offsets.size() - 1 - count;
 
     ColumnPtr column = cut(count, remain_size);
-    auto* binary_column = down_cast<BinaryColumnBase<T>*>(column.get());
+    auto* binary_column = down_cast<const BinaryColumnBase<T>*>(column.get());
     _offsets = std::move(binary_column->_offsets);
     _bytes = std::move(binary_column->_bytes);
     _slices_cache = false;
@@ -505,31 +553,18 @@ int BinaryColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs
 template <typename T>
 uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
     uint32_t max_size = 0;
-    T prev_offset = _offsets[0];
-    for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        T curr_offset = _offsets[i + 1];
+    size_t length = _offsets.size() - 1;
+    for (size_t i = 0; i < length; ++i) {
         // it's safe to cast, because max size of one string is 2^32
-        max_size = std::max(max_size, static_cast<uint32_t>(curr_offset - prev_offset));
-        prev_offset = curr_offset;
+        uint32_t curr_length = _offsets[i + 1] - _offsets[i];
+        max_size = std::max(max_size, curr_length);
     }
     // TODO: may be overflow here, i will solve it later
     return max_size + sizeof(uint32_t);
 }
 
 template <typename T>
-uint32_t BinaryColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
-    // max size of one string is 2^32, so use uint32_t not T
-    auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
-    T offset = _offsets[idx];
-
-    strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
-    strings::memcpy_inlined(pos + sizeof(uint32_t), &_bytes[offset], binary_size);
-
-    return sizeof(uint32_t) + binary_size;
-}
-
-template <typename T>
-uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) {
+uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) const {
     // max size of one string is 2^32, so use uint32_t not T
     uint32_t binary_size = 0;
     strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
@@ -538,7 +573,7 @@ uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) {
 
 template <typename T>
 void BinaryColumnBase<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                          uint32_t max_one_row_size) {
+                                          uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
@@ -569,10 +604,65 @@ void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size
 }
 
 template <typename T>
+void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes,
+                                                          size_t chunk_size, uint32_t max_one_row_size,
+                                                          const uint8_t* null_masks, bool has_null) const {
+    uint32_t* sizes = slice_sizes.data();
+
+    if (!has_null) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
+            sizes[i] += static_cast<uint32_t>(sizeof(bool)) +
+                        serialize(i, dst + i * max_one_row_size + sizes[i] + sizeof(bool));
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
+            sizes[i] += sizeof(bool);
+
+            if (!null_masks[i]) {
+                sizes[i] += serialize(i, dst + i * max_one_row_size + sizes[i]);
+            }
+        }
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
+                                                                Buffer<uint8_t>& is_nulls, bool& has_null) {
+    const uint32_t string_size = *((bool*)srcs[0].data) // is null
+                                         ? 4
+                                         : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
+    _bytes.reserve(chunk_size * string_size * 2);
+    ColumnFactory<Column, BinaryColumnBase<T> >::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
+                                                                                       has_null);
+}
+
+template <typename T>
 void BinaryColumnBase<T>::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i],
                                        static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+template <typename T>
+void BinaryColumnBase<T>::fnv_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                                  uint16_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
+        if (!selection[i]) {
+            continue;
+        }
+        hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i],
+                                       static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::fnv_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel[i];
+        hashes[idx] = HashUtil::fnv_hash(_bytes.data() + _offsets[idx],
+                                         static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]), hashes[idx]);
     }
 }
 
@@ -582,6 +672,27 @@ void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t t
     for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
         hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
                                             static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::crc32_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                                    uint16_t to) const {
+    for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
+        if (!selection[i]) {
+            continue;
+        }
+        hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
+                                            static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::crc32_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel[i];
+        hashes[idx] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[idx],
+                                              static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]), hashes[idx]);
     }
 }
 
@@ -629,7 +740,7 @@ int64_t BinaryColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 template <typename T>
-void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     T start = _offsets[idx];
     T len = _offsets[idx + 1] - start;
     buf->push_string((const char*)_bytes.data() + start, len);
@@ -655,8 +766,10 @@ std::string BinaryColumnBase<T>::raw_item_value(size_t idx) const {
     return s;
 }
 
+// find first overflow point in offsets[start,end)
+// return the first overflow point or end if not found
 size_t find_first_overflow_point(const BinaryColumnBase<uint32_t>::Offsets& offsets, size_t start, size_t end) {
-    for (size_t i = start; i < end; i++) {
+    for (size_t i = start; i < end - 1; i++) {
         if (offsets[i] > offsets[i + 1]) {
             return i + 1;
         }
@@ -689,6 +802,10 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
                 base += Column::MAX_CAPACITY_LIMIT;
                 start = mid;
             }
+
+            // NOTE(yanz): in BinaryColumnBase, we have an invariant that `_offsets.back == _bytes.size()`;  
+            // and since _bytes has been moved to new_column, we have to clear _offset to keep the invariant.
+            _offsets.clear();
             return new_column;
         } else {
             return nullptr;
@@ -733,50 +850,41 @@ bool BinaryColumnBase<T>::has_large_column() const {
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::capacity_limit_reached(std::string* msg) const {
+Status BinaryColumnBase<T>::capacity_limit_reached() const {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
     if constexpr (std::is_same_v<T, uint32_t>) {
         // The size limit of a single element is 2^32 - 1.
         // The size limit of all elements is 2^32 - 1.
         // The number limit of elements is 2^32 - 1.
         if (_bytes.size() >= Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total byte size of binary column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total byte size of binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         } else if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total row count of binary column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total row count of binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         } else {
-            return false;
+            return Status::OK();
         }
     } else {
         // The size limit of a single element is 2^32 - 1.
         // The size limit of all elements is 2^64 - 1.
         // The number limit of elements is 2^32 - 1.
         if (_bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total byte size of large binary column exceed the limit: " +
-                            std::to_string(Column::MAX_LARGE_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total byte size of large binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_LARGE_CAPACITY_LIMIT)));
         } else if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total row count of large binary column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total row count of large binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         } else {
-            return false;
+            return Status::OK();
         }
     }
 }
 
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
-
 } // namespace starrocks

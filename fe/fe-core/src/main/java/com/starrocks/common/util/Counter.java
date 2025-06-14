@@ -36,17 +36,21 @@ package com.starrocks.common.util;
 
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
+import com.starrocks.thrift.TCounterMinMaxType;
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TUnit;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 // Counter means indicators field. The counter's name is key, the counter itself is value.  
 public class Counter {
     private volatile int type;
     private volatile TCounterStrategy strategy;
     private volatile long value;
+    private volatile Optional<Long> minValue = Optional.empty();
+    private volatile Optional<Long> maxValue = Optional.empty();
 
     public long getValue() {
         return value;
@@ -54,6 +58,26 @@ public class Counter {
 
     public void setValue(long newValue) {
         value = newValue;
+    }
+
+    public Optional<Long> getMinValue() {
+        return minValue;
+    }
+
+    public Optional<Long> getMaxValue() {
+        return maxValue;
+    }
+
+    public void setMinValue(long minValue) {
+        this.minValue = Optional.of(minValue);
+    }
+
+    public void setMaxValue(long maxValue) {
+        this.maxValue = Optional.of(maxValue);
+    }
+
+    public void update(long increment) {
+        value += increment;
     }
 
     public TUnit getType() {
@@ -65,16 +89,22 @@ public class Counter {
     }
 
     public boolean isSum() {
-        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM);
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM) ||
+                Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG_SUM);
     }
 
     public boolean isAvg() {
-        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG);
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG)
+                || Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM_AVG);
     }
 
     public boolean isSkipMerge() {
         return Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_ALL)
                 || Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_SECOND_MERGE);
+    }
+
+    public boolean isSkipMinMax() {
+        return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
     }
 
     public void setStrategy(TCounterStrategy strategy) {
@@ -87,7 +117,8 @@ public class Counter {
 
     public Counter(TUnit type, TCounterStrategy strategy, long value) {
         this.type = type.getValue();
-        if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null) {
+        if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null ||
+                strategy.min_max_type == null) {
             this.strategy = Counter.createStrategy(type);
         } else {
             this.strategy = strategy;
@@ -103,11 +134,16 @@ public class Counter {
     }
 
     public static TCounterStrategy createStrategy(TUnit type) {
-        TCounterStrategy strategy = new TCounterStrategy();
         TCounterAggregateType aggregateType = isTimeType(type) ? TCounterAggregateType.AVG : TCounterAggregateType.SUM;
+        return createStrategy(aggregateType);
+    }
+
+    public static TCounterStrategy createStrategy(TCounterAggregateType aggregateType) {
+        TCounterStrategy strategy = new TCounterStrategy();
         TCounterMergeType mergeType = TCounterMergeType.MERGE_ALL;
         strategy.aggregate_type = aggregateType;
         strategy.merge_type = mergeType;
+        strategy.min_max_type = TCounterMinMaxType.MIN_MAX_ALL;
         return strategy;
     }
 
@@ -124,9 +160,15 @@ public class Counter {
             if (counter.getValue() < minValue) {
                 minValue = counter.getValue();
             }
+            if (counter.getMinValue().isPresent() && counter.getMinValue().get() < minValue) {
+                minValue = counter.getMinValue().get();
+            }
 
             if (counter.getValue() > maxValue) {
                 maxValue = counter.getValue();
+            }
+            if (counter.getMaxValue().isPresent() && counter.getMaxValue().get() > maxValue) {
+                maxValue = counter.getMaxValue().get();
             }
 
             mergedValue += counter.getValue();

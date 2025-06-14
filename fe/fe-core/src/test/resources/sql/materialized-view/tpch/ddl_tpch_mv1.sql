@@ -1,4 +1,4 @@
--- partsupp_mv
+-- partsupp_mv, query2/query11/query18
 create materialized view partsupp_mv
 distributed by hash(ps_partkey, ps_suppkey) buckets 24
 refresh deferred manual
@@ -7,7 +7,7 @@ properties (
 )
 as select
               n_name,
-              p_mfgr,p_size,p_type,
+              p_mfgr,p_size,p_type,p_brand,
               ps_partkey, ps_suppkey,ps_supplycost,
               r_name,
               s_acctbal,s_address,s_comment,s_name,s_nationkey,s_phone,

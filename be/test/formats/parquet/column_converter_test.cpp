@@ -44,6 +44,8 @@ protected:
 
     HdfsScannerContext* _create_scan_context() {
         auto* ctx = _pool.add(new HdfsScannerContext());
+        auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
         ctx->timezone = "Asia/Shanghai";
         ctx->stats = &g_hdfs_scan_stats;
         return ctx;
@@ -81,9 +83,10 @@ protected:
 
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-        ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
+        ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
         Status status = file_reader->init(ctx);
@@ -92,7 +95,7 @@ protected:
             return;
         }
         if (!status.ok()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
         }
         ASSERT_TRUE(status.ok());
 
@@ -112,7 +115,7 @@ protected:
             chunk->reset();
             status = file_reader->get_next(&chunk);
             if (!status.ok() && !status.is_end_of_file()) {
-                std::cout << status.get_error_msg() << std::endl;
+                std::cout << status.message() << std::endl;
                 break;
             }
             check_chunk_values(chunk, expected_value);
@@ -243,6 +246,17 @@ TEST_F(ColumnConverterTest, Int32Test) {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
             check(file_path, col_type, col_name, "[-99998]", expected_rows);
         }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+            check(file_path, col_type, col_name, "[-99998]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "time_millis";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+            check(file_path, col_type, col_name, "[3600]", expected_rows);
+        }
     }
     {
         const std::string col_name = "uint8";
@@ -267,6 +281,17 @@ TEST_F(ColumnConverterTest, Int32Test) {
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
             check(file_path, col_type, col_name, "[67676767]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "date";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+            check(file_path, col_type, col_name, "[2023-04-25]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2023-04-25 00:00:00]", expected_rows);
         }
     }
     {
@@ -355,14 +380,14 @@ TEST_F(ColumnConverterTest, Int64Test) {
         const std::string col_name = "time_micros";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
-            check(file_path, col_type, col_name, "[5]", expected_rows, true);
+            check(file_path, col_type, col_name, "[3600]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_nanos";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
-            check(file_path, col_type, col_name, "[5]", expected_rows, true);
+            check(file_path, col_type, col_name, "[3.6e+06]", expected_rows);
         }
     }
     {
@@ -453,6 +478,34 @@ TEST_F(ColumnConverterTest, Int96Test) {
     }
 }
 
+TEST_F(ColumnConverterTest, Int96TimeZoneTest) {
+    const std::string file_path =
+            "./be/test/formats/parquet/test_data/column_converter/int96_timestamp_timezone.parquet";
+    const size_t expected_rows = 2;
+
+    {
+        const std::string col_name = "time_with_new_york";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "time_with_shanghai";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "time_without_timezone";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
+        }
+    }
+}
+
 TEST_F(ColumnConverterTest, FloatTest) {
     const std::string file_path = "./be/test/formats/parquet/test_data/column_converter/float.parquet";
     const size_t expected_rows = 5;
@@ -461,6 +514,10 @@ TEST_F(ColumnConverterTest, FloatTest) {
         const std::string col_name = "float";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT);
+            check(file_path, col_type, col_name, "[-5.55]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
             check(file_path, col_type, col_name, "[-5.55]", expected_rows);
         }
         {

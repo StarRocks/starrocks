@@ -22,7 +22,7 @@ const i64 IS_SET_DEFAULT_ROWSET_TO_BETA_BIT = 0x01;
 
 struct TMasterInfo {
     1: required Types.TNetworkAddress network_address
-    2: required Types.TClusterId cluster_id
+    2: optional Types.TClusterId cluster_id     //deprecated
     3: required Types.TEpoch epoch
     4: optional string token 
     5: optional string backend_ip
@@ -31,6 +31,11 @@ struct TMasterInfo {
     8: optional i64 backend_id
     9: optional i64 min_active_txn_id = 0
     10: optional Types.TRunMode run_mode
+    11: optional list<string> disabled_disks
+    12: optional list<string> decommissioned_disks
+    13: optional bool encrypted;
+    14: optional bool stop_regular_tablet_report; // used for upgrade/downgrade compatibility, can be removed after 3.5
+    15: optional Types.TNodeType node_type
 }
 
 struct TBackendInfo {
@@ -42,6 +47,11 @@ struct TBackendInfo {
     6: optional i32 num_hardware_cores
     7: optional Types.TPort starlet_port
     8: optional i64 reboot_time
+    9: optional bool is_set_storage_path
+
+    10: optional i64 mem_limit_bytes
+
+    11: optional Types.TPort arrow_flight_port
 }
 
 struct THeartbeatResult {

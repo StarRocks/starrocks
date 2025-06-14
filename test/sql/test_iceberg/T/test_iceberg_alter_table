@@ -1,0 +1,48 @@
+-- name: test_iceberg_alter_table
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (
+  id bigint,
+  data string
+)
+comment "table comment"
+properties (
+"file_format"="parquet"
+);
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+add column col1 string comment 'col1';
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+add column col2 string null comment 'col2' after id;
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+add column (col3 string comment 'col3', col4 INT DEFAULT "1");
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+rename column col1 to col11;
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+add column col5 string not null default "--";
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+modify column col4 BIGINT;
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+drop column col4;
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+rename new_ice_tbl_${uuid0};
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0}
+comment = "new comment";
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0}
+set ('file_format'='orc');
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0} force;
+
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

@@ -36,21 +36,23 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 public class PartitionCommitInfo implements Writable {
 
     @SerializedName(value = "partitionId")
-    private long partitionId;
+    private long physicalPartitionId;
     @SerializedName(value = "version")
     private long version;
 
@@ -63,47 +65,57 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "versionTime")
     private long versionTime;
 
+    @SerializedName(value = "dataVersion")
+    private long dataVersion;
+
+    @SerializedName(value = "versionEpoch")
+    private long versionEpoch;
+
     // For low cardinality string column with global dict
     // TODO(KKS): move invalidDictCacheColumns and validDictCacheColumns to TableCommitInfo
     // Currently, for support FE rollback, we persist the invalidDictCacheColumns in PartitionCommitInfo by json,
     // not TableCommitInfo.
 
     @SerializedName(value = "invalidColumns")
-    private List<String> invalidDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
-    private List<String> validDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> validDictCacheColumns = Lists.newArrayList();
+    @SerializedName(value = "DictCollectedVersion")
+    private List<Long> dictCollectedVersions = Lists.newArrayList();
 
     // compaction score quantiles of lake table
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
+    private final Map<Long, Long> tabletIdToRowCountForPartitionFirstLoad = new HashMap<>();
+
+    private boolean isDoubleWrite = false;
+
     public PartitionCommitInfo() {
 
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime) {
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime,
-                               List<String> invalidDictCacheColumns,
-                               List<String> validDictCacheColumns) {
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime,
+                               List<ColumnId> invalidDictCacheColumns,
+                               List<ColumnId> validDictCacheColumns,
+                               List<Long> dictCollectedVersions) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
         this.validDictCacheColumns = validDictCacheColumns;
+        this.dictCollectedVersions = dictCollectedVersions;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static PartitionCommitInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -114,8 +126,8 @@ public class PartitionCommitInfo implements Writable {
         this.versionTime = time;
     }
 
-    public long getPartitionId() {
-        return partitionId;
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getVersion() {
@@ -130,16 +142,48 @@ public class PartitionCommitInfo implements Writable {
         return versionTime;
     }
 
-    public List<String> getInvalidDictCacheColumns() {
+    public long getDataVersion() {
+        return dataVersion;
+    }
+
+    public void setDataVersion(long dataVersion) {
+        this.dataVersion = dataVersion;
+    }
+
+    public long getVersionEpoch() {
+        return versionEpoch;
+    }
+
+    public void setVersionEpoch(long versionEpoch) {
+        this.versionEpoch = versionEpoch;
+    }
+
+    public void setIsDoubleWrite(boolean isDoubleWrite) {
+        this.isDoubleWrite = isDoubleWrite;
+    }
+
+    public boolean isDoubleWrite() {
+        return isDoubleWrite;
+    }
+
+    public List<ColumnId> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
 
-    public List<String> getValidDictCacheColumns() {
+    public List<ColumnId> getValidDictCacheColumns() {
         return validDictCacheColumns;
+    }
+
+    public List<Long> getDictCollectedVersions() {
+        return dictCollectedVersions;
     }
 
     public void setCompactionScore(Quantiles compactionScore) {
         this.compactionScore = compactionScore;
+    }
+
+    public Map<Long, Long> getTabletIdToRowCountForPartitionFirstLoad() {
+        return tabletIdToRowCountForPartitionFirstLoad;
     }
 
     @Nullable
@@ -149,11 +193,11 @@ public class PartitionCommitInfo implements Writable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("partitionid=");
-        sb.append(partitionId);
+        StringBuilder sb = new StringBuilder("partitionId=");
+        sb.append(physicalPartitionId);
         sb.append(", version=").append(version);
-        sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
+        sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();
     }
 }

@@ -16,6 +16,7 @@
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -43,6 +44,7 @@ struct ScannerCounter {
     int64_t init_chunk_ns = 0;
 
     int64_t file_read_ns = 0;
+    int64_t file_read_count = 0;
 };
 
 class FileScanner {
@@ -61,6 +63,9 @@ public:
 
     virtual Status get_schema(std::vector<SlotDescriptor>* schema) { return Status::NotSupported("not implemented"); }
 
+    static Status sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
+                                std::vector<SlotDescriptor>* schema);
+
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
                                      std::shared_ptr<RandomAccessFile>* file);
@@ -68,12 +73,22 @@ public:
     Status create_sequential_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                   const TBrokerScanRangeParams& params, std::shared_ptr<SequentialFile>* file);
 
+    // only for test
+    RuntimeState* TEST_runtime_state() { return _state; }
+    ScannerCounter* TEST_scanner_counter() { return _counter; }
+
+    static void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                             std::vector<SlotDescriptor>* output);
+
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,
                                 int size);
     // materialize is used to transform source chunk depicted by src_slot_descriptors into destination
     // chunk depicted by dest_slot_descriptors
     StatusOr<ChunkPtr> materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast);
+
+    static void sample_files(size_t total_file_count, int64_t sample_file_count,
+                             std::vector<size_t>* sample_file_indexes);
 
 protected:
     RuntimeState* _state;
@@ -85,6 +100,12 @@ protected:
 
     bool _strict_mode;
     int64_t _error_counter;
+    // When column mismatch, files query/load and other type load have different behaviors.
+    // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
+    // files load will not filter rows if file column count is larger that the schema,
+    // so need to check files query/load or other type load in scanner.
+    // Currently only used in csv scanner.
+    TFileScanType::type _file_scan_type;
 
     // sources
     std::vector<SlotDescriptor*> _src_slot_descriptors;

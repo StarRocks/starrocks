@@ -1,0 +1,332 @@
+name: REUSABLE INSPECTION SYSTEM TEST PIPELINE
+
+on:
+  workflow_call:
+    inputs:
+      BRANCH:
+        description: 'BRANCH'
+        required: true
+        type: string
+      COMMIT_ID:
+        description: 'COMMIT ID'
+        required: true
+        type: string
+      TAR_PATH:
+        description: 'TAR PATH'
+        required: true
+        type: string
+      BUILD_TYPE:
+        description: 'BUILD TYPE'
+        required: true
+        type: string
+      LINUX_DISTRO:
+        description: 'LINUX DISTRO'
+        required: true
+        type: string
+        default: 'centos7'
+      CLUSTER_NAME:
+        description: 'CLUSTER NAME'
+        required: false
+        type: string
+        default: ci-admit
+      IS_SELF_BUILD:
+        description: 'IS SELF BUILD'
+        type: string
+        default: 'false'
+      INCLUDE_ADMIT:
+        description: 'RUN ADMIT?'
+        type: string
+        default: 'true'
+      WITH_FEATURE_COV:
+        type: string
+        default: 'false'
+      IS_ARM:
+        type: string
+        default: 'false'
+
+    outputs:
+      CONF_FILE:
+        description: "DEPLOY CONF"
+        value: ${{ jobs.deploy.outputs.deploy_conf_file }}
+      MYSQL_ECI_ID:
+        description: "MySQL ECI ID"
+        value: ${{ jobs.SQL-Tester.outputs.MYSQL_ECI_ID }}
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+env:
+  IS_INSPECTION: true
+  BRANCH: ${{ inputs.BRANCH }}
+  PR_NUMBER: ${{ inputs.COMMIT_ID }}
+  TAR_PATH: ${{ inputs.TAR_PATH }}
+  BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
+  LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
+  CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
+  IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
+  INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
+  WITH_FEATURE_COV: ${{ inputs.WITH_FEATURE_COV }}
+  IS_ARM: ${{ inputs.IS_ARM }}
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, normal]
+    name: DEPLOY SR
+    outputs:
+      fe: ${{steps.deploy_sr.outputs.fe}}
+      be: ${{steps.deploy_sr.outputs.be}}
+      be_list: ${{steps.deploy_sr.outputs.be_list}}
+      deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Apply for resources
+        id: apply_resource
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} ${arm_arg}
+          conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-starrocks_deploy.conf
+          cp conf/starrocks_deploy.conf ${conf_name}
+          echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
+
+      - name: Deploy SR
+        id: deploy_sr
+        if: always() && steps.apply_resource.outcome == 'success'
+        run: |
+          cd ci-tool && source lib/init.sh
+          echo ${TAR_PATH}
+          [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH} --with-coverage ${arm_arg}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/* 
+
+  SQL-Tester:
+    runs-on: [ self-hosted, normal ]
+    name: SQL-Tester
+    needs:
+      - deploy
+    env:
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    outputs:
+      MYSQL_ECI_ID: ${{steps.run_case.outputs.MYSQL_ECI_ID}}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Code
+        run: |
+          git checkout $BRANCH;
+          git reset ${PR_NUMBER} --hard 
+
+      - name: Run Case (${{ needs.deploy.outputs.fe }})
+        id: run_case
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-sql-tester.sh
+
+      - name: Prepare Tools
+        id: prepare-tools
+        if: success() || failure()
+        run: |
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Publish SQL-Tester Report
+        uses: ./.actions/nose-report-action
+        if: always() && steps.prepare-tools.outcome == 'success'
+        with:
+          check_name: SQL-Tester Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: 'test/*.xml'
+
+      - name: Upload log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
+          path: |
+            test/log/
+            test/crash_logs/
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: ignore
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  restart-fe:
+    runs-on: [ self-hosted, normal ]
+    name: Restart FE
+    needs:
+      - deploy
+      - SQL-Tester
+    if: always() && needs.deploy.result == 'success'
+    env:
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart FE (${{needs.deploy.outputs.fe}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/restart-fe.sh --repository ${{ github.repository }} --pr ${PR_NUMBER} --branch ${BRANCH} --build Release
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  restart-be:
+    runs-on: [ self-hosted, normal ]
+    name: Restart BE
+    needs:
+      - deploy
+      - SQL-Tester
+    if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 20
+    env:
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    outputs:
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart BE (${{needs.deploy.outputs.be_list}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
+          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} ${skip_gcov}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  admit:
+    runs-on: [ self-hosted, normal ]
+    name: ADMIT TEST
+    needs:
+      - restart-fe
+      - restart-be
+    if: always() && inputs.INCLUDE_ADMIT == 'true' && inputs.BUILD_TYPE == 'Release' && needs.restart-be.result == 'success' && needs.restart-fe.result == 'success'
+    timeout-minutes: 40
+    env:
+      FE_NODE: ${{ needs.restart-be.outputs.FE_NODE }}
+      BE_NODE: ${{ needs.restart-be.outputs.BE_NODE }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: Run Case
+        run: |
+          echo "FE: ${FE_NODE}, BE: ${BE_NODE}"
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+
+          cd ${{ github.workspace }}
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
+
+          cd ${{ github.workspace }}/ci-tool
+          cluster_type=native
+          ./bin/run-admit-single.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} --cluster ${cluster_type}
+
+      - name: Prepare Tools
+        if: success() || failure()
+        id: prepare-tools
+        run: |
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Publish Admit Report
+        uses: ./.actions/nose-report-action
+        if: always() && steps.prepare-tools.outcome == 'success'
+        with:
+          check_name: Admit Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: './StarRocksTest/result/*.xml'
+
+      - name: Clean ENV
+        if: always()
+        run: rm -rf ${{ github.workspace }}/*
+
+  clean:
+    runs-on: [ self-hosted, normal ]
+    name: CLEAN ENV
+    needs:
+      - deploy
+      - admit
+      - SQL-Tester
+    if: always()
+    env:
+      conf_file: ${{ needs.deploy.outputs.deploy_conf_file }}
+      mysql_eci_id: ${{ needs.SQL-Tester.outputs.MYSQL_ECI_ID }}
+    steps:
+      - name: init
+        run: rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
+
+      - name: Backup Cluster Info
+        if: always() && env.conf_file != ''
+        env:
+          linuxdistro: ${LINUX_DISTRO}
+        run: |
+          cd ci-tool && source lib/init.sh
+          ./bin/backup_log_cores.sh \
+            --branch "${BRANCH}" \
+            --pr "${PR_NUMBER}" \
+            --build "${BUILD_TYPE}" \
+            --conf "${conf_file}" \
+            --repository "${GITHUB_REPOSITORY}" || true
+          ./bin/elastic-cluster.sh --delete
+
+      - name: Delete MySQL Env
+        if: always() && env.mysql_eci_id != ''
+        run: eci rm ${mysql_eci_id}
+
+      - name: Delete Conf
+        if: always() && env.conf_file != ''
+        run: rm -rf ${conf_file}

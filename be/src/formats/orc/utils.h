@@ -14,24 +14,28 @@
 
 #pragma once
 
-#include <exception>
 #include <orc/OrcFile.hh>
-#include <set>
-#include <unordered_map>
 #include <utility>
 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/operator.h"
 #include "formats/orc/orc_mapping.h"
-#include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
-#include "runtime/types.h"
+#include "io/shared_buffered_input_stream.h"
 #include "types/date_value.h"
-#include "types/logical_type.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {
+
+class OrcPredicates {
+public:
+    OrcPredicates(const std::vector<Expr*>* conjuncts, const RuntimeFilterProbeCollector* rf_collector)
+            : conjuncts(conjuncts), rf_collector(rf_collector) {}
+    const std::vector<Expr*>* conjuncts;
+    const RuntimeFilterProbeCollector* rf_collector;
+};
 
 // Hive ORC char type will pad trailing spaces.
 // https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
@@ -53,7 +57,7 @@ public:
 // orc timestamp is millseconds since unix epoch time.
 // timestamp conversion is quite tricky, because it involves timezone info,
 // and it affects how we interpret `value`. according to orc v1 spec
-// https://orc.apache.org/specification/ORCv1/ writer timezoe  is in stripe footer.
+// https://orc.apache.org/specification/ORCv1/ writer timezone is in stripe footer.
 
 // time conversion involves two aspects:
 // 1. timezone (UTC/GMT and local timezone)
@@ -85,12 +89,24 @@ public:
         tv->from_timestamp(tp.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second(), 0);
     }
     static void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone& tz, int64_t tzoffset, int64_t seconds,
-                                    int64_t nanoseconds) {
+                                    int64_t nanoseconds, bool is_instant) {
         if (seconds >= 0) {
-            orc_ts_to_native_ts_after_unix_epoch(tv, seconds + tzoffset, nanoseconds);
+            seconds = is_instant ? seconds + tzoffset : seconds;
+            orc_ts_to_native_ts_after_unix_epoch(tv, seconds, nanoseconds);
         } else {
-            orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
+            if (is_instant) {
+                orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
+            } else {
+                orc_ts_to_native_ts_before_unix_epoch(tv, cctz::utc_time_zone(), seconds, nanoseconds);
+            }
         }
+    }
+
+    static void native_ts_to_orc_ts(const TimestampValue& tv, int64_t& seconds, int64_t& nanoseconds) {
+        Timestamp time = tv._timestamp & TIMESTAMP_BITS_TIME;
+        uint64_t microseconds = time % USECS_PER_SEC;
+        seconds = tv.to_unix_second();
+        nanoseconds = microseconds * 1000;
     }
 };
 

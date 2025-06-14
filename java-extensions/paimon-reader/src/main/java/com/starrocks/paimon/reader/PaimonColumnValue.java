@@ -16,13 +16,32 @@ package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.paimon.data.Decimal;
+import org.apache.paimon.data.InternalArray;
+import org.apache.paimon.data.InternalMap;
+import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.types.ArrayType;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.MapType;
+import org.apache.paimon.types.RowType;
+import org.apache.paimon.utils.InternalRowUtils;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
     private final Object fieldData;
-    public PaimonColumnValue(Object fieldData) {
+    private final DataType dataType;
+    private final String timeZone;
+    public PaimonColumnValue(Object fieldData, DataType dataType, String timeZone) {
         this.fieldData = fieldData;
+        this.dataType = dataType;
+        this.timeZone = timeZone;
     }
     @Override
     public boolean getBoolean() {
@@ -55,32 +74,92 @@ public class PaimonColumnValue implements ColumnValue {
     }
 
     @Override
-    public String getString() {
-        return fieldData.toString();
-    }
-
-    @Override
-    public String getTimestamp(ColumnType.TypeValue type) {
+    public String getString(ColumnType.TypeValue type) {
         return fieldData.toString();
     }
 
     @Override
     public byte[] getBytes() {
-        return new byte[0];
+        return (byte[]) fieldData;
     }
 
     @Override
     public void unpackArray(List<ColumnValue> values) {
-
+        InternalArray array = (InternalArray) fieldData;
+        toPaimonColumnValue(values, array, ((ArrayType) dataType).getElementType());
     }
 
     @Override
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values) {
+        InternalMap map = (InternalMap) fieldData;
+        DataType keyType;
+        DataType valueType;
+        if (dataType instanceof MapType) {
+            keyType = ((MapType) dataType).getKeyType();
+            valueType = ((MapType) dataType).getValueType();
+        } else {
+            throw new UnsupportedOperationException("Unsupported type: " + dataType);
+        }
 
+        InternalArray keyArray = map.keyArray();
+        toPaimonColumnValue(keys, keyArray, keyType);
+
+        InternalArray valueArray = map.valueArray();
+        toPaimonColumnValue(values, valueArray, valueType);
     }
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
+        InternalRow array = (InternalRow) fieldData;
+        List<DataField> fields = ((RowType) dataType).getFields();
+        for (int i = 0; i < structFieldIndex.size(); i++) {
+            Integer idx = structFieldIndex.get(i);
+            PaimonColumnValue cv = null;
+            if (idx != null) {
+                DataField dataField = fields.get(idx);
+                Object o = InternalRowUtils.get(array, idx, dataField.type());
+                if (o != null) {
+                    cv = new PaimonColumnValue(o, dataField.type(), timeZone);
+                }
+            }
+            values.add(cv);
+        }
+    }
 
+    @Override
+    public byte getByte() {
+        return (byte) fieldData;
+    }
+
+    public BigDecimal getDecimal() {
+        return ((Decimal) fieldData).toBigDecimal();
+    }
+
+    private void toPaimonColumnValue(List<ColumnValue> values, InternalArray array, DataType dataType) {
+        for (int i = 0; i < array.size(); i++) {
+            PaimonColumnValue cv = null;
+            Object o = InternalRowUtils.get(array, i, dataType);
+            if (o != null) {
+                cv = new PaimonColumnValue(o, dataType, timeZone);
+            }
+            values.add(cv);
+        }
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((int) fieldData);
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        switch (dataType.getTypeRoot()) {
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+                return ((Timestamp) fieldData).toLocalDateTime();
+            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+                return LocalDateTime.ofInstant(((Timestamp) fieldData).toInstant(), ZoneId.of(timeZone));
+            default:
+                throw new UnsupportedOperationException("Unsupported type: " + type);
+        }
     }
 }

@@ -54,10 +54,6 @@ public class IntersectNode extends SetOperationNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         toThrift(msg, TPlanNodeType.INTERSECT_NODE);
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+        msg.intersect_node.setHas_outer_join_child(hasNullableGenerateChild);
     }
 }

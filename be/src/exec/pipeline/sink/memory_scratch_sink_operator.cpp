@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -45,6 +47,10 @@ bool MemoryScratchSinkOperator::is_finished() const {
 
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
+    }
     return Status::OK();
 }
 
@@ -59,8 +65,12 @@ Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
     // because we introduced pending_finish, once cancel occurs, some states need to be changed so that the pending_finish can end immediately
     _pending_result.reset();
     _is_finished = true;
-    _has_put_sentinel = true;
     _queue->update_status(Status::Cancelled("Set cancelled by MemoryScratchSinkOperator"));
+    // Make sure all waiters in the result queue can get the notification.
+    // NOTE:
+    //   There is no guarantee that pending_finish() will be invoked before set_cancelled().  In case set_cancelled() is
+    //   called before pending_finish(), there is no chance to invoke try_to_put_sentinel() any more.
+    try_to_put_sentinel();
     return Status::OK();
 }
 
@@ -69,6 +79,9 @@ StatusOr<ChunkPtr> MemoryScratchSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
+    // otherwise it will cause memory statistics errors.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }
@@ -88,6 +101,7 @@ Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 }
 
 void MemoryScratchSinkOperator::try_to_put_sentinel() {
+    // NOTE: Must be implemented idempotent!
     if (_pending_result != nullptr) {
         if (!_queue->try_put(_pending_result)) {
             return;
@@ -103,7 +117,7 @@ void MemoryScratchSinkOperator::try_to_put_sentinel() {
 MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc,
                                                                    std::vector<TExpr> t_output_expr,
                                                                    FragmentContext* const fragment_ctx)
-        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_memory_scratch_sink),
+        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _row_desc(row_desc),
           _t_output_expr(std::move(t_output_expr)) {}
 

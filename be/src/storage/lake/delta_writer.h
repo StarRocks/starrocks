@@ -14,11 +14,16 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "storage/lake/delta_writer_finish_mode.h"
+#include "storage/memtable_flush_executor.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class MemTracker;
@@ -26,6 +31,9 @@ class SlotDescriptor;
 class Chunk;
 class TabletSchema;
 class ThreadPool;
+struct FileInfo;
+class TxnLogPB;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -34,38 +42,50 @@ class DeltaWriterImpl;
 class TabletManager;
 class TabletWriter;
 
+// Statistics for DeltaWriter
+struct DeltaWriterStat {
+    std::atomic_int32_t task_count = 0;
+    std::atomic_int64_t pending_time_ns = 0;
+
+    // ====== statistics for write()
+
+    // The number of write()
+    std::atomic_int32_t write_count = 0;
+    // The number of rows to write
+    std::atomic_int32_t row_count = 0;
+    // Accumulated time for write()
+    std::atomic_int64_t write_time_ns = 0;
+    // The number that memtable is full
+    std::atomic_int32_t memtable_full_count = 0;
+    // The number that reach memory limit, and each will
+    // trigger memtable flush, and wait for it to finish
+    std::atomic_int32_t memory_exceed_count = 0;
+    // Accumulated time to wait for flush because of reaching memory limit
+    std::atomic_int64_t write_wait_flush_time_ns = 0;
+
+    // ====== statistics for finish_with_txnlog()
+
+    std::atomic_int64_t finish_time_ns = 0;
+    // Time to wait for memtable flush
+    std::atomic_int64_t finish_wait_flush_time_ns = 0;
+    // Time to prepare txn log in
+    std::atomic_int64_t finish_prepare_txn_log_time_ns = 0;
+    // Time to put txn log
+    std::atomic_int64_t finish_put_txn_log_time_ns = 0;
+    // Time to preload pk
+    std::atomic_int64_t finish_pk_preload_time_ns = 0;
+
+    // ====== statistics for close()
+
+    // Time for close()
+    std::atomic_int64_t close_time_ns = 0;
+};
+
 class DeltaWriter {
-    using Chunk = starrocks::Chunk;
+    friend class DeltaWriterBuilder;
 
 public:
-    using Ptr = std::unique_ptr<DeltaWriter>;
-
-    enum FinishMode {
-        kWriteTxnLog,
-        kDontWriteTxnLog,
-    };
-
-    // for load
-    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
-    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
-
-    // for condition update
-    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
-    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                      MemTracker* mem_tracker);
-
-    // for auto increment
-    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
-    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                      bool miss_auto_increment_column, int64_t table_id, MemTracker* mem_tracker);
-
-    // for schema change
-    // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
-    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
-                      MemTracker* mem_tracker);
+    using TxnLogPtr = std::shared_ptr<const TxnLogPB>;
 
     // Return the thread pool used for performing write IO.
     static ThreadPool* io_threads();
@@ -77,21 +97,28 @@ public:
     DISALLOW_COPY_AND_MOVE(DeltaWriter);
 
     // NOTE: It's ok to invoke this method in a bthread, there is no I/O operation in this method.
-    [[nodiscard]] Status open();
+    Status open();
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status finish(FinishMode mode = kWriteTxnLog);
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
+
+    // Manual flush used by stale memtable flush
+    // different from `flush()`, this method will reduce memory usage in `mem_tracker`
+    Status manual_flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush();
+    Status flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush_async();
+    Status flush_async();
 
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
@@ -104,9 +131,11 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker();
 
-    // Return the list of files created by this DeltaWriter.
+    const int64_t queueing_memtable_num() const;
+
+    // Return the list of file infos created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
-    std::vector<std::string> files() const;
+    std::vector<FileInfo> files() const;
 
     // The sum of all segment file sizes, in bytes.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
@@ -116,13 +145,138 @@ public:
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
     int64_t num_rows() const;
 
-    void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
-                                 const std::vector<int32_t>& referenced_column_ids);
+    bool is_immutable() const;
 
-    void TEST_set_miss_auto_increment_column();
+    Status check_immutable();
+
+    int64_t last_write_ts() const;
+
+    void update_task_stat(int32_t num_tasks, int64_t pending_time_ns);
+
+    const DeltaWriterStat& get_writer_stat() const;
+
+    const FlushStatistic* get_flush_stats() const;
+
+    bool has_spill_block() const;
 
 private:
     DeltaWriterImpl* _impl;
+};
+
+class DeltaWriterBuilder {
+public:
+    using DeltaWriterPtr = std::unique_ptr<DeltaWriter>;
+
+    DeltaWriterBuilder() = default;
+    ~DeltaWriterBuilder() = default;
+
+    DISALLOW_COPY_AND_MOVE(DeltaWriterBuilder);
+
+    DeltaWriterBuilder& set_tablet_manager(TabletManager* tablet_mgr) {
+        _tablet_mgr = tablet_mgr;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_txn_id(int64_t txn_id) {
+        _txn_id = txn_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_table_id(int64_t table_id) {
+        _table_id = table_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_partition_id(int64_t partition_id) {
+        _partition_id = partition_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_tablet_id(int64_t tablet_id) {
+        _tablet_id = tablet_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_slot_descriptors(const std::vector<SlotDescriptor*>* slots) {
+        _slots = slots;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_merge_condition(std::string merge_condition) {
+        _merge_condition = std::move(merge_condition);
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_immutable_tablet_size(int64_t immutable_tablet_size) {
+        _immutable_tablet_size = immutable_tablet_size;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_mem_tracker(MemTracker* mem_tracker) {
+        _mem_tracker = mem_tracker;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_miss_auto_increment_column(bool miss_auto_increment_column) {
+        _miss_auto_increment_column = miss_auto_increment_column;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_max_buffer_size(int64_t max_buffer_size) {
+        _max_buffer_size = max_buffer_size;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_schema_id(int64_t schema_id) {
+        _schema_id = schema_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_load_id(const PUniqueId& load_id) {
+        _load_id = load_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_profile(RuntimeProfile* profile) {
+        _profile = profile;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_bundle_writable_file_context(BundleWritableFileContext* bundle_writable_file_context) {
+        _bundle_writable_file_context = bundle_writable_file_context;
+        return *this;
+    }
+
+    StatusOr<DeltaWriterPtr> build();
+
+private:
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _txn_id{0};
+    int64_t _table_id{0};
+    int64_t _partition_id{0};
+    int64_t _schema_id{0};
+    int64_t _tablet_id{0};
+    const std::vector<SlotDescriptor*>* _slots{nullptr};
+    std::string _merge_condition{};
+    int64_t _immutable_tablet_size{0};
+    MemTracker* _mem_tracker{nullptr};
+    int64_t _max_buffer_size{0};
+    bool _miss_auto_increment_column{false};
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
+    PUniqueId _load_id;
+    RuntimeProfile* _profile{nullptr};
+    BundleWritableFileContext* _bundle_writable_file_context{nullptr};
 };
 
 } // namespace starrocks::lake

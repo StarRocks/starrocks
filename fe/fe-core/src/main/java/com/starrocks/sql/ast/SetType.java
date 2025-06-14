@@ -41,4 +41,18 @@ public enum SetType {
         }
         return SetType.SESSION;
     }
+
+    public String toString() {
+        switch (this) {
+            case USER:
+                return "USER";
+            case GLOBAL:
+                return "GLOBAL";
+            case SESSION:
+                return "SESSION";
+            case VERBOSE:
+                return "VERBOSE";
+        }
+        return "UNKNOWN";
+    }
 }

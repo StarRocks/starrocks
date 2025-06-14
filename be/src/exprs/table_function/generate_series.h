@@ -49,9 +49,10 @@ public:
         return Status::OK();
     }
 
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* base_state) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* base_state) const override {
         using NumericType = RunTimeCppType<Type>;
-        auto max_chunk_size = config::vector_chunk_size;
+        auto max_chunk_size = runtime_state->chunk_size();
         auto state = down_cast<MyState*>(base_state);
         auto res = RunTimeColumnType<Type>::create();
         auto offsets = UInt32Column::create();
@@ -116,7 +117,8 @@ public:
                     }
                 }
 
-                if (current > stop || overflow) {
+                bool done = (step > 0 && current > stop) || (step < 0 && current < stop);
+                if (done || overflow) {
                     move_to_next_row();
                 } else {
                     state->set_offset(current - start);
@@ -124,7 +126,7 @@ public:
             }
         } // while
         offsets->append(res->size());
-        return std::make_pair(Columns{res}, offsets);
+        return std::make_pair(Columns{std::move(res)}, std::move(offsets));
     }
 
 private:

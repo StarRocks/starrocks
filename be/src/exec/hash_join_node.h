@@ -32,7 +32,6 @@ class ExprContext;
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
-static constexpr size_t kHashJoinKeyColumnOffset = 1;
 class HashJoinNode final : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -46,8 +45,12 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    bool can_generate_global_runtime_filter() const;
+    TJoinDistributionMode::type distribution_mode() const;
+    const std::list<RuntimeFilterBuildDescriptor*>& build_runtime_filters() const;
+    void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
 
 private:
     template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
@@ -55,7 +58,7 @@ private:
 
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state);
     // local join includes: broadcast join and colocate join.
     Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
     void _final_update_profile() {
@@ -111,7 +114,11 @@ private:
     std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
-    bool _need_create_tuple_columns = true;
+    bool _enable_late_materialization = false;
+
+    bool _enable_partition_hash_join = false;
+
+    bool _is_skew_join = false;
 
     JoinHashTable _ht;
 
@@ -120,8 +127,8 @@ private:
     ChunkPtr _probing_chunk = nullptr;
 
     Columns _key_columns;
-    size_t _probe_column_count = 0;
-    size_t _build_column_count = 0;
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
     size_t _probe_chunk_count = 0;
     size_t _output_chunk_count = 0;
 
@@ -129,8 +136,7 @@ private:
     // hash table doesn't have reserved data
     bool _ht_has_remain = false;
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
-    bool _right_table_has_remain = false;
-    bool _build_eos = false;
+    bool _right_table_has_remain = true;
     bool _probe_eos = false; // probe table scan finished;
     size_t _runtime_join_filter_pushdown_limit = 1024000;
 
@@ -141,9 +147,9 @@ private:
     RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
     RuntimeProfile::Counter* _probe_timer = nullptr;
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
+    RuntimeProfile::Counter* _probe_counter = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* _output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* _build_rows_counter = nullptr;
     RuntimeProfile::Counter* _probe_rows_counter = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;

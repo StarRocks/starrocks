@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
@@ -69,7 +70,7 @@ public class SetConfigAction extends RestBaseAction {
     }
 
     @Override
-    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
 

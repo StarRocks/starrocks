@@ -29,7 +29,8 @@ namespace starrocks {
  */
 class MultiUnnest final : public TableFunction {
 public:
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* state) const override {
         if (state->get_columns().empty()) {
             return {};
         }
@@ -37,22 +38,26 @@ public:
         long row_count = state->get_columns()[0]->size();
         state->set_processed_rows(row_count);
 
-        std::vector<ColumnPtr> compacted_array_list;
+        Columns unnested_array_list;
         for (auto& col_idx : state->get_columns()) {
             Column* column = col_idx.get();
 
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
-            compacted_array_list.emplace_back(compacted_array_elements);
+            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            unnested_array_list.emplace_back(unnested_array_elements);
         }
 
-        auto compacted_offset_column = UInt32Column::create();
-        long offset = 0;
-        compacted_offset_column->append(offset);
+        auto copy_count_column = UInt32Column::create();
+        uint32_t offset = 0;
+        copy_count_column->append(offset);
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
-            long max_length_array_size = 0;
+            uint32_t max_length_array_size = 0;
             for (auto& col_idx : state->get_columns()) {
                 Column* column = col_idx.get();
+                if (column->is_null(row_idx)) {
+                    // current row is null, ignore the offset.
+                    continue;
+                }
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
@@ -62,31 +67,46 @@ public:
                     max_length_array_size = array_element_length;
                 }
             }
-            compacted_offset_column->append(offset + max_length_array_size);
-            offset += max_length_array_size;
+            if (max_length_array_size == 0 && state->get_is_left_join()) {
+                offset += 1;
+                copy_count_column->append(offset);
+            } else {
+                offset += max_length_array_size;
+                copy_count_column->append(offset);
+            }
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
                 Column* column = state->get_columns()[col_idx].get();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
-                long array_element_length =
-                        offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                compacted_array_list[col_idx]->append(*(col_array->elements_column()),
-                                                      offset_column->get(row_idx).get_int32(), array_element_length);
+                if (max_length_array_size == 0 && state->get_is_left_join()) {
+                    unnested_array_list[col_idx]->append_nulls(1);
+                } else {
+                    if (column->is_null(row_idx)) {
+                        // current row is null, ignore element data.
+                        unnested_array_list[col_idx]->append_nulls(max_length_array_size);
+                    } else {
+                        auto array_element_length =
+                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
+                        unnested_array_list[col_idx]->append(*(col_array->elements_column()),
+                                                             offset_column->get(row_idx).get_int32(),
+                                                             array_element_length);
 
-                if (array_element_length < max_length_array_size) {
-                    compacted_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
+                        if (array_element_length < max_length_array_size) {
+                            unnested_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
+                        }
+                    }
                 }
             }
         }
 
         Columns result;
-        for (auto& col_idx : compacted_array_list) {
+        for (auto& col_idx : unnested_array_list) {
             result.emplace_back(col_idx);
         }
 
-        return std::make_pair(result, compacted_offset_column);
+        return std::make_pair(std::move(result), std::move(copy_count_column));
     }
 
     class UnnestState : public TableFunctionState {
@@ -98,6 +118,10 @@ public:
 
     Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
+        const auto& table_fn = fn.table_fn;
+        if (table_fn.__isset.is_left_join) {
+            (*state)->set_is_left_join(table_fn.is_left_join);
+        }
         return Status::OK();
     }
 

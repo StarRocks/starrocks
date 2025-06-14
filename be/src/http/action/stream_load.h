@@ -35,6 +35,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 
 #include "gen_cpp/PlanNodes_types.h"
 #include "http/http_handler.h"
@@ -47,10 +48,11 @@ namespace starrocks {
 class ExecEnv;
 class Status;
 class StreamLoadContext;
+class ConcurrentLimiter;
 
 class StreamLoadAction : public HttpHandler {
 public:
-    explicit StreamLoadAction(ExecEnv* exec_env);
+    explicit StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter);
     ~StreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -69,8 +71,11 @@ private:
     Status _execute_plan_fragment(StreamLoadContext* ctx);
     Status _process_put(HttpRequest* http_req, StreamLoadContext* ctx);
 
+    Status _handle_batch_write(HttpRequest* http_req, StreamLoadContext* ctx);
+
 private:
     ExecEnv* _exec_env;
+    ConcurrentLimiter* _http_concurrent_limiter = nullptr;
 };
 
 } // namespace starrocks

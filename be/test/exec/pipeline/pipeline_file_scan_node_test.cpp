@@ -27,6 +27,7 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -40,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
+#include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/disk_info.h"
 #include "util/mem_info.h"
@@ -63,13 +65,14 @@ public:
         const auto& query_id = params.query_id;
         const auto& fragment_id = params.fragment_instance_id;
 
-        _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
         _query_ctx->set_total_fragments(1);
         _query_ctx->set_delivery_expire_seconds(60);
         _query_ctx->set_query_expire_seconds(60);
         _query_ctx->extend_delivery_lifetime();
         _query_ctx->extend_query_lifetime();
-        _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+        _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                     GlobalEnv::GetInstance()->query_pool_mem_tracker());
         _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
         _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
@@ -88,8 +91,8 @@ public:
         _runtime_state->set_query_ctx(_query_ctx);
         _runtime_state->set_fragment_ctx(_fragment_ctx);
         _pool = _runtime_state->obj_pool();
-
-        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, false));
+        auto sink_dop = degree_of_parallelism;
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop, false));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 
@@ -114,7 +117,6 @@ private:
                               const std::vector<TScanRangeParams>& scan_ranges);
 
     RuntimeState* _runtime_state = nullptr;
-    OlapTableDescriptor* _table_desc = nullptr;
     ObjectPool* _pool = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     ExecEnv* _exec_env = nullptr;
@@ -129,6 +131,7 @@ private:
 
     std::string _file = "./be/test/exec/test_data/csv_scanner/csv_file1";
     Pipelines _pipelines;
+    ExecutionGroupPtr exec_group;
 };
 
 ChunkPtr PipeLineFileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
@@ -186,14 +189,12 @@ std::vector<TScanRangeParams> PipeLineFileScanNodeTest::_create_csv_scan_ranges(
 
 std::shared_ptr<TPlanNode> PipeLineFileScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -215,7 +216,8 @@ DescriptorTbl* PipeLineFileScanNodeTest::_create_table_desc(const std::vector<Ty
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state, _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state, _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                  .ok());
 
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
@@ -223,36 +225,31 @@ DescriptorTbl* PipeLineFileScanNodeTest::_create_table_desc(const std::vector<Ty
 
 void PipeLineFileScanNodeTest::prepare_pipeline() {
     // const auto& params = _request.params;
-
-    _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
     MorselQueueFactoryMap& morsel_queues = _fragment_ctx->morsel_queue_factories();
-    const auto& pipelines = _fragment_ctx->pipelines();
 
-    for (const auto& pipeline : pipelines) {
+    _fragment_ctx->iterate_pipeline([&morsel_queues](auto pipeline) {
         if (pipeline->source_operator_factory()->with_morsels()) {
-            auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
+            auto source_id = pipeline->source_operator_factory()->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue_factory = morsel_queues[source_id];
 
             pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
         }
-    }
+    });
 
-    for (const auto& pipeline : pipelines) {
-        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
-    }
+    _fragment_ctx->iterate_pipeline(
+            [this](auto pipeline) { pipeline->instantiate_drivers(_fragment_ctx->runtime_state()); });
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
-    Status prepare_status = _fragment_ctx->iterate_drivers(
+    _fragment_ctx->iterate_drivers(
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
-    ASSERT_TRUE(prepare_status.ok());
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+        LOG(WARNING) << driver->to_readable_string();
         exec_env->wg_driver_executor()->submit(driver.get());
-        return Status::OK();
     });
 }
 
@@ -265,7 +262,7 @@ void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks:
     for (auto& i : scan_nodes) {
         auto* scan_node = (ScanNode*)(i);
         auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
-                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
+                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, false, true,
                 TTabletInternalParallelMode::type::AUTO);
         DCHECK(morsel_queue_factory.ok());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
@@ -332,7 +329,7 @@ class TestFileScanSinkOperator : public Operator {
 public:
     TestFileScanSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              CounterPtr counter)
-            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
+            : Operator(factory, id, "test_sink", plan_node_id, false, driver_sequence), _counter(std::move(counter)) {}
     ~TestFileScanSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override {
@@ -359,7 +356,6 @@ public:
 
 private:
     CounterPtr _counter;
-    bool _is_finishing = false;
     bool _is_finished = false;
 };
 
@@ -407,12 +403,18 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     starrocks::pipeline::CounterPtr sinkCounter = std::make_shared<starrocks::pipeline::FileScanCounter>();
 
+    exec_group = ExecutionGroupBuilder::create_normal_exec_group();
+
     OpFactories op_factories = file_scan_node->decompose_to_pipeline(_context);
 
     op_factories.push_back(std::make_shared<starrocks::pipeline::TestFileScanSinkOperatorFactory>(
             _context->next_operator_id(), 0, sinkCounter));
 
-    _pipelines.push_back(std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories));
+    _pipelines.push_back(
+            std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories, exec_group.get()));
+    exec_group->add_pipeline(_pipelines.back().get());
+    auto pipelines = _pipelines;
+    _fragment_ctx->set_pipelines({exec_group}, std::move(pipelines));
 
     prepare_pipeline();
 

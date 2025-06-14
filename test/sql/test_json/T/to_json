@@ -1,0 +1,22 @@
+-- name: test_to_json
+
+drop database if exists test_to_json;
+create database test_to_json;
+use test_to_json;
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL,
+  `c1` struct<a int(11), b int(11)> NULL
+) 
+DUPLICATE KEY(`c0`);
+
+INSERT INTO t0 VALUES (1, NULL);
+INSERT INTO t0 VALUES (2, row(1, 1));
+
+select to_json(c1) from t0 order by c0;
+
+SELECT to_json(row(1, 1));
+SELECT to_json(NULL);
+
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ to_json(map{null:null});
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY')*/ to_json(map{null:null});

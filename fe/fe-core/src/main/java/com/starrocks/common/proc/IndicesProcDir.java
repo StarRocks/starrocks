@@ -41,10 +41,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,13 +59,14 @@ import java.util.List;
 public class IndicesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime")
+            .add("VirtualBuckets").add("Tablets")
             .build();
 
     private Database db;
     private OlapTable olapTable;
-    private Partition partition;
+    private PhysicalPartition partition;
 
-    public IndicesProcDir(Database db, OlapTable olapTable, Partition partition) {
+    public IndicesProcDir(Database db, OlapTable olapTable, PhysicalPartition partition) {
         this.db = db;
         this.olapTable = olapTable;
         this.partition = partition;
@@ -77,7 +80,8 @@ public class IndicesProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         // get info
         List<List<Comparable>> indexInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             result.setNames(TITLE_NAMES);
             for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
@@ -86,12 +90,14 @@ public class IndicesProcDir implements ProcDirInterface {
                 indexInfo.add(olapTable.getIndexNameById(materializedIndex.getId()));
                 indexInfo.add(materializedIndex.getState());
                 indexInfo.add(TimeUtils.longToTimeString(materializedIndex.getLastCheckTime()));
+                indexInfo.add(materializedIndex.getVirtualBuckets().size());
+                indexInfo.add(materializedIndex.getTablets().size());
 
                 indexInfos.add(indexInfo);
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // sort by index id
@@ -129,19 +135,20 @@ public class IndicesProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index id format: " + indexIdStr);
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             MaterializedIndex materializedIndex = partition.getIndex(indexId);
             if (materializedIndex == null) {
                 throw new AnalysisException("Index[" + indexId + "] does not exist.");
             }
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                return new LakeTabletsProcNode(db, olapTable, materializedIndex);
+                return new LakeTabletsProcDir(db, olapTable, materializedIndex);
             } else {
                 return new LocalTabletsProcDir(db, olapTable, materializedIndex);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

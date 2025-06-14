@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 import java.util.Objects;
@@ -36,6 +37,7 @@ public class CaseWhenOperator extends CallOperator {
         this.hasElse = other.hasElse;
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
+        checkMaxFlatChildren();
     }
 
     public CaseWhenOperator(Type returnType, CaseWhenOperator other) {
@@ -44,6 +46,7 @@ public class CaseWhenOperator extends CallOperator {
         this.hasElse = other.hasElse;
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
+        checkMaxFlatChildren();
     }
 
     public CaseWhenOperator(Type returnType, ScalarOperator caseClause, ScalarOperator elseClause,
@@ -67,6 +70,15 @@ public class CaseWhenOperator extends CallOperator {
             this.hasElse = true;
             this.arguments.add(elseClause);
         }
+        checkMaxFlatChildren();
+    }
+
+    private void checkMaxFlatChildren() {
+        if (Config.max_scalar_operator_flat_children > 0 &&
+                getNumFlatChildren() > Config.max_scalar_operator_flat_children) {
+            throw new SemanticException(
+                    "The flat children of the case when statement exceeds the FE Config.max_scalar_operator_flat_children");
+        }
     }
 
     public boolean hasCase() {
@@ -77,10 +89,25 @@ public class CaseWhenOperator extends CallOperator {
         return hasElse;
     }
 
+    /**
+     * Remove the ELSE-clause, but not set the hasElse state
+     */
+    public void removeElseClause() {
+        Preconditions.checkState(hasElse);
+        hasElse = false;
+        arguments.remove(arguments.size() - 1);
+    }
+
     // must after call hasElse
     public void setElseClause(ScalarOperator elseClause) {
         Preconditions.checkState(hasElse);
         arguments.set(arguments.size() - 1, elseClause);
+    }
+
+    public void addElseClause(ScalarOperator elseClause) {
+        Preconditions.checkState(!hasElse);
+        hasElse = true;
+        arguments.add(elseClause);
     }
 
     // must after call hasCase
@@ -160,7 +187,7 @@ public class CaseWhenOperator extends CallOperator {
             }
         }
         this.arguments = newArguments;
-        this.whenEnd = this.arguments.size();
+        this.whenEnd = hasElse ? this.arguments.size() - 1 : this.arguments.size();
     }
 
     @Override
@@ -201,7 +228,6 @@ public class CaseWhenOperator extends CallOperator {
                 whenStart == that.whenStart &&
                 whenEnd == that.whenEnd;
     }
-
 
     @Override
     public int hashCode() {

@@ -42,12 +42,19 @@ import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -66,16 +73,17 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
@@ -96,75 +104,78 @@ public class MetadataViewer {
 
             for (String partName : partitions) {
                 Partition partition = olapTable.getPartition(partName);
-                long visibleVersion = partition.getVisibleVersion();
                 short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
 
-                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                    for (Tablet tablet : index.getTablets()) {
-                        long tabletId = tablet.getId();
-                        int count = replicationNum;
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            --count;
-                            List<String> row = Lists.newArrayList();
+                    long visibleVersion = physicalPartition.getVisibleVersion();
 
-                            ReplicaStatus status = ReplicaStatus.OK;
-                            Backend be = infoService.getBackend(replica.getBackendId());
-                            if (be == null || !be.isAvailable() || replica.isBad()) {
-                                status = ReplicaStatus.DEAD;
-                            } else if (replica.getVersion() < visibleVersion
-                                    || replica.getLastFailedVersion() > 0) {
-                                status = ReplicaStatus.VERSION_ERROR;
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
+                            int count = replicationNum;
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                --count;
+                                List<String> row = Lists.newArrayList();
 
-                            } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
-                                status = ReplicaStatus.SCHEMA_ERROR;
+                                ReplicaStatus status = ReplicaStatus.OK;
+                                Backend be = infoService.getBackend(replica.getBackendId());
+                                if (be == null || !be.isAvailable() || replica.isBad()) {
+                                    status = ReplicaStatus.DEAD;
+                                } else if (replica.getVersion() < visibleVersion
+                                        || replica.getLastFailedVersion() > 0) {
+                                    status = ReplicaStatus.VERSION_ERROR;
+
+                                } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
+                                    status = ReplicaStatus.SCHEMA_ERROR;
+                                }
+
+                                if (filterReplica(status, statusFilter, op)) {
+                                    continue;
+                                }
+
+                                row.add(String.valueOf(tabletId));
+                                row.add(String.valueOf(replica.getId()));
+                                row.add(String.valueOf(replica.getBackendId()));
+                                row.add(String.valueOf(replica.getVersion()));
+                                row.add(String.valueOf(replica.getLastFailedVersion()));
+                                row.add(String.valueOf(replica.getLastSuccessVersion()));
+                                row.add(String.valueOf(visibleVersion));
+                                row.add(String.valueOf(Replica.DEPRECATED_PROP_SCHEMA_HASH));
+                                row.add(String.valueOf(replica.getVersionCount()));
+                                row.add(String.valueOf(replica.isBad()));
+                                row.add(String.valueOf(replica.isSetBadForce()));
+                                row.add(replica.getState().name());
+                                row.add(status.name());
+                                result.add(row);
                             }
 
-                            if (filterReplica(status, statusFilter, op)) {
+                            if (filterReplica(ReplicaStatus.MISSING, statusFilter, op)) {
                                 continue;
                             }
 
-                            row.add(String.valueOf(tabletId));
-                            row.add(String.valueOf(replica.getId()));
-                            row.add(String.valueOf(replica.getBackendId()));
-                            row.add(String.valueOf(replica.getVersion()));
-                            row.add(String.valueOf(replica.getLastFailedVersion()));
-                            row.add(String.valueOf(replica.getLastSuccessVersion()));
-                            row.add(String.valueOf(visibleVersion));
-                            row.add(String.valueOf(Replica.DEPRECATED_PROP_SCHEMA_HASH));
-                            row.add(String.valueOf(replica.getVersionCount()));
-                            row.add(String.valueOf(replica.isBad()));
-                            row.add(String.valueOf(replica.isSetBadForce()));
-                            row.add(replica.getState().name());
-                            row.add(status.name());
-                            result.add(row);
-                        }
-
-                        if (filterReplica(ReplicaStatus.MISSING, statusFilter, op)) {
-                            continue;
-                        }
-
-                        // get missing replicas
-                        for (int i = 0; i < count; ++i) {
-                            List<String> row = Lists.newArrayList();
-                            row.add(String.valueOf(tabletId));
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add(FeConstants.NULL_STRING);
-                            row.add(FeConstants.NULL_STRING);
-                            row.add(ReplicaStatus.MISSING.name());
-                            result.add(row);
+                            // get missing replicas
+                            for (int i = 0; i < count; ++i) {
+                                List<String> row = Lists.newArrayList();
+                                row.add(String.valueOf(tabletId));
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add(FeConstants.NULL_STRING);
+                                row.add(FeConstants.NULL_STRING);
+                                row.add(ReplicaStatus.MISSING.name());
+                                result.add(row);
+                            }
                         }
                     }
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
@@ -193,16 +204,15 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
                 throw new DdlException("Table does not exist or is not native table: " + tblName);
             }
@@ -228,7 +238,7 @@ public class MetadataViewer {
             // backend id -> replica count
             Map<Long, Integer> countMap = Maps.newHashMap();
             // init map
-            List<Long> beIds = infoService.getBackendIds(false);
+            List<Long> beIds = getAllComputeNodeIds();
             for (long beId : beIds) {
                 countMap.put(beId, 0);
             }
@@ -236,14 +246,16 @@ public class MetadataViewer {
             int totalReplicaNum = 0;
             for (long partId : partitionIds) {
                 Partition partition = olapTable.getPartition(partId);
-                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    for (Tablet tablet : index.getTablets()) {
-                        for (long beId : tablet.getBackendIds()) {
-                            if (!countMap.containsKey(beId)) {
-                                continue;
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        for (Tablet tablet : index.getTablets()) {
+                            for (long beId : tablet.getBackendIds()) {
+                                if (!countMap.containsKey(beId)) {
+                                    continue;
+                                }
+                                countMap.put(beId, countMap.get(beId) + 1);
+                                totalReplicaNum++;
                             }
-                            countMap.put(beId, countMap.get(beId) + 1);
-                            totalReplicaNum++;
                         }
                     }
                 }
@@ -261,9 +273,120 @@ public class MetadataViewer {
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
+        return result;
+    }
+
+    private static List<Long> getAllComputeNodeIds() throws DdlException {
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> allComputeNodeIds = Lists.newArrayList();
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            List<Long> computeNodeIs = warehouseManager.getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                final Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+            allComputeNodeIds.addAll(computeNodeIs);
+        } else {
+            allComputeNodeIds = infoService.getBackendIds(false);
+
+        }
+        return allComputeNodeIds;
+    }
+
+    public static List<List<String>> getDataDistribution(ShowDataDistributionStmt stmt) throws DdlException {
+        return getDataDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
+    }
+
+    public static List<List<String>> getDataDistribution(
+            String dbName, String tblName, PartitionNames partitionNames) throws DdlException {
+
+        DecimalFormat df = new DecimalFormat("00.00 %");
+        List<List<String>> result = Lists.newArrayList();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Database " + dbName + " does not exsit");
+        }
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
+                throw new DdlException("Table does not exist or is not native table: " + tblName);
+            }
+
+            OlapTable olapTable = (OlapTable) tbl;
+
+            List<Long> partitionIds = Lists.newArrayList();
+            if (partitionNames == null) {
+                for (Partition partition : olapTable.getPartitions()) {
+                    partitionIds.add(partition.getId());
+                }
+            } else {
+                for (String partitionName : partitionNames.getPartitionNames()) {
+                    Partition partition = olapTable.getPartition(partitionName, partitionNames.isTemp());
+                    if (partition == null) {
+                        throw new DdlException("Partition does not exist: " + partitionName);
+                    }
+                    partitionIds.add(partition.getId());
+                }
+            }
+
+            Collections.sort(partitionIds);
+
+            for (long partitionId : partitionIds) {
+                Partition partition = olapTable.getPartition(partitionId);
+                if (partition == null) {
+                    continue;
+                }
+
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        List<Tablet> tablets = index.getTablets();
+
+                        List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(tablets.size());
+                        List<Long> dataSizeStatistics = Lists.newArrayListWithCapacity(tablets.size());
+
+                        long totalRowCount = 0;
+                        long totalDataSize = 0;
+                        long version = physicalPartition.getVisibleVersion();
+                        for (Tablet tablet : tablets) {
+                            long rowCount = tablet.getRowCount(version);
+                            long dataSize = tablet.getDataSize(true);
+                            rowCountStatistics.add(rowCount);
+                            dataSizeStatistics.add(dataSize);
+                            totalRowCount += rowCount;
+                            totalDataSize += dataSize;
+                        }
+
+                        for (int i = 0; i < tablets.size(); i++) {
+                            List<String> row = Lists.newArrayList();
+                            row.add(partition.getName());
+                            row.add(String.valueOf(physicalPartition.getId()));
+                            row.add(olapTable.getIndexNameById(index.getId()));
+                            row.add(index.getVirtualBucketsByTabletId(tablets.get(i).getId()).toString());
+                            row.add(String.valueOf(rowCountStatistics.get(i)));
+                            row.add(totalRowCount == 0L ? "0.00 %"
+                                    : df.format((double) rowCountStatistics.get(i) / totalRowCount));
+                            row.add(String.valueOf(dataSizeStatistics.get(i)));
+                            row.add(totalDataSize == 0L ? "0.00 %"
+                                    : df.format((double) dataSizeStatistics.get(i) / totalDataSize));
+                            result.add(row);
+                        }
+                    }
+                }
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
         return result;
     }
 

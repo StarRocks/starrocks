@@ -40,7 +40,7 @@ public:
     Status get_next_internal(RuntimeState* state, ChunkPtr* chunk, bool* eos,
                              ScopedTimer<MonotonicStopWatch>& probe_timer);
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
@@ -114,11 +114,8 @@ private:
     size_t _probe_rows_index = 0;
 
     bool _eos = false;
-    bool _need_create_tuple_columns = true;
 
     Buffer<SlotDescriptor*> _col_types;
-    Buffer<TupleId> _output_build_tuple_ids;
-    Buffer<TupleId> _output_probe_tuple_ids;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 
@@ -130,6 +127,7 @@ private:
     std::vector<uint32_t> _buf_selective;
 
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+    bool _interpolate_passthrough = false;
 };
 
 } // namespace starrocks

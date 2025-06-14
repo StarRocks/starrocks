@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.collect.ImmutableSet;
+
+import java.util.Set;
+
 public enum EngineType {
     OLAP,
     MYSQL,
@@ -23,9 +27,20 @@ public enum EngineType {
     ICEBERG,
     HUDI,
     JDBC,
+    ODPS,
     FILE;
+
+    public static Set<EngineType> SUPPORT_NOT_NULL_SET = ImmutableSet.of(
+            OLAP,
+            MYSQL,
+            BROKER
+    );
 
     public static EngineType defaultEngine() {
         return OLAP;
+    }
+
+    public static boolean supportNotNullColumn(String engineName) {
+        return SUPPORT_NOT_NULL_SET.contains(EngineType.valueOf(engineName.toUpperCase()));
     }
 }

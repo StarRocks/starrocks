@@ -24,7 +24,7 @@ class AggregateStreamingSourceOperator : public SourceOperator {
 public:
     AggregateStreamingSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                      int32_t driver_sequence, AggregatorPtr aggregator)
-            : SourceOperator(factory, id, "aggregate_streaming_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "aggregate_streaming_source", plan_node_id, false, driver_sequence),
               _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
@@ -33,6 +33,7 @@ public:
 
     bool has_output() const override;
     bool is_finished() const override;
+    Status prepare(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
@@ -57,6 +58,8 @@ public:
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateStreamingSourceOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateStreamingSourceOperator>(this, _id, _plan_node_id, driver_sequence,

@@ -12,22 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.delta;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.hive.CatalogNameType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class DeltaLakeConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeConnector.class);
@@ -36,25 +37,20 @@ public class DeltaLakeConnector implements Connector {
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
+    private final CatalogNameType catalogNameType;
     private final DeltaLakeInternalMgr internalMgr;
     private final DeltaLakeMetadataFactory metadataFactory;
+    private IDeltaLakeMetastore metastore;
 
     public DeltaLakeConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
+        this.catalogNameType = new CatalogNameType(catalogName, "delta_lake");
         this.properties = context.getProperties();
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
-        // TODO extract to ConnectorConfigFactory
-        validate();
         onCreate();
-    }
-
-    public void validate() {
-        String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
-        Util.validateMetastoreUris(hiveMetastoreUris);
     }
 
     @Override
@@ -63,17 +59,15 @@ public class DeltaLakeConnector implements Connector {
     }
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
-        IHiveMetastore metastore = internalMgr.createHiveMetastore();
+        metastore = internalMgr.createDeltaLakeMetastore();
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
                 internalMgr.getHiveMetastoreConf(),
-                properties.get(HIVE_METASTORE_URIS),
-                internalMgr.getHdfsEnvironment()
+                properties,
+                internalMgr.getHdfsEnvironment(),
+                internalMgr.getMetastoreType()
         );
-    }
-
-    public void onCreate() {
     }
 
     public CloudConfiguration getCloudConfiguration() {
@@ -83,5 +77,28 @@ public class DeltaLakeConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+        metadataFactory.metastoreCacheInvalidateCache();
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
+    }
+
+    public void onCreate() {
+        Optional<DeltaLakeCacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+        updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerCacheUpdateProcessor(catalogNameType, updateProcessor.get()));
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return metastore != null;
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return metastore.getSamples();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return metastore.estimateCount();
     }
 }

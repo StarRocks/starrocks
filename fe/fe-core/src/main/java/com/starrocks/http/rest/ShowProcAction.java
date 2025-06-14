@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -75,7 +76,7 @@ public class ShowProcAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         // check authority
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
@@ -129,7 +130,7 @@ public class ShowProcAction extends RestBaseAction {
                     procNode = instance.open(path);
                 }
             } catch (AnalysisException e) {
-                LOG.warn(e.getMessage());
+                LOG.warn(e.getMessage(), e);
                 response.getContent().append("[]");
             }
 
@@ -143,7 +144,7 @@ public class ShowProcAction extends RestBaseAction {
                     response.setContentType("application/json");
                     response.getContent().append(formatResultToJson(columnNames, rows));
                 } catch (AnalysisException e) {
-                    LOG.warn(e.getMessage());
+                    LOG.warn(e.getMessage(), e);
                     response.getContent().append("[]");
                 }
             }

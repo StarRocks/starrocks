@@ -200,5 +200,9 @@ struct PartitionHashMapVariant {
     size_t memory_usage() const;
 
     bool is_nullable() const;
+
+    void set_passthrough();
+
+    void set_enable_pre_agg();
 };
 } // namespace starrocks

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
@@ -24,7 +23,6 @@ import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 // ResourceGroupEntry is used by EditLog to persist ResourceGroupOp in replicated log
@@ -60,10 +58,7 @@ public class ResourceGroupOpEntry implements Writable {
         this.opType = opType;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public TWorkGroupOp toThrift() {
         TWorkGroupOp op = new TWorkGroupOp();

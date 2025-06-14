@@ -141,9 +141,74 @@ void ColumnReader::seekToRowGroup(PositionProviderMap* positions) {
    */
 void expandBytesToLongs(int64_t* buffer, uint64_t numValues) {
     for (size_t i = numValues - 1; i < numValues; --i) {
-        buffer[i] = reinterpret_cast<char*>(buffer)[i];
+        // compiler treat char as unsigned on aarch64, negative tinyint will be wrong,
+        // so use 'int8_t' not 'char' to cast
+        buffer[i] = reinterpret_cast<int8_t*>(buffer)[i];
     }
 }
+
+class LazyColumnReader final : public ColumnReader {
+public:
+    LazyColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe) : type(type), stripe(stripe) {
+        columnId = type.getColumnId();
+    }
+
+    ~LazyColumnReader() override = default;
+
+    uint64_t skip(uint64_t numValues) override {
+        tryInit();
+        return childColumnReader->skip(numValues);
+    }
+
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->next(rowBatch, numValues, notNull);
+    }
+
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->nextEncoded(rowBatch, numValues, notNull);
+    }
+
+    void seekToRowGroup(PositionProviderMap* providers) override {
+        tryInit();
+        childColumnReader->seekToRowGroup(providers);
+    }
+
+    void lazyLoadSkip(uint64_t numValues) override {
+        tryInit();
+        childColumnReader->lazyLoadSkip(numValues);
+    }
+
+    void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->lazyLoadNext(rowBatch, numValues, notNull);
+    }
+
+    void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->lazyLoadNextEncoded(rowBatch, numValues, notNull);
+    }
+
+    void lazyLoadSeekToRowGroup(PositionProviderMap* providers) override {
+        tryInit();
+        childColumnReader->lazyLoadSeekToRowGroup(providers);
+    }
+
+private:
+    void tryInit() {
+        if (!isInit) {
+            childColumnReader = buildReader(type, stripe);
+            isInit = true;
+        }
+    }
+
+    bool isInit = false;
+    const Type& type;
+    // We need use shared_ptr to hold stripe, otherwise, when LazyColumnReader is created, the life cycle of stripe has ended.
+    std::shared_ptr<StripeStreams> stripe;
+    std::unique_ptr<ColumnReader> childColumnReader;
+};
 
 class BooleanColumnReader : public ColumnReader {
 private:
@@ -995,7 +1060,7 @@ private:
     std::vector<uint64_t> lazyLoadFieldIndex;
 
 public:
-    StructColumnReader(const Type& type, StripeStreams& stipe);
+    StructColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
 
     uint64_t skip(uint64_t numValues) override;
 
@@ -1022,13 +1087,16 @@ private:
     void nextInternal(const std::vector<std::unique_ptr<ColumnReader>>& children,
                       const std::vector<uint64_t>& fieldIndex, ColumnVectorBatch& rowBatch, uint64_t numValues,
                       char* notNull);
+
+    bool isAllFieldsLazy();
 };
 
-StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+StructColumnReader::StructColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     // count the number of selected sub-columns
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
-    const std::vector<bool> lazyLoadColumns = stripe.getLazyLoadColumns();
-    switch (static_cast<int64_t>(stripe.getEncoding(columnId).kind())) {
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
+    const std::vector<bool> lazyLoadColumns = stripe->getLazyLoadColumns();
+    switch (static_cast<int64_t>(stripe->getEncoding(columnId).kind())) {
     case proto::ColumnEncoding_Kind_DIRECT: {
         uint64_t fi = 0;
         for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
@@ -1036,7 +1104,9 @@ StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) 
             auto columnId = static_cast<uint64_t>(child.getColumnId());
             if (selectedColumns[columnId]) {
                 if (lazyLoadColumns[columnId]) {
-                    lazyLoadChildren.push_back(buildReader(child, stripe));
+                    // Using LazyColumnReader, will initilize ColumnReader when need it
+                    lazyLoadChildren.push_back(std::make_unique<LazyColumnReader>(child, stripe));
+                    // lazyLoadChildren.push_back(buildReader(child, stripe));
                     lazyLoadFieldIndex.push_back(fi);
                 } else {
                     children.push_back(buildReader(child, stripe));
@@ -1082,6 +1152,10 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
                                       uint64_t numValues, char* notNull) {
     if constexpr (!lazyLoad) {
         ColumnReader::next(rowBatch, numValues, notNull);
+    } else {
+        if (isAllFieldsLazy()) {
+            ColumnReader::next(rowBatch, numValues, notNull);
+        }
     }
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
@@ -1104,6 +1178,10 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
     }
 }
 
+bool StructColumnReader::isAllFieldsLazy() {
+    return children.empty();
+}
+
 void StructColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
     for (auto& ptr : children) {
@@ -1112,14 +1190,20 @@ void StructColumnReader::seekToRowGroup(PositionProviderMap* positions) {
 }
 
 void StructColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
+    if (isAllFieldsLazy()) {
+        ColumnReader::seekToRowGroup(positions);
+    }
     for (auto& ptr : lazyLoadChildren) {
-        ptr->seekToRowGroup(positions);
+        ptr->lazyLoadSeekToRowGroup(positions);
     }
 }
 
 void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
+    if (isAllFieldsLazy()) {
+        numValues = ColumnReader::skip(numValues);
+    }
     for (auto& ptr : lazyLoadChildren) {
-        ptr->skip(numValues);
+        ptr->lazyLoadSkip(numValues);
     }
 }
 
@@ -1137,7 +1221,7 @@ private:
     std::unique_ptr<RleDecoder> rle;
 
 public:
-    ListColumnReader(const Type& type, StripeStreams& stipe);
+    ListColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
     ~ListColumnReader() override;
 
     uint64_t skip(uint64_t numValues) override;
@@ -1148,18 +1232,25 @@ public:
 
     void seekToRowGroup(PositionProviderMap* positions) override;
 
+    void lazyLoadSeekToRowGroup(PositionProviderMap* positions) override;
+    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+
 private:
-    template <bool encoded>
+    uint64_t doSkip(uint64_t numValues, bool isLazyLoad);
+    template <bool encoded, bool lazyLoad>
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
-ListColumnReader::ListColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+ListColumnReader::ListColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     // count the number of selected sub-columns
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
-    RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
-    std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, true);
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
+    RleVersion vers = convertRleVersion(stripe->getEncoding(columnId).kind());
+    std::unique_ptr<SeekableInputStream> stream = stripe->getStream(columnId, proto::Stream_Kind_LENGTH, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in List column");
-    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe->getSharedBuffer());
     const Type& childType = *type.getSubtype(0);
     if (selectedColumns[static_cast<uint64_t>(childType.getColumnId())]) {
         child = buildReader(childType, stripe);
@@ -1170,7 +1261,7 @@ ListColumnReader::~ListColumnReader() {
     // PASS
 }
 
-uint64_t ListColumnReader::skip(uint64_t numValues) {
+uint64_t ListColumnReader::doSkip(uint64_t numValues, bool isLazyLoad) {
     numValues = ColumnReader::skip(numValues);
     ColumnReader* childReader = child.get();
     if (childReader) {
@@ -1186,22 +1277,42 @@ uint64_t ListColumnReader::skip(uint64_t numValues) {
             }
             lengthsRead += chunk;
         }
-        childReader->skip(childrenElements);
+        if (isLazyLoad) {
+            childReader->lazyLoadSkip(childrenElements);
+        } else {
+            childReader->skip(childrenElements);
+        }
     } else {
         rle->skip(numValues);
     }
     return numValues;
 }
 
+uint64_t ListColumnReader::skip(uint64_t numValues) {
+    return doSkip(numValues, false);
+}
+
+void ListColumnReader::lazyLoadSkip(uint64_t numValues) {
+    doSkip(numValues, true);
+}
+
 void ListColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+    nextInternal<false, false>(rowBatch, numValues, notNull);
+}
+
+void ListColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<false, true>(rowBatch, numValues, notNull);
 }
 
 void ListColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+    nextInternal<true, false>(rowBatch, numValues, notNull);
 }
 
-template <bool encoded>
+void ListColumnReader::lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<true, true>(rowBatch, numValues, notNull);
+}
+
+template <bool encoded, bool lazyLoad>
 void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     auto& listBatch = dynamic_cast<ListVectorBatch&>(rowBatch);
@@ -1229,10 +1340,18 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
     offsets[numValues] = static_cast<int64_t>(totalChildren);
     ColumnReader* childReader = child.get();
     if (childReader) {
-        if (encoded) {
-            childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr);
+        if constexpr (lazyLoad) {
+            if (encoded) {
+                childReader->lazyLoadNextEncoded(*(listBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                childReader->lazyLoadNext(*(listBatch.elements.get()), totalChildren, nullptr);
+            }
         } else {
-            childReader->next(*(listBatch.elements.get()), totalChildren, nullptr);
+            if (encoded) {
+                childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                childReader->next(*(listBatch.elements.get()), totalChildren, nullptr);
+            }
         }
     }
 }
@@ -1245,6 +1364,14 @@ void ListColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     }
 }
 
+void ListColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
+    ColumnReader::seekToRowGroup(positions);
+    rle->seek(positions->at(columnId));
+    if (child) {
+        child->lazyLoadSeekToRowGroup(positions);
+    }
+}
+
 class MapColumnReader : public ColumnReader {
 private:
     std::unique_ptr<ColumnReader> keyReader;
@@ -1252,7 +1379,7 @@ private:
     std::unique_ptr<RleDecoder> rle;
 
 public:
-    MapColumnReader(const Type& type, StripeStreams& stipe);
+    MapColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
     ~MapColumnReader() override;
 
     uint64_t skip(uint64_t numValues) override;
@@ -1263,18 +1390,25 @@ public:
 
     void seekToRowGroup(PositionProviderMap* positions) override;
 
+    void lazyLoadSeekToRowGroup(PositionProviderMap* positions) override;
+    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+
 private:
-    template <bool encoded>
+    uint64_t doSkip(uint64_t numValues, bool isLazyLoad);
+    template <bool encoded, bool lazyLoad>
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
-MapColumnReader::MapColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+MapColumnReader::MapColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     // Determine if the key and/or value columns are selected
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
-    RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
-    std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, true);
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
+    RleVersion vers = convertRleVersion(stripe->getEncoding(columnId).kind());
+    std::unique_ptr<SeekableInputStream> stream = stripe->getStream(columnId, proto::Stream_Kind_LENGTH, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in Map column");
-    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe->getSharedBuffer());
     const Type& keyType = *type.getSubtype(0);
     if (selectedColumns[static_cast<uint64_t>(keyType.getColumnId())]) {
         keyReader = buildReader(keyType, stripe);
@@ -1289,7 +1423,7 @@ MapColumnReader::~MapColumnReader() {
     // PASS
 }
 
-uint64_t MapColumnReader::skip(uint64_t numValues) {
+uint64_t MapColumnReader::doSkip(uint64_t numValues, bool isLazyLoad) {
     numValues = ColumnReader::skip(numValues);
     ColumnReader* rawKeyReader = keyReader.get();
     ColumnReader* rawElementReader = elementReader.get();
@@ -1307,10 +1441,18 @@ uint64_t MapColumnReader::skip(uint64_t numValues) {
             lengthsRead += chunk;
         }
         if (rawKeyReader) {
-            rawKeyReader->skip(childrenElements);
+            if (isLazyLoad) {
+                rawKeyReader->lazyLoadSkip(childrenElements);
+            } else {
+                rawKeyReader->skip(childrenElements);
+            }
         }
         if (rawElementReader) {
-            rawElementReader->skip(childrenElements);
+            if (isLazyLoad) {
+                rawElementReader->lazyLoadSkip(childrenElements);
+            } else {
+                rawElementReader->skip(childrenElements);
+            }
         }
     } else {
         rle->skip(numValues);
@@ -1318,15 +1460,31 @@ uint64_t MapColumnReader::skip(uint64_t numValues) {
     return numValues;
 }
 
+uint64_t MapColumnReader::skip(uint64_t numValues) {
+    return doSkip(numValues, false);
+}
+
+void MapColumnReader::lazyLoadSkip(uint64_t numValues) {
+    doSkip(numValues, true);
+}
+
 void MapColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+    nextInternal<false, false>(rowBatch, numValues, notNull);
+}
+
+void MapColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<false, true>(rowBatch, numValues, notNull);
 }
 
 void MapColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+    nextInternal<true, false>(rowBatch, numValues, notNull);
 }
 
-template <bool encoded>
+void MapColumnReader::lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<true, true>(rowBatch, numValues, notNull);
+}
+
+template <bool encoded, bool lazyLoad>
 void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     auto& mapBatch = dynamic_cast<MapVectorBatch&>(rowBatch);
@@ -1354,18 +1512,34 @@ void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValu
     offsets[numValues] = static_cast<int64_t>(totalChildren);
     ColumnReader* rawKeyReader = keyReader.get();
     if (rawKeyReader) {
-        if (encoded) {
-            rawKeyReader->nextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr);
+        if constexpr (lazyLoad) {
+            if (encoded) {
+                rawKeyReader->lazyLoadNextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr);
+            } else {
+                rawKeyReader->lazyLoadNext(*(mapBatch.keys.get()), totalChildren, nullptr);
+            }
         } else {
-            rawKeyReader->next(*(mapBatch.keys.get()), totalChildren, nullptr);
+            if (encoded) {
+                rawKeyReader->nextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr);
+            } else {
+                rawKeyReader->next(*(mapBatch.keys.get()), totalChildren, nullptr);
+            }
         }
     }
     ColumnReader* rawElementReader = elementReader.get();
     if (rawElementReader) {
-        if (encoded) {
-            rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr);
+        if constexpr (lazyLoad) {
+            if (encoded) {
+                rawElementReader->lazyLoadNextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                rawElementReader->lazyLoadNext(*(mapBatch.elements.get()), totalChildren, nullptr);
+            }
         } else {
-            rawElementReader->next(*(mapBatch.elements.get()), totalChildren, nullptr);
+            if (encoded) {
+                rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                rawElementReader->next(*(mapBatch.elements.get()), totalChildren, nullptr);
+            }
         }
     }
 }
@@ -1381,6 +1555,18 @@ void MapColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     }
 }
 
+void MapColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
+    // TODO If struct/map want to support lazy load, here need to handle null carefully
+    ColumnReader::seekToRowGroup(positions);
+    rle->seek(positions->at(columnId));
+    if (keyReader) {
+        keyReader->lazyLoadSeekToRowGroup(positions);
+    }
+    if (elementReader) {
+        elementReader->lazyLoadSeekToRowGroup(positions);
+    }
+}
+
 class UnionColumnReader : public ColumnReader {
 private:
     std::unique_ptr<ByteRleDecoder> rle;
@@ -1389,7 +1575,7 @@ private:
     uint64_t numChildren;
 
 public:
-    UnionColumnReader(const Type& type, StripeStreams& stipe);
+    UnionColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
 
     uint64_t skip(uint64_t numValues) override;
 
@@ -1404,16 +1590,17 @@ private:
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
-UnionColumnReader::UnionColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+UnionColumnReader::UnionColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     numChildren = type.getSubtypeCount();
     childrenReader.resize(numChildren);
     childrenCounts.resize(numChildren);
 
-    std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
+    std::unique_ptr<SeekableInputStream> stream = stripe->getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in Union column");
     rle = createByteRleDecoder(std::move(stream), metrics);
     // figure out which types are selected
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
     for (unsigned int i = 0; i < numChildren; ++i) {
         const Type& child = *type.getSubtype(i);
         if (selectedColumns[static_cast<size_t>(child.getColumnId())]) {
@@ -1885,33 +2072,33 @@ void DecimalHive11ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numVa
 /**
    * Create a reader for the given stripe.
    */
-std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& stripe) {
+std::unique_ptr<ColumnReader> buildReader(const Type& type, std::shared_ptr<StripeStreams>& stripe) {
     switch (static_cast<int64_t>(type.getKind())) {
     case DATE:
     case INT:
     case LONG:
     case SHORT:
-        return std::unique_ptr<ColumnReader>(new IntegerColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new IntegerColumnReader(type, *stripe.get()));
     case BINARY:
     case CHAR:
     case STRING:
     case VARCHAR:
-        switch (static_cast<int64_t>(stripe.getEncoding(type.getColumnId()).kind())) {
+        switch (static_cast<int64_t>(stripe->getEncoding(type.getColumnId()).kind())) {
         case proto::ColumnEncoding_Kind_DICTIONARY:
         case proto::ColumnEncoding_Kind_DICTIONARY_V2:
-            return std::unique_ptr<ColumnReader>(new StringDictionaryColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new StringDictionaryColumnReader(type, *stripe.get()));
         case proto::ColumnEncoding_Kind_DIRECT:
         case proto::ColumnEncoding_Kind_DIRECT_V2:
-            return std::unique_ptr<ColumnReader>(new StringDirectColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new StringDirectColumnReader(type, *stripe.get()));
         default:
             throw NotImplementedYet("buildReader unhandled string encoding");
         }
 
     case BOOLEAN:
-        return std::unique_ptr<ColumnReader>(new BooleanColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new BooleanColumnReader(type, *stripe.get()));
 
     case BYTE:
-        return std::unique_ptr<ColumnReader>(new ByteColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new ByteColumnReader(type, *stripe.get()));
 
     case LIST:
         return std::unique_ptr<ColumnReader>(new ListColumnReader(type, stripe));
@@ -1927,28 +2114,28 @@ std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& strip
 
     case FLOAT:
     case DOUBLE:
-        return std::unique_ptr<ColumnReader>(new DoubleColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new DoubleColumnReader(type, *stripe.get()));
 
     case TIMESTAMP:
-        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, stripe, false));
+        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripe.get(), false));
 
     case TIMESTAMP_INSTANT:
-        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, stripe, true));
+        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripe.get(), true));
 
     case DECIMAL:
         // is this a Hive 0.11 or 0.12 file?
         if (type.getPrecision() == 0) {
-            return std::unique_ptr<ColumnReader>(new DecimalHive11ColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new DecimalHive11ColumnReader(type, *stripe.get()));
         }
         // can we represent the values using int64_t?
         if (type.getPrecision() <= Decimal64ColumnReader::MAX_PRECISION_64) {
-            if (stripe.isDecimalAsLong()) {
-                return std::unique_ptr<ColumnReader>(new Decimal64ColumnReaderV2(type, stripe));
+            if (stripe->isDecimalAsLong()) {
+                return std::unique_ptr<ColumnReader>(new Decimal64ColumnReaderV2(type, *stripe.get()));
             }
-            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, *stripe.get()));
         }
         // otherwise we use the Int128 implementation
-        return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, *stripe.get()));
 
     default:
         throw NotImplementedYet("buildReader unhandled type");

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.analysis.JoinOperator;
@@ -23,17 +22,26 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
-
+    private ScalarOperator skewColumn;
+    private List<ScalarOperator> skewValues;
+    private Optional<PhysicalHashJoinOperator> skewJoinFriend = Optional.empty();
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
-                                    Projection projection) {
+                                    Projection projection,
+                                    ScalarOperator skewColumn,
+                                    List<ScalarOperator> skewValues) {
+
         super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
+        this.skewColumn = skewColumn;
+        this.skewValues = skewValues;
     }
 
     @Override
@@ -61,6 +69,22 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
         return "HASH";
     }
 
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
+    }
+
+    public Optional<PhysicalHashJoinOperator> getSkewJoinFriend() {
+        return skewJoinFriend;
+    }
+
+    public void setSkewJoinFriend(PhysicalHashJoinOperator skewJoinFriend) {
+        this.skewJoinFriend = Optional.ofNullable(skewJoinFriend);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -79,6 +103,5 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
-
 
 }

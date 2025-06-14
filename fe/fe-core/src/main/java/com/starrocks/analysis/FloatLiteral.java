@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
@@ -73,6 +74,11 @@ public class FloatLiteral extends LiteralExpr {
 
     public FloatLiteral(String value) throws AnalysisException {
         this(value, NodePosition.ZERO);
+    }
+
+    public FloatLiteral(String value, Type type) throws AnalysisException {
+        this(value, NodePosition.ZERO);
+        this.type = type;
     }
 
     public FloatLiteral(String value, NodePosition pos) throws AnalysisException {
@@ -126,11 +132,7 @@ public class FloatLiteral extends LiteralExpr {
         // Figure out if this will fit in a FLOAT without loosing precision.
         float fvalue;
         fvalue = value.floatValue();
-        if (fvalue == this.value) {
-            type = Type.FLOAT;
-        } else {
-            type = Type.DOUBLE;
-        }
+        type = Float.toString(fvalue).equals(Double.toString(value)) ? Type.FLOAT : Type.DOUBLE;
     }
 
     private void checkValue(Double value) throws AnalysisException {
@@ -236,8 +238,12 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj);
+    public void parseMysqlParam(ByteBuffer data) {
+        if (type.getPrimitiveType() == PrimitiveType.FLOAT) {
+            value = data.getFloat();
+        } else if (type.getPrimitiveType() == PrimitiveType.DOUBLE) {
+            value = data.getDouble();
+        }
     }
 }
 

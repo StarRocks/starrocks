@@ -14,9 +14,14 @@
 
 #pragma once
 
+#include "exec/pipeline/pipeline_metrics.h"
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 #include "work_group.h"
+
+namespace starrocks::pipeline {
+class PipelineExecutorMetrics;
+}
 
 namespace starrocks::workgroup {
 
@@ -27,13 +32,21 @@ class ScanTaskQueue;
 
 class ScanExecutor {
 public:
-    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue);
-    virtual ~ScanExecutor();
+    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
+                          pipeline::ScanExecutorMetrics* metrics);
+    virtual ~ScanExecutor() = default;
 
     void initialize(int32_t num_threads);
+    void close();
     void change_num_threads(int32_t num_threads);
 
     bool submit(ScanTask task);
+
+    void force_submit(ScanTask task);
+
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
+
+    int64_t num_tasks() const;
 
 private:
     void worker_thread();
@@ -42,7 +55,8 @@ private:
     std::unique_ptr<ScanTaskQueue> _task_queue;
     // _thread_pool must be placed after _task_queue, because worker threads in _thread_pool use _task_queue.
     std::unique_ptr<ThreadPool> _thread_pool;
-    std::atomic<int> _next_id = 0;
+
+    pipeline::ScanExecutorMetrics* _metrics;
 };
 
 } // namespace starrocks::workgroup

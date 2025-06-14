@@ -38,12 +38,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -87,7 +90,7 @@ public class ColocateMetaService {
     private static final String GROUP_ID = "group_id";
     private static final String DB_ID = "db_id";
 
-    private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+    private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
     private static GroupId checkAndGetGroupId(BaseRequest request) throws DdlException {
         long grpId = Long.valueOf(request.getSingleParameter(GROUP_ID).trim());
@@ -107,7 +110,7 @@ public class ColocateMetaService {
 
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
-                throws DdlException {
+                throws DdlException, AccessDeniedException {
             if (redirectToLeader(request, response)) {
                 return;
             }
@@ -139,7 +142,7 @@ public class ColocateMetaService {
                 throws DdlException {
             response.setContentType("application/json");
             RestResult result = new RestResult();
-            result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentColocateIndex());
+            result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentState().getColocateTableIndex());
             sendResult(request, response, result);
         }
     }
@@ -259,15 +262,16 @@ public class ColocateMetaService {
                 isJoin = false;
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(groupId.dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 response.appendContent("Non-exist db");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 return;
             }
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
-                OlapTable table = (OlapTable) globalStateMgr.getCurrentState().getTableIncludeRecycleBin(db, tableId);
+                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                 if (table == null) {
                     response.appendContent("Non-exist table");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -282,7 +286,7 @@ public class ColocateMetaService {
                 response.appendContent("update succeed");
                 sendResult(request, response);
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
     }
@@ -291,7 +295,7 @@ public class ColocateMetaService {
     public static class BucketSeqAction extends ColocateMetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(BucketSeqAction.class);
 
-        BucketSeqAction(ActionController controller) {
+        public BucketSeqAction(ActionController controller) {
             super(controller);
         }
 
@@ -311,14 +315,14 @@ public class ColocateMetaService {
             List<List<Long>> backendsPerBucketSeq = new Gson().fromJson(meta, type);
             LOG.info("get buckets sequence: {}", backendsPerBucketSeq);
 
-            ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentColocateIndex().getGroupSchema(groupId);
+            ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroupSchema(groupId);
             if (backendsPerBucketSeq.size() != groupSchema.getBucketsNum()) {
                 throw new DdlException("Invalid bucket num. expected: " + groupSchema.getBucketsNum() + ", actual: "
                         + backendsPerBucketSeq.size());
             }
 
             List<Long> clusterBackendIds =
-                    GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
             //check the Backend id
             for (List<Long> backendIds : backendsPerBucketSeq) {
                 if (backendIds.size() != groupSchema.getReplicationNum()) {
@@ -349,11 +353,12 @@ public class ColocateMetaService {
             sendResult(request, response);
         }
 
-        private void updateBackendPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
+        public void updateBackendPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
             colocateIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info2 =
                     ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info2);
+            colocateIndex.markGroupUnstable(groupId, true);
         }
     }
 

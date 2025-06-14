@@ -137,12 +137,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const C
         }
 
         auto src_value = src_viewer.value(row);
+        auto limit = config::max_length_for_to_base64;
         if (src_value.size == 0) {
             result.append_null();
             continue;
-        } else if (src_value.size > config::max_length_for_to_base64) {
+        } else if (src_value.size > limit) {
             std::stringstream ss;
-            ss << "to_base64 not supported length > " << config::max_length_for_to_base64;
+            ss << "to_base64 not supported length > " << limit;
             throw std::runtime_error(ss.str());
         }
 
@@ -165,7 +166,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::md5sum(FunctionContext* ctx, const Colu
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
-        list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+        list.emplace_back(col);
     }
 
     auto size = columns[0]->size();
@@ -191,7 +192,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, co
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
-        list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+        list.emplace_back(col);
     }
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_LARGEINT> result(size);

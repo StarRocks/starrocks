@@ -34,19 +34,24 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.BlackListSql;
-import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -143,48 +148,120 @@ public class QueryPlannerTest {
     @Test
     public void testSqlBlackList() throws Exception {
         String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
-        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, setEnableSqlBlacklist);
+        StatementBase statement = SqlParser.parseSingleStatement(setEnableSqlBlacklist,
+                connectContext.getSessionVariable().getSqlMode());
+
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, statement);
         stmtExecutor0.execute();
 
         String addBlackListSql = "add sqlblacklist \"select k1 from .+\"";
-        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, addBlackListSql);
+        statement = SqlParser.parseSingleStatement(addBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
         long id = -1;
-        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            id = entry.getValue().id;
-            Assert.assertEquals("select k1 from .+", entry.getKey());
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("select k1 from .+", entry.pattern.pattern());
         }
 
         String sql = "select k1 from test.baseall";
-        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        statement = SqlParser.parseSingleStatement(sql,
+                connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         stmtExecutor2.execute();
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
                 connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
+        String sqlWithLineSeparators = "select k1 \n" +
+                " from \n" +
+                " test.baseall";
+        StatementBase statement1 =
+                SqlParser.parse(sqlWithLineSeparators, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statement1);
+        stmtExecutor4.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
-        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
+        statement = SqlParser.parseSingleStatement(deleteBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
-        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
+    }
+
+    @Test
+    public void testSqlBlackListWithLineSeparators() throws Exception {
+        String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
+        StatementBase statement = SqlParser.parseSingleStatement(setEnableSqlBlacklist,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, statement);
+        stmtExecutor0.execute();
+
+        String addBlackListSql = "add sqlblacklist \"select \n k1 from .+\"";
+        statement = SqlParser.parseSingleStatement(addBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
+        stmtExecutor1.execute();
+
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
+        long id = -1;
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("select k1 from .+", entry.pattern.pattern());
+        }
+
+        String sql = "select k1 from test.baseall";
+        statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
+        stmtExecutor2.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
+        String sqlWithLineSeparators = "select k1 \n" +
+                " from \n" +
+                " test.baseall";
+        StatementBase statement1 =
+                SqlParser.parse(sqlWithLineSeparators, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statement1);
+        stmtExecutor4.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
+        String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
+        statement = SqlParser.parseSingleStatement(deleteBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
+        stmtExecutor3.execute();
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
     }
 
     @Test
     public void testSqlBlackListUseWhere() throws Exception {
         String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
-        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, setEnableSqlBlacklist);
+        StatementBase statement = SqlParser.parseSingleStatement(setEnableSqlBlacklist,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, statement);
         stmtExecutor0.execute();
 
         String addBlackListSql = "add sqlblacklist \"( where )\"";
-        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, addBlackListSql);
+        statement = SqlParser.parseSingleStatement(addBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
         long id = -1;
-        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            id = entry.getValue().id;
-            Assert.assertEquals("( where )", entry.getKey());
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("( where )", entry.pattern.pattern());
         }
 
         String sql4 = "select k1 as awhere from test.baseall";
@@ -201,30 +278,36 @@ public class QueryPlannerTest {
                 connectContext.getState().getErrorMessage());
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
-        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
+        statement = SqlParser.parseSingleStatement(deleteBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
-        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
     }
-
-    //@Test
+    @Test
     public void testSqlBlackListWithInsert() throws Exception {
         String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
-        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, setEnableSqlBlacklist);
+        StatementBase statement = SqlParser.parseSingleStatement(setEnableSqlBlacklist,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, statement);
         stmtExecutor0.execute();
 
         String addBlackListSql = "add sqlblacklist \"insert into .+ values.+\"";
-        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, addBlackListSql);
+        statement = SqlParser.parseSingleStatement(addBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
         long id = -1;
-        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            id = entry.getValue().id;
-            Assert.assertEquals("insert into .+ values.+", entry.getKey());
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            id = entry.id;
+            Assert.assertEquals("insert into .+ values.+", entry.pattern.pattern());
         }
 
-        String sql = "insert into test.baseall values (1, 1, 1, 1, 1, 'a', '2020-02-05', '2020-02-05 13:22:35', 'starrocks', 33.3, 22.55)";
-        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        String sql =
+                "insert into test.baseall values (1, 1, 1, 1, 1, 'a', '2020-02-05', '2020-02-05 13:22:35', 'starrocks', 33.3, 22.55)";
+        statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         try {
             stmtExecutor2.execute();
@@ -235,8 +318,70 @@ public class QueryPlannerTest {
                 connectContext.getState().getErrorMessage());
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
-        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
+        statement = SqlParser.parseSingleStatement(deleteBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
-        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
+    }
+
+    @Test
+    public void testFollowerProxyQuery() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public FrontendNodeType getFeType() {
+                return FrontendNodeType.FOLLOWER;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        String sql = "select k1 from test.baseall";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        {
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("default");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == false);
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("leader");
+            Assert.assertTrue(executor.isForwardToLeader() == false);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("leader");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
+    }
+
+    @Test
+    public void testErrTypeInQueryState() throws Exception {
+        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ctx.setQueryId(UUIDUtil.genUUID());
+
+        StatementBase statement = SqlParser.parseSingleStatement("select * from test.baseall",
+                ctx.getSessionVariable().getSqlMode());
+        StmtExecutor executor = new StmtExecutor(ctx, statement);
+        executor.execute();
+        Assert.assertEquals(QueryState.ErrType.UNKNOWN, ctx.getState().getErrType());
+
+        statement = SqlParser.parseSingleStatement("select * from test.baseallxxx",
+                ctx.getSessionVariable().getSqlMode());
+        executor = new StmtExecutor(ctx, statement);
+        executor.execute();
+        Assert.assertEquals(QueryState.ErrType.ANALYSIS_ERR, ctx.getState().getErrType());
     }
 }

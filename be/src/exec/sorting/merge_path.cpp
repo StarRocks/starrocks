@@ -473,6 +473,20 @@ void detail::MergeNode::_setup_input() {
 
     const size_t streaming_batch_size = _merger->streaming_batch_size();
     auto get_min = [](size_t n1, size_t n2, size_t n3) { return std::min(std::min(n1, n2), n3); };
+    auto all_ge = [this](const InputSegment& large, const InputSegment& small) -> bool {
+        if (large.len == 0 || small.len == 0) {
+            return false;
+        }
+
+        // Smallest row in large
+        const auto [large_run_idx, large_run_offset] = large.runs.get_run_idx(large.start).value();
+        // Largest row in small
+        const auto [small_run_idx, small_run_offset] = small.runs.get_run_idx(small.start + small.len - 1).value();
+
+        return large.runs.get_run(large_run_idx)
+                       .compare_row(_merger->sort_descs(), small.runs.get_run(small_run_idx), large_run_offset,
+                                    small_run_offset) >= 0;
+    };
 
     if (parent_input_full()) {
         _merge_length = 0;
@@ -480,7 +494,15 @@ void detail::MergeNode::_setup_input() {
         _merge_length = std::min(_left_buffer.len + _right_buffer.len, streaming_batch_size);
     } else if (_left->eos()) {
         if (_left_buffer.len > 0) {
-            _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            // Generally, we can only move forward by the length of std::min(_left_buffer.len, _right_buffer.len).
+            // And it may slow down the merge process to great extent if the length of _left_buffer is very small.
+            // But if all rows in _left_buffer are greater than all rows in _right_buffer, we can simply move forward
+            // by the length of _right_buffer, which can speed up the merge process significantly.
+            if (all_ge(_left_buffer, _right_buffer)) {
+                _merge_length = std::min(_right_buffer.len, streaming_batch_size);
+            } else {
+                _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            }
         } else {
             if (_right_buffer.len < streaming_batch_size) {
                 // Just wait for more data
@@ -491,7 +513,15 @@ void detail::MergeNode::_setup_input() {
         }
     } else if (_right->eos()) {
         if (_right_buffer.len > 0) {
-            _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            // Generally, we can only move forward by the length of std::min(_left_buffer.len, _right_buffer.len).
+            // And it may slow down the merge process to great extent if the length of _right_buffer is very small.
+            // But if all rows in _right_buffer are greater than all rows in _left_buffer, we can simply move forward
+            // by the length of _left_buffer, which can speed up the merge process significantly.
+            if (all_ge(_right_buffer, _left_buffer)) {
+                _merge_length = std::min(_left_buffer.len, streaming_batch_size);
+            } else {
+                _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            }
         } else {
             if (_left_buffer.len < streaming_batch_size) {
                 // Just wait for more data
@@ -595,7 +625,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t num_rows) {
     static TypeDescriptor s_type_desc = TypeDescriptor(TYPE_BIGINT);
     static Chunk::SlotHashMap s_slot_map = {{0, 0}};
-    ColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
+    MutableColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
     ordinal_column->resize(num_rows);
     auto* raw_array = down_cast<Int64Column*>(ordinal_column.get())->get_data().data();
 
@@ -615,7 +645,8 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
                                                std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
                                                const TupleDescriptor* tuple_desc, const TTopNType::type topn_type,
                                                const int64_t offset, const int64_t limit,
-                                               std::vector<MergePathChunkProvider> chunk_providers)
+                                               std::vector<MergePathChunkProvider> chunk_providers,
+                                               TLateMaterializeMode::type mode)
         : _chunk_size(chunk_size > MAX_CHUNK_SIZE ? MAX_CHUNK_SIZE : chunk_size),
           _streaming_batch_size(4 * chunk_size * degree_of_parallelism),
           _degree_of_parallelism(degree_of_parallelism),
@@ -627,7 +658,8 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
           _limit(limit),
           _chunk_providers(std::move(chunk_providers)),
           _process_cnts(degree_of_parallelism),
-          _output_chunks(degree_of_parallelism) {
+          _output_chunks(degree_of_parallelism),
+          _late_materialization_mode(mode) {
     _working_nodes.resize(_degree_of_parallelism);
     _metrics.resize(_degree_of_parallelism);
 
@@ -816,6 +848,8 @@ bool MergePathCascadeMerger::_is_current_stage_done() {
 
 void MergePathCascadeMerger::_forward_stage(const detail::Stage& stage, int32_t worker_num,
                                             std::vector<size_t>* process_cnts) {
+    bool current_stage_finished = true;
+    auto notify = defer_notify_source([&]() { return current_stage_finished; });
     std::lock_guard<std::recursive_mutex> l(_status_m);
     _stage = stage;
     DCHECK_GT(worker_num, 0);
@@ -1098,11 +1132,17 @@ void MergePathCascadeMerger::_finishing() {
 void MergePathCascadeMerger::_init_late_materialization() {
     DeferOp defer([this]() {
         std::for_each(_metrics.begin(), _metrics.end(), [this](auto& metrics) {
-            metrics.profile->add_info_string("LateMaterialization", _late_materialization ? "true" : "false");
+            metrics.profile->add_info_string("LateMaterialization", _late_materialization ? "True" : "False");
         });
     });
-
     if (_chunk_providers.size() <= 2) {
+        _late_materialization = false;
+        return;
+    }
+    if (_late_materialization_mode == TLateMaterializeMode::ALWAYS) {
+        _late_materialization = true;
+        return;
+    } else if (_late_materialization_mode == TLateMaterializeMode::NEVER) {
         _late_materialization = false;
         return;
     }

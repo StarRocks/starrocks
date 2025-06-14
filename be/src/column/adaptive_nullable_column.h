@@ -53,9 +53,14 @@ namespace starrocks {
 // when append null data to AdaptiveNullableColumn, we only need increase _size in AdaptiveNullableColumn,
 // no need to append default to data column and 1 to null column.
 // At the end of AdaptiveNullableColumn, you need to call materialized_nullable() if you want to use the data column and null column.
-class AdaptiveNullableColumn final : public ColumnFactory<NullableColumn, AdaptiveNullableColumn, Column> {
+class AdaptiveNullableColumn final
+        : public CowFactory<ColumnFactory<NullableColumn, AdaptiveNullableColumn>, AdaptiveNullableColumn, Column> {
 public:
-    using SuperClass = ColumnFactory<NullableColumn, AdaptiveNullableColumn, Column>;
+    friend class CowFactory<ColumnFactory<NullableColumn, AdaptiveNullableColumn>, AdaptiveNullableColumn, Column>;
+
+    using SuperClass =
+            CowFactory<ColumnFactory<NullableColumn, AdaptiveNullableColumn>, AdaptiveNullableColumn, Column>;
+
     enum class State {
         kUninitialized,
         kNull,
@@ -68,17 +73,6 @@ public:
 
     explicit AdaptiveNullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
             : SuperClass(std::move(data_column), std::move(null_column)) {
-        DCHECK_EQ(_null_column->size(), _data_column->size());
-        if (_data_column->size() == 0) {
-            _state = State::kUninitialized;
-            _size = 0;
-        } else {
-            _state = State::kMaterialized;
-        }
-    }
-
-    explicit AdaptiveNullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
-            : SuperClass(data_column, null_column) {
         DCHECK_EQ(_null_column->size(), _data_column->size());
         if (_data_column->size() == 0) {
             _state = State::kUninitialized;
@@ -205,7 +199,7 @@ public:
     size_t byte_size(size_t from, size_t size) const override {
         materialized_nullable();
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->byte_size(from, size) + _null_column->Column::byte_size(from, size);
+        return _data_column->byte_size(from, size) + _null_column->byte_size(from, size);
     }
 
     size_t byte_size(size_t idx) const override {
@@ -270,15 +264,13 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
     bool append_nulls(size_t count) override;
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override {
         materialized_nullable();
-        if (_null_column->capacity_limit_reached()) {
-            return Status::InternalError("Size of NullableColumn exceed the limit");
-        }
+        RETURN_IF_ERROR(_null_column->capacity_limit_reached());
 
         return upgrade_helper_func(&_data_column);
     }
@@ -293,11 +285,11 @@ public:
         return _data_column->has_large_column();
     }
 
-    bool append_strings(const Buffer<Slice>& strs) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
-    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
 
-    bool append_continuous_strings(const Buffer<Slice>& strs) override;
+    bool append_continuous_strings(const Slice* data, size_t size) override;
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
@@ -334,19 +326,19 @@ public:
 
     void append_default(size_t count) override { append_nulls(count); }
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t max_one_element_serialize_size() const override {
         materialized_nullable();
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -361,11 +353,11 @@ public:
     }
 
     MutableColumnPtr clone_empty() const override {
-        return NullableColumn::create_mutable(_data_column->clone_empty(), _null_column->clone_empty());
+        return NullableColumn::create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) override;
+                                       size_t count) const override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
@@ -375,7 +367,25 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+
+    ColumnPtr& begin_append_not_default_value() {
+        switch (_state) {
+        case State::kUninitialized: {
+            _state = State::kNotConstant;
+            break;
+        }
+        case State::kNotConstant:
+        case State::kMaterialized: {
+            break;
+        }
+        default: {
+            materialized_nullable();
+            break;
+        }
+        }
+        return _data_column;
+    }
 
     const ColumnPtr& begin_append_not_default_value() const {
         switch (_state) {
@@ -395,7 +405,7 @@ public:
         return _data_column;
     }
 
-    Column* mutable_begin_append_not_default_value() const {
+    Column* mutable_begin_append_not_default_value() {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
@@ -525,7 +535,7 @@ public:
         }
     }
 
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override {
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override {
         materialized_nullable();
         return NullableColumn::replicate(offsets);
     }
@@ -556,9 +566,9 @@ public:
         return NullableColumn::debug_string();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+    Status capacity_limit_reached() const override {
         materialized_nullable();
-        return NullableColumn::capacity_limit_reached(msg);
+        return NullableColumn::capacity_limit_reached();
     }
 
     void check_or_die() const override {
@@ -574,13 +584,13 @@ public:
         if (LIKELY(_size > 0)) {
             switch (_state) {
             case State::kNull: {
-                _data_column->append_default(_size);
+                _data_column->as_mutable_ptr()->append_default(_size);
                 null_column_data().insert(null_column_data().end(), _size, 1);
                 _has_null = true;
                 break;
             }
             case State::kConstant: {
-                _data_column->append_default(_size);
+                _data_column->as_mutable_ptr()->append_default(_size);
                 null_column_data().insert(null_column_data().end(), _size, 0);
                 break;
             }
@@ -598,7 +608,11 @@ public:
     }
 
 private:
-    NullData& null_column_data() const { return _null_column->get_data(); }
+    NullData& null_column_data() const {
+        // TODO(COW): remove const_cast
+        auto* mutable_data_col = const_cast<NullColumn*>(_null_column.get());
+        return mutable_data_col->get_data();
+    }
 
     mutable State _state;
     mutable size_t _size;

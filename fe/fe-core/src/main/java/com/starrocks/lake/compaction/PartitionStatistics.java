@@ -31,11 +31,32 @@ public class PartitionStatistics {
     private long nextCompactionTime;
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
+    // default priority is 0, manual compaction will have priority value 1
+    @SerializedName(value = "priority")
+    private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
+    // not persist on purpose, used to control the interval of continuous partial success compaction
+    private int punishFactor = 1;
+
+    public enum CompactionPriority {
+        DEFAULT(0),
+        MANUAL_COMPACT(1);
+
+        private final int value;
+
+        CompactionPriority(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
 
     public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
-        this.compactionVersion = null;
+        this.compactionVersion = new PartitionVersion(0 /* version */, System.currentTimeMillis() /* createTime */);
         this.nextCompactionTime = 0;
+        this.punishFactor = 1;
     }
 
     public PartitionIdentifier getPartition() {
@@ -74,8 +95,33 @@ public class PartitionStatistics {
         return getCurrentVersion().getVersion() - getCompactionVersion().getVersion();
     }
 
+    public int getPunishFactor() {
+        return punishFactor;
+    }
+
+    private void adjustPunishFactor(Quantiles newCompactionScore) {
+        if (compactionScore != null && newCompactionScore != null) {
+            if (compactionScore.getMax() == newCompactionScore.getMax()) {
+                // this means partial compaction succeeds, need increase punish factor,
+                // so that other partitions' compaction can proceed.
+                // max interval will be CompactionScheduler.MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS * punishFactor
+                punishFactor = Math.min(punishFactor * 2, 360);
+            } else {
+                punishFactor = 1;
+            }
+        } else {
+            punishFactor = 1;
+        }
+    }
+
     public void setCompactionScore(@Nullable Quantiles compactionScore) {
         this.compactionScore = compactionScore;
+    }
+
+    // should only called by compaction
+    public void setCompactionScoreAndAdjustPunishFactor(@Nullable Quantiles compactionScore) {
+        adjustPunishFactor(compactionScore);
+        setCompactionScore(compactionScore);
     }
 
     @Nullable
@@ -83,8 +129,27 @@ public class PartitionStatistics {
         return compactionScore;
     }
 
+    public CompactionPriority getPriority() {
+        // For backward compatibility
+        // prevent null value when deserializing JSON that doesn't include the priority field
+        return priority == null ? CompactionPriority.DEFAULT : priority;
+    }
+
+    public void setPriority(CompactionPriority priority) {
+        this.priority = priority;
+    }
+
+    public void resetPriority() {
+        this.setPriority(CompactionPriority.DEFAULT);
+    }
+
+    public PartitionStatisticsSnapshot getSnapshot() {
+        return new PartitionStatisticsSnapshot(this);
+    }
+
     @Override
     public String toString() {
         return new Gson().toJson(this);
     }
 }
+

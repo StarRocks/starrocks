@@ -17,7 +17,10 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/agg/percentile_cont.h"
 #include "gutil/strings/substitute.h"
+#include "types/logical_type.h"
 #include "util/percentile_value.h"
 #include "util/string_parser.hpp"
 
@@ -37,7 +40,7 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* contex
     }
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(percentile_column, columns[0]->size());
+        return ConstColumn::create(std::move(percentile_column), columns[0]->size());
     } else {
         return percentile_column;
     }
@@ -63,5 +66,34 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_approx_raw(FunctionContext* 
     }
     return builder.build(columns[0]->is_constant());
 }
+
+struct LCPercentileExtracter {
+    template <LogicalType Type>
+    ColumnPtr operator()(const FunctionContext::TypeDesc& type_desc, const ColumnPtr& lc_percentile, double rate) {
+        if constexpr (lt_is_decimal<Type> || lt_is_float<Type> || lt_is_integer<Type> || lt_is_date_or_datetime<Type>) {
+            ColumnBuilder<Type> builder(lc_percentile->size(), type_desc.precision, type_desc.scale);
+            ColumnViewer<TYPE_VARCHAR> viewer(lc_percentile);
+            for (size_t i = 0; i < viewer.size(); ++i) {
+                // process null
+                if (viewer.is_null(i)) {
+                    builder.append_null();
+                    continue;
+                }
+                LowCardPercentileState<Type> state;
+                state.merge(viewer.value(i));
+                if (state.items.empty()) {
+                    builder.append_null();
+                    continue;
+                }
+                auto res = state.build_result(rate);
+                builder.append(res);
+            }
+            return builder.build(lc_percentile->is_constant());
+        } else {
+            throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
+        }
+        return nullptr;
+    }
+};
 
 } // namespace starrocks

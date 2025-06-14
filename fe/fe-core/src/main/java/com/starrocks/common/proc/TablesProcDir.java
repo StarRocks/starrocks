@@ -34,22 +34,25 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -89,15 +92,16 @@ public class TablesProcDir implements ProcDirInterface {
         }
 
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             try {
-                table = db.getTable(Long.parseLong(tableIdOrName));
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
             } catch (NumberFormatException e) {
-                table = db.getTable(tableIdOrName);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableIdOrName);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         if (table == null) {
@@ -113,9 +117,10 @@ public class TablesProcDir implements ProcDirInterface {
 
         // get info
         List<List<Comparable>> tableInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            for (Table table : db.getTables()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 List<Comparable> tableInfo = new ArrayList<Comparable>();
                 TableType tableType = table.getType();
                 tableInfo.add(table.getId());
@@ -132,7 +137,7 @@ public class TablesProcDir implements ProcDirInterface {
                 tableInfos.add(tableInfo);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // sort by table id
@@ -186,18 +191,11 @@ public class TablesProcDir implements ProcDirInterface {
         if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                return ((RangePartitionInfo) partitionInfo).getPartitionColumns()
-                        .stream()
-                        .map(column -> column.getName())
-                        .collect(Collectors.joining(", "));
-            }
-            if (partitionInfo.getType() == PartitionType.LIST) {
-                return ((ListPartitionInfo) partitionInfo).getPartitionColumns()
-                        .stream()
-                        .map(column -> column.getName())
-                        .collect(Collectors.joining(", "));
-            }
+            return Joiner.on(", ")
+                    .join(partitionInfo.getPartitionColumns(table.getIdToColumn())
+                            .stream()
+                            .map(Column::getName)
+                            .collect(Collectors.toList()));
         }
         return NULL_STRING_DEFAULT;
     }
@@ -224,7 +222,7 @@ public class TablesProcDir implements ProcDirInterface {
     private String findStoragePath(Table table) {
         String storageGroup = null;
         if (table.isCloudNativeTableOrMaterializedView()) {
-            storageGroup = ((OlapTable) table).getStoragePath();
+            storageGroup = ((OlapTable) table).getDefaultFilePathInfo().getFullPath();
         }
         return storageGroup != null ? storageGroup : NULL_STRING_DEFAULT;
     }

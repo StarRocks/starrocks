@@ -16,8 +16,6 @@
 
 namespace starrocks {
 
-static Status kOnlyPipelinedEngine = Status::NotSupported("Don't support non-pipelined query engine");
-
 MultiCastDataStreamSink::MultiCastDataStreamSink(RuntimeState* state) : _sinks() {}
 
 void MultiCastDataStreamSink::add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink) {
@@ -32,18 +30,31 @@ Status MultiCastDataStreamSink::init(const TDataSink& thrift_sink, RuntimeState*
 }
 
 Status MultiCastDataStreamSink::prepare(RuntimeState* state) {
-    return kOnlyPipelinedEngine;
+    return Status::NotSupported("Don't support non-pipelined query engine");
 }
 
 Status MultiCastDataStreamSink::open(RuntimeState* state) {
-    return kOnlyPipelinedEngine;
+    return Status::NotSupported("Don't support non-pipelined query engine");
 }
 
 Status MultiCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
-    return kOnlyPipelinedEngine;
+    return Status::NotSupported("Don't support non-pipelined query engine");
 }
 
 Status MultiCastDataStreamSink::send_chunk(RuntimeState* state, Chunk* chunk) {
-    return kOnlyPipelinedEngine;
+    return Status::NotSupported("Don't support non-pipelined query engine");
+}
+
+Status SplitDataStreamSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
+    const TSplitDataStreamSink& split_sink = thrift_sink.split_stream_sink;
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, split_sink.splitExprs, &_split_expr_ctxs, state));
+    TDataSink fakeDataSink{};
+    for (size_t i = 0; i < _sinks.size(); i++) {
+        auto& s = _sinks[i];
+        // super ugly
+        fakeDataSink.stream_sink = split_sink.sinks[i];
+        RETURN_IF_ERROR(s->init(fakeDataSink, state));
+    }
+    return Status::OK();
 }
 } // namespace starrocks

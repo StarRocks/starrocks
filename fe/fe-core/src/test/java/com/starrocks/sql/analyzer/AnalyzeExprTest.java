@@ -115,6 +115,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_map(x -> x is null,[null]),array_map(x -> x is null,null)");
         analyzeSuccess("select array_map((x,y) -> x + y, [], [])");
         analyzeSuccess("select array_map((x,y) -> x, [], [])");
+        analyzeSuccess("select array_map((x,y)->((x is null) and (y is null)), [1232], [[['abc']]])");
         analyzeSuccess("select array_map([1], x -> x)");
         analyzeSuccess("select array_map([1], x -> x + v1) from t0");
         analyzeSuccess("select transform([1], x -> x)");
@@ -129,6 +130,8 @@ public class AnalyzeExprTest {
         analyzeSuccess("select v1, v2, count(v1) over (partition by array_sum(array_map(x->x+1, [1])) order by v2) from tarray");
         analyzeSuccess("with x2 as (select array_map((ss) -> ss * v1, v3) from tarray) select * from x2;");
         analyzeSuccess("select array_map(array_map(x2->x2+1,[1,2,3]),array_map(x1->x1+2,[1,2,3]),(x,y)->(x+y))");
+        analyzeSuccess("select array_map((x,y,z) -> x is null and y is not null or z is not null, [[1]], [null],['abc'])");
+
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
@@ -153,6 +156,7 @@ public class AnalyzeExprTest {
         analyzeFail("select transform(1)");
         analyzeFail("select array_map(x->x+ array_length(array_agg(x)),[2,6]) from tarray");
         analyzeFail("select array_map(x->x >  count(v1), v3) from tarray");
+        analyzeFail("select array_map(array_map(x2->x2+1,[1,2,3]),array_map(x1->x1+x2,[1,2,3]),(x,y)->(x+y))");
     }
 
     @Test
@@ -164,6 +168,8 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_filter(x -> x is null,[null]),array_map(x -> x is null,null)");
         analyzeSuccess("select array_filter((x,y) -> x + y, [], [])");
         analyzeSuccess("select array_filter((x,y) -> x, [], [])");
+        analyzeSuccess("select array_filter((x,y)->((x is null) and (y is null)), [1232], [[['abc']]])");
+        analyzeSuccess("select array_filter((x,y,z) -> x is null and y is not null or z is not null, [[1]], [null],['abc'])");
 
         analyzeFail("select array_filter(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_filter((x,y,z) -> x + y, [], [])");
@@ -313,7 +319,6 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_agg(v1 order by 1) from t0;");
         analyzeSuccess("select array_agg(null);");
         analyzeSuccess("select array_agg(v1 order by v1) from t0;");
-        analyzeSuccess("select array_agg(null order by 11);");
         analyzeSuccess("select array_agg(null order by 1,1);");
         analyzeSuccess("select array_agg(1 order by null,null);");
         analyzeSuccess("select array_agg(1 order by null,null,v1) from t0 group by v2;");
@@ -326,8 +331,23 @@ public class AnalyzeExprTest {
                 "from (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeSuccess("select array_agg(case when c1='a' then struct(1,3) else struct(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeSuccess("select array_agg(vj) from ttypes group by v1;");
+        analyzeSuccess("select array_agg(vm) from ttypes group by v1;");
 
+        analyzeSuccess("select array_agg(distinct v1), array_agg(v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1), count(distinct v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1) from t0 group by v3;");
+        analyzeSuccess("select array_agg(distinct v3) from t0 group by v1;");
+        analyzeSuccess("select array_agg(distinct null) from t0;");
+        analyzeSuccess("select array_agg(1) from t0;");
+        analyzeSuccess("select array_agg(distinct 1) from t0 group by v2;");
+        analyzeSuccess("select array_agg(distinct vm) from ttypes group by v1;");
+        analyzeSuccess("select array_agg(distinct v2), count(distinct v3) from t0 group by rollup(v1);");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0 group by rollup(v1);");
 
+        analyzeFail("select array_agg(distinct vj) from ttypes group by v1;");
+        analyzeFail("select array_agg(null order by 11);");
         analyzeFail("select array_agg(null order by);");
         analyzeFail("select array_agg(null,'a');");
         analyzeFail("select array_agg(1,1);");
@@ -336,6 +356,46 @@ public class AnalyzeExprTest {
                 " (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeFail("select array_agg(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+
+        analyzeSuccess("select array_agg_distinct(v1), array_agg(distinct v1),array_agg(v1) from t0;");
+    }
+
+    @Test
+    public void testGroupConcat() {
+        analyzeSuccess("select group_concat(v1 order by v2 desc), group_concat(distinct v1 order by v2) from t0;");
+        analyzeSuccess("select group_concat(v1 order by v2, v3 desc nulls last) from t0 group by v3;");
+        analyzeSuccess("select group_concat(null) from t0;");
+        analyzeSuccess("select group_concat(null order by null) from t0;");
+        analyzeSuccess("select group_concat(v1 order by null) from t0;");
+        analyzeSuccess("select group_concat(v1 order by 1) from t0;");
+        analyzeSuccess("select group_concat(null);");
+        analyzeSuccess("select group_concat(v1 order by v1) from t0;");
+        analyzeSuccess("select group_concat(distinct null order by 1,1);");
+        analyzeSuccess("select group_concat(1 order by null,null);");
+        analyzeSuccess("select group_concat(1 order by null,null,v1) from t0 group by v2;");
+        analyzeSuccess("select group_concat(a order by b) from (select null as a, null as b " +
+                "union all select v1 as a, v3 as b from t0)A;");
+        analyzeSuccess("select group_concat(v1 order by v1), group_concat(v1),group_concat(v2) from t0;");
+        analyzeSuccess("select group_concat(null,'a');");
+        analyzeSuccess("select group_concat(1,1);");
+        analyzeSuccess("select group_concat(1 order by 1 desc nulls first)");
+
+        analyzeFail("select group_concat(case when c1='a' then [1,3] else [1,2] end order by c3) as arr1 " +
+                "from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(case when c1='a' then map(1,3) else map(1,2) end order by c3) as arr1 " +
+                "from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(case when c1='a' then struct(1,3) else struct(1,2) end order by c3) as arr1" +
+                " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(null order by 11);");
+        analyzeFail("select group_concat(null order by);");
+        analyzeFail("select group_concat()");
+        analyzeFail("select group_concat(separator '')");
+        analyzeFail("select group_concat(case when c1='a' then struct(1,3) else map(1,2) end order by c3) as arr1 from " +
+                " (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
+                " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(1 order by 1 nulls first desc)");
+        analyzeFail("select group_concat(name) over (partition by id) from ss");
     }
 
     @Test
@@ -373,6 +433,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map_concat(NULL)");
         analyzeSuccess("select map_concat(NULL,NULL)");
         analyzeSuccess("select map_concat(NULL,map{})");
+        analyzeSuccess("select map_concat(NULL,map{to_date(\"2020-02-02 00:00:00\"):2})");
 
         analyzeFail("select cardinality();");
         analyzeFail("select cardinality(map{},map{})");
@@ -439,6 +500,41 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby('[a,b]','[1,2]')");
         analyzeFail("select array_sum('[1,2]')");
         analyzeFail("select array_to_bitmap('[1,2]')");
+        analyzeFail("select array_sortby([1, 2, 3])");
+        analyzeFail("select array_sortby([1, 2, 3], [1, 2, 3], 'a')");
+        analyzeFail("select array_sortby([map{'a':1, 'b':2, 'c':3}], " +
+                "[map{'a':1, 'b':2, 'c':3}], [map{'c':4, 'd':5, 'e':6}])");
+    }
+
+    @Test
+    public void testAnalyseNullToBoolean() {
+        analyzeSuccess("select coalesce(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select coalesce([to_date(\"2020-02-02 00:00:00\")], [])");
+        analyzeSuccess("select coalesce(struct(to_date(\"2020-02-02 00:00:00\")), NULL)");
+        analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select map_from_arrays([1, 2], NULL)");
+    }
+
+    @Test
+    public void testMapInvalidKeyType() {
+        analyzeSuccess("select map(1, 2)");
+        analyzeSuccess("select map(1, [])");
+        analyzeSuccess("select map('a', row(1, 2))");
+        analyzeSuccess("select map('abc', row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as date), row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as datetime), row(1, 2))");
+
+        analyzeFail("select map([], 123)");
+        analyzeFail("select map(row(1,2,3), 123)");
+        analyzeFail("select map(map(1,2), 123)");
+        analyzeFail("select map(parse_json('{\"a\": 1}'), map(1,2))");
+    }
+
+    @Test
+    public void testNgramSearch() {
+        analyzeFail("select ngram_search('abc', 'a')");
+        analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
+        analyzeFail("select ngram_search(th,th,4) from tall;");
     }
 
 }

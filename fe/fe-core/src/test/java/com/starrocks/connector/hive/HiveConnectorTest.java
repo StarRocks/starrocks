@@ -24,6 +24,8 @@ import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.MetastoreType;
+import com.starrocks.qe.ConnectContext;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -37,7 +39,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 
 public class HiveConnectorTest {
     private HiveMetaClient client;
@@ -56,11 +58,12 @@ public class HiveConnectorTest {
         executorForPullFiles = Executors.newFixedThreadPool(5);
 
         client = new HiveMetastoreTest.MockedHiveMetaClient();
-        metastore = new HiveMetastore(client, "hive_catalog");
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+                metastore, executorForHmsRefresh, executorForHmsRefresh,
+                100, 10, 1000, false);
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
@@ -102,16 +105,47 @@ public class HiveConnectorTest {
         HiveConnector hiveConnector = new HiveConnector(new ConnectorContext("hive_catalog", "hive", properties));
         ConnectorMetadata metadata = hiveConnector.getMetadata();
         Assert.assertTrue(metadata instanceof HiveMetadata);
-        HiveMetadata hiveMetadata = (HiveMetadata) metadata;
-        com.starrocks.catalog.Table table = hiveMetadata.getTable("db1", "tbl1");
+        com.starrocks.catalog.Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
-        Assert.assertEquals("db1", hiveTable.getDbName());
-        Assert.assertEquals("tbl1", hiveTable.getTableName());
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
         Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
+    }
+
+    @Test
+    public void testCreateHiveConnectorWithMetaStoreType(@Mocked HiveConnectorInternalMgr internalMgr) {
+        FeConstants.runningUnitTest = true;
+        Map<String, String> properties = ImmutableMap.of("hive.metastore.uris", "thrift://127.0.0.1:9083",
+                "type", "hive", "hive.metastore.type", "hive");
+        new Expectations() {
+            {
+                internalMgr.createHiveMetastore();
+                result = cachingHiveMetastore;
+
+                internalMgr.createRemoteFileIO();
+                result = cachingRemoteFileIO;
+
+                internalMgr.getHiveMetastoreConf();
+                result = new CachingHiveMetastoreConf(properties, "hive");
+
+                internalMgr.getRemoteFileConf();
+                result = new CachingRemoteFileConf(properties);
+
+                internalMgr.getPullRemoteFileExecutor();
+                result = executorForPullFiles;
+
+                internalMgr.isSearchRecursive();
+                result = false;
+            }
+        };
+
+        HiveConnector hiveConnector = new HiveConnector(new ConnectorContext("hive_catalog", "hive", properties));
+        ConnectorMetadata metadata = hiveConnector.getMetadata();
+        Assert.assertTrue(metadata instanceof HiveMetadata);
     }
 }

@@ -1,0 +1,50 @@
+name: CI COMMENT TOOLS
+
+on:
+  issue_comment:
+    types: [ created ]
+
+jobs:
+
+  close:
+    name: CLOSE PR
+    runs-on: ubuntu-latest
+    if: >
+      contains(github.event.issue.pull_request.html_url, 'pull') &&
+      (contains(github.event.comment.body, '@Mergify close') ||
+      contains(github.event.comment.body, '@Mergifyio close'))
+
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+
+    steps:
+      - name: CLOSE
+        run: |
+          gh pr close ${PR_NUMBER} -R ${{ github.repository }} -c "PR was manually closed."
+
+  automerge:
+    name: AutoMerge PR
+    runs-on: ubuntu-latest
+    if: >
+      contains(github.event.issue.pull_request.html_url, 'pull') &&
+      contains(github.event.comment.body, '@Mergify automerge')
+
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+
+    steps:
+      - name: BASE REF
+        id: get_base_ref
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          base_ref=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json baseRefName | jq -r '.baseRefName')
+          echo "base_ref=${base_ref}" >> $GITHUB_OUTPUT
+
+      - name: AutoMerge
+        if: startsWith(steps.get_base_ref.outputs.base_ref, 'mergify/bp')
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: |
+          gh pr merge ${PR_NUMBER} -R ${{ github.repository }} -s --auto

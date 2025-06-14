@@ -20,6 +20,7 @@
 
 #include "common/statusor.h"
 #include "exec/spill/common.h"
+#include "exec/spill/options.h"
 #include "exec/spill/spiller_factory.h"
 
 namespace starrocks::pipeline {
@@ -75,8 +76,8 @@ ChunkPtr NLJoinProber::_init_output_chunk(RuntimeState* state, const ChunkPtr& b
         if (!is_probe && build_chunk) {
             nullable |= build_chunk->get_column_by_slot_id(slot->id())->is_nullable();
         }
-        ColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
-        chunk->append_column(new_col, slot->id());
+        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
+        chunk->append_column(std::move(new_col), slot->id());
     }
 
     chunk->reserve(state->chunk_size());
@@ -103,10 +104,10 @@ void NLJoinProber::_permute_probe_row(Chunk* dst, const ChunkPtr& build_chunk) {
         ColumnPtr& dst_col = dst->get_column_by_slot_id(slot->id());
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
-            dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows, true);
+            dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
         } else {
             ColumnPtr& src_col = build_chunk->get_column_by_slot_id(slot->id());
-            dst_col->append_shallow_copy(*src_col);
+            dst_col->append(*src_col);
         }
     }
 }
@@ -116,7 +117,7 @@ SpillableNLJoinProbeOperator::SpillableNLJoinProbeOperator(
         const std::string& sql_join_conjuncts, const std::vector<ExprContext*>& join_conjuncts,
         const std::vector<ExprContext*>& conjunct_ctxs, const std::vector<SlotDescriptor*>& col_types,
         size_t probe_column_count, const std::shared_ptr<NLJoinContext>& cross_join_context)
-        : OperatorWithDependency(factory, id, "spillable_nestloop_join_probe", plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, "spillable_nestloop_join_probe", plan_node_id, false, driver_sequence),
           _prober(join_op, join_conjuncts, conjunct_ctxs, col_types, probe_column_count),
           _cross_join_context(cross_join_context) {}
 
@@ -125,7 +126,9 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     _accumulator.set_desired_size(state->chunk_size());
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
-    _spiller = _spill_factory->create({});
+    spill::SpilledOptions opts;
+    opts.wg = state->fragment_ctx()->workgroup();
+    _spiller = _spill_factory->create(opts);
     _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     _cross_join_context->incr_prober();
     return Status::OK();
@@ -141,7 +144,7 @@ bool SpillableNLJoinProbeOperator::is_ready() const {
     if (res) {
         _init_chunk_stream();
     }
-    return _cross_join_context->is_right_finished();
+    return res;
 }
 
 bool SpillableNLJoinProbeOperator::is_finished() const {
@@ -149,10 +152,19 @@ bool SpillableNLJoinProbeOperator::is_finished() const {
 }
 
 bool SpillableNLJoinProbeOperator::has_output() const {
-    return _chunk_stream && _chunk_stream->has_output();
+    if (!is_ready()) {
+        DCHECK(false) << "is_ready() must be true before call has_output";
+        return false;
+    }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_spiller);
+    return !_is_current_build_probe_finished() && _chunk_stream && _chunk_stream->has_output();
 }
 
 bool SpillableNLJoinProbeOperator::need_input() const {
+    if (!is_ready()) {
+        DCHECK(false) << "is_ready() must be true before call has_output";
+        return false;
+    }
     return _prober.probe_finished() && _is_current_build_probe_finished();
 }
 
@@ -169,8 +181,9 @@ Status SpillableNLJoinProbeOperator::set_finished(RuntimeState* state) {
 
 StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state) {
     TRACE_SPILL_LOG << "pull_chunk:" << _driver_sequence;
+    RETURN_IF_ERROR(_spiller->task_status());
     if (_prober.probe_finished() || _build_chunk == nullptr || _build_chunk->is_empty()) {
-        auto chunk_st = _chunk_stream->get_next(state, _executor());
+        auto chunk_st = _chunk_stream->get_next(state);
         if (chunk_st.status().is_end_of_file()) {
             _prober.reset();
             _set_current_build_probe_finished(true);
@@ -185,6 +198,11 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
 
         _prober.reset_probe();
     }
+    // if probe finished after reset probe side. it means probe side is empty
+    if (_prober.probe_finished()) {
+        _set_current_build_probe_finished(true);
+        return nullptr;
+    }
 
     ASSIGN_OR_RETURN(auto res, _prober.probe_chunk(state, _build_chunk));
     RETURN_IF_ERROR(eval_conjuncts(_prober.conjunct_ctxs(), res.get(), nullptr));
@@ -194,10 +212,13 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
 
 Status SpillableNLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TRACE_SPILL_LOG << "push_chunk:" << _driver_sequence;
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
     _set_current_build_probe_finished(false);
     RETURN_IF_ERROR(_prober.push_probe_chunk(chunk));
     RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller.get()));
-    RETURN_IF_ERROR(_chunk_stream->prefetch(state, _executor()));
+    RETURN_IF_ERROR(_chunk_stream->prefetch(state));
     return Status::OK();
 }
 
@@ -205,10 +226,6 @@ void SpillableNLJoinProbeOperator::_init_chunk_stream() const {
     if (_chunk_stream == nullptr) {
         _chunk_stream = _cross_join_context->builder().build_stream();
     }
-}
-
-spill::IOTaskExecutor& SpillableNLJoinProbeOperator::_executor() {
-    return *_cross_join_context->spill_channel_factory()->executor();
 }
 
 void SpillableNLJoinProbeOperatorFactory::_init_row_desc() {

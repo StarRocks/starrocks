@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.base;
-
-import com.starrocks.sql.optimizer.operator.Operator;
 
 import java.util.Objects;
 
@@ -23,16 +20,8 @@ import java.util.Objects;
  * Re-shuffle all date to one node
  */
 public class GatherDistributionSpec extends DistributionSpec {
-    // limit doesn't affect distribution property
-    private long limit = Operator.DEFAULT_LIMIT;
-
     public GatherDistributionSpec() {
         super(DistributionType.GATHER);
-    }
-
-    public GatherDistributionSpec(long limit) {
-        super(DistributionType.GATHER);
-        this.limit = limit;
     }
 
     public boolean isSatisfy(DistributionSpec spec) {
@@ -46,14 +35,6 @@ public class GatherDistributionSpec extends DistributionSpec {
         }
 
         return spec instanceof GatherDistributionSpec;
-    }
-
-    public long getLimit() {
-        return limit;
-    }
-
-    public boolean hasLimit() {
-        return limit != Operator.DEFAULT_LIMIT;
     }
 
     @Override

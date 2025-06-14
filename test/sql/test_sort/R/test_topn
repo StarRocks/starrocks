@@ -1,0 +1,537 @@
+-- name: test_topn
+set pipeline_dop=1;
+-- result:
+-- !result
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT null, null FROM TABLE(generate_series(1,  65536));
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+select c0 from t0 order by 1 asc limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select c0 from t0 order by 1 asc nulls last limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c0 from t0 order by 1 asc nulls first limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select c0 from t0 order by 1 desc limit 10;
+-- result:
+40960
+40959
+40958
+40957
+40956
+40955
+40954
+40953
+40952
+40951
+-- !result
+select c0 from t0 order by 1 desc nulls last limit 10;
+-- result:
+40960
+40959
+40958
+40957
+40956
+40955
+40954
+40953
+40952
+40951
+-- !result
+select c0 from t0 order by 1 desc nulls first limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select * from t0 order by 1,2 asc limit 5;
+-- result:
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select * from t0 order by 1,2 desc limit 5;
+-- result:
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select * from t0 order by 2,1 asc limit 5;
+-- result:
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select * from t0 order by 2,1 desc limit 5;
+-- result:
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select * from t0 order by 1 where c0 > 10 limit 10;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 28. Detail message: Unexpected input 'where', the most similar input is {<EOF>, ';'}.")
+-- !result
+select * from t0 order by 1 where c0 > 1000 limit 10;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 28. Detail message: Unexpected input 'where', the most similar input is {<EOF>, ';'}.")
+-- !result
+create table t1 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  10));
+-- result:
+-- !result
+select * from t1 order by 1 limit 10;
+-- result:
+-- !result
+CREATE TABLE `t2` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`c1`)
+(
+PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("1024")),
+PARTITION p3 VALUES [("1024"), ("2048")),
+PARTITION p4 VALUES [("2048"), ("4096")),
+PARTITION p5 VALUES [("4096"), ("8192")),
+PARTITION p6 VALUES [("8192"), ("65536")),
+PARTITION p7 VALUES [("65536"), ("2100000000")))
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1");
+-- result:
+-- !result
+insert into t2 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  63336));
+-- result:
+-- !result
+select c0 from t2 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1 from t2 order by c1 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1,c0 from t2 order by c1,c0 asc limit 10;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+10	10
+-- !result
+create table t3 (
+    c0 INT,
+    c1 BIGINT
+) UNIQUE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 3 FROM TABLE(generate_series(1,  81920));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t3 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1 from t3 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+11
+12
+13
+-- !result
+select c1,c0 from t3 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+select c0,c1 from t3 where c1 < 10 order by c0 desc limit 10;
+-- result:
+7	9
+6	8
+5	7
+4	6
+3	5
+2	4
+1	3
+-- !result
+select c1 from t3 order by c1 desc limit 10;
+-- result:
+81923
+81922
+81921
+81920
+81919
+81918
+81917
+81916
+81915
+81914
+-- !result
+select c1,c0 from t3 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+create table t4 (
+    c0 INT,
+    c1 BIGINT REPLACE
+) UNIQUE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 3 FROM TABLE(generate_series(1,  81920));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t4 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1 from t4 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+11
+12
+13
+-- !result
+select c1,c0 from t4 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+select c0,c1 from t4 where c1 < 10 order by c0 desc limit 10;
+-- result:
+7	9
+6	8
+5	7
+4	6
+3	5
+2	4
+1	3
+-- !result
+select c1 from t4 order by c1 desc limit 10;
+-- result:
+81923
+81922
+81921
+81920
+81919
+81918
+81917
+81916
+81915
+81914
+-- !result
+select c1,c0 from t4 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+create table t5 (
+    c0 INT,
+    c1 BIGINT
+) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 3 FROM TABLE(generate_series(1,  81920));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t5 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1 from t5 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+11
+12
+13
+-- !result
+select c1,c0 from t5 where c1 < 10 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
+select c0,c1 from t5 order by c0 desc limit 10;
+-- result:
+81920	81923
+81919	81922
+81918	81921
+81917	81920
+81916	81919
+81915	81918
+81914	81917
+81913	81916
+81912	81915
+81911	81914
+-- !result
+select c1 from t5 order by c1 desc limit 10;
+-- result:
+81923
+81922
+81921
+81920
+81919
+81918
+81917
+81916
+81915
+81914
+-- !result
+select c1,c0 from t5 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+CREATE TABLE `tlow` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 64
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+set io_tasks_per_scan_operator=1;
+-- result:
+-- !result
+set group_execution_min_scan_rows=1;
+-- result:
+-- !result
+insert into tlow SELECT generate_series, if (generate_series<10, null, generate_series%10), generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+select count(distinct c1) from tlow;
+-- result:
+10
+-- !result
+function: wait_global_dict_ready('c1', 'tlow')
+-- result:
+
+-- !result
+select c1 from tlow group by c0, c1 order by c1 nulls first limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+0
+-- !result

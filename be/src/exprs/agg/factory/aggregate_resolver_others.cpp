@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/any_value.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/group_concat.h"
@@ -33,11 +34,30 @@ struct PercentileDiscDispatcher {
     }
 };
 
+struct LowCardPercentileDispatcher {
+    template <LogicalType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_datetime<pt> || lt_is_date<pt> || lt_is_arithmetic<pt> ||
+                      lt_is_decimal_of_any_version<pt>) {
+            resolver->add_aggregate_mapping_variadic<pt, pt, LowCardPercentileState<pt>>(
+                    "percentile_disc_lc", false, AggregateFactory::MakeLowCardPercentileCntAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<pt, TYPE_VARCHAR, LowCardPercentileState<pt>>(
+                    "percentile_build_lc", false, AggregateFactory::MakeLowCardPercentileBinAggregateFunction<pt>());
+        }
+    }
+};
+
 void AggregateFuncResolver::register_others() {
-    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx", false,
-                                                            AggregateFactory::MakePercentileApproxAggregateFunction());
-    add_aggregate_mapping_notnull<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx", false,
-                                                            AggregateFactory::MakePercentileApproxAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx", false, AggregateFactory::MakePercentileApproxAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx", false, AggregateFactory::MakePercentileApproxAggregateFunction());
+
+    add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx_weighted", false, AggregateFactory::MakePercentileApproxWeightedAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx_weighted", false, AggregateFactory::MakePercentileApproxWeightedAggregateFunction());
+
     add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
             "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());
 
@@ -52,12 +72,15 @@ void AggregateFuncResolver::register_others() {
         type_dispatch_all(type, PercentileDiscDispatcher(), this);
     }
 
+    for (auto type : sortable_types()) {
+        type_dispatch_all(type, LowCardPercentileDispatcher(), this);
+    }
+
     add_aggregate_mapping_variadic<TYPE_CHAR, TYPE_VARCHAR, GroupConcatAggregateState>(
             "group_concat", false, AggregateFactory::MakeGroupConcatAggregateFunction<TYPE_CHAR>());
     add_aggregate_mapping_variadic<TYPE_VARCHAR, TYPE_VARCHAR, GroupConcatAggregateState>(
             "group_concat", false, AggregateFactory::MakeGroupConcatAggregateFunction<TYPE_VARCHAR>());
 
-    add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
     add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");
 
     // sum, avg, distinct_sum use decimal128 as intermediate or result type to avoid overflow
@@ -72,7 +95,11 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 
+    add_general_mapping<AnyValueSemiState>("any_value", false, AggregateFactory::MakeAnyValueSemiAggregateFunction());
     add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
+    add_general_mapping_notnull("group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+
+    add_general_mapping_notnull("dict_merge", false, AggregateFactory::MakeDictMergeAggregateFunction());
 }
 
 } // namespace starrocks

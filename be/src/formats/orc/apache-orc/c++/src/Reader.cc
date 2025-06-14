@@ -594,6 +594,13 @@ std::unique_ptr<StripeInformation> ReaderImpl::getStripe(uint64_t stripeIndex) c
             contents->blockSize, contents->readerMetrics));
 }
 
+const orc::proto::StripeInformation& ReaderImpl::getStripeInOrcFormat(uint64_t stripeIndex) const {
+    if (stripeIndex > getNumberOfStripes()) {
+        throw std::logic_error("stripe index out of range");
+    }
+    return footer->stripes(static_cast<int>(stripeIndex));
+}
+
 FileVersion ReaderImpl::getFormatVersion() const {
     if (contents->postscript->version_size() != 2) {
         return FileVersion::v_0_11();
@@ -1005,8 +1012,22 @@ void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) 
     for (const proto::Stream& stream : currentStripeFooter.streams()) {
         uint32_t columnId = stream.column();
         uint64_t length = stream.length();
-        if (selectedColumns[columnId] || lazyLoadColumns[columnId]) {
-            io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length});
+        // ColumnId = 0 is root column, we always need it
+        if (columnId == 0 || selectedColumns[columnId] || lazyLoadColumns[columnId]) {
+            bool is_active = true;
+
+            // We didn't support stripe index lazy load, so we will regard all index stream as active column
+            bool is_stripe_index = false;
+            if (stream.has_kind() && (stream.kind() == proto::Stream_Kind_ROW_INDEX ||
+                                      stream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
+                is_stripe_index = true;
+            }
+
+            // we only seperate io range for column's data, don't include column's index
+            if (!is_stripe_index && lazyLoadColumns[columnId]) {
+                is_active = false;
+            }
+            io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length, .is_active = is_active});
         }
         offset += length;
     }
@@ -1016,7 +1037,7 @@ void RowReaderImpl::startNextStripe() {
     reader.reset(); // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
-    bool streamIORangesEnabled = contents->stream->isIORangesEnabled();
+    const bool isIOCoalesceEnabled = contents->stream->isIOCoalesceEnabled();
 
     // evaluate file statistics if it exists
     if (sargsApplier && !sargsApplier->evaluateFileStatistics(*footer, numRowGroupsInStripeRange)) {
@@ -1040,43 +1061,49 @@ void RowReaderImpl::startNextStripe() {
             throw ParseError(msg.str());
         }
 
+        rowsInCurrentStripe = currentStripeInfo.numberofrows();
+
         bool skipStripe = false;
-        if (sargsApplier && sargsApplier->getRowReaderFilter()) {
-            if (sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
+        bool skipStripeByScanRangeMisMatch = false;
+        if (sargsApplier) {
+            // check is existed RowReaderFilter
+            if (sargsApplier->getRowReaderFilter() &&
+                sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
                 skipStripe = true;
+                skipStripeByScanRangeMisMatch = true;
                 goto end;
+            }
+
+            // TODO(SmithCruise)
+            // We should contribute this code to apache-orc, we need to eval stripe's stats before load stripe footer
+            // Because If this stripe can skip by stripe's stats, we don't need to load stripe's footer anymore
+            // Stripe's stats is placed in orc tail's metadata
+            if (contents->metadata) {
+                const auto& currentStripeStats = contents->metadata->stripestats(static_cast<int>(currentStripe));
+                // skip this stripe after stats fail to satisfy sargs
+                uint64_t stripeRowGroupCount =
+                        (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
+                if (!sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount)) {
+                    skipStripe = true;
+                    goto end;
+                }
             }
         }
 
-        if (streamIORangesEnabled) {
-            contents->stream->clearIORanges();
-        } else {
-            contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
-                                           stripeSize);
+        // release previous stripe's io ranges
+        if (isIOCoalesceEnabled) {
+            contents->stream->releaseToOffset(currentStripeInfo.offset());
         }
-
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
-        rowsInCurrentStripe = currentStripeInfo.numberofrows();
-        if (streamIORangesEnabled) {
+        // We need to check this stripe is already set in shared buffer(tiny stripe optimize) to avoid shared buffer overlap
+        if (isIOCoalesceEnabled &&
+            !contents->stream->isAlreadyCollectedInSharedBuffer(currentStripeInfo.offset(), stripeSize)) {
             std::vector<InputStream::IORange> io_ranges;
             buildIORanges(&io_ranges);
             contents->stream->setIORanges(io_ranges);
         }
 
         if (sargsApplier) {
-            bool isStripeNeeded = true;
-            if (contents->metadata) {
-                const auto& currentStripeStats = contents->metadata->stripestats(static_cast<int>(currentStripe));
-                // skip this stripe after stats fail to satisfy sargs
-                uint64_t stripeRowGroupCount =
-                        (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
-                isStripeNeeded = sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount);
-            }
-            if (!isStripeNeeded) {
-                skipStripe = true;
-                goto end;
-            }
-
             // read row group statistics and bloom filters of current stripe
             loadStripeIndex();
 
@@ -1098,9 +1125,10 @@ void RowReaderImpl::startNextStripe() {
                                                      ? getTimezoneByName(currentStripeFooter.writertimezone())
                                                      : getLocalTimezone();
 
-            StripeStreamsImpl stripeStreams(*this, currentStripe, currentStripeInfo, currentStripeFooter,
-                                            currentStripeInfo.offset(), *contents->stream, writerTimezone,
-                                            readerTimezone);
+            // We need use shared_ptr to hold stripe, otherwise, when LazyColumnReader is created, the life cycle of stripe has ended.
+            std::shared_ptr<StripeStreams> stripeStreams = std::make_shared<StripeStreamsImpl>(
+                    *this, currentStripe, currentStripeInfo, currentStripeFooter, currentStripeInfo.offset(),
+                    *contents->stream, writerTimezone, readerTimezone);
             reader = buildReader(*contents->schema, stripeStreams);
 
             if (sargsApplier) {
@@ -1130,6 +1158,12 @@ void RowReaderImpl::startNextStripe() {
             // advance to next stripe when current stripe has no matching rows
             currentStripe += 1;
             currentRowInStripe = 0;
+
+            // We do not count the skipped stripes because the scan range does not match
+            if (!skipStripeByScanRangeMisMatch && contents->stream->get_lazy_column_coalesce_counter() != nullptr) {
+                // Skip entrie stripe, which means we didn't need to coalesce active and lazy column together
+                contents->stream->get_lazy_column_coalesce_counter()->fetch_sub(1, std::memory_order_relaxed);
+            }
         } else {
             break;
         }
@@ -1223,19 +1257,25 @@ void RowReaderImpl::lazyLoadSeekTo(uint64_t toRow) {
     // then #1 cost is X + toRow % rowindexstripe
     // #2 cost is (row - lazyLoadLastUsedRowInStripe)
     const uint64_t ROW_INDEX_STRIDE = footer->rowindexstride();
-    static const uint64_t SEEK_TO_ROW_GROUP_COST = 4096;
-    uint64_t costIndirectSkip = toRow % ROW_INDEX_STRIDE;
-    uint64_t toRowGroupNumber = toRow / ROW_INDEX_STRIDE;
-    uint64_t fromRowGroupNumber = lazyLoadLastUsedRowInStripe / ROW_INDEX_STRIDE;
-
-    if ((fromRowGroupNumber != toRowGroupNumber) && (SEEK_TO_ROW_GROUP_COST + costIndirectSkip) < costDirectSkip) {
-        PositionProviderMap map;
-        getRowGroupPosition(static_cast<uint32_t>(toRowGroupNumber), &map);
-        reader->lazyLoadSeekToRowGroup(&map);
-        reader->lazyLoadSkip(costIndirectSkip);
-    } else {
+    if (ROW_INDEX_STRIDE == 0) {
+        // Orc can only have one RowGroup in each stipe
         reader->lazyLoadSkip(costDirectSkip);
+    } else {
+        static const uint64_t SEEK_TO_ROW_GROUP_COST = 4096;
+        uint64_t costIndirectSkip = toRow % ROW_INDEX_STRIDE;
+        uint64_t toRowGroupNumber = toRow / ROW_INDEX_STRIDE;
+        uint64_t fromRowGroupNumber = lazyLoadLastUsedRowInStripe / ROW_INDEX_STRIDE;
+
+        if ((fromRowGroupNumber != toRowGroupNumber) && (SEEK_TO_ROW_GROUP_COST + costIndirectSkip) < costDirectSkip) {
+            PositionProviderMap map;
+            getRowGroupPosition(static_cast<uint32_t>(toRowGroupNumber), &map);
+            reader->lazyLoadSeekToRowGroup(&map);
+            reader->lazyLoadSkip(costIndirectSkip);
+        } else {
+            reader->lazyLoadSkip(costDirectSkip);
+        }
     }
+
     lazyLoadLastUsedRowInStripe = toRow;
 }
 
@@ -1426,7 +1466,6 @@ std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const 
             throw ParseError("File size too small");
         }
         std::unique_ptr<DataBuffer<char>> buffer(new DataBuffer<char>(*contents->pool, readSize));
-        stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_FILE, 0, fileLength);
         stream->read(buffer->data(), readSize, fileLength - readSize);
 
         postscriptLength = buffer->data()[readSize - 1] & 0xff;
@@ -1533,14 +1572,24 @@ uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
     return 128 * 1024;
 }
 
-void InputStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {}
-
-bool InputStream::isIORangesEnabled() const {
+bool InputStream::isIOCoalesceEnabled() const {
     return false;
 }
 
-void InputStream::clearIORanges() {}
+bool InputStream::isIOAdaptiveCoalesceEnabled() const {
+    return false;
+}
+
+bool InputStream::isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const {
+    return false;
+}
+
+void InputStream::releaseToOffset(const int64_t offset) {}
 
 void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges) {}
+
+std::atomic<int32_t>* InputStream::get_lazy_column_coalesce_counter() {
+    return nullptr;
+}
 
 } // namespace orc

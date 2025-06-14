@@ -38,6 +38,7 @@
 
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
@@ -52,13 +53,14 @@ ResultBufferMgr::ResultBufferMgr() {
     });
 }
 
-ResultBufferMgr::~ResultBufferMgr() {
+void ResultBufferMgr::stop() {
     _is_stop = true;
     _cancel_thread->join();
 }
 
 Status ResultBufferMgr::init() {
-    _cancel_thread = std::make_unique<std::thread>(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this));
+    _cancel_thread = std::make_unique<std::thread>(
+            std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this)); // NOLINT
     Thread::set_thread_name(_cancel_thread->native_handle(), "res_buf_mgr");
     return Status::OK();
 }
@@ -116,6 +118,27 @@ void ResultBufferMgr::fetch_data(const PUniqueId& finst_id, GetResultBatchCtx* c
     cb->get_batch(ctx);
 }
 
+Status ResultBufferMgr::fetch_arrow_data(const TUniqueId& query_id, std::shared_ptr<arrow::RecordBatch>* result) {
+    std::shared_ptr<BufferControlBlock> cb = find_control_block(query_id);
+    if (cb == nullptr) {
+        return Status::InternalError("no result for this query");
+    }
+    RETURN_IF_ERROR(cb->get_arrow_batch(result));
+    return Status::OK();
+}
+
+void ResultBufferMgr::set_arrow_schema(const TUniqueId& query_id, const std::shared_ptr<arrow::Schema>& arrow_schema) {
+    _arrow_schema_map.insert(std::make_pair(query_id, arrow_schema));
+}
+
+std::shared_ptr<arrow::Schema> ResultBufferMgr::get_arrow_schema(const TUniqueId& query_id) {
+    auto iter = _arrow_schema_map.find(query_id);
+    if (_arrow_schema_map.end() != iter) {
+        return iter->second;
+    }
+    return nullptr;
+}
+
 Status ResultBufferMgr::cancel(const TUniqueId& query_id) {
     std::lock_guard<std::mutex> l(_lock);
     auto iter = _buffer_map.find(query_id);
@@ -163,10 +186,9 @@ void ResultBufferMgr::cancel_thread() {
 
         // cancel query
         for (auto& i : query_to_cancel) {
-            cancel(i);
+            (void)cancel(i);
         }
-
-        sleep(1);
+        nap_sleep(1, [this] { return _is_stop; });
     }
 
     LOG(INFO) << "result buffer manager cancel thread finish.";

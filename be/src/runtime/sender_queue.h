@@ -43,11 +43,12 @@ public:
     virtual bool try_get_chunk(Chunk** chunk) = 0;
 
     // add chunks to this sender queue if this stream has not been cancelled
-    virtual Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) = 0;
+    virtual Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+                              ::google::protobuf::Closure** done) = 0;
 
     // add chunks to this sender queue if this stream has not been cancelled
     // Process data in strict accordance with the order of the sequence
-    virtual Status add_chunks_and_keep_order(const PTransmitChunkParams& request,
+    virtual Status add_chunks_and_keep_order(const PTransmitChunkParams& request, Metrics& metrics,
                                              ::google::protobuf::Closure** done) = 0;
 
     // Decrement the number of remaining senders for this queue
@@ -60,7 +61,7 @@ public:
 protected:
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, faststring* uncompressed_buffer);
+    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, Metrics& metrics, faststring* uncompressed_buffer);
 
     DataStreamRecvr* _recvr = nullptr;
 
@@ -78,9 +79,11 @@ public:
 
     bool try_get_chunk(Chunk** chunk) override;
 
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+                      ::google::protobuf::Closure** done) override;
 
-    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, Metrics& metrics,
+                                     ::google::protobuf::Closure** done) override;
 
     void decrement_senders(int be_number) override;
 
@@ -92,7 +95,7 @@ private:
     void clean_buffer_queues();
 
     template <bool keep_order>
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics, ::google::protobuf::Closure** done);
 
     struct ChunkItem {
         int64_t chunk_bytes = 0;
@@ -144,7 +147,10 @@ private:
 class DataStreamRecvr::PipelineSenderQueue final : public DataStreamRecvr::SenderQueue {
 public:
     PipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders, int degree_of_parallism);
-    ~PipelineSenderQueue() override = default;
+    ~PipelineSenderQueue() override {
+        check_leak_closure();
+        close();
+    }
 
     Status get_chunk(Chunk** chunk, const int32_t driver_sequence = -1) override;
 
@@ -152,9 +158,11 @@ public:
 
     bool try_get_chunk(Chunk** chunk) override;
 
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+                      ::google::protobuf::Closure** done) override;
 
-    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
+    Status add_chunks_and_keep_order(const PTransmitChunkParams& request, Metrics& metrics,
+                                     ::google::protobuf::Closure** done) override;
 
     void decrement_senders(int be_number) override;
 
@@ -205,15 +213,18 @@ private:
 
     void clean_buffer_queues();
 
+    void check_leak_closure();
+
     StatusOr<ChunkList> get_chunks_from_pass_through(const int32_t sender_id, size_t& total_chunk_bytes);
 
     template <bool need_deserialization>
-    StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, size_t& total_chunk_bytes);
+    StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, Metrics& metrics,
+                                                size_t& total_chunk_bytes);
 
-    Status try_to_build_chunk_meta(const PTransmitChunkParams& request);
+    Status try_to_build_chunk_meta(const PTransmitChunkParams& request, Metrics& metrics);
 
     template <bool keep_order>
-    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+    Status add_chunks(const PTransmitChunkParams& request, Metrics& metrics, ::google::protobuf::Closure** done);
 
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
 
@@ -237,7 +248,7 @@ private:
         // In the unplug state, has_output will return true directly if there is a chunk in the queue.
         // Otherwise, it will try to batch enough chunks to reduce the scheduling overhead.
         bool unpluging = false;
-        bool is_short_circuited = false;
+        std::atomic<bool> is_short_circuited = false;
     };
     std::vector<ChunkQueueState> _chunk_queue_states;
 
@@ -249,11 +260,13 @@ private:
     // distribution of received sequence numbers:
     // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
     // part2: { sequence | seq = _max_processed_sequence + i, i > 1 }
-    phmap::flat_hash_map<int, int64_t> _max_processed_sequences;
+    phmap::flat_hash_map<int, int64_t, StdHash<int>> _max_processed_sequences;
     // chunk request may be out-of-order, but we have to deal with it in order
     // key of first level is be_number
     // key of second level is request sequence
-    phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
+    phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>, StdHash<int>> _buffered_chunk_queues;
+
+    std::atomic<bool> _is_chunk_meta_built{false};
 
     static constexpr size_t kUnplugBufferThreshold = 16;
 };

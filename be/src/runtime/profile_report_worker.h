@@ -65,13 +65,14 @@ struct PipeLineReportTaskKeyHasher {
 class ProfileReportWorker {
 public:
     ProfileReportWorker(ExecEnv* env);
-    ~ProfileReportWorker();
+    ~ProfileReportWorker() = default;
     void execute();
+    void close();
     Status register_non_pipeline_load(const TUniqueId& fragment_instance_id);
-    Status unregister_non_pipeline_load(const TUniqueId& fragment_instance_id);
+    void unregister_non_pipeline_load(const TUniqueId& fragment_instance_id);
 
     Status register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
-    Status unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
+    void unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
 
 private:
     void _start_report_profile();

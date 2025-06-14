@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -105,7 +106,8 @@ public class JoinHelper {
             if (leftChildColumns.containsAll(leftUsedColumns) && rightChildColumns.containsAll(rightUsedColumns)) {
                 leftOnCols.add(new DistributionCol(leftUsedColumns.getFirstId(), nullStrict, leftTableAggStrict));
                 rightOnCols.add(new DistributionCol(rightUsedColumns.getFirstId(), nullStrict, rightTableAggStrict));
-            } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
+            } else if (leftChildColumns.containsAll(rightUsedColumns) &&
+                    rightChildColumns.containsAll(leftUsedColumns)) {
                 leftOnCols.add(new DistributionCol(rightUsedColumns.getFirstId(), nullStrict, leftTableAggStrict));
                 rightOnCols.add(new DistributionCol(leftUsedColumns.getFirstId(), nullStrict, rightTableAggStrict));
             } else {
@@ -140,8 +142,8 @@ public class JoinHelper {
     }
 
     public boolean onlyShuffle() {
-        return type.isRightJoin() || type.isFullOuterJoin() || JoinOperator.HINT_SHUFFLE.equals(hint) ||
-                JoinOperator.HINT_BUCKET.equals(hint);
+        return type.isRightJoin() || type.isFullOuterJoin() || HintNode.HINT_JOIN_SHUFFLE.equals(hint) ||
+                HintNode.HINT_JOIN_BUCKET.equals(hint) || HintNode.HINT_JOIN_SKEW.equals(hint);
     }
 
     public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
@@ -154,6 +156,31 @@ public class JoinHelper {
         }
         return eqConjuncts;
     }
+
+    public static Pair<List<BinaryPredicateOperator>, List<ScalarOperator>> separateEqualPredicatesFromOthers(
+            OptExpression optExpression) {
+        Preconditions.checkArgument(optExpression.getOp() instanceof LogicalJoinOperator);
+        LogicalJoinOperator joinOp = optExpression.getOp().cast();
+        List<ScalarOperator> onPredicates = Utils.extractConjuncts(joinOp.getOnPredicate());
+
+        ColumnRefSet leftChildColumns = optExpression.inputAt(0).getOutputColumns();
+        ColumnRefSet rightChildColumns = optExpression.inputAt(1).getOutputColumns();
+
+        List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                leftChildColumns, rightChildColumns, onPredicates);
+
+        onPredicates.removeAll(eqOnPredicates);
+        List<BinaryPredicateOperator> lhsEqRhsOnPredicates = Lists.newArrayList();
+        for (BinaryPredicateOperator s : eqOnPredicates) {
+            if (!leftChildColumns.containsAll(s.getChild(0).getUsedColumns())) {
+                lhsEqRhsOnPredicates.add(new BinaryPredicateOperator(s.getBinaryType(), s.getChild(1), s.getChild(0)));
+            } else {
+                lhsEqRhsOnPredicates.add(s);
+            }
+        }
+        return Pair.create(lhsEqRhsOnPredicates, onPredicates);
+    }
+
 
     /**
      * Conditions should contain:
@@ -191,6 +218,6 @@ public class JoinHelper {
                                         String hint) {
         // Cross join only support broadcast join
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
-                (type.isInnerJoin() && equalOnPredicate.isEmpty()) || JoinOperator.HINT_BROADCAST.equals(hint);
+                (type.isInnerJoin() && equalOnPredicate.isEmpty()) || HintNode.HINT_JOIN_BROADCAST.equals(hint);
     }
 }

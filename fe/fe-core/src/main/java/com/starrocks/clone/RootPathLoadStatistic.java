@@ -34,21 +34,30 @@
 
 package com.starrocks.clone;
 
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
-import com.starrocks.clone.BalanceStatus.ErrCode;
+import com.starrocks.clone.BackendsFitStatus.ErrCode;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStorageMedium;
 
 public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> {
 
-    private long beId;
-    private String path;
-    private Long pathHash;
-    private TStorageMedium storageMedium;
-    private long capacityB;
-    private long usedCapacityB;
-    private DiskState diskState;
+    @SerializedName(value = "beId")
+    private final long beId;
+    @SerializedName(value = "path")
+    private final String path;
+    @SerializedName(value = "pathHash")
+    private final Long pathHash;
+    @SerializedName(value = "storageMedium")
+    private final TStorageMedium storageMedium;
+    @SerializedName(value = "total")
+    private final long capacityB;
+    @SerializedName(value = "used")
+    private final long usedCapacityB;
+    private final DiskState diskState;
 
     private Classification clazz = Classification.INIT;
 
@@ -103,18 +112,18 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
         return diskState;
     }
 
-    public BalanceStatus isFit(long tabletSize) {
-        if (diskState == DiskState.OFFLINE) {
-            return new BalanceStatus(ErrCode.COMMON_ERROR,
-                    toString() + " does not fit tablet with size: " + tabletSize + ", offline");
+    public BackendsFitStatus isFit(long tabletSize) {
+        if (diskState != DiskState.ONLINE) {
+            return new BackendsFitStatus(ErrCode.COMMON_ERROR,
+                    toString() + " does not fit tablet with size: " + tabletSize + ", disk state: " + diskState);
         }
 
         if (DiskInfo.exceedLimit(capacityB - usedCapacityB - tabletSize, capacityB, false)) {
-            return new BalanceStatus(ErrCode.COMMON_ERROR,
+            return new BackendsFitStatus(ErrCode.COMMON_ERROR,
                     toString() + " does not fit tablet with size: " + tabletSize);
         }
 
-        return BalanceStatus.OK;
+        return BackendsFitStatus.OK;
     }
 
     // path with lower usage percent rank ahead
@@ -132,5 +141,9 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
         sb.append(", medium: ").append(storageMedium).append(", used: ").append(usedCapacityB);
         sb.append(", total: ").append(capacityB);
         return sb.toString();
+    }
+
+    public JsonObject toJson() {
+        return (JsonObject) GsonUtils.GSON.toJsonTree(this);
     }
 }

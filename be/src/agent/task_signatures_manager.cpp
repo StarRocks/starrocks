@@ -19,10 +19,12 @@ namespace starrocks {
 static std::mutex g_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
 static std::set<int64_t> g_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 
-bool register_task_info(TTaskType::type task_type, int64_t signature) {
+std::pair<bool, size_t> register_task_info(TTaskType::type task_type, int64_t signature) {
     std::lock_guard task_signatures_lock(g_task_signatures_locks[task_type]);
     std::set<int64_t>& signature_set = g_task_signatures[task_type];
-    return signature_set.insert(signature).second;
+    bool register_success = signature_set.insert(signature).second;
+    size_t task_count = signature_set.size();
+    return std::make_pair(register_success, task_count);
 }
 
 std::vector<uint8_t> batch_register_task_info(const std::vector<const TAgentTaskRequest*>& tasks) {
@@ -44,9 +46,10 @@ std::vector<uint8_t> batch_register_task_info(const std::vector<const TAgentTask
     return failed_task;
 }
 
-void remove_task_info(TTaskType::type task_type, int64_t signature) {
+size_t remove_task_info(TTaskType::type task_type, int64_t signature) {
     std::lock_guard task_signatures_lock(g_task_signatures_locks[task_type]);
     g_task_signatures[task_type].erase(signature);
+    return g_task_signatures[task_type].size();
 }
 
 std::map<TTaskType::type, std::set<int64_t>> count_all_tasks() {

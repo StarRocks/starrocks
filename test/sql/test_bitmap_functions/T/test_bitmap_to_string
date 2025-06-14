@@ -1,0 +1,19 @@
+-- name: test_bitmap_to_string
+
+-- large int
+CREATE TABLE `t1` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t1 select 1, bitmap_agg(generate_series) from TABLE(generate_series(18446744073709551611));
+select bitmap_to_string(c2) from t1;
+
+insert into t1 select 1, bitmap_agg(generate_series) from TABLE(generate_series(18446744073709551611, 18446744073709551615));
+select bitmap_to_string(c2) from t1;
+
+insert into t1 select 1, bitmap_agg(generate_series) from TABLE(generate_series(18446744073709551551, 18446744073709551615));
+select bitmap_to_string(c2) from t1;

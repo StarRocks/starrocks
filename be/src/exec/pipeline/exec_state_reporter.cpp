@@ -17,10 +17,14 @@
 #include <thrift/Thrift.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include <memory>
+
 #include "agent/master_info.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
+#include "util/network_util.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -28,25 +32,25 @@ std::string to_load_error_http_path(const std::string& file_name) {
         return "";
     }
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_load_error_log?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
 
 std::string to_http_path(const std::string& token, const std::string& file_name) {
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_download_load?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
         << "token=" << token << "&file=" << file_name;
     return url.str();
 }
 
-TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
-                                                                            FragmentContext* fragment_ctx,
-                                                                            const Status& status, bool done) {
-    TReportExecStatusParams params;
+std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_status_params(
+        QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
+        RuntimeProfile* load_channel_profile, const Status& status, bool done) {
+    auto res = std::make_unique<TReportExecStatusParams>();
+    TReportExecStatusParams& params = *res;
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
-    auto* profile = runtime_state->runtime_profile();
     DCHECK(profile != nullptr);
     auto* exec_env = fragment_ctx->runtime_state()->exec_env();
     DCHECK(exec_env != nullptr);
@@ -61,14 +65,27 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         // this is a load plan, and load is not finished, just make a brief report
         runtime_state->update_report_load_status(&params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
+
+        if (query_ctx->enable_profile()) {
+            profile->to_thrift(&params.profile);
+            params.__isset.profile = true;
+
+            load_channel_profile->to_thrift(&params.load_channel_profile);
+            params.__isset.load_channel_profile = true;
+        }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             runtime_state->update_report_load_status(&params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->is_report_profile()) {
+        if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
+
+            if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                load_channel_profile->to_thrift(&params.load_channel_profile);
+                params.__isset.load_channel_profile = true;
+            }
         }
 
         if (!runtime_state->output_files().empty()) {
@@ -107,6 +124,13 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
                 params.commitInfos.push_back(info);
             }
         }
+        if (!runtime_state->tablet_fail_infos().empty()) {
+            params.__isset.failInfos = true;
+            params.failInfos.reserve(runtime_state->tablet_fail_infos().size());
+            for (auto& info : runtime_state->tablet_fail_infos()) {
+                params.failInfos.push_back(info);
+            }
+        }
         if (!runtime_state->sink_commit_infos().empty()) {
             params.__isset.sink_commit_infos = true;
             params.sink_commit_infos.reserve(runtime_state->sink_commit_infos().size());
@@ -114,64 +138,31 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
                 params.sink_commit_infos.push_back(info);
             }
         }
-
-        // Send new errors to coordinator
-        runtime_state->get_unreported_errors(&(params.error_log));
-        params.__isset.error_log = (params.error_log.size() > 0);
     }
 
     auto backend_id = get_backend_id();
     if (backend_id.has_value()) {
         params.__set_backend_id(backend_id.value());
     }
-    return params;
+    return res;
 }
-
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::transport::TTransportException;
 
 // including the final status when execution finishes.
 Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                              const TNetworkAddress& fe_addr) {
-    Status fe_status;
-    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
-    if (!fe_status.ok()) {
-        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
-        return fe_status;
-    }
-
     TReportExecStatusResult res;
     Status rpc_status;
 
-    try {
-        try {
-            coord->reportExecStatus(res, params);
-        } catch (TTransportException& e) {
-            TTransportException::TTransportExceptionType type = e.getType();
-            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
-                // if not TIMED_OUT, retry
-                rpc_status = coord.reopen();
+    // since the caller(report_exec_state) has already retried {@code config::report_exec_rpc_request_retry_num} times,
+    // no need to retry again.
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
+            config::thrift_rpc_timeout_ms, 1);
 
-                if (!rpc_status.ok()) {
-                    return rpc_status;
-                }
-                coord->reportExecStatus(res, params);
-            } else {
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
-                rpc_status = Status::InternalError(msg.str());
-            }
-        }
-
+    if (rpc_status.ok()) {
         rpc_status = Status(res.status);
-    } catch (TException& e) {
-        std::stringstream msg;
-        msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
     }
+
     return rpc_status;
 }
 
@@ -245,60 +236,50 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
 Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
                                        const TNetworkAddress& fe_addr) {
     Status fe_status;
-    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
-    if (!fe_status.ok()) {
-        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
-        return fe_status;
-    }
-
     TMVReportEpochResponse res;
     Status rpc_status;
 
-    try {
-        try {
-            coord->mvReport(res, params);
-        } catch (TTransportException& e) {
-            TTransportException::TTransportExceptionType type = e.getType();
-            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
-                // if not TIMED_OUT, retry
-                rpc_status = coord.reopen();
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->mvReport(res, params); },
+            config::thrift_rpc_timeout_ms);
 
-                if (!rpc_status.ok()) {
-                    return rpc_status;
-                }
-                coord->mvReport(res, params);
-            } else {
-                std::stringstream msg;
-                msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
-                rpc_status = Status::InternalError(msg.str());
-            }
-        }
-
-        rpc_status = Status::OK();
-    } catch (TException& e) {
-        std::stringstream msg;
-        msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
-    }
     return rpc_status;
 }
 
-ExecStateReporter::ExecStateReporter() {
+ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
     auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                          .set_cpuids(cpuids)
                           .build(&_thread_pool);
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
+
+    status = ThreadPoolBuilder("priority_ex_state_report") // priority exec state reporter with infinite queue
+                     .set_min_threads(1)
+                     .set_max_threads(2)
+                     .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                     .set_cpuids(cpuids)
+                     .build(&_priority_thread_pool);
+    if (!status.ok()) {
+        LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
+    }
 }
 
-void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    _thread_pool->submit_func(std::move(report_task));
+void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
+    if (priority) {
+        (void)_priority_thread_pool->submit_func(std::move(report_task));
+    } else {
+        (void)_thread_pool->submit_func(std::move(report_task));
+    }
+}
+
+void ExecStateReporter::bind_cpus(const CpuUtil::CpuIds& cpuids) const {
+    _thread_pool->bind_cpus(cpuids, {});
+    _priority_thread_pool->bind_cpus(cpuids, {});
 }
 
 } // namespace starrocks::pipeline

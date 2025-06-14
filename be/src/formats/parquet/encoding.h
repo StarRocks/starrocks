@@ -14,9 +14,14 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <functional>
 #include <memory>
+#include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/parquet_types.h"
 #include "utils.h"
@@ -25,6 +30,7 @@ namespace starrocks {
 
 class Slice;
 class Column;
+class NullableColumn;
 
 } // namespace starrocks
 
@@ -42,6 +48,9 @@ public:
     virtual Status encode_dict(Encoder* dict_encoder, size_t* num_dicts) {
         return Status::NotSupported("encode_dict is not supported");
     }
+
+    // used to set fixed length for FLBA
+    virtual void set_type_length(int32_t type_length) {}
 };
 
 class Decoder {
@@ -55,12 +64,8 @@ public:
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
+    virtual Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
-    }
-
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
-        return Status::NotSupported("get_dict_codes is not supported");
     }
 
     // used to set fixed length
@@ -72,7 +77,10 @@ public:
     // For history reason, decoder don't known how many elements encoded in one page.
     // Caller must assure that no out-of-bounds access.
     // It will return ERROR if caller wants to read out-of-bound data.
-    virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst) = 0;
+    virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst,
+                              const FilterData* filter = nullptr) = 0;
+    virtual Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                         Column* dst, const FilterData* filter);
 
     virtual Status skip(size_t values_to_skip) = 0;
 

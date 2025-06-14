@@ -45,6 +45,7 @@ public abstract class AgentTask {
 
     protected long dbId;
     protected long tableId;
+    // physical partition id
     protected long partitionId;
     protected long indexId;
     protected long tabletId;
@@ -53,8 +54,8 @@ public abstract class AgentTask {
 
     protected int failedTimes;
     protected String errorMsg;
-    // some of process may use this member to check if the task is finished.
-    // some of are not.
+    // some process may use this member to check if the task is finished.
+    // some are not.
     // so whether the task is finished depends on caller's logic, not the value of this member.
     protected boolean isFinished = false;
     protected boolean isFailed = false;

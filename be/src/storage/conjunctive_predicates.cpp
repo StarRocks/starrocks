@@ -15,6 +15,7 @@
 #include "storage/conjunctive_predicates.h"
 
 #include "column/chunk.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -32,6 +33,7 @@ Status ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection
 }
 
 Status ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     DCHECK_LE(to, chunk->num_rows());
     if (!_vec_preds.empty()) {
         const ColumnPredicate* pred = _vec_preds[0];

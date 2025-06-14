@@ -134,6 +134,8 @@ protected:
     ReaderMetrics* metrics;
 
 public:
+    // Default construtor, only used for LazyColumnReader
+    ColumnReader() : columnId(0), memoryPool(*getDefaultPool()), metrics(nullptr) {}
     ColumnReader(const Type& type, StripeStreams& stipe);
 
     virtual ~ColumnReader();
@@ -194,7 +196,7 @@ public:
 /**
    * Create a reader for the given stripe.
    */
-std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& stripe);
+std::unique_ptr<ColumnReader> buildReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
 
 // collect string dictionary from column reader
 void collectStringDictionary(ColumnReader* reader, std::unordered_map<uint64_t, StringDictionary*>& coll);

@@ -17,6 +17,7 @@
 #include <variant>
 
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
@@ -25,7 +26,12 @@ namespace starrocks::pipeline {
 Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-    return _aggregator->open(state);
+    if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
+        _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
+    }
+    RETURN_IF_ERROR(_aggregator->open(state));
+    _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
 }
 
 void AggregateStreamingSinkOperator::close(RuntimeState* state) {
@@ -36,7 +42,12 @@ void AggregateStreamingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_source();
     _is_finished = true;
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
 
     if (_aggregator->hash_map_variant().size() == 0) {
         _aggregator->set_ht_eos();
@@ -51,7 +62,14 @@ StatusOr<ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(RuntimeState* stat
 }
 
 void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
-    _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
+    if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
+        _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
+    }
+    if (_aggregator->hash_map_memory_usage() > config::streaming_agg_limited_memory_size) {
+        _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
+    } else {
+        _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
+    }
 }
 
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -63,11 +81,12 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const Chu
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
-
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
         RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
     } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
         RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk->num_rows()));
+    } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
+        RETURN_IF_ERROR(_push_chunk_by_limited_memory(chunk, chunk_size));
     } else {
         RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk->num_rows()));
     }
@@ -86,14 +105,16 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming(const Chun
 Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const ChunkPtr& chunk,
                                                                            const size_t chunk_size) {
     SCOPED_TIMER(_aggregator->agg_compute_timer());
-    TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
+    TRY_CATCH_ALLOC_SCOPE_START();
+    _aggregator->build_hash_map(chunk_size);
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
     } else {
         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
     }
 
-    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+    _aggregator->try_convert_to_two_level_map();
+    TRY_CATCH_ALLOC_SCOPE_END();
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     return Status::OK();
@@ -102,9 +123,10 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
 Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(const ChunkPtr& chunk,
                                                                                const size_t chunk_size,
                                                                                bool need_build) {
+    TRY_CATCH_ALLOC_SCOPE_START();
     if (need_build) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
+        _aggregator->build_hash_map_with_selection(chunk_size);
     }
 
     size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
@@ -132,6 +154,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(c
             _aggregator->offer_chunk_to_buffer(res);
         }
     }
+    TRY_CATCH_ALLOC_SCOPE_END();
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     return Status::OK();
 }
@@ -163,14 +186,16 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
                                                           _aggregator->hash_map_variant().size())) {
             // hash table is not full or allow to expand the hash table according reduction rate
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
+            TRY_CATCH_ALLOC_SCOPE_START()
+            _aggregator->build_hash_map(chunk_size);
             if (_aggregator->is_none_group_by_exprs()) {
                 RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
             } else {
                 RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
             }
 
-            TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+            _aggregator->try_convert_to_two_level_map();
+            TRY_CATCH_ALLOC_SCOPE_END()
 
             COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
             break;
@@ -283,8 +308,27 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
     return Status::OK();
 }
 
+Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size) {
+    if (_limited_mem_state.has_limited(*_aggregator)) {
+        RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
+        _aggregator->set_streaming_all_states(true);
+    } else {
+        RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk_size));
+    }
+    return Status::OK();
+}
+
 Status AggregateStreamingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     return _aggregator->reset_state(state, refill_chunks, this);
 }
+
+std::string AggregateStreamingSinkOperator::get_name() const {
+    std::string finished = is_finished() ? "X" : "O";
+    auto full = _aggregator->is_chunk_buffer_full();
+    return fmt::format("{}_{}_{}({}) {{ full:{} has_output:{}}}", _name, _plan_node_id, (void*)this, finished, full,
+                       has_output());
+}
+
 } // namespace starrocks::pipeline

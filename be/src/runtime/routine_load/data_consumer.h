@@ -93,13 +93,18 @@ public:
         switch (event.type()) {
         case RdKafka::Event::EVENT_ERROR:
             LOG(INFO) << "kafka error: " << RdKafka::err2str(event.err()) << ", event: " << event.str();
+            log_event_msg(event);
             break;
+
         case RdKafka::Event::EVENT_STATS:
             LOG(INFO) << "kafka stats: " << event.str();
             break;
 
         case RdKafka::Event::EVENT_LOG:
             LOG(INFO) << "kafka log-" << event.severity() << "-" << event.fac().c_str() << ", event: " << event.str();
+            if (event.severity() <= RdKafka::Event::EVENT_SEVERITY_WARNING) {
+                log_event_msg(event);
+            }
             break;
 
         case RdKafka::Event::EVENT_THROTTLE:
@@ -113,6 +118,27 @@ public:
             break;
         }
     }
+
+    std::string get_error_msg() const {
+        std::unique_lock l(_lock);
+        return _error_msg;
+    }
+
+    void reset_error_msg() {
+        std::unique_lock l(_lock);
+        _error_msg.clear();
+    }
+
+private:
+    void log_event_msg(const RdKafka::Event& event) {
+        std::unique_lock l(_lock);
+        if (_error_msg.empty() && event.str().size() > 0) {
+            _error_msg = "event: " + event.str();
+        }
+    }
+
+    std::string _error_msg;
+    mutable std::mutex _lock;
 };
 
 class KafkaDataConsumer : public DataConsumer {
@@ -123,7 +149,10 @@ public:
     ~KafkaDataConsumer() override {
         VLOG(3) << "deconstruct consumer";
         if (_k_consumer) {
-            _k_consumer->close();
+            // consumer may be already closed when get partition meta failed
+            if (!_k_consumer->closed()) {
+                _k_consumer->close();
+            }
             delete _k_consumer;
             _k_consumer = nullptr;
         }
@@ -137,7 +166,7 @@ public:
     Status reset() override;
     bool match(StreamLoadContext* ctx) override;
     // commit kafka offset
-    Status commit(std::vector<RdKafka::TopicPartition*>& offset);
+    Status commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets);
 
     Status assign_topic_partitions(const std::map<int32_t, int64_t>& begin_partition_offset, const std::string& topic,
                                    StreamLoadContext* ctx);
@@ -155,6 +184,7 @@ public:
 private:
     std::string _brokers;
     std::string _topic;
+    std::string _group_id;
     std::unordered_map<std::string, std::string> _custom_properties;
 
     size_t _non_eof_partition_count = 0;

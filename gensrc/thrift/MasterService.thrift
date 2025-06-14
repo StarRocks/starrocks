@@ -41,6 +41,7 @@ include "Types.thrift"
 include "Status.thrift"
 include "WorkGroup.thrift"
 include "ResourceUsage.thrift"
+include "DataCache.thrift"
 
 struct TTabletInfo {
     1: required Types.TTabletId tablet_id
@@ -56,11 +57,15 @@ struct TTabletInfo {
     11: optional bool version_miss
     12: optional bool used
     13: optional Types.TPartitionId partition_id
-    14: optional bool is_in_memory
+    14: optional bool is_in_memory // Deprecated
     15: optional bool enable_persistent_index
     16: optional Types.TVersion min_readable_version
     17: optional i64 binlog_config_version
     18: optional bool is_error_state
+    19: optional Types.TVersion max_readable_version
+    20: optional i64 max_rowset_creation_time
+    21: optional i32 primary_index_cache_expire_sec
+    22: optional i32 tablet_schema_version
 }
 
 struct TTabletVersionPair {
@@ -86,6 +91,8 @@ struct TFinishTaskRequest {
     15: optional i64 copy_size
     16: optional i64 copy_time_ms
     17: optional list<TTabletVersionPair> tablet_versions;
+    18: optional list<TTabletVersionPair> tablet_publish_versions;
+    19: optional Types.TSnapshotInfo snapshot_info
 }
 
 struct TTablet {
@@ -121,6 +128,7 @@ struct TReportRequest {
     // active workgroup on this backend
     9: optional list<WorkGroup.TWorkGroup> active_workgroups
     10: optional ResourceUsage.TResourceUsage resource_usage
+    11: optional DataCache.TDataCacheMetrics datacache_metrics
 }
 
 struct TMasterResult {

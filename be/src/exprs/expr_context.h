@@ -54,6 +54,8 @@ class MemTracker;
 class RuntimeState;
 class ObjectPool;
 class TColumnValue;
+class BloomFilter;
+struct NgramBloomFilterReaderOptions;
 
 /// An ExprContext contains the state for the execution of a tree of Exprs, in particular
 /// the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -114,6 +116,18 @@ public:
 
     StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
     StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+    bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options);
+    bool support_ngram_bloom_filter();
+    bool is_index_only_filter() const;
+
+    bool error_if_overflow() const;
+
+    Status rewrite_jit_expr(ObjectPool* pool);
+
+    void set_build_from_only_in_filter(bool build_from_only_in_filter) {
+        _build_from_only_in_filter = build_from_only_in_filter;
+    }
+    bool build_from_only_in_filter() const { return _build_from_only_in_filter; }
 
 private:
     friend class Expr;
@@ -128,18 +142,21 @@ private:
     /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
     std::unique_ptr<MemPool> _pool;
 
+    RuntimeState* _runtime_state = nullptr;
     /// The expr tree this context is for.
     Expr* _root;
 
     /// True if this context came from a Clone() call. Used to manage FunctionStateScope.
-    bool _is_clone;
-
+    bool _is_clone{false};
     /// Variables keeping track of current state.
-    bool _prepared;
-    bool _opened;
-    RuntimeState* _runtime_state = nullptr;
+    bool _prepared{false};
+    bool _opened{false};
+    // Indicates that this expr is built from only in runtime in filter
+    // For hash join, it will build both IN filter and bloom filter. This variable is false.
+    // For cross join, it will only build Runtime IN filter, and this value is false.
+    bool _build_from_only_in_filter{false};
     // In operator, the ExprContext::close method will be called concurrently
-    std::atomic<bool> _closed;
+    std::atomic<bool> _closed{false};
 };
 
 #define RETURN_IF_HAS_ERROR(expr_ctxs)             \
@@ -149,13 +166,14 @@ private:
         }                                          \
     } while (false)
 
-#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                             \
-    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                \
-        auto st = c->evaluate(e, ptr);                                                       \
-        if (st.ok()) {                                                                       \
-            return st.value();                                                               \
-        }                                                                                    \
-        return ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                      \
+    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                         \
+        auto st = c->evaluate(e, ptr);                                                                \
+        if (st.ok()) {                                                                                \
+            return st.value();                                                                        \
+        }                                                                                             \
+        ColumnPtr res = ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+        return res;                                                                                   \
     }(ctx, expr, chunk)
 
 } // namespace starrocks

@@ -1,0 +1,53 @@
+-- name: test_table_sample @sequential
+
+set pipeline_dop = 1;
+
+create table t1 (
+    k1 int,
+    k2 int,
+    k3 string
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties("replication_num" = "1");
+
+insert into t1 
+select s1, s1 % 1000, repeat('a', 128) FROM TABLE(generate_series(1, 655350)) s(s1);
+
+create table pk_t1 primary key(k1) as select * from t1;
+
+-- make sure all data are compacted into one segment, otherwise the sample result is not stable
+alter table t1 compact;
+alter table pk_t1 compact;
+select sleep(3);
+
+-- arguments
+select count(k1), sum(k1), sum(k2) from t1 sample('method'='by_nothing');
+select count(k1), sum(k1), sum(k2) from t1 sample('percent'='1111');
+select count(k1), sum(k1), sum(k2) from t1 sample('percent'='0');
+select count(k1), sum(k1), sum(k2) from t1 sample('unknown'='a');
+
+-- block sample
+[UC] select count(k1), sum(k1), sum(k2) from t1 sample;
+select count(k1), sum(k1), sum(k2) from t1 sample('seed'='1', 'method'='by_block', 'percent'='1');
+select count(k1), sum(k1), sum(k2) from t1 sample('seed'='1', 'method'='by_block', 'percent'='10');
+select count(k1), sum(k1), sum(k2) from t1 sample('seed'='123', 'method'='by_block', 'percent'='10');
+
+-- page sample
+-- somehow, the result is unstable
+-- select count(k1), sum(k1) from t1 sample('seed'='1', 'method'='by_page', 'percent'='1');
+-- select count(k1), sum(k1) from t1 sample('seed'='1', 'method'='by_page', 'percent'='10');
+-- select count(k1), sum(k1) from t1 sample('seed'='123', 'method'='by_page', 'percent'='10');
+
+-- delete data
+delete from t1 where k2 = 1;
+select count(k1), sum(k1), sum(k2) from t1 sample('seed'='1', 'method'='by_block', 'percent'='1');
+select count(k1), sum(k1), sum(k2) from t1 sample('seed'='1', 'method'='by_block', 'percent'='10');
+
+-- with other predicates
+select count(k1), sum(k1), sum(k2) 
+from t1 sample('seed'='1', 'method'='by_block', 'percent'='1')
+where k2 = 2;
+
+-- primary key
+select count(k1), sum(k1), sum(k2) from pk_t1 sample('seed'='1', 'method'='by_block', 'percent'='10');

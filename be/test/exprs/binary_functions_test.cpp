@@ -51,7 +51,7 @@ public:
         return BinaryFunctions::from_binary(ctx.get(), columns);
     }
 
-    Slice hex_binary(const Slice& str) {
+    std::string hex_binary(const Slice& str) {
         std::stringstream ss;
         ss << std::hex << std::uppercase << std::setfill('0');
         for (int i = 0; i < str.size; ++i) {
@@ -79,7 +79,6 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
 
     for (auto& c : good_cases) {
         auto [binary_type, arg, expect] = c;
-        std::cout << "good case, arg:" << arg << std::endl;
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
 
@@ -88,7 +87,7 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
         ASSERT_TRUE(!v->is_null(0));
         ASSERT_EQ(v->size(), 1);
         if (binary_type == BinaryFormatType::HEX) {
-            ASSERT_EQ(Slice(expect), hex_binary(v->get_data()[0]));
+            ASSERT_EQ(Slice(expect).to_string(), hex_binary(v->get_data()[0]));
         } else {
             ASSERT_EQ(Slice(expect), v->get_data()[0]);
         }
@@ -100,7 +99,6 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
     };
     for (auto& c : bad_cases) {
         auto [binary_type, arg] = c;
-        std::cout << "bad case, arg:" << arg << std::endl;
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
         auto v = ColumnHelper::as_column<BinaryColumn>(result.value());
@@ -113,7 +111,7 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
 TEST_F(BinaryFunctionsTest, TestToBinaryNull) {
     auto arg = ColumnHelper::create_const_null_column(2);
     state->to_binary_type = BinaryFormatType::HEX;
-    auto result = BinaryFunctions::to_binary(ctx.get(), {arg});
+    auto result = BinaryFunctions::to_binary(ctx.get(), {std::move(arg)});
     ASSERT_TRUE(result.ok());
     const auto v = ColumnHelper::as_column<ConstColumn>(result.value());
     ASSERT_EQ(v->size(), 2);
@@ -135,7 +133,6 @@ TEST_F(BinaryFunctionsTest, TestFromToBinaryNormal) {
 
     for (auto& c : good_cases) {
         auto [binary_type, arg, expect] = c;
-        std::cout << "good case, arg:" << arg << std::endl;
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
 

@@ -1,0 +1,33 @@
+-- name: testIcebergCatalog
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_trans_part order by col_int;
+-- result:
+1	2020-01-01
+2	2020-02-01
+3	2020-03-01
+4	2020-04-01
+5	2020-05-01
+6	2020-06-01
+-- !result
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_trans_part;
+-- result:
+6
+-- !result
+select count(*), col_date from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_trans_part group by col_date order by col_date;
+-- result:
+1	2020-01-01
+1	2020-02-01
+1	2020-03-01
+1	2020-04-01
+1	2020-05-01
+1	2020-06-01
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_ts_to_ts;","partitions=2")
+-- result:
+None
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

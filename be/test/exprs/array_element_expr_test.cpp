@@ -19,23 +19,13 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
+#include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
 
 namespace {
 
-class FakeConstExpr : public starrocks::Expr {
-public:
-    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
-
-    Expr* clone(ObjectPool*) const override { return nullptr; }
-
-    ColumnPtr _column;
-};
-
-ColumnPtr const_int_column(int32_t value, size_t size = 1) {
+MutableColumnPtr const_int_column(int32_t value, size_t size = 1) {
     auto data = Int32Column::create();
     data->append(value);
     return ConstColumn::create(std::move(data), size);
@@ -63,7 +53,7 @@ protected:
     void SetUp() override {}
     void TearDown() override { _objpool.clear(); }
 
-    FakeConstExpr* new_fake_const_expr(ColumnPtr value, const TypeDescriptor& type) {
+    FakeConstExpr* new_fake_const_expr(MutableColumnPtr&& value, const TypeDescriptor& type) {
         TExprNode node;
         node.__set_node_type(TExprNodeType::INT_LITERAL);
         node.__set_num_children(0);
@@ -113,7 +103,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
 
-        expr->add_child(new_fake_const_expr(array, type_array_int));
+        expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
         expr->add_child(new_fake_const_expr(const_int_column(1), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -153,7 +143,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
 
-        expr->add_child(new_fake_const_expr(array, type_array_int));
+        expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
         expr->add_child(new_fake_const_expr(const_int_column(0), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -187,7 +177,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
 
-        expr->add_child(new_fake_const_expr(array, type_array_int));
+        expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
         expr->add_child(new_fake_const_expr(const_int_column(-1), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -224,8 +214,8 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
         auto subscript = NullableColumn::create(Int32Column::create(), NullColumn::create());
         (void)subscript->append_nulls(5);
 
-        expr->add_child(new_fake_const_expr(array, type_array_int));
-        expr->add_child(new_fake_const_expr(subscript, type_int));
+        expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
+        expr->add_child(new_fake_const_expr(std::move(subscript), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -254,7 +244,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
                                           UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
-        expr->add_child(new_fake_const_expr(array1, type_array_int));
+        expr->add_child(new_fake_const_expr(std::move(array1), type_array_int));
         expr->add_child(new_fake_const_expr(const_int_column(1), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -280,7 +270,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
                                           UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
-        expr->add_child(new_fake_const_expr(array1, type_array_int));
+        expr->add_child(new_fake_const_expr(std::move(array1), type_array_int));
         expr->add_child(new_fake_const_expr(const_int_column(100), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -306,7 +296,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
                                           UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
-        expr->add_child(new_fake_const_expr(array1, type_array_int));
+        expr->add_child(new_fake_const_expr(std::move(array1), type_array_int));
         expr->add_child(new_fake_const_expr(const_int_column(0), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -353,8 +343,8 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         auto subscript = NullableColumn::create(Int32Column::create(), NullColumn::create());
         (void)subscript->append_nulls(4);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
-        expr->add_child(new_fake_const_expr(subscript, type_int));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
+        expr->add_child(new_fake_const_expr(std::move(subscript), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -375,7 +365,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
         expr->add_child(new_fake_const_expr(const_int_column(-1), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -397,7 +387,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
         expr->add_child(new_fake_const_expr(const_int_column(0), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -419,7 +409,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
         expr->add_child(new_fake_const_expr(const_int_column(1), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -446,7 +436,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
         expr->add_child(new_fake_const_expr(const_int_column(2), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -478,7 +468,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
         expr->add_child(new_fake_const_expr(const_int_column(3), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -500,7 +490,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
         expr->add_child(new_fake_const_expr(const_int_column(100000), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);
@@ -521,7 +511,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
-        expr->add_child(new_fake_const_expr(array, type_desc));
+        expr->add_child(new_fake_const_expr(array->clone(), type_desc));
         expr->add_child(new_fake_const_expr(const_int_column(-100000), type_int));
 
         auto result = expr->evaluate(nullptr, nullptr);

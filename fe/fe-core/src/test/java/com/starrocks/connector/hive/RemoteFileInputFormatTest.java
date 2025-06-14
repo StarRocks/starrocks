@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
-import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.thrift.THdfsFileFormat;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -26,5 +25,11 @@ public class RemoteFileInputFormatTest {
                 .fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"));
         Assert.assertSame(RemoteFileInputFormat.ORC,
                 RemoteFileInputFormat.fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"));
+    }
+
+    @Test
+    public void testUnknownFormat() {
+        RemoteFileInputFormat format = RemoteFileInputFormat.UNKNOWN;
+        Assert.assertEquals(THdfsFileFormat.UNKNOWN, format.toThrift());
     }
 }

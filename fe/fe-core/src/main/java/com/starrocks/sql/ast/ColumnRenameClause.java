@@ -18,8 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
-
 // rename column
 public class ColumnRenameClause extends AlterTableClause {
     private final String colName;
@@ -30,10 +28,9 @@ public class ColumnRenameClause extends AlterTableClause {
     }
 
     public ColumnRenameClause(String colName, String newColName, NodePosition pos) {
-        super(AlterOpType.SCHEMA_CHANGE, pos);
+        super(AlterOpType.RENAME, pos);
         this.colName = colName;
         this.newColName = newColName;
-        this.needTableStable = false;
     }
 
     public String getColName() {
@@ -42,11 +39,6 @@ public class ColumnRenameClause extends AlterTableClause {
 
     public String getNewColName() {
         return newColName;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return null;
     }
 
     @Override

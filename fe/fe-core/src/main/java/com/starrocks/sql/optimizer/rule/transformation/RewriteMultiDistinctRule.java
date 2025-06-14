@@ -14,43 +14,43 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.common.FeConstants;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
-import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
 public class RewriteMultiDistinctRule extends TransformationRule {
-    private static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
-            new ImplicitCastRule()
-    );
-    private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
 
     public RewriteMultiDistinctRule() {
         super(RuleType.TF_REWRITE_MULTI_DISTINCT,
@@ -62,132 +62,178 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
 
+        // any aggregate function is distinct and constant, we replace it to any_value
+        if (isComplexConstantCountDistinct(input)) {
+            return true;
+        }
+
+        // if have multiple distinct functions and their distinct input cols are not exactly same
+        Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
+        if (distinctCols.isEmpty()) {
+            return true;
+        }
+
+        // If have multiple distinct functions and their distinct input cols are exactly same, but split Agg rule can't handle it
+        // such as table has one tablet property
+        if (Utils.hasMultipleDistinctFuncShareSameDistinctColumns(agg.getAggregations().values()) &&
+                !Utils.couldGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(),
+                        input.inputAt(0).getOp())) {
+            return true;
+        }
+
+        // all distinct function use the same distinct columns and split rule can handle it, we use the split rule to rewrite
+        return false;
+    }
+
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        if (isComplexConstantCountDistinct(input)) {
+            return rewriteComplexConstantDistinct(input);
+        }
+        if (useCteToRewrite(input, context)) {
+            MultiDistinctByCTERewriter rewriter = new MultiDistinctByCTERewriter();
+            return rewriter.transformImpl(input, context);
+        } else {
+            MultiDistinctByMultiFuncRewriter rewriter = new MultiDistinctByMultiFuncRewriter();
+            return rewriter.transformImpl(input, context);
+        }
+    }
+
+    private boolean isComplexConstantCountDistinct(OptExpression input) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        // sr support count(distinct constant array/struct/map) in four-phase aggregate,
+        // but doesn't support in two-phase aggregate, we replace it to any_value
+        return agg.getAggregations().values().stream()
+                .anyMatch(c -> c.isDistinct() && c.isConstant() && FunctionSet.COUNT.equalsIgnoreCase(c.getFnName()) &&
+                        (c.getChildren().size() == 1) && c.getChild(0).getType().isComplexType());
+    }
+
+    private List<OptExpression> rewriteComplexConstantDistinct(OptExpression input) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+
+        agg.getAggregations().forEach((k, v) -> {
+            if (v.isDistinct() && v.isConstant() && FunctionSet.COUNT.equalsIgnoreCase(v.getFnName()) &&
+                    (v.getChildren().size() == 1) && v.getChild(0).getType().isComplexType()) {
+                Preconditions.checkState(v.getType() == Type.BIGINT);
+                IsNullPredicateOperator isNull = new IsNullPredicateOperator(true, v.getChild(0));
+                CastOperator cast = new CastOperator(Type.BIGINT, isNull);
+                Function fn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {Type.BIGINT},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                CallOperator anyValue =
+                        new CallOperator(FunctionSet.ANY_VALUE, v.getType(), Lists.newArrayList(cast), fn, false);
+                newAggregations.put(k, anyValue);
+            } else {
+                newAggregations.put(k, v);
+            }
+        });
+
+        LogicalAggregationOperator newAgg =
+                LogicalAggregationOperator.builder().withOperator(agg).setAggregations(newAggregations).build();
+        return Lists.newArrayList(OptExpression.create(newAgg, input.getInputs()));
+    }
+
+    private boolean useCteToRewrite(OptExpression input, OptimizerContext context) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
-
-        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
-        return (distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
-                .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG))) && !hasMultiColumns;
-    }
-
-    @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-
-        Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : aggregationOperator.getAggregations()
-                .entrySet()) {
-            CallOperator oldFunctionCall = aggregation.getValue();
-            if (oldFunctionCall.isDistinct()) {
-                CallOperator newAggOperator = oldFunctionCall;
-                if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
-                    newAggOperator = buildMultiCountDistinct(oldFunctionCall);
-                } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
-                    newAggOperator = buildMultiSumDistinct(oldFunctionCall);
-                }
-                newAggMap.put(aggregation.getKey(), newAggOperator);
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getColumnRefs().size() > 1);
+        // exist multiple distinct columns should enable cte use
+        if (hasMultiColumns) {
+            if (!context.getSessionVariable().isCboCteReuse()) {
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR,
+                        "%s is unsupported when cbo_cte_reuse is disabled", distinctAggOperatorList);
             } else {
-                newAggMap.put(aggregation.getKey(), aggregation.getValue());
+                return true;
             }
         }
 
-        /*
-         * Repeat the loop once, because avg can use the newly generated aggregate function last time,
-         * so that the expression can be reused. such as: count(distinct v1), avg(distinct v1), sum(distinct v1),
-         * avg can use multi_distinct_x generated by count or sum
-         */
-        boolean hasAvg = false;
-        Map<ColumnRefOperator, ScalarOperator> projections = new HashMap<>();
-        Map<ColumnRefOperator, CallOperator> newAggMapWithAvg = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, CallOperator> aggMap : newAggMap.entrySet()) {
-            CallOperator oldFunctionCall = aggMap.getValue();
-            if (oldFunctionCall.isDistinct() && oldFunctionCall.getFnName().equals(FunctionSet.AVG)) {
-                hasAvg = true;
-                CallOperator count = buildMultiCountDistinct(oldFunctionCall);
-                ColumnRefOperator countColRef = null;
-                for (Map.Entry<ColumnRefOperator, CallOperator> entry : newAggMap.entrySet()) {
-                    if (entry.getValue().equals(count)) {
-                        countColRef = entry.getKey();
-                        break;
-                    }
-                }
-                countColRef = countColRef == null ?
-                        context.getColumnRefFactory().create(count, count.getType(), count.isNullable()) : countColRef;
-                newAggMapWithAvg.put(countColRef, count);
+        // respect prefer cte rewrite hint
+        if (context.getSessionVariable().isCboCteReuse() && context.getSessionVariable().isPreferCTERewrite()) {
+            return true;
+        }
 
-                CallOperator sum = buildMultiSumDistinct(oldFunctionCall);
-                ColumnRefOperator sumColRef = null;
-                for (Map.Entry<ColumnRefOperator, CallOperator> entry : newAggMap.entrySet()) {
-                    if (entry.getValue().equals(sum)) {
-                        sumColRef = entry.getKey();
-                        break;
-                    }
-                }
-                sumColRef = sumColRef == null ?
-                        context.getColumnRefFactory().create(sum, sum.getType(), sum.isNullable()) : sumColRef;
-                newAggMapWithAvg.put(sumColRef, sum);
-                CallOperator multiAvg = new CallOperator(FunctionSet.DIVIDE, oldFunctionCall.getType(),
-                        Lists.newArrayList(sumColRef, countColRef));
-                if (multiAvg.getType().isDecimalV3()) {
-                    // There is not need to apply ImplicitCastRule to divide operator of decimal types.
-                    // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-                    ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
-                    multiAvg.getChildren().set(
-                            1, new CastOperator(decimal128p38s0, multiAvg.getChild(1), true));
-                } else {
-                    multiAvg = (CallOperator) scalarRewriter.rewrite(multiAvg,
-                            Lists.newArrayList(new ImplicitCastRule()));
-                }
-                projections.put(aggMap.getKey(), multiAvg);
-            } else {
-                projections.put(aggMap.getKey(), aggMap.getKey());
-                newAggMapWithAvg.put(aggMap.getKey(), aggMap.getValue());
+        // respect skew int
+        if (context.getSessionVariable().isCboCteReuse() && agg.hasSkew() && !agg.getGroupingKeys().isEmpty()) {
+            return true;
+        }
+
+        // if one tablet, prefer to use MultiFun, which only has one global agg without exchange
+        LogicalProperty inputLogicalProperty = input.getLogicalProperty();
+        if (inputLogicalProperty.oneTabletProperty().supportOneTabletOpt && (!FeConstants.runningUnitTest)) {
+            return false;
+        }
+
+        if (context.getSessionVariable().isCboCteReuse() &&
+                isCTEMoreEfficient(input, context, distinctAggOperatorList)) {
+            return true;
+        }
+
+        // all distinct one column function can be rewritten by multi distinct function
+        boolean canRewriteByMultiFunc = true;
+        for (CallOperator distinctCall : distinctAggOperatorList) {
+            String fnName = distinctCall.getFnName();
+            List<ScalarOperator> children = distinctCall.getChildren();
+            Type type = children.get(0).getType();
+            if (type.isComplexType()
+                    || type.isJsonType()
+                    || FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)
+                    || (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && type.isDecimalOfAnyVersion())) {
+                canRewriteByMultiFunc = false;
+                break;
             }
         }
 
-        OptExpression result;
-        if (hasAvg) {
-            OptExpression aggOpt = OptExpression
-                    .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
-                                    .setType(AggType.GLOBAL)
-                                    .setAggregations(newAggMapWithAvg)
-                                    .build(),
-                            input.getInputs());
-            aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
-            result = OptExpression.create(new LogicalProjectOperator(projections), Lists.newArrayList(aggOpt));
-        } else {
-            result = OptExpression
-                    .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
-                                    .setType(AggType.GLOBAL)
-                                    .setAggregations(newAggMap)
-                                    .build(),
-                            input.getInputs());
+        if (!context.getSessionVariable().isCboCteReuse() && !canRewriteByMultiFunc) {
+            throw new StarRocksPlannerException(ErrorType.USER_ERROR,
+                    "%s is unsupported when cbo_cte_reuse is disabled", distinctAggOperatorList);
         }
 
-        if (aggregationOperator.getPredicate() != null) {
-            result = OptExpression.create(new LogicalFilterOperator(aggregationOperator.getPredicate()), result);
+        return !canRewriteByMultiFunc;
+    }
+
+    private boolean isCTEMoreEfficient(OptExpression input, OptimizerContext context,
+                                       List<CallOperator> distinctAggOperatorList) {
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+        if (aggOp.hasLimit()) {
+            return false;
+        }
+        Utils.calculateStatistics(input, context);
+
+        Statistics inputStatistics = input.inputAt(0).getStatistics();
+        // inputStatistics may be null if it's a cte consumer operator
+        if (inputStatistics == null) {
+            return false;
+        }
+        List<ColumnRefOperator> neededCols = Lists.newArrayList(aggOp.getGroupingKeys());
+        distinctAggOperatorList.stream().forEach(e -> neededCols.addAll(e.getColumnRefs()));
+
+        // no statistics available, use cte for no group by or group by only one col scenes to avoid bad case of multiple_func
+        if (neededCols.stream().anyMatch(e -> inputStatistics.getColumnStatistics().get(e).isUnknown())) {
+            return aggOp.getGroupingKeys().size() < 2;
         }
 
-        return Lists.newArrayList(result);
-    }
+        double inputRowCount = inputStatistics.getOutputRowCount();
+        List<Double> deduplicateOutputRows = Lists.newArrayList();
+        List<Double> distinctValueCounts = Lists.newArrayList();
+        for (CallOperator callOperator : distinctAggOperatorList) {
+            List<ColumnRefOperator> distinctColumns = callOperator.getColumnRefs();
+            if (distinctColumns.isEmpty()) {
+                continue;
+            }
+            Set<ColumnRefOperator> deduplicateKeys = Sets.newHashSet();
+            deduplicateKeys.addAll(aggOp.getGroupingKeys());
+            deduplicateKeys.addAll(distinctColumns);
+            deduplicateOutputRows.add(StatisticsCalculator.computeGroupByStatistics(Lists.newArrayList(deduplicateKeys),
+                    inputStatistics, Maps.newHashMap()));
+            distinctValueCounts.add(inputStatistics.getColumnStatistics().get(distinctColumns.get(0)).getDistinctValuesCount());
+        }
 
-    private CallOperator buildMultiCountDistinct(CallOperator oldFunctionCall) {
-        Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_COUNT),
-                oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
-        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
-
-        return (CallOperator) scalarRewriter.rewrite(
-                new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fn.getReturnType(), oldFunctionCall.getChildren(),
-                        fn),
-                DEFAULT_TYPE_CAST_RULE);
-    }
-
-    private CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
-        Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
-                oldFunctionCall.getFunction(), oldFunctionCall.getChild(0).getType());
-        return (CallOperator) scalarRewriter.rewrite(
-                new CallOperator(
-                        FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
-                        oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
+        if (distinctValueCounts.stream().allMatch(d -> d < MEDIUM_AGGREGATE_EFFECT_COEFFICIENT)) {
+            // distinct key with an extreme low cardinality use multi_distinct_func maybe more efficient
+            return false;
+        } else if (deduplicateOutputRows.stream().allMatch(row -> row * LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount)) {
+            return false;
+        }
+        return true;
     }
 }

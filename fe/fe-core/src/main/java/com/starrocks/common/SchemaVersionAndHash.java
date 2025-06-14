@@ -23,7 +23,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 /*
@@ -42,11 +41,7 @@ public class SchemaVersionAndHash implements Writable {
         this.schemaHash = schemaHash;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public String toString() {

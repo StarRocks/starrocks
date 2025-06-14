@@ -19,37 +19,33 @@
 #include "column/fixed_length_column.h"
 
 namespace starrocks {
-class StructColumn final : public ColumnFactory<Column, StructColumn> {
-    friend class ColumnFactory<Column, StructColumn>;
+class StructColumn final : public CowFactory<ColumnFactory<Column, StructColumn>, StructColumn> {
+    friend class CowFactory<ColumnFactory<Column, StructColumn>, StructColumn>;
+    using Base = CowFactory<ColumnFactory<Column, StructColumn>, StructColumn>;
 
 public:
     using ValueType = void;
     using Container = Buffer<std::string>;
 
     // Used to construct an unnamed struct
-    StructColumn(Columns fields) : _fields(std::move(fields)) {}
-
-    StructColumn(Columns fields, std::vector<std::string> field_names)
-            : _fields(std::move(fields)), _field_names(std::move(field_names)) {
-        // Struct must have at least one field.
-        DCHECK(_fields.size() > 0);
-        DCHECK(_field_names.size() > 0);
-
-        // fields and field_names must have the same size.
-        DCHECK(_fields.size() == _field_names.size());
-    }
-
+    StructColumn(MutableColumns&& fields);
+    StructColumn(MutableColumns&& fields, std::vector<std::string> field_names);
     StructColumn(const StructColumn& rhs) {
-        Columns fields;
         for (const auto& field : rhs._fields) {
-            fields.emplace_back(field->clone_shared());
+            _fields.emplace_back(field->clone());
         }
-        _fields = fields;
         _field_names = rhs._field_names;
     }
-
     StructColumn(StructColumn&& rhs) noexcept
             : _fields(std::move(rhs._fields)), _field_names(std::move(rhs._field_names)) {}
+
+    static Ptr create(const Columns& columns, std::vector<std::string> field_names);
+    static Ptr create(const Columns& columns);
+
+    static MutablePtr create(MutableColumns&& columns, std::vector<std::string> field_names) {
+        return Base::create(std::move(columns), std::move(field_names));
+    }
+    static MutablePtr create(MutableColumns&& columns) { return Base::create(std::move(columns)); }
 
     ~StructColumn() override = default;
 
@@ -68,6 +64,8 @@ public:
     size_t byte_size() const override;
 
     size_t byte_size(size_t idx) const override;
+
+    size_t byte_size(size_t from, size_t size) const override;
 
     void reserve(size_t n) override;
 
@@ -89,15 +87,13 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
     [[nodiscard]] bool append_nulls(size_t count) override;
-
-    [[nodiscard]] bool append_strings(const Buffer<Slice>& strs) override;
 
     [[nodiscard]] size_t append_numbers(const void* buff, size_t length) override;
 
@@ -107,12 +103,12 @@ public:
 
     void append_default(size_t count) override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -128,7 +124,7 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    bool equals(size_t left, const Column& rhs, size_t right) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
 
     void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
 
@@ -136,7 +132,7 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is) const override;
 
     std::string debug_item(size_t idx) const override;
 
@@ -156,22 +152,30 @@ public:
 
     void reset_column() override;
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override;
+    Status capacity_limit_reached() const override;
 
     void check_or_die() const override;
 
-    // Struct Column own functions
-    const Columns& fields() const;
+    const Columns& fields() const { return _fields; }
+    const Columns& fields_column() const { return _fields; }
+    Columns& fields_column() { return _fields; }
 
-    Columns& fields_column();
-
-    ColumnPtr field_column(const std::string& field_name);
+    const ColumnPtr& field_column(const std::string& field_name) const;
+    ColumnPtr& field_column(const std::string& field_name);
 
     const std::vector<std::string>& field_names() const { return _field_names; }
 
     Status unfold_const_children(const TypeDescriptor& type) override;
 
+    void mutate_each_subcolumn() override {
+        for (auto& column : _fields) {
+            column = (std::move(*column)).mutate();
+        }
+    }
+
 private:
+    size_t _find_field_idx_by_name(const std::string& field_name) const;
+
     // A collection that contains StructType's subfield column.
     Columns _fields;
 

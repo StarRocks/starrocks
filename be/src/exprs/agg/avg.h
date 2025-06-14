@@ -80,7 +80,7 @@ public:
     template <bool is_inc>
     void do_update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
         DCHECK(!columns[0]->is_nullable());
-        [[maybe_unused]] const InputColumnType* column = down_cast<const InputColumnType*>(columns[0]);
+        [[maybe_unused]] const auto* column = down_cast<const InputColumnType*>(columns[0]);
         if constexpr (is_inc) {
             if constexpr (lt_is_datetime<LT>) {
                 this->data(state).sum += column->get_data()[row_num].to_unix_second();
@@ -139,7 +139,8 @@ public:
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
-                                             bool ignore_subtraction, bool ignore_addition) const override {
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
         const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
         const int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
@@ -185,7 +186,7 @@ public:
         bytes.resize(one_element_size * chunk_size);
         dst_column->get_offset().resize(chunk_size + 1);
 
-        [[maybe_unused]] const InputColumnType* src_column = down_cast<const InputColumnType*>(src[0].get());
+        [[maybe_unused]] const auto* src_column = down_cast<const InputColumnType*>(src[0].get());
         int64_t count = 1;
         ImmediateType result = {};
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -211,13 +212,14 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
+        auto* column = down_cast<ResultColumnType*>(to);
         // In fact, for StarRocks real query, we don't need this check.
         // But for robust, we add this check.
         if (this->data(state).count == 0) {
+            column->append_default();
             return;
         }
 
-        ResultColumnType* column = down_cast<ResultColumnType*>(to);
         ResultType result;
         if constexpr (lt_is_decimalv2<LT>) {
             result = this->data(state).sum / DecimalV2Value(this->data(state).count, 0);
@@ -229,8 +231,8 @@ public:
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
             static_assert(lt_is_decimal128<ResultLT>, "Result type of avg on decimal32/64/128 is decimal 128");
-            ResultType sum = ResultType(this->data(state).sum);
-            ResultType count = ResultType(this->data(state).count);
+            auto sum = ResultType(this->data(state).sum);
+            auto count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
         } else {
             DCHECK(false) << "Invalid LogicalTypes for avg function";
@@ -242,7 +244,7 @@ public:
                     size_t end) const override {
         DCHECK_GT(end, start);
 
-        ResultColumnType* column = down_cast<ResultColumnType*>(dst);
+        auto* column = down_cast<ResultColumnType*>(dst);
         ResultType result;
 
         if constexpr (lt_is_decimalv2<LT>) {
@@ -255,8 +257,8 @@ public:
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
             static_assert(lt_is_decimal128<ResultLT>, "Result type of avg on decimal32/64/128 is decimal 128");
-            ResultType sum = ResultType(this->data(state).sum);
-            ResultType count = ResultType(this->data(state).count);
+            auto sum = ResultType(this->data(state).sum);
+            auto count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
         } else {
             DCHECK(false) << "Invalid LogicalTypes for avg function";

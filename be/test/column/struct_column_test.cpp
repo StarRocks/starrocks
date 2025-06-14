@@ -23,97 +23,56 @@
 
 namespace starrocks {
 
-TEST(StructColumnTest, test_create) {
+StructColumn::Ptr create_test_column() {
     std::vector<std::string> field_name{"id", "name"};
     auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
     auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    Columns fields{id, name};
-    auto column = StructColumn::create(fields, field_name);
-
-    ASSERT_TRUE(column->is_struct());
-    ASSERT_FALSE(column->is_nullable());
-    ASSERT_EQ(0, column->size());
+    Columns fields{std::move(id), std::move(name)};
+    auto column = StructColumn::create(std::move(fields), std::move(field_name));
 
     DatumStruct struct1{uint64_t(1), Slice("smith")};
     DatumStruct struct2{uint64_t(2), Slice("cruise")};
     column->append_datum(struct1);
     column->append_datum(struct2);
 
-    ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
+    return column;
+}
 
-    ASSERT_EQ("{id:1,name:'smith'}, {id:2,name:'cruise'}", column->debug_string());
+TEST(StructColumnTest, test_create) {
+    auto col = create_test_column();
+
+    ASSERT_EQ(col->size(), 2);
+    ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
+
+    ASSERT_EQ("{id:1,name:'smith'}, {id:2,name:'cruise'}", col->debug_string());
 }
 
 TEST(StructColumnTest, test_update_if_overflow) {
-    {
-        std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
+    auto col = create_test_column();
 
-        DatumStruct struct1{uint64_t(1), Slice("smith")};
-        DatumStruct struct2{uint64_t(2), Slice("cruise")};
-        column->append_datum(struct1);
-        column->append_datum(struct2);
-
-        // it does not upgrade because of not overflow
-        auto ret = column->upgrade_if_overflow();
-        ASSERT_TRUE(ret.ok());
-        ASSERT_TRUE(ret.value() == nullptr);
-    }
-
-    {
-        /*
-         * require too much of time, comment it.
-        auto field_name = BinaryColumn::create();
-        field_name->append_string("id");
-        field_name->append_string("name");
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
-
-        size_t item_count = 1 << 30;
-        for (size_t i = 0; i < item_count; i++) {
-            column->append_datum(DatumStruct{i, Slice("smith")});
-        }
-
-        auto ret = column->upgrade_if_overflow();
-        ASSERT_TRUE(ret.ok());
-        ASSERT_TRUE(ret.value() == nullptr);
-        ASSERT_TRUE(column->has_large_column());
-         */
-    }
+    // it does not upgrade because of not overflow
+    auto ret = col->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
 }
 
 TEST(StructColumnTest, test_column_downgrade) {
     {
-        std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
+        auto col = create_test_column();
 
-        DatumStruct struct1{uint64_t(1), Slice("smith")};
-        DatumStruct struct2{uint64_t(2), Slice("cruise")};
-        column->append_datum(struct1);
-        column->append_datum(struct2);
-
-        ASSERT_FALSE(column->has_large_column());
-        auto ret = column->downgrade();
+        ASSERT_FALSE(col->has_large_column());
+        auto ret = col->downgrade();
         ASSERT_TRUE(ret.ok());
         ASSERT_TRUE(ret.value() == nullptr);
     }
 
     {
         std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
+        NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+        NullableColumn::Ptr name = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
         Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
+        StructColumn::Ptr column = StructColumn::create(fields, field_name);
 
         for (size_t i = 0; i < 10; i++) {
             column->append_datum(DatumStruct{i, Slice(std::to_string(i))});
@@ -136,10 +95,10 @@ TEST(StructColumnTest, test_column_downgrade) {
 TEST(StructColumnTest, test_append_null) {
     {
         std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+        NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
+        StructColumn::Ptr column = StructColumn::create(fields, field_name);
 
         DatumStruct struct1{uint64_t(1), Slice("smith")};
         DatumStruct struct3{uint64_t(3), Slice("cruise")};
@@ -155,11 +114,11 @@ TEST(StructColumnTest, test_append_null) {
 
     {
         std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+        NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
         // one subfield is not nullable
-        auto name = BinaryColumn::create();
+        BinaryColumn::Ptr name = BinaryColumn::create();
         Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
+        StructColumn::Ptr column = StructColumn::create(fields, field_name);
 
         DatumStruct struct1{uint64_t(1), Slice("smith")};
         DatumStruct struct3{uint64_t(3), Slice("cruise")};
@@ -175,10 +134,10 @@ TEST(StructColumnTest, test_append_null) {
 
 TEST(StructColumnTest, test_append_defaults) {
     std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     Columns fields{id, name};
-    auto column = StructColumn::create(fields, field_name);
+    StructColumn::Ptr column = StructColumn::create(fields, field_name);
 
     column->append_default();
     ASSERT_EQ(1, column->size());
@@ -195,8 +154,8 @@ TEST(StructColumnTest, equals) {
     // rhs: {1, 2}, {1, 2}, {6, 7}, {2, 1}
     StructColumn::Ptr lhs;
     {
-        auto field1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        auto field2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        NullableColumn::Ptr field1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        NullableColumn::Ptr field2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
         Columns fields{field1, field2};
         lhs = StructColumn::create(fields);
     }
@@ -212,8 +171,8 @@ TEST(StructColumnTest, equals) {
 
     StructColumn::Ptr rhs;
     {
-        auto field1 = Int32Column::create();
-        auto field2 = Int32Column::create();
+        Int32Column::Ptr field1 = Int32Column::create();
+        Int32Column::Ptr field2 = Int32Column::create();
         Columns fields{field1, field2};
         rhs = StructColumn::create(fields);
     }
@@ -234,44 +193,32 @@ TEST(StructColumnTest, equals) {
     ASSERT_TRUE(lhs->equals(3, *rhs, 3));
 }
 
+TEST(StructColumnTest, test_byte_size) {
+    auto col = create_test_column();
+
+    ASSERT_EQ(sizeof(uint64_t) * 2 + sizeof(BinaryColumn::Offset) * 2 + 11 + 2 * 2, col->byte_size());
+    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 6 + 2, col->byte_size(1, 1));
+    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 5 + 2, col->byte_size(0));
+}
+
 TEST(StructColumnTest, test_resize) {
-    std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    Columns fields{id, name};
-    auto column = StructColumn::create(fields, field_name);
+    auto col = create_test_column();
 
-    DatumStruct struct1{uint64_t(1), Slice("smith")};
-    DatumStruct struct2{uint64_t(2), Slice("cruise")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
+    ASSERT_EQ(2, col->size());
 
-    ASSERT_EQ(2, column->size());
+    col->resize(1);
 
-    column->resize(1);
-
-    ASSERT_EQ(1, column->size());
-    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ(1, col->size());
+    ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
 }
 
 TEST(StructColumnTest, test_reset_column) {
-    std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    Columns fields{id, name};
-    auto column = StructColumn::create(fields, field_name);
+    auto col = create_test_column();
 
-    DatumStruct struct1{uint64_t(1), Slice("smith")};
-    DatumStruct struct2{uint64_t(2), Slice("cruise")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
+    col->reset_column();
 
-    ASSERT_EQ(2, column->size());
-
-    column->reset_column();
-
-    ASSERT_EQ(0, column->size());
-    for (const auto& subfield : column->fields()) {
+    ASSERT_EQ(0, col->size());
+    for (const auto& subfield : col->fields()) {
         ASSERT_EQ(0, subfield->size());
     }
 }
@@ -281,8 +228,8 @@ TEST(StructColumnTest, test_swap_column) {
     ColumnPtr column2;
     {
         std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+        NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         Columns fields{id, name};
         column1 = StructColumn::create(fields, field_name);
 
@@ -291,8 +238,8 @@ TEST(StructColumnTest, test_swap_column) {
     }
     {
         std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+        NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         Columns fields{id, name};
         column2 = StructColumn::create(fields, field_name);
 
@@ -316,173 +263,93 @@ TEST(StructColumnTest, test_swap_column) {
 }
 
 TEST(StructColumnTest, test_copy_construtor) {
-    std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
+    auto col = create_test_column();
 
-    // delete reference
-    id = nullptr;
-    name = nullptr;
+    ASSERT_EQ(col->size(), 2);
+    ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
 
-    ASSERT_TRUE(column->is_struct());
-    ASSERT_FALSE(column->is_nullable());
-    ASSERT_EQ(0, column->size());
-
-    DatumStruct struct1{uint64_t(1), Slice("smith")};
-    DatumStruct struct2{uint64_t(2), Slice("cruise")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
-
-    ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
-
-    StructColumn copy(*column);
-    column->reset_column();
-    ASSERT_EQ(0, column->size());
+    StructColumn copy(*col);
+    col->reset_column();
+    ASSERT_EQ(0, col->size());
     ASSERT_EQ(2, copy.size());
     ASSERT_EQ("{id:1,name:'smith'}", copy.debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", copy.debug_item(1));
 
-    ASSERT_TRUE(copy.fields().at(0).unique());
-    ASSERT_TRUE(copy.fields().at(1).unique());
+    ASSERT_TRUE(copy.fields().at(0)->use_count() == 1);
+    ASSERT_TRUE(copy.fields().at(1)->use_count() == 1);
 }
 
 TEST(StructColumnTest, test_move_construtor) {
-    std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
+    auto col = create_test_column();
 
-    // delete reference
-    id = nullptr;
-    name = nullptr;
+    ASSERT_EQ(col->size(), 2);
+    ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
 
-    ASSERT_TRUE(column->is_struct());
-    ASSERT_FALSE(column->is_nullable());
-    ASSERT_EQ(0, column->size());
-
-    DatumStruct struct1{uint64_t(1), Slice("smith")};
-    DatumStruct struct2{uint64_t(2), Slice("cruise")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
-
-    ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
-
-    StructColumn copy(std::move(*column));
+    StructColumn copy(std::move(*col));
     ASSERT_EQ(2, copy.size());
     ASSERT_EQ("{id:1,name:'smith'}", copy.debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", copy.debug_item(1));
 
-    ASSERT_TRUE(copy.fields().at(0).unique());
-    ASSERT_TRUE(copy.fields().at(1).unique());
+    ASSERT_TRUE(copy.fields().at(0)->use_count() == 1);
+    ASSERT_TRUE(copy.fields().at(1)->use_count() == 1);
 }
 
 TEST(StructColumnTest, test_clone) {
-    std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
+    auto col = create_test_column();
 
-    // delete reference
-    id = nullptr;
-    name = nullptr;
+    ASSERT_EQ(col->size(), 2);
+    ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
 
-    ASSERT_TRUE(column->is_struct());
-    ASSERT_FALSE(column->is_nullable());
-    ASSERT_EQ(0, column->size());
-
-    DatumStruct struct1{uint64_t(1), Slice("smith")};
-    DatumStruct struct2{uint64_t(2), Slice("cruise")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
-
-    ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
-
-    auto copy = column->clone();
-    column->reset_column();
+    auto copy = col->clone();
+    col->reset_column();
     ASSERT_EQ(2, copy->size());
     ASSERT_EQ("{id:1,name:'smith'}", copy->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", copy->debug_item(1));
 
-    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0).unique());
-    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(1).unique());
+    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0)->use_count() == 1);
+    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(1)->use_count() == 1);
 }
 
 TEST(StructColumnTest, test_clone_shared) {
-    std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
+    auto col = create_test_column();
 
-    // delete reference
-    id = nullptr;
-    name = nullptr;
+    ASSERT_EQ(col->size(), 2);
+    ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
 
-    ASSERT_TRUE(column->is_struct());
-    ASSERT_FALSE(column->is_nullable());
-    ASSERT_EQ(0, column->size());
-
-    DatumStruct struct1{uint64_t(1), Slice("smith")};
-    DatumStruct struct2{uint64_t(2), Slice("cruise")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
-
-    ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
-
-    auto copy = column->clone_shared();
-    column->reset_column();
+    auto copy = col->clone();
+    col->reset_column();
     ASSERT_EQ(2, copy->size());
     ASSERT_EQ("{id:1,name:'smith'}", copy->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", copy->debug_item(1));
 
-    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0).unique());
-    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(1).unique());
+    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0)->use_count() == 1);
+    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(1)->use_count() == 1);
 }
 
 TEST(StructColumnTest, test_clone_empty) {
-    std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
+    auto col = create_test_column();
 
-    // delete reference
-    id = nullptr;
-    name = nullptr;
+    ASSERT_EQ(2, col->size());
+    ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
 
-    ASSERT_TRUE(column->is_struct());
-    ASSERT_FALSE(column->is_nullable());
-    ASSERT_EQ(0, column->size());
-
-    DatumStruct struct1{uint64_t(1), Slice("smith")};
-    DatumStruct struct2{uint64_t(2), Slice("cruise")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
-
-    ASSERT_EQ(2, column->size());
-    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
-
-    auto copy = column->clone_empty();
-    column->reset_column();
+    auto copy = col->clone_empty();
+    col->reset_column();
     ASSERT_EQ(0, copy->size());
 
-    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0).unique());
-    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(1).unique());
+    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0)->use_count() == 1);
+    ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(1)->use_count() == 1);
 }
 
 TEST(StructColumnTest, test_update_rows) {
     std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
+    NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    StructColumn::Ptr column = StructColumn::create(Columns{id, name}, field_name);
 
     ASSERT_TRUE(column->is_struct());
     ASSERT_FALSE(column->is_nullable());
@@ -499,7 +366,7 @@ TEST(StructColumnTest, test_update_rows) {
     copy->append_datum(struct2);
     copy->append_datum(DatumStruct{uint64_t(4), Slice("world")});
     std::vector<uint32_t> replace_indexes = {0, 2};
-    ASSERT_TRUE(column->update_rows(*copy.get(), replace_indexes.data()).ok());
+    column->update_rows(*copy.get(), replace_indexes.data());
 
     ASSERT_EQ(3, column->size());
     ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(0));
@@ -509,9 +376,9 @@ TEST(StructColumnTest, test_update_rows) {
 
 TEST(StructColumnTest, test_assign) {
     std::vector<std::string> field_name{"id", "name"};
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
+    NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    StructColumn::Ptr column = StructColumn::create(Columns{id, name}, field_name);
 
     ASSERT_TRUE(column->is_struct());
     ASSERT_FALSE(column->is_nullable());
@@ -529,10 +396,10 @@ TEST(StructColumnTest, test_assign) {
 }
 
 TEST(StructColumnTest, test_reference_memory_usage) {
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     Columns fields{id, name};
-    auto column = StructColumn::create(fields);
+    StructColumn::Ptr column = StructColumn::create(fields);
 
     column->append_datum(DatumStruct{uint64_t(1), Slice("2")});
     column->append_datum(DatumStruct{uint64_t(1), Slice("4")});

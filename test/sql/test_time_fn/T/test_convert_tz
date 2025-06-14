@@ -1,0 +1,16 @@
+-- name: test_convert_tz
+create table dt_test(
+    c1 datetime,
+    c2 varchar(100),
+    c3 varchar(100)
+) duplicate key(c1)
+PROPERTIES("replication_num" = "1");
+insert into dt_test values ('2020-01-01 00:00:00', 'Asia/Shanghai', 'America/Los_Angeles'),
+('2020-01-01 00:00:00.01', 'Asia/Shanghai', 'America/Los_Angeles'),
+('2020-01-01 00:00:00.01', '+08:00', 'America/Los_Angeles'),
+('2020-01-01 00:00:00.01', '+08:00', '+09:00'),
+('2020-01-01 00:00:00.01', 'Asia/Shanghai', 'America/Lima');
+select c1, c2, c3, convert_tz(c1, c2, c3) from dt_test order by c1, c2, c3;
+select c1, convert_tz(c1, 'Asia/Shanghai', '+09:00') from dt_test  order by c1;
+select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');
+select convert_tz('2019-08-01 13:21:03.001', 'Asia/Shanghai', 'America/Los_Angeles');

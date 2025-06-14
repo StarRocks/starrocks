@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -60,12 +61,15 @@ public class PruneComplexTypeUtil {
     protected static class Context {
         // The same ColumnRefOperator may have multiple access paths for complex type
         private final Map<ColumnRefOperator, ComplexTypeAccessGroup> accessGroups;
-
+        private final Map<ColumnRefOperator, ColumnRefOperator> unnestColRefMap;
+        private boolean enablePruneComplexTypesInUnnest;
         private boolean enablePruneComplexTypes;
 
-        public Context() {
+        public Context(boolean enablePruneComplexTypesInUnnest) {
             this.accessGroups = new HashMap<>();
             this.enablePruneComplexTypes = true;
+            this.unnestColRefMap = new HashMap<>();
+            this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
         }
 
         public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
@@ -79,26 +83,26 @@ public class PruneComplexTypeUtil {
         public void addAccessPaths(ColumnRefOperator columnRefOperator, ComplexTypeAccessPaths accessPaths) {
             accessGroups.putIfAbsent(columnRefOperator, new ComplexTypeAccessGroup());
             accessGroups.get(columnRefOperator).addAccessPaths(accessPaths);
+
+            ColumnRefOperator oriColRefOperator = getOriginalColRef(columnRefOperator);
+            if (oriColRefOperator != columnRefOperator) {
+                accessGroups.putIfAbsent(oriColRefOperator, new ComplexTypeAccessGroup());
+                accessGroups.get(oriColRefOperator).addAccessPaths(accessPaths);
+            }
         }
 
         public void addAccessPaths(ColumnRefOperator columnRefOperator,
                                    ComplexTypeAccessPaths curAccessPaths,
                                    ComplexTypeAccessGroup visitedAccessGroup) {
-            int size = visitedAccessGroup.size();
-            // We should we below loop to avoid ConcurrentModificationException
-            for (int i = 0; i < size; i++) {
-                addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, visitedAccessGroup.get(i)));
+            // We should copy it first to avoid ConcurrentModificationException
+            ImmutableList<ComplexTypeAccessPaths> accessGroup = ImmutableList.<ComplexTypeAccessPaths>builder().addAll(
+                    visitedAccessGroup.getAccessGroup()).build();
+            for (ComplexTypeAccessPaths complexTypeAccessPaths : accessGroup) {
+                addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, complexTypeAccessPaths));
             }
         }
 
         public void add(ColumnRefOperator outputColumnRefOperator, ScalarOperator scalarOperator) {
-            // If outputColumnRefOperator's type is not equal to scalarOperator's type,
-            // we just stop pruning in case.
-            if (!checkCanPrune(outputColumnRefOperator, scalarOperator)) {
-                setEnablePruneComplexTypes(false);
-                return;
-            }
-
             ComplexTypeAccessGroup visitedAccessGroup = null;
             if (outputColumnRefOperator != null) {
                 // If outputColumnRefOperator is not null, it means it may have visited access group,
@@ -110,26 +114,43 @@ public class PruneComplexTypeUtil {
             scalarOperator.accept(markSubfieldsVisitor, this);
         }
 
+        public void setUnnest(PhysicalTableFunctionOperator operator) {
+            for (int i = 0; i < operator.getFnResultColRefs().size(); i++) {
+                ColumnRefOperator output = operator.getFnResultColRefs().get(i);
+                ColumnRefOperator input = operator.getFnParamColumnRefs().get(i);
+                unnestColRefMap.put(output, input);
+                if (getVisitedAccessGroup(output) != null) {
+                    accessGroups.put(input, getVisitedAccessGroup(output));
+                    if (operator.getProjection() == null && operator.getOutputColRefs().contains(output)) {
+                        add(input, input);
+                    }
+                }
+            }
+        }
+
+        public boolean isEnablePruneComplexTypesInUnnest() {
+            return enablePruneComplexTypesInUnnest;
+        }
+
+        public boolean hasUnnestColRefMapValue(ColumnRefOperator columnRefOperator) {
+            return unnestColRefMap.containsValue(columnRefOperator);
+        }
+
+        public boolean hasUnnestColRefMapKey(ColumnRefOperator columnRefOperator) {
+            return unnestColRefMap.containsKey(columnRefOperator);
+        }
+
         public ComplexTypeAccessGroup getVisitedAccessGroup(ColumnRefOperator columnRefOperator) {
             return accessGroups.get(columnRefOperator);
         }
 
-        private boolean checkCanPrune(ColumnRefOperator columnRefOperator, ScalarOperator scalarOperator) {
-            if (columnRefOperator == null) {
-                return true;
+        private ColumnRefOperator getOriginalColRef(ColumnRefOperator col) {
+            if (unnestColRefMap.containsKey(col)) {
+                return unnestColRefMap.get(col);
             }
-
-            if (!columnRefOperator.getType().isComplexType() && !scalarOperator.getType().isComplexType()) {
-                // If columnRefOperator and scalarOperator both are not complex type, don't need to check
-                return true;
-            }
-
-            if (!columnRefOperator.getType().equals(scalarOperator.getType())) {
-                LOG.warn("Complex type columnRefOperator and scalarOperator should has the same type.");
-                return false;
-            }
-            return true;
+            return col;
         }
+
     }
 
     private static ComplexTypeAccessPaths concatAccessPaths(
@@ -158,6 +179,10 @@ public class PruneComplexTypeUtil {
                 // we will always select the ItemType of ArrayType, so we don't mark it and skip it.
                 while (tmpType.isArrayType()) {
                     tmpType = ((ArrayType) tmpType).getItemType();
+                }
+                /// If origin type is Array, the item type may not be complex type anymore
+                if (!tmpType.isComplexType()) {
+                    break;
                 }
                 ComplexTypeAccessPath accessPath = accessPaths.get(i);
                 if (i == accessPaths.size() - 1) {
@@ -194,7 +219,8 @@ public class PruneComplexTypeUtil {
                 return null;
             }
 
-            if (scalarOperator.getType().isMapType() || scalarOperator.getType().isStructType()) {
+            if (scalarOperator.getType().isMapType() || scalarOperator.getType().isStructType() ||
+                    scalarOperator.getType().isFunctionType()) {
                 // New expression maybe added, and it's not be handled when go here, so we need disable prune subfields
                 // to prevent error prune.
                 context.setEnablePruneComplexTypes(false);

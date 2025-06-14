@@ -14,27 +14,66 @@
 
 package com.starrocks.service;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.common.Config;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.SlotManager;
+import com.starrocks.qe.scheduler.slot.SlotSelectionStrategyV2;
+import com.starrocks.qe.scheduler.slot.SlotTracker;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
+import com.starrocks.thrift.TGetPartitionsMetaRequest;
+import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TGetWarehouseMetricsRequest;
+import com.starrocks.thrift.TGetWarehouseMetricsRespone;
+import com.starrocks.thrift.TGetWarehouseQueriesRequest;
+import com.starrocks.thrift.TGetWarehouseQueriesResponse;
+import com.starrocks.thrift.TKeywordInfo;
+import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.HashMap;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class InformationSchemaDataSourceTest {
 
@@ -48,7 +87,6 @@ public class InformationSchemaDataSourceTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
-        Config.enable_experimental_mv = true;
     }
 
     @Test
@@ -69,8 +107,12 @@ public class InformationSchemaDataSourceTest {
                 "REFRESH ASYNC " +
                 "AS SELECT k1, k2 " +
                 "FROM db1.tbl1 ";
-
         starRocksAssert.withMaterializedView(createMvStmtStr);
+
+        String createViewStmtStr = "CREATE VIEW db1.v1 " +
+                "AS SELECT k1, k2 " +
+                "FROM db1.tbl1 ";
+        starRocksAssert.withView(createViewStmtStr);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();
@@ -98,10 +140,16 @@ public class InformationSchemaDataSourceTest {
                 .filter(t -> t.getTable_engine().equals("MATERIALIZED_VIEW")).findFirst()
                 .orElseGet(null);
         Assert.assertEquals("MATERIALIZED_VIEW", mvConfig.getTable_engine());
-        Map<String, String> propsMap = new HashMap<>();
-        propsMap = new Gson().fromJson(mvConfig.getProperties(), propsMap.getClass());
+        Map<String, String> propsMap = new Gson().fromJson(mvConfig.getProperties(), Map.class);
         Assert.assertEquals("1", propsMap.get("replication_num"));
         Assert.assertEquals("HDD", propsMap.get("storage_medium"));
+
+        TTableConfigInfo viewConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_engine().equals("VIEW")).findFirst()
+                .orElseGet(null);
+        Assert.assertEquals("VIEW", viewConfig.getTable_engine());
+        Assert.assertEquals("db1", viewConfig.getTable_schema());
+        Assert.assertEquals("v1", viewConfig.getTable_name());
 
     }
 
@@ -129,7 +177,7 @@ public class InformationSchemaDataSourceTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
         starRocksAssert.withTable(createTblStmtStr);
@@ -179,4 +227,496 @@ public class InformationSchemaDataSourceTest {
         Assert.assertTrue(checkTables);
     }
 
+    @Test
+    public void testGetPartitionsMeta() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db3").useDatabase("db3");
+        String createTblStmtStr = "CREATE TABLE db3.`duplicate_table_with_null` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` int COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\",\n" +
+                "  `k4` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`)\n" +
+                "PARTITION BY RANGE(`k2`)\n" +
+                "(PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")))\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        String ddlStr = "ALTER TABLE db3.`duplicate_table_with_null`\n" +
+                "add TEMPORARY partition p2 VALUES [(\"19930101\"), (\"19940101\"))\n" +
+                "DISTRIBUTED BY HASH(`k1`);";
+        starRocksAssert.ddl(ddlStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db3");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_table_with_null")).findFirst().orElseGet(null);
+        Assert.assertEquals("db3", partitionMeta.getDb_name());
+        Assert.assertEquals("duplicate_table_with_null", partitionMeta.getTable_name());
+    }
+
+    @Test
+    public void testRandomDistribution() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db4").useDatabase("db4");
+        String createTblStmtStr = "CREATE TABLE db4.`duplicate_table_random` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db4");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_table_random")).findFirst().orElseGet(null);
+        Assert.assertEquals("RANDOM", tableConfig.getDistribute_type());
+        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assert.assertEquals("", tableConfig.getDistribute_key());
+    }
+
+    @Test
+    public void testDynamicPartition() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db5").useDatabase("db5");
+        String createTblStmtStr = "CREATE TABLE db5.`duplicate_dynamic_table` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY RANGE(k1)()\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "\"dynamic_partition.start\" = \"-3\",\n" +
+                "\"dynamic_partition.end\" = \"3\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db5");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_dynamic_table")).findFirst().orElseGet(null);
+        Map<String, String> props = new Gson().fromJson(tableConfig.getProperties(), Map.class);
+        Assert.assertEquals("true", props.get("dynamic_partition.enable"));
+        Assert.assertEquals("DAY", props.get("dynamic_partition.time_unit"));
+        Assert.assertEquals("-3", props.get("dynamic_partition.start"));
+        Assert.assertEquals("3", props.get("dynamic_partition.end"));
+        Assert.assertEquals("p", props.get("dynamic_partition.prefix"));
+        Assert.assertEquals("1", props.get("replication_num"));
+    }
+
+    public static ZoneOffset offset(ZoneId id) {
+        return ZoneOffset.ofTotalSeconds((int) 
+            TimeUnit.MILLISECONDS.toSeconds(
+                TimeZone.getTimeZone(id).getRawOffset()        // Returns offset in milliseconds 
+            )
+        );
+    }
+
+    @Test
+    public void testTaskRunsEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        starRocksAssert.withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1') ");
+        starRocksAssert.ddl("submit task t_1024 as insert into t1 select * from t1");
+
+        TaskRunStatus taskRun = new TaskRunStatus();
+        taskRun.setTaskName("t_1024");
+        taskRun.setState(Constants.TaskRunState.SUCCESS);
+        taskRun.setDbName("d1");
+        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setExpireTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        new MockUp<TaskManager>() {
+            @Mock
+            public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
+                return Lists.newArrayList(taskRun);
+            }
+        };
+
+        starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' | 'SUCCESS' | " +
+                                "NULL | 'd1' | 'insert into t1 select * from t1' | '2024-01-02 03:04:05' | 0 | " +
+                                "NULL | '0%' | '' | NULL");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "'SUCCESS' | NULL");
+        starRocksAssert.query("select count(task_name) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "'t_1024'");
+        starRocksAssert.query("select count(error_code) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: \n         0\n");
+        starRocksAssert.query("select count(*) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "NULL");
+        starRocksAssert.query("select count(distinct task_name) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "'t_1024'");
+        starRocksAssert.query("select error_code + 1, error_message + 'haha' " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "0 | NULL");
+
+        // Not supported
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name='t_1024' or task_name='t_1025' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where error_message > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where state = 'SUCCESS' ")
+                .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testGetKeywords() throws Exception {
+        starRocksAssert.withEnableMV();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TGetKeywordsRequest req = new TGetKeywordsRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetKeywordsResponse response = impl.getKeywords(req);
+        List<TKeywordInfo> keywordList = response.getKeywords();
+
+        Assert.assertNotNull("Keywords list should not be null", keywordList);
+        Assert.assertFalse("Keywords list should not be empty", keywordList.isEmpty());
+
+        List<String> keywordNames = keywordList.stream()
+                .map(TKeywordInfo::getKeyword)
+                .collect(Collectors.toList());
+
+        Assert.assertTrue("Keywords should contain 'SELECT'", keywordNames.contains("SELECT"));
+        Assert.assertTrue("Keywords should contain 'INSERT'", keywordNames.contains("INSERT"));
+        Assert.assertTrue("Keywords should contain 'UPDATE'", keywordNames.contains("UPDATE"));
+        Assert.assertTrue("Keywords should contain 'DELETE'", keywordNames.contains("DELETE"));
+        Assert.assertTrue("Keywords should contain 'TABLE'", keywordNames.contains("TABLE"));
+        Assert.assertTrue("Keywords should contain 'INDEX'", keywordNames.contains("INDEX"));
+        Assert.assertTrue("Keywords should contain 'VIEW'", keywordNames.contains("VIEW"));
+        Assert.assertTrue("Keywords should contain 'USER'", keywordNames.contains("USER"));
+        Assert.assertTrue("Keywords should contain 'PASSWORD'", keywordNames.contains("PASSWORD"));
+
+        TKeywordInfo selectKeyword = keywordList.stream()
+                .filter(k -> k.getKeyword().equals("SELECT"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("SELECT keyword should be present", selectKeyword);
+        Assert.assertTrue("SELECT keyword should be reserved", selectKeyword.isReserved());
+
+        TKeywordInfo userKeyword = keywordList.stream()
+                .filter(k -> k.getKeyword().equals("USER"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("USER keyword should be present", userKeyword);
+        Assert.assertFalse("USER keyword should not be reserved", userKeyword.isReserved());
+    }
+
+    @Test
+    public void testGetApplicableRoles() throws Exception {
+        starRocksAssert.withEnableMV();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TGetApplicableRolesRequest req = new TGetApplicableRolesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetApplicableRolesResponse response = impl.getApplicableRoles(req);
+        List<TApplicableRolesInfo> rolesList = response.getRoles();
+
+        Assert.assertNotNull("Roles list should not be null", rolesList);
+        Assert.assertFalse("Roles list should not be empty", rolesList.isEmpty());
+
+        List<String> roleNames = rolesList.stream()
+                .map(TApplicableRolesInfo::getRole_name)
+                .collect(Collectors.toList());
+
+        Assert.assertTrue("Roles should contain 'root'", roleNames.contains("root"));
+
+        TApplicableRolesInfo adminRole = rolesList.stream()
+                .filter(r -> r.getRole_name().equals("root"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("root role should be present", adminRole);
+        Assert.assertEquals("User should be root", "root", adminRole.getUser());
+        Assert.assertEquals("Host should be %", "%", adminRole.getHost());
+        Assert.assertEquals("isGrantable should be NO", "NO", "NO");
+        Assert.assertEquals("isDefault should be NO", "NO", "NO");
+        Assert.assertEquals("isMandatory should be NO", "NO", "NO");
+    }
+
+    @Test
+    public void testWarehouseMetrics() throws Exception {
+        starRocksAssert.withEnableMV();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetWarehouseMetricsRequest req = new TGetWarehouseMetricsRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetWarehouseMetricsRespone response = impl.getWarehouseMetrics(req);
+        Assert.assertNotNull(response.getMetrics());
+
+        starRocksAssert.query("select * from information_schema.warehouse_metrics;")
+                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUEUE_PENDING_LENGTH " +
+                        "| 4: QUEUE_RUNNING_LENGTH | 5: MAX_PENDING_LENGTH | 6: MAX_PENDING_TIME_SECOND " +
+                        "| 7: EARLIEST_QUERY_WAIT_TIME | 8: MAX_REQUIRED_SLOTS | 9: SUM_REQUIRED_SLOTS | 10: REMAIN_SLOTS " +
+                        "| 11: MAX_SLOTS | 12: EXTRA_MESSAGE\n");
+    }
+
+    @Test
+    public void testWarehouseQueries() throws Exception {
+        starRocksAssert.withEnableMV();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetWarehouseQueriesRequest req = new TGetWarehouseQueriesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetWarehouseQueriesResponse response = impl.getWarehouseQueries(req);
+        Assert.assertTrue(response.getQueries().isEmpty());
+
+        starRocksAssert.query("select * from information_schema.warehouse_queries;")
+                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUERY_ID | 4: STATE " +
+                        "| 5: EST_COSTS_SLOTS | 6: ALLOCATE_SLOTS | 7: QUEUED_WAIT_SECONDS " +
+                        "| 8: QUERY | 9: QUERY_START_TIME | 10: QUERY_END_TIME | 11: QUERY_DURATION | 12: EXTRA_MESSAGE\n");
+    }
+
+    @Test
+    public void testMaterializedViewsEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        starRocksAssert.withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1') ");
+        starRocksAssert.withMaterializedView("create materialized view test_mv1 refresh manual as select * from t1");
+
+        MaterializedView mv = starRocksAssert.getMv("d1", "test_mv1");
+        Assert.assertTrue(mv != null);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        String taskName = TaskBuilder.getMvTaskName(mv.getId());
+        Task task = taskManager.getTask(taskName);
+        Assert.assertTrue(task != null);
+
+        TaskRunStatus taskRun = new TaskRunStatus();
+        taskRun.setTaskName(taskName);
+        taskRun.setState(Constants.TaskRunState.SUCCESS);
+        taskRun.setDbName("d1");
+        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setExpireTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        new MockUp<TaskManager>() {
+            @Mock
+            public Map<String, List<TaskRunStatus>> listMVRefreshedTaskRunStatus(String dbName, Set<String> taskNames) {
+                Map<String, List<TaskRunStatus>> result = Maps.newHashMap();
+                result.put(taskName, Lists.newArrayList(taskRun));
+                return result;
+            }
+        };
+        // supported
+        starRocksAssert.query("select TABLE_NAME, LAST_REFRESH_STATE,LAST_REFRESH_ERROR_CODE,IS_ACTIVE,INACTIVE_REASON\n" +
+                        "from information_schema.materialized_views where table_name = 'test_mv1")
+                .explainContains(" OUTPUT EXPRS:3: TABLE_NAME | 13: LAST_REFRESH_STATE " +
+                                "| 19: LAST_REFRESH_ERROR_CODE | 5: IS_ACTIVE | 6: INACTIVE_REASON",
+                        "constant exprs: ",
+                        "'test_mv1' | 'true' | '' | 'SUCCESS' | '0'");
+        starRocksAssert.query("select count(1) from information_schema.materialized_views")
+                .explainContains("     constant exprs: ");
+        starRocksAssert.query("select * from information_schema.materialized_views")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+        starRocksAssert.query("select * from information_schema.materialized_views where table_name = 'test_mv1' ")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+        starRocksAssert.query("select * from information_schema.materialized_views " +
+                        "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+        starRocksAssert.query("select *, TASK_ID + 1 from information_schema.materialized_views " +
+                        "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+
+        // not supported
+        starRocksAssert.query("select * from information_schema.materialized_views where TABLE_NAME != 'test_mv1' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.materialized_views where TABLE_SCHEMA = 'd1' or " +
+                        "TABLE_NAME = 'test_mv1' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.materialized_views where TABLE_NAME = 'test_mv1' " +
+                        "or TABLE_NAME = 'test_mv2' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.materialized_views where TASK_NAME = 'txxx' ")
+                .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testWarehouseMetricsEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        new MockUp<SlotManager>() {
+            @Mock
+            public Map<Long, BaseSlotTracker> getWarehouseIdToSlotTracker() {
+                Map<Long, BaseSlotTracker> result = Maps.newHashMap();
+                result.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, slotTracker);
+                return result;
+            }
+        };
+        // supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics")
+                .explainContains("constant exprs: \n" +
+                        "         'default_warehouse' | '0'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where warehouse_id = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_ID = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics " +
+                        "where WAREHOUSE_ID = 0")
+                .explainContains("constant exprs: \n" +
+                        "         'default_warehouse' | '0'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where WAREHOUSE_NAME = " +
+                        "'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_NAME= 'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics " +
+                        "where WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("constant exprs: \n" +
+                        "         'default_warehouse' | '0'");
+
+        // not supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where WAREHOUSE_ID != '0'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_ID = 0 and " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_ID = 0 or " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
+    }
+
+    private static LogicalSlot generateSlot(int numSlots) {
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0,
+                0, 0);
+    }
+
+    @Test
+    public void testWarehouseQueriesEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        LogicalSlot slot1 = generateSlot(1);
+        new MockUp<SlotManager>() {
+            @Mock
+            public List<LogicalSlot> getSlots() {
+                List<LogicalSlot> result = Lists.newArrayList();
+                result.add(slot1);
+                return result;
+            }
+        };
+        // supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_queries")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries")
+                .explainContains("     constant exprs: \n" +
+                        "         'default_warehouse' | '1'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries where warehouse_id = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries " +
+                        "where WAREHOUSE_ID = 0")
+                .explainContains("     constant exprs: \n" +
+                        "         'default_warehouse' | '1'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries where WAREHOUSE_NAME = " +
+                        "'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_NAME= 'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries " +
+                        "where WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         'default_warehouse' | '1'");
+
+        // not supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries where WAREHOUSE_ID != '0'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = 0 and " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = 0 or " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
+    }
 }

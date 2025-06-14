@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
  */
 public class RowOutputInfo {
 
-    // store the final output of the optExpression
+    // store the final output of the optExpression after projection(if exists)
     private final Map<Integer, ColumnOutputInfo> colOutputInfo;
 
     // store the final common exprs referenced by the output
@@ -130,6 +130,10 @@ public class RowOutputInfo {
 
     public List<ColumnOutputInfo> getColumnOutputInfo() {
         return Lists.newArrayList(chooseOutputMap().values());
+    }
+
+    public List<ColumnOutputInfo> getCommonColInfo() {
+        return Lists.newArrayList(commonColInfo.values());
     }
 
     public List<ColumnRefOperator> getOutputColRefs() {

@@ -17,11 +17,13 @@ package com.starrocks.binlog;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletMetaType;
@@ -69,11 +71,11 @@ public class BinlogManager {
         tableIdToPartitions = new HashMap<>();
     }
 
-    private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<Partition> curPartitions) {
+    private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<PhysicalPartition> curPartitions) {
         if (prePartitions.size() != curPartitions.size()) {
             return true;
         }
-        for (Partition partition : curPartitions) {
+        for (PhysicalPartition partition : curPartitions) {
             if (!prePartitions.contains(partition.getId())) {
                 return true;
             }
@@ -85,22 +87,23 @@ public class BinlogManager {
     public void checkAndSetBinlogAvailableVersion(Database db, OlapTable table, long tabletId, long beId) {
         lock.writeLock().lock();
         try {
+            Locker locker = new Locker();
             try {
                 // check if partitions has changed
-                db.readLock();
+                locker.lockDatabase(db.getId(), LockType.READ);
                 Set<Long> partitions = tableIdToPartitions.computeIfAbsent(table.getId(), key -> new HashSet<>());
                 boolean isPartitionChanged = false;
                 // if partitions is empty indicates that the tablet is
                 // the first tablet of the table to be reported,
                 // no need to check whether the partitions have been changed
                 if (!partitions.isEmpty()) {
-                    isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPartitions());
+                    isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPhysicalPartitions());
                 }
 
                 if (isPartitionChanged) {
                     // for the sake of simplicity, if the partition have been changed, re-statistics
                     partitions.clear();
-                    partitions.addAll(table.getAllPartitions().stream().
+                    partitions.addAll(table.getAllPhysicalPartitions().stream().
                             map(partition -> partition.getId()).
                             collect(Collectors.toSet()));
                     tableIdToReportedNum.clear();
@@ -121,7 +124,7 @@ public class BinlogManager {
                 }
                 tableIdToBinlogVersion.put(table.getId(), table.getBinlogVersion());
                 if (!tableIdToReplicaCount.containsKey(table.getId())) {
-                    long totalReplicaCount = table.getAllPartitions().stream().
+                    long totalReplicaCount = table.getAllPhysicalPartitions().stream().
                             map(partition -> partition.getBaseIndex().getReplicaCount()).
                             reduce(0L, (acc, n) -> acc + n);
                     tableIdToReplicaCount.put(table.getId(), totalReplicaCount);
@@ -135,14 +138,14 @@ public class BinlogManager {
                     allBeIds.add(beId);
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             if (tableIdToReportedNum.get(table.getId()).equals(tableIdToReplicaCount.get(table.getId()))) {
-                db.writeLock();
+                locker.lockDatabase(db.getId(), LockType.WRITE);
                 try {
                     // check again if all replicas have been reported
-                    long totalReplicaCount = table.getAllPartitions().stream().
+                    long totalReplicaCount = table.getAllPhysicalPartitions().stream().
                             map(partition -> partition.getBaseIndex().getReplicaCount()).
                             reduce(0L, (acc, n) -> acc + n);
 
@@ -154,7 +157,7 @@ public class BinlogManager {
                     long binlogTxnId = table.getBinlogTxnId();
                     if (binlogTxnId == INVALID) {
                         // the binlog config takes effect in all tablets of the table in BE for now
-                        Long nextTxnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().
+                        Long nextTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
                                 getTransactionIDGenerator().getNextTransactionId();
                         table.setBinlogTxnId(binlogTxnId);
                         binlogTxnId = nextTxnId;
@@ -180,9 +183,9 @@ public class BinlogManager {
                         tableIdToPartitions.remove(table.getId());
                     }
                 } catch (AnalysisException e) {
-                    LOG.warn(e);
+                    LOG.warn("Failed to execute", e);
                 } finally {
-                    db.writeUnlock();
+                    locker.unLockDatabase(db.getId(), LockType.WRITE);
                 }
             }
         } finally {
@@ -223,16 +226,18 @@ public class BinlogManager {
 
 
     public boolean isBinlogAvailable(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion().size() != 0;
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return false;
@@ -242,16 +247,18 @@ public class BinlogManager {
     // the binlog is available
     // result : partitionId -> binlogAvailableVersion, null indicates the db or table is dropped
     public Map<Long, Long> getBinlogAvailableVersion(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion();
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return null;
@@ -261,20 +268,21 @@ public class BinlogManager {
     // result : <tableId, BinlogConfig>
     public HashMap<Long, BinlogConfig> showAllBinlog() {
         HashMap<Long, BinlogConfig> allTablesWithBinlogConfigMap = new HashMap<>();
-        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : allDbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
-                    List<Table> tables = db.getTables();
+                    List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : tables) {
                         if (table.isOlapTable() && ((OlapTable) table).isBinlogEnabled()) {
                             allTablesWithBinlogConfigMap.put(table.getId(), ((OlapTable) table).getCurBinlogConfig());
                         }
                     }
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }

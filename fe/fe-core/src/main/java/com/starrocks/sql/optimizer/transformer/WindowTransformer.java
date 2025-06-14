@@ -22,10 +22,11 @@ import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
@@ -37,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -120,7 +122,6 @@ public class WindowTransformer {
                     firstType = callExpr.getFn().getArgs()[0];
                 }
 
-
                 if (callExpr.getChildren().size() == 1) {
                     callExpr.addChild(new IntLiteral("1", Type.BIGINT));
                     callExpr.addChild(NullLiteral.create(firstType));
@@ -151,6 +152,11 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+        } else if (AnalyticExpr.isApproxTopKFn(callExpr.getFn())) {
+            Preconditions.checkState(CollectionUtils.isEmpty(orderByElements),
+                    "Unexpected order by clause for approx_top_k()");
+            Preconditions.checkState(windowFrame == null, "Unexpected window set for approx_top_k()");
+            windowFrame = AnalyticWindow.DEFAULT_UNBOUNDED_WINDOW;
         }
 
         // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
@@ -163,30 +169,39 @@ public class WindowTransformer {
 
             // Also flip first_value()/last_value(). For other analytic functions there is no
             // need to also change the function.
-            FunctionName reversedFnName = null;
+            String reversedFnName = null;
 
             if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
-                reversedFnName = new FunctionName(AnalyticExpr.LASTVALUE);
+                reversedFnName = AnalyticExpr.LASTVALUE;
             } else if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
-                reversedFnName = new FunctionName(AnalyticExpr.FIRSTVALUE);
+                reversedFnName = AnalyticExpr.FIRSTVALUE;
             }
 
             if (reversedFnName != null) {
-                callExpr = new FunctionCallExpr(reversedFnName, callExpr.getParams());
-                callExpr.setIsAnalyticFnCall(true);
+                callExpr.resetFnName("", reversedFnName);
+                Function reversedFn = Expr.getBuiltinFunction(reversedFnName,
+                        callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
+                callExpr.setFn(reversedFn);
             }
         }
 
         if (windowFrame != null
                 && windowFrame.getLeftBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING
                 && windowFrame.getRightBoundary().getType() != AnalyticWindow.BoundaryType.PRECEDING
-                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
+                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
+                !callExpr.getIgnoreNulls()) {
             windowFrame.setRightBoundary(new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
         }
 
         // Set the default window.
         if (!orderByElements.isEmpty() && windowFrame == null) {
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
+        }
+
+        // Check if range window has order by clause
+        if (windowFrame != null
+                && AnalyticWindow.Type.RANGE.equals(windowFrame.getType())) {
+            Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
         // Change first_value/last_value RANGE windows to ROWS
@@ -291,6 +306,7 @@ public class WindowTransformer {
                     .setAnalyticWindow(windowOperator.getWindow())
                     .setEnforceSortColumns(sortEnforceProperty.stream().distinct().collect(Collectors.toList()))
                     .setUseHashBasedPartition(windowOperator.useHashBasedPartition)
+                    .setIsSkewed(windowOperator.isSkewed)
                     .build());
         }
 
@@ -388,11 +404,18 @@ public class WindowTransformer {
 
         /*
          * Step 2.
-         * Put the nodes with more partition columns at the top of the query plan
+         * For Each Sort Group, Put the nodes with more partition columns at the top of the query plan
          * to ensure that the Enforce operation can meet the conditions, and only one ExchangeNode will be generated
+         * If two window ops in the same sort group and same partition size, put rank-related window operator upper
+         * which help PushDownLimitRankingWindowRule and PushDownPredicateRankingWindowRule rule to check plan's shape
          */
         sortedGroups.forEach(sortGroup -> sortGroup.getWindowOperators()
-                .sort(Comparator.comparingInt(w -> w.getPartitionExpressions().size())));
+                .sort(Comparator
+                        .<LogicalWindowOperator>comparingInt(w -> w.getPartitionExpressions().size())
+                        .thenComparing(w -> {
+                            String fnName = w.getWindowCall().values().iterator().next().getFnName();
+                            return FunctionSet.RANK_RALATED_FUNCTIONS.contains(fnName) ? 1 : 0;
+                        })));
 
         /*
          * Step 3.
@@ -514,6 +537,10 @@ public class WindowTransformer {
         private List<OrderByElement> orderByElements;
         private final AnalyticWindow window;
         private final boolean useHashBasedPartition;
+        // If there are multiply window functions sharing the same window clause but only one of which has skew hint,
+        // it will be also treated as the same window clause. So this field should not be involved in the equals and
+        // hashCode method.
+        private boolean isSkewed;
 
         public WindowOperator(AnalyticExpr analyticExpr, List<Expr> partitionExprs,
                               List<OrderByElement> orderByElements, AnalyticWindow window) {
@@ -536,6 +563,11 @@ public class WindowTransformer {
                 }
             } else {
                 this.useHashBasedPartition = false;
+            }
+            if (!partitionExprs.isEmpty()) {
+                this.isSkewed = analyticExpr.isSkewed();
+            } else {
+                this.isSkewed = false;
             }
         }
 
@@ -563,6 +595,14 @@ public class WindowTransformer {
 
         public AnalyticWindow getWindow() {
             return window;
+        }
+
+        public boolean isSkewed() {
+            return isSkewed;
+        }
+
+        public void setSkewed() {
+            isSkewed = true;
         }
 
         @Override

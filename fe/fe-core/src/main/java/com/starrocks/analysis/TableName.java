@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
@@ -49,14 +50,17 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
+
     private String catalog;
     @SerializedName(value = "tbl")
     private String tbl;
@@ -85,6 +89,27 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         this.tbl = tbl;
     }
 
+    public static TableName fromString(String name) {
+        List<String> pieces = Splitter.on(".").splitToList(name);
+        if (pieces.size() == 3) {
+            return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
+        }
+        String catalog = ConnectContext.get().getCurrentCatalog();
+        String db = ConnectContext.get().getDatabase();
+        if (pieces.isEmpty()) {
+            throw new IllegalArgumentException("empty table name");
+        } else if (pieces.size() == 1) {
+            if (StringUtils.isEmpty(db)) {
+                throw new IllegalArgumentException("no database");
+            }
+            return new TableName(catalog, db, pieces.get(0));
+        } else if (pieces.size() == 2) {
+            return new TableName(catalog, pieces.get(0), pieces.get(1));
+        } else {
+            throw new IllegalArgumentException("illegal table name: " + name);
+        }
+    }
+
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (Strings.isNullOrEmpty(catalog)) {
             catalog = analyzer.getDefaultCatalog();
@@ -103,26 +128,22 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     }
 
     public void normalization(ConnectContext connectContext) {
-        try {
-            if (Strings.isNullOrEmpty(catalog)) {
-                if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
-                }
-                catalog = connectContext.getCurrentCatalog();
+        if (Strings.isNullOrEmpty(catalog)) {
+            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
             }
+            catalog = connectContext.getCurrentCatalog();
+        }
 
+        if (Strings.isNullOrEmpty(db)) {
+            db = connectContext.getDatabase();
             if (Strings.isNullOrEmpty(db)) {
-                db = connectContext.getDatabase();
-                if (Strings.isNullOrEmpty(db)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
+        }
 
-            if (Strings.isNullOrEmpty(tbl)) {
-                throw new SemanticException("Table name is null");
-            }
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
+        if (Strings.isNullOrEmpty(tbl)) {
+            throw new SemanticException("Table name is null");
         }
     }
 
@@ -228,8 +249,12 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         TableName tableName = (TableName) o;
         return Objects.equals(catalog, tableName.catalog)
                 && Objects.equals(tbl, tableName.tbl)

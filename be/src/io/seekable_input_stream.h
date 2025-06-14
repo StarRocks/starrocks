@@ -68,6 +68,29 @@ public:
     Status skip(int64_t count) override;
 
     virtual void set_size(int64_t);
+
+    // Reads all the data in this stream and returns it as std::string.
+    //
+    // Some implementations may override this method to get all
+    // the data without calling `get_size()`.
+    // For example, S3InputStream can read the contents of an entire
+    // object directly with a single GET OBJECT call, without the need
+    // to first send a HEAD OBJECT request to get the object size.
+    virtual StatusOr<std::string> read_all();
+
+    // if cache in [offset, offset+length] exists, refresh it
+    // if not, read from remote and write to cache system
+    // stream offset will not change
+    virtual Status touch_cache(int64_t offset, size_t length) { return Status::OK(); }
+
+    virtual const std::string& filename() const { return _filename; };
+
+    virtual bool is_cache_hit() const { return false; };
+
+    virtual bool is_encrypted() const { return false; };
+
+protected:
+    std::string _filename = "";
 };
 
 class SeekableInputStreamWrapper : public SeekableInputStream {
@@ -115,6 +138,12 @@ public:
     Status seek(int64_t offset) override { return _impl->seek(offset); }
 
     void set_size(int64_t value) override { return _impl->set_size(value); }
+
+    StatusOr<std::string> read_all() override { return _impl->read_all(); }
+
+    bool is_encrypted() const override { return _impl->is_encrypted(); };
+
+    Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
 
 private:
     SeekableInputStream* _impl;

@@ -47,8 +47,6 @@ public class VariableExpr extends Expr {
     private final SetType setType;
     private final String name;
     private Object value;
-    private boolean isNull;
-
     @VisibleForTesting
     public VariableExpr(String name) {
         this(name, SetType.SESSION);
@@ -69,7 +67,6 @@ public class VariableExpr extends Expr {
         setType = other.setType;
         name = other.name;
         value = other.value;
-        isNull = other.isNull;
     }
 
     public SetType getSetType() {
@@ -88,14 +85,6 @@ public class VariableExpr extends Expr {
         this.value = value;
     }
 
-    public boolean isNull() {
-        return isNull;
-    }
-
-    public void setIsNull() {
-        isNull = true;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitVariableExpr(this, context);
@@ -107,16 +96,25 @@ public class VariableExpr extends Expr {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), name, setType, value, isNull);
+    public String toSqlImpl() {
+        String msg = setType.toString() + " " + name;
+        if (value != null) {
+            msg += " = " + value.toString();
+        }
+        return msg;
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), name, setType, value);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object o) {
+        if (!super.equalsWithoutChild(o)) {
+            return false;
+        }
         VariableExpr that = (VariableExpr) o;
-        return isNull == that.isNull && setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
+        return setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
     }
 }

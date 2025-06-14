@@ -18,9 +18,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exec/pipeline/limit_operator.h"
@@ -61,9 +59,6 @@ static bool _support_join_type(TJoinOp::type join_type) {
 
 Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
-    if (tnode.__isset.need_create_tuple_columns) {
-        _need_create_tuple_columns = tnode.need_create_tuple_columns;
-    }
     if (tnode.__isset.nestloop_join_node) {
         _join_op = tnode.nestloop_join_node.join_op;
         if (!state->enable_pipeline_engine() && _join_op != TJoinOp::CROSS_JOIN && _join_op != TJoinOp::INNER_JOIN) {
@@ -71,12 +66,16 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
         if (!_support_join_type(_join_op)) {
             std::string type_string = starrocks::to_string(_join_op);
-            return Status::NotSupported("nestloop join not supoort: " + type_string);
+            return Status::NotSupported("nest-loop join not support: " + type_string);
         }
 
         if (tnode.nestloop_join_node.__isset.join_conjuncts) {
             RETURN_IF_ERROR(
                     Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
+        }
+
+        if (tnode.nestloop_join_node.__isset.interpolate_passthrough) {
+            _interpolate_passthrough = tnode.nestloop_join_node.interpolate_passthrough;
         }
         if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
             _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
@@ -164,31 +163,6 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, siz
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _probe_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[probe_index]);
-            }
-        }
-    }
-
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_build_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _build_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[build_index + i]);
-            }
-        }
-    }
 }
 
 void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, size_t row_count, size_t probe_index,
@@ -206,31 +180,6 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, siz
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
     }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _probe_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[probe_index + i]);
-            }
-        }
-    }
-
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_build_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _build_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[build_index]);
-            }
-        }
-    }
 }
 
 void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
@@ -241,7 +190,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             dest_col->append_nulls(copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
         }
     } else {
         if (src_col->is_constant()) {
@@ -252,7 +201,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
         }
     }
 }
@@ -313,14 +262,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
             _buf_selective.assign(row_count, 0);
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
         }
     }
 }
@@ -509,9 +458,9 @@ Status CrossJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
             });
 }
 
-Status CrossJoinNode::close(RuntimeState* state) {
+void CrossJoinNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     if (_build_chunk != nullptr) {
@@ -522,7 +471,7 @@ Status CrossJoinNode::close(RuntimeState* state) {
     }
 
     Expr::close(_join_conjuncts, state);
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 void CrossJoinNode::_init_row_desc() {
@@ -531,21 +480,11 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _probe_column_count++;
         }
-        if (_need_create_tuple_columns) {
-            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-                _output_probe_tuple_ids.emplace_back(tuple_desc->id());
-            }
-        }
     }
     for (auto& tuple_desc : child(1)->row_desc().tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
             _col_types.emplace_back(slot);
             _build_column_count++;
-        }
-        if (_need_create_tuple_columns) {
-            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-                _output_build_tuple_ids.emplace_back(tuple_desc->id());
-            }
         }
     }
 }
@@ -587,7 +526,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
         _build_chunks_size = (_number_of_build_rows / runtime_state()->chunk_size()) * runtime_state()->chunk_size();
     }
 
-    RETURN_IF_ERROR(child(1)->close(state));
+    child(1)->close(state);
     return Status::OK();
 }
 
@@ -599,7 +538,7 @@ StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
     for (auto rf_desc : rf_descs) {
         DCHECK_LT(rf_desc->build_expr_order(), ctxs.size());
         ASSIGN_OR_RETURN(auto expr, RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(
-                                            pool, ctxs[rf_desc->build_expr_order()], chunk));
+                                            pool, ctxs[rf_desc->build_expr_order()], chunk))
         filters.push_back(expr);
     }
     return filters;
@@ -618,21 +557,8 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     for (size_t i = 0; i < _build_column_count; ++i) {
         SlotDescriptor* slot = _col_types[_probe_column_count + i];
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
-        ColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
+        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
-    }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr dest_col = BooleanColumn::create();
-            new_chunk->append_tuple_column(dest_col, tuple_id);
-        }
-    }
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_build_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr dest_col = BooleanColumn::create();
-            new_chunk->append_tuple_column(dest_col, tuple_id);
-        }
     }
 
     *chunk = std::move(new_chunk);
@@ -664,9 +590,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     size_t num_right_partitions = context->source_operator(right_ops)->degree_of_parallelism();
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
-    auto spill_process_factory_ptr =
-            std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
+    auto spill_process_factory_ptr = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
     context_params.spill_process_factory_ptr = spill_process_factory_ptr;
 
     auto cross_join_context = std::make_shared<NLJoinContext>(std::move(context_params));
@@ -689,12 +613,19 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
                                            std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
-    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), left_ops,
-                                                                              context->degree_of_parallelism());
+    if (!context->is_colocate_group()) {
+        left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
+                                                                                  context->degree_of_parallelism());
+    }
     left_ops.emplace_back(std::move(left_factory));
 
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (_interpolate_passthrough && !context->is_colocate_group()) {
+        left_ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), left_ops,
+                                                                         context->degree_of_parallelism(), true);
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {

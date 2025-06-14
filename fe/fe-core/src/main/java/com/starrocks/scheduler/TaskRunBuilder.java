@@ -22,8 +22,9 @@ import java.util.Map;
 
 public class TaskRunBuilder {
     private final Task task;
-    private Map<String, String> properties;
-    private Constants.TaskType type;
+    private ExecuteOption executeOption;
+
+    private Map<String, String> properties = new HashMap<>();
     private ConnectContext connectContext;
 
     public static TaskRunBuilder newBuilder(Task task) {
@@ -32,6 +33,7 @@ public class TaskRunBuilder {
 
     private TaskRunBuilder(Task task) {
         this.task = task;
+        this.executeOption = new ExecuteOption(task);
     }
 
     public TaskRunBuilder setConnectContext(ConnectContext connectContext) {
@@ -46,9 +48,12 @@ public class TaskRunBuilder {
         taskRun.setTaskId(task.getId());
         taskRun.setProperties(mergeProperties());
         taskRun.setTask(task);
+        taskRun.setExecuteOption(executeOption);
         taskRun.setType(getTaskType());
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
+        } else if (task.getSource().equals(Constants.TaskSource.DATACACHE_SELECT)) {
+            taskRun.setProcessor(new DataCacheSelectProcessor());
         } else {
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }
@@ -56,23 +61,28 @@ public class TaskRunBuilder {
     }
 
     private Constants.TaskType getTaskType() {
-        return type != null ? type : task.getType();
+        if (executeOption.isManual()) {
+            return Constants.TaskType.MANUAL;
+        } else {
+            return task.getType();
+        }
     }
 
     private Map<String, String> mergeProperties() {
+        Map<String, String> result = new HashMap<>();
+        if (task.getProperties() == null && properties == null) {
+            return result;
+        }
         if (task.getProperties() == null) {
-            return properties;
+            result.putAll(properties);
+            return result;
         }
         if (properties == null) {
-            return task.getProperties();
+            result.putAll(task.getProperties());
+            return result;
         }
-        Map<String, String> result = new HashMap<>();
-        for (Map.Entry<String, String> entry : task.getProperties().entrySet()) {
-            result.put(entry.getKey(), entry.getValue());
-        }
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            result.put(entry.getKey(), entry.getValue());
-        }
+        result.putAll(task.getProperties());
+        result.putAll(properties);
         return result;
     }
 
@@ -81,14 +91,16 @@ public class TaskRunBuilder {
         return this;
     }
 
-    public TaskRunBuilder type(ExecuteOption option) {
-        if (option.isManual()) {
-            this.type = Constants.TaskType.MANUAL;
-        }
-        return this;
-    }
-
     public Long getTaskId() {
         return task.getId();
+    }
+
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public TaskRunBuilder setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
+        return this;
     }
 }

@@ -31,6 +31,21 @@ public @interface ConstantFunction {
 
     PrimitiveType returnType();
 
+    /**
+     * These functions are used to inspect metadata of database objects
+     */
+    boolean isMetaFunction() default false;
+
+    /**
+     * When a function is a possible monotonic function, which means for any value within a range,
+     * the first and last endpoints yield the new extreme points after the function mapping with
+     * other specific arguments. This helps us to determine the result range according the only
+     * first and last endpoints of the input of a function.
+     * For example, date_trunc() is a monotonic function while abs() is not. date_format(arg1, pattern)
+     * is a monotonic function when pattern is special values.
+     */
+    boolean isMonotonic() default false;
+
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.METHOD)
     @interface List {

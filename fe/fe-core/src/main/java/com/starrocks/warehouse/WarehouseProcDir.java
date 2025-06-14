@@ -14,30 +14,34 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.server.WarehouseManager;
-import org.apache.parquet.Strings;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
 public class WarehouseProcDir implements ProcDirInterface {
     public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Id")
-            .add("Warehouse")
+            .add("Name")
             .add("State")
-            .add("ClusterCount")
+            .add("NodeCount")
+            .add("CurrentClusterCount")
+            .add("MaxClusterCount")
+            .add("StartedClusters")
+            .add("RunningSql")
+            .add("QueuedSql")
+            .add("CreatedOn")
+            .add("ResumedOn")
+            .add("UpdatedOn")
+            .add("Property")
+            .add("Comment")
             .build();
-
-    private final WarehouseManager warehouseManager;
-
-    public WarehouseProcDir(WarehouseManager manager) {
-        this.warehouseManager = manager;
-    }
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {
@@ -47,29 +51,30 @@ public class WarehouseProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String idOrName) throws AnalysisException {
         if (Strings.isNullOrEmpty(idOrName)) {
-            throw new AnalysisException("warehouse id or name is null or empty");
+            throw new AnalysisException("Warehouse id or name is null or empty.");
         }
         Warehouse warehouse;
         try {
-            warehouse = warehouseManager.getWarehouse(Long.parseLong(idOrName));
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(Long.parseLong(idOrName));
         } catch (NumberFormatException e) {
-            warehouse = warehouseManager.getWarehouse(idOrName);
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(idOrName);
         }
         if (warehouse == null) {
-            throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + "\"");
+            throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + ".\"");
         }
-        return new WarehouseClusterProcNode(warehouse);
+
+        Warehouse finalWarehouse = warehouse;
+        return finalWarehouse::fetchResult;
     }
 
     @Override
     public ProcResult fetchResult() {
         BaseProcResult result = new BaseProcResult();
         result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
-        List<Long> warehouseIds = warehouseManager.getWarehouseIds();
+        List<Warehouse> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses();
         warehouseIds.forEach(x -> {
-            Warehouse wh = warehouseManager.getWarehouse(x);
-            if (wh != null) {
-                wh.getProcNodeData(result);
+            if (x != null) {
+                result.addRow(x.getWarehouseInfo());
             }
         });
         return result;

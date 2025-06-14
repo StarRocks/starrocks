@@ -34,19 +34,13 @@
 
 package com.starrocks.persist;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.io.JsonWriter;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
-public class PartitionPersistInfo implements Writable {
+public class PartitionPersistInfo extends JsonWriter {
     private Long dbId;
     private Long tableId;
     private Partition partition;
@@ -105,55 +99,5 @@ public class PartitionPersistInfo implements Writable {
 
     public boolean isTempPartition() {
         return isTempPartition;
-    }
-
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        partition.write(out);
-
-        RangeUtils.writeRange(out, range);
-        dataProperty.write(out);
-        out.writeShort(replicationNum);
-        out.writeBoolean(isInMemory);
-        out.writeBoolean(isTempPartition);
-    }
-
-    public static PartitionPersistInfo read(DataInput in) throws IOException {
-        PartitionPersistInfo info = new PartitionPersistInfo();
-        info.readFields(in);
-        return info;
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        tableId = in.readLong();
-        partition = Partition.read(in);
-
-        range = RangeUtils.readRange(in);
-        dataProperty = DataProperty.read(in);
-        replicationNum = in.readShort();
-        isInMemory = in.readBoolean();
-        isTempPartition = in.readBoolean();
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(dbId, tableId);
-    }
-
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (!(obj instanceof PartitionPersistInfo)) {
-            return false;
-        }
-
-        PartitionPersistInfo info = (PartitionPersistInfo) obj;
-
-        return dbId.equals(info.dbId)
-                && tableId.equals(info.tableId)
-                && partition.equals(info.partition);
     }
 }

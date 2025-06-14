@@ -89,4 +89,6 @@ private:
     EnvMemoryImpl* _impl;
 };
 
+std::unique_ptr<RandomAccessFile> new_random_access_file_from_memory(std::string_view name, std::string_view data);
+
 } // namespace starrocks

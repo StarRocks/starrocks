@@ -21,6 +21,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "runtime/runtime_state.h"
 
@@ -75,7 +76,14 @@ public:
 
     pipeline::OperatorPtr get_internal_op(size_t i);
 
+    const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
+
+    RuntimeFilterProbeCollector* runtime_bloom_filters() override;
+
+    const RuntimeFilterProbeCollector* runtime_bloom_filters() const override;
+
     void set_precondition_ready(starrocks::RuntimeState* state) override;
+    bool ignore_empty_eos() const override { return false; }
 
 private:
     StatusOr<ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);

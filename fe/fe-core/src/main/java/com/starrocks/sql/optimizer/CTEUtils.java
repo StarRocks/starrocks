@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -88,11 +87,20 @@ public class CTEUtils {
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) expression.getOp();
 
             // costs
-            if (context.getCteContext().isForceCTE(produce.getCteId())) {
-                OptExpression opt = root.extractLogicalTree();
-                calculateStatistics(opt, context);
-                context.getCteContext().addCTEStatistics(produce.getCteId(), opt.getStatistics());
-            }
+            OptExpression opt = root.extractLogicalTree();
+            calculateStatistics(opt, context);
+            context.getCteContext().addCTEStatistics(produce.getCteId(), opt.getStatistics());
+        }
+    }
+
+    // Collect statistics of CTEProduceOperator outside of memo, used by only by table pruning features.
+    public static void collectForceCteStatisticsOutsideMemo(OptExpression root, OptimizerContext context) {
+        root.getInputs().forEach(input -> collectForceCteStatisticsOutsideMemo(input, context));
+        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(root.getOp().getOpType())) {
+            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getOp();
+
+            calculateStatistics(root, context);
+            context.getCteContext().addCTEStatistics(produce.getCteId(), root.getStatistics());
         }
     }
 

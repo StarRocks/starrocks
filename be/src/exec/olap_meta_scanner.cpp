@@ -16,6 +16,7 @@
 
 #include "exec/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks {
@@ -37,11 +38,21 @@ Status OlapMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParam
 }
 
 Status OlapMetaScanner::_init_meta_reader_params() {
+    _reader_params.tablet_id = _tablet->tablet_id();
     _reader_params.tablet = _tablet;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
     _reader_params.chunk_size = _runtime_state->chunk_size();
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
+    _reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
+                                                ? _parent->_meta_scan_node.low_cardinality_threshold
+                                                : DICT_DECODE_MAX_SIZE;
+    if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
+        _parent->_meta_scan_node.columns[0].col_unique_id > 0) {
+        _reader_params.tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);
+    } else {
+        _reader_params.tablet_schema = _tablet->tablet_schema();
+    }
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
     return Status::OK();

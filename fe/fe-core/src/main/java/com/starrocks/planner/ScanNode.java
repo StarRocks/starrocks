@@ -34,19 +34,27 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
+import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.apache.commons.collections4.CollectionUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.jetbrains.annotations.TestOnly;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -57,6 +65,15 @@ public abstract class ScanNode extends PlanNode {
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
+    protected DataCacheOptions dataCacheOptions = null;
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    protected ScanOptimizeOption scanOptimizeOption;
+    // The column names applied dict optimization
+    // used for explain
+    protected final List<String> appliedDictStringColumns = new ArrayList<>();
+    // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
+    // The compute resource used by this scan node.
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -71,10 +88,55 @@ public abstract class ScanNode extends PlanNode {
         this.columnAccessPaths = columnAccessPaths;
     }
 
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+    }
+
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
+    }
+
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
+    }
+
+    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (appliedColumnIds.contains(slot.getId().asInt())) {
+                appliedDictStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
+    public TupleDescriptor getDesc() {
+        return desc;
+    }
+
+    public String getTableName() {
+        return desc.getTable().getName();
+    }
+
+    public boolean isLocalNativeTable() {
+        return false;
+    }
+
+    public boolean hasMoreScanRanges() {
+        return false;
+    }
+
     /**
      * cast expr to SlotDescriptor type
      */
-    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws UserException {
+    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
         if (!slotDesc.getType().matchesType(expr.getType())) {
             return expr.castTo(slotDesc.getType());
         } else {
@@ -100,13 +162,22 @@ public abstract class ScanNode extends PlanNode {
     }
 
     protected String explainColumnAccessPath(String prefix) {
-        if (CollectionUtils.isEmpty(columnAccessPaths)) {
-            return "";
+        String result = "";
+        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate())) {
+            result += prefix + "ColumnAccessPath: [" + columnAccessPaths.stream()
+                    .filter(c -> !c.isFromPredicate())
+                    .map(ColumnAccessPath::explain)
+                    .sorted()
+                    .collect(Collectors.joining(", ")) + "]\n";
         }
-
-        return prefix + "ColumnAccessPath: [" +
-                columnAccessPaths.stream().map(ColumnAccessPath::explain).collect(Collectors.joining(", ")) +
-                "]\n";
+        if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isFromPredicate)) {
+            result += prefix + "PredicateAccessPath: [" + columnAccessPaths.stream()
+                    .filter(ColumnAccessPath::isFromPredicate)
+                    .map(ColumnAccessPath::explain)
+                    .sorted()
+                    .collect(Collectors.joining(", ")) + "]\n";
+        }
+        return result;
     }
 
     protected List<TColumnAccessPath> columnAccessPathToThrift() {
@@ -115,5 +186,45 @@ public abstract class ScanNode extends PlanNode {
         }
 
         return columnAccessPaths.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList());
+    }
+
+    protected boolean supportTopNRuntimeFilter() {
+        return false;
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+
+    // We use this flag to know how many connector scan nodes at BE side, and connector framework
+    // will use this number to fair share memory usage between those scan nodes.
+    public boolean isRunningAsConnectorOperator() {
+        return true;
+    }
+
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+    }
+
+    public boolean isConnectorScanNode() {
+        return this instanceof HdfsScanNode || this instanceof IcebergScanNode ||
+                this instanceof HudiScanNode || this instanceof DeltaLakeScanNode ||
+                this instanceof FileTableScanNode || this instanceof PaimonScanNode ||
+                this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode;
+    }
+
+    protected String explainColumnDict(String prefix) {
+        StringBuilder output = new StringBuilder();
+        if (!appliedDictStringColumns.isEmpty()) {
+            int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+            List<String> printList = appliedDictStringColumns.subList(0, maxSize);
+            String format_template = "dict_col=%s";
+            if (appliedDictStringColumns.size() > 5) {
+                format_template = format_template + "...";
+            }
+            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
+            output.append("\n");
+        }
+        return output.toString();
     }
 }

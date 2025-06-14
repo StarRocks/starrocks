@@ -39,6 +39,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.LoadPriority;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
@@ -109,6 +110,10 @@ public class LoadStmt extends DdlStmt {
     public static final String BOS_ACCESSKEY = "bos_accesskey";
     public static final String BOS_SECRET_ACCESSKEY = "bos_secret_accesskey";
 
+    public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
+    public static final String JSONPATHS = "jsonpaths";
+    public static final String JSONROOT = "json_root";
+
     // mini load params
     public static final String KEY_IN_PARAM_COLUMNS = "columns";
     public static final String KEY_IN_PARAM_SET = "set";
@@ -144,6 +149,11 @@ public class LoadStmt extends DdlStmt {
             .add(LOG_REJECTED_RECORD_NUM)
             .add(PARTIAL_UPDATE_MODE)
             .add(SPARK_LOAD_SUBMIT_TIMEOUT)
+            .add(MERGE_CONDITION)
+            .add(STRIP_OUTER_ARRAY)
+            .add(JSONPATHS)
+            .add(JSONROOT)
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,
@@ -326,14 +336,6 @@ public class LoadStmt extends DdlStmt {
                 throw new DdlException(LOG_REJECTED_RECORD_NUM + " is not a number.");
             }
         }
-    }
-
-    @Override
-    public boolean needAuditEncryption() {
-        if (brokerDesc != null || resourceDesc != null) {
-            return true;
-        }
-        return false;
     }
 
     public String getVersion() {

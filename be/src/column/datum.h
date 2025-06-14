@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "common/overloaded.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
@@ -43,17 +44,10 @@ typedef unsigned __int128 uint128_t;
 class Datum;
 using DatumArray = std::vector<Datum>;
 
-using DatumKey = std::variant<int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t, uint64_t,
-                              int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double>;
+using DatumKey = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
+                              uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double>;
 using DatumMap = std::map<DatumKey, Datum>;
 using DatumStruct = std::vector<Datum>;
-
-template <class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-template <class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
 
 class Datum {
 public:
@@ -61,6 +55,7 @@ public:
 
     template <typename T>
     Datum(T value) {
+        static_assert(!std::is_same_v<std::string, T>, "should use the Slice as parameter instead of std::string");
         set(value);
     }
 
@@ -160,6 +155,9 @@ public:
     }
 
     DatumKey convert2DatumKey() const {
+        if (is_null()) {
+            return std::monostate();
+        }
         return std::visit(
                 overloaded{[](const int8_t& arg) { return DatumKey(arg); },
                            [](const uint8_t& arg) { return DatumKey(arg); },
@@ -188,6 +186,10 @@ public:
     bool equal_datum_key(const DatumKey& key) const {
         return std::visit([&](const auto& arg) { return is_equal(arg); }, key);
     }
+
+    [[nodiscard]] bool operator==(const Datum& other) const { return _value == other._value; }
+
+    [[nodiscard]] bool operator!=(const Datum& other) const { return !(*this == other); }
 
 private:
     using Variant =

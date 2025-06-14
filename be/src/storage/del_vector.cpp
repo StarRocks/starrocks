@@ -44,7 +44,7 @@ void DelVector::_add_dels(const std::vector<uint32_t>& dels) {
 
 void DelVector::add_dels_as_new_version(const std::vector<uint32_t>& dels, int64_t version,
                                         std::shared_ptr<DelVector>* pdelvec) const {
-    CHECK(this != pdelvec->get());
+    DCHECK(this != pdelvec->get());
     DelVectorPtr tmp(new DelVector());
     if (_roaring) {
         tmp->_roaring = std::make_unique<Roaring>(*_roaring);
@@ -93,7 +93,7 @@ string DelVector::save() const {
     return ret;
 }
 
-void DelVector::save_to(std::string* str) {
+void DelVector::save_to(std::string* str) const {
     auto roaring_size = _roaring ? _roaring->getSizeInBytes() : 0;
     str->resize(roaring_size + 1);
     str->at(0) = 0x01; // one byte flag.
@@ -125,7 +125,11 @@ void DelVector::copy_from(const DelVector& delvec) {
     _version = delvec._version;
     _cardinality = delvec._cardinality;
     _memory_usage = delvec._memory_usage;
-    _roaring = std::make_unique<Roaring>(*delvec._roaring);
+    if (delvec._roaring) {
+        _roaring = std::make_unique<Roaring>(*delvec._roaring);
+    } else {
+        _roaring.reset();
+    }
 }
 
 } // namespace starrocks

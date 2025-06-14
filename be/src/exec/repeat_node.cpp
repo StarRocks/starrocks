@@ -49,7 +49,7 @@ RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const Descripto
 
     // initial for _grouping_columns;
     for (auto& group : _grouping_list) {
-        std::vector<ColumnPtr> columns;
+        Columns columns;
         columns.reserve(group.size());
         for (auto slot_id : group) {
             columns.push_back(generate_repeat_column(slot_id, config::vector_chunk_size));
@@ -196,11 +196,11 @@ void RepeatNode::extend_and_update_columns(ChunkPtr* curr_chunk, ChunkPtr* chunk
     }
 }
 
-Status RepeatNode::close(RuntimeState* state) {
+void RepeatNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_to_pipeline(

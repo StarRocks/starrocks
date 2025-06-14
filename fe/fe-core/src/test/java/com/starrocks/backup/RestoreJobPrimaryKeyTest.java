@@ -41,6 +41,7 @@ import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -49,10 +50,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -130,6 +132,8 @@ public class RestoreJobPrimaryKeyTest {
     private EditLog editLog;
     @Mocked
     private SystemInfoService systemInfoService;
+    @Mocked
+    private NodeSelector nodeSelector;
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
@@ -147,10 +151,6 @@ public class RestoreJobPrimaryKeyTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = id.getAndIncrement();
@@ -158,16 +158,15 @@ public class RestoreJobPrimaryKeyTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-
-                GlobalStateMgr.getCurrentSystemInfo();
-                minTimes = 0;
-                result = systemInfoService;
             }
         };
 
         new Expectations() {
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector();
+                minTimes = 0;
+                result = nodeSelector;
+                nodeSelector.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = new Delegate() {
                     public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive,
@@ -239,7 +238,8 @@ public class RestoreJobPrimaryKeyTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
@@ -249,8 +249,6 @@ public class RestoreJobPrimaryKeyTest {
                 for (Tablet tablet : index.getTablets()) {
                     BackupTabletInfo tabletInfo = new BackupTabletInfo();
                     tabletInfo.id = tablet.getId();
-                    tabletInfo.files.add(tabletInfo.id + ".dat");
-                    tabletInfo.files.add("meta");
                     idxInfo.tablets.add(tabletInfo);
                 }
             }
@@ -264,7 +262,7 @@ public class RestoreJobPrimaryKeyTest {
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta);
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
     }
 
     @Ignore
@@ -394,6 +392,5 @@ public class RestoreJobPrimaryKeyTest {
         partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
-
 }
 

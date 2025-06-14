@@ -23,16 +23,14 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -57,9 +55,12 @@ public class ShowTabletStmt extends ShowStmt {
     private long backendId;
     private String indexName;
     private Replica.ReplicaState replicaState;
+    private Boolean isConsistent;
     private ArrayList<OrderByPair> orderByPairs;
 
     private boolean isShowSingleTablet;
+
+    private Table table;
 
     public ShowTabletStmt(TableName dbTableName, long tabletId, NodePosition pos) {
         this(dbTableName, tabletId, null, null, null, null, pos);
@@ -154,6 +155,10 @@ public class ShowTabletStmt extends ShowStmt {
         return indexName;
     }
 
+    public Boolean getIsConsistent() {
+        return isConsistent;
+    }
+
     public List<OrderByPair> getOrderByPairs() {
         return orderByPairs;
     }
@@ -172,6 +177,10 @@ public class ShowTabletStmt extends ShowStmt {
 
     public void setIndexName(String indexName) {
         this.indexName = indexName;
+    }
+
+    public void setIsConsistent(Boolean isConsistent) {
+        this.isConsistent = isConsistent;
     }
 
     public void setReplicaState(Replica.ReplicaState replicaState) {
@@ -194,6 +203,10 @@ public class ShowTabletStmt extends ShowStmt {
         return limitElement;
     }
 
+    public void setTable(Table table) {
+        this.table = table;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowTabletStatement(this, context);
@@ -204,25 +217,13 @@ public class ShowTabletStmt extends ShowStmt {
             return SINGLE_TABLET_TITLE_NAMES;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
+        if (table == null || !table.isNativeTableOrMaterializedView()) {
             return ImmutableList.of();
         }
-
-        db.readLock();
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null || !table.isNativeTableOrMaterializedView()) {
-                return ImmutableList.of();
-            }
-
-            if (table.isCloudNativeTableOrMaterializedView()) {
-                return LakeTabletsProcNode.TITLE_NAMES;
-            } else {
-                return LocalTabletsProcDir.TITLE_NAMES;
-            }
-        } finally {
-            db.readUnlock();
+        if (table.isCloudNativeTableOrMaterializedView()) {
+            return LakeTabletsProcDir.TITLE_NAMES;
+        } else {
+            return LocalTabletsProcDir.TITLE_NAMES;
         }
     }
 

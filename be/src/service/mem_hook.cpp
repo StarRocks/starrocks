@@ -12,186 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
-#include <gperftools/nallocx.h>
-#include <gperftools/tcmalloc.h>
-#endif
+#include "mem_hook.h"
 
-#include <atomic>
 #include <iostream>
 
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "glog/logging.h"
+#include "jemalloc/jemalloc.h"
+#include "runtime/current_thread.h"
+#include "runtime/memory/counting_allocator.h"
+#include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 
 #ifndef BE_TEST
-#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #endif
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
-/*
-//// void* ptr = new AAA();
-void* operator new(size_t size) {
-    void* ptr = tc_new(size);
-
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-
-// (<=C++11) delete ptr
-void operator delete(void* p) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    tc_delete(p);
-}
-
-// AAA* ptr = new AAA[5];
-void* operator new[](size_t size) {
-    void* ptr = tc_newarray(size);
-
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-
-// delete[] ptr;
-void operator delete[](void* p) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    tc_deletearray(p);
-}
-
-// void* c1 = new (std::nothrow) AAA();
-void* operator new(size_t size, const std::nothrow_t& nt) noexcept {
-    void* ptr = tc_new_nothrow(size, nt);
-
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-
-// AAA* c1 = new (std::nothrow) AAA[5];
-void* operator new[](size_t size, const std::nothrow_t& nt) noexcept {
-    void* ptr = tc_newarray_nothrow(size, nt);
-
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-
-void operator delete(void* p, const std::nothrow_t& nt) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    tc_delete(p);
-}
-
-void operator delete[](void* p, const std::nothrow_t& nt) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    tc_deletearray(p);
-}
-
-// (>C++11) delete ptr
-void operator delete(void* p, size_t size) noexcept {
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    tc_delete(p);
-}
-
-void operator delete[](void* p, size_t size) noexcept {
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    tc_deletearray(p);
-}
-
-void* operator new(size_t size, std::align_val_t al) {
-    void* ptr = tc_new_aligned(size, al);
-
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-
-void operator delete(void* p, std::align_val_t al) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    return tc_delete_aligned(p, al);
-}
-void* operator new[](size_t size, std::align_val_t al) {
-    void* ptr = tc_newarray_aligned(size, al);
-
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-void operator delete[](void* p, std::align_val_t al) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    return tc_deletearray_aligned(p, al);
-}
-void* operator new(size_t size, std::align_val_t al, const std::nothrow_t& nt) noexcept {
-    void* ptr = tc_new_aligned_nothrow(size, al, nt);
-
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-void* operator new[](size_t size, std::align_val_t al, const std::nothrow_t& nt) noexcept {
-    void* ptr = tc_newarray_aligned_nothrow(size, al, nt);
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
-
-    return ptr;
-}
-void operator delete(void* p, std::align_val_t al, const std::nothrow_t& nt) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    return tc_delete_aligned_nothrow(p, al, nt);
-}
-void operator delete[](void* p, std::align_val_t al, const std::nothrow_t& nt) noexcept {
-    size_t actual_size = tc_malloc_size(p);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    return tc_deletearray_aligned_nothrow(p, al, nt);
-}
-
-void operator delete(void* p, size_t size, std::align_val_t al) noexcept {
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    return tc_delete(p);
-}
-void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_release(actual_size);
-
-    return tc_deletearray(p);
-}
-*/
-
-#ifdef USE_JEMALLOC
 #define STARROCKS_MALLOC_SIZE(ptr) je_malloc_usable_size(ptr)
 #define STARROCKS_NALLOX(size, flags) je_nallocx(size, flags)
 #define STARROCKS_MALLOC(size) je_malloc(size)
@@ -202,18 +41,12 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define STARROCKS_POSIX_MEMALIGN(ptr, align, size) je_posix_memalign(ptr, align, size)
 #define STARROCKS_CFREE(ptr) je_free(ptr)
 #define STARROCKS_VALLOC(size) je_valloc(size)
-#else
-#define STARROCKS_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define STARROCKS_NALLOX(size, flags) tc_nallocx(size, flags)
-#define STARROCKS_MALLOC(size) tc_malloc(size)
-#define STARROCKS_FREE(ptr) tc_free(ptr)
-#define STARROCKS_REALLOC(ptr, size) tc_realloc(ptr, size)
-#define STARROCKS_CALLOC(number, size) tc_calloc(number, size)
-#define STARROCKS_ALIGNED_ALLOC(align, size) tc_memalign(align, size)
-#define STARROCKS_POSIX_MEMALIGN(ptr, align, size) tc_posix_memalign(ptr, align, size)
-#define STARROCKS_CFREE(ptr) tc_cfree(ptr)
-#define STARROCKS_VALLOC(size) tc_valloc(size)
-#endif
+
+#define SET_DELTA_MEMORY(value)              \
+    do {                                     \
+        starrocks::tls_delta_memory = value; \
+    } while (0)
+#define RESET_DELTA_MEMORY() SET_DELTA_MEMORY(0)
 
 #ifndef BE_TEST
 #define MEMORY_CONSUME_SIZE(size)                                      \
@@ -234,17 +67,23 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
     } while (0)
 #define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr))
 #define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(STARROCKS_MALLOC_SIZE(ptr))
-#define TRY_MEM_CONSUME(size, err_ret)                                                                   \
-    do {                                                                                                 \
-        if (LIKELY(starrocks::tls_is_thread_status_init)) {                                              \
-            RETURN_IF_UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size), err_ret);            \
-        } else {                                                                                         \
-            RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
-        }                                                                                                \
+#define TRY_MEM_CONSUME(size, err_ret)                                                      \
+    do {                                                                                    \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {                                 \
+            if (UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size))) {            \
+                RESET_DELTA_MEMORY();                                                       \
+                return err_ret;                                                             \
+            }                                                                               \
+        } else {                                                                            \
+            if (UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size))) { \
+                RESET_DELTA_MEMORY();                                                       \
+                return err_ret;                                                             \
+            }                                                                               \
+        }                                                                                   \
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
-    starrocks::tls_exceed_mem_tracker = starrocks::ExecEnv::GetInstance()->process_mem_tracker()
-#define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
+    starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
+#define IS_BAD_ALLOC_CATCHED() starrocks::tls_is_catched
 #else
 std::atomic<int64_t> g_mem_usage(0);
 #define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
@@ -256,14 +95,29 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
-#ifdef USE_JEMALLOC
+static int64_t g_large_memory_alloc_failure_threshold = 0;
+
+namespace starrocks {
+// thread-safety is not a concern here since this is a really rare op
+int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
+    int64_t old_val = g_large_memory_alloc_failure_threshold;
+    g_large_memory_alloc_failure_threshold = val;
+    return old_val;
+}
+} // namespace starrocks
+
 const size_t large_memory_alloc_report_threshold = 1073741824;
 inline thread_local bool skip_report = false;
 inline void report_large_memory_alloc(size_t size) {
     if (size > large_memory_alloc_report_threshold && !skip_report) {
         skip_report = true; // to avoid recursive output log
         try {
-            LOG(WARNING) << "large memory alloc: " << size << " bytes, stack:\n" << starrocks::get_stack_trace();
+            auto qid = starrocks::CurrentThread::current().query_id();
+            auto fid = starrocks::CurrentThread::current().fragment_instance_id();
+            LOG(WARNING) << "large memory alloc, query_id:" << print_id(qid) << " instance: " << print_id(fid)
+                         << " acquire:" << size << " bytes, is_bad_alloc_caught: " << IS_BAD_ALLOC_CATCHED()
+                         << ", stack:\n"
+                         << starrocks::get_stack_trace();
         } catch (...) {
             // do nothing
         }
@@ -271,30 +125,61 @@ inline void report_large_memory_alloc(size_t size) {
     }
 }
 #define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) report_large_memory_alloc(size)
+
+inline bool block_large_memory_alloc(size_t size) {
+    if (UNLIKELY(g_large_memory_alloc_failure_threshold > 0 && size > g_large_memory_alloc_failure_threshold)) {
+        // DON'T try to allocate the memory at all
+        if (starrocks::config::abort_on_large_memory_allocation) {
+            std::abort();
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
+
+DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
+
+#ifdef FIU_ENABLE
+#define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal)                                       \
+    FAIL_POINT_TRIGGER_EXECUTE(mem_alloc_error, {                                       \
+        LOG(INFO) << "inject mem alloc error, stack: " << starrocks::get_stack_trace(); \
+        return retVal;                                                                  \
+    });
 #else
-#define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) (void)0
+#define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal) (void)0
 #endif
 
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
+    int64_t alloc_size = STARROCKS_NALLOX(size, 0);
+    SET_DELTA_MEMORY(alloc_size);
     if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
-        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
+        TRY_MEM_CONSUME(alloc_size, nullptr);
         void* ptr = STARROCKS_MALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0));
+            MEMORY_RELEASE_SIZE(alloc_size);
+            RESET_DELTA_MEMORY();
         }
         return ptr;
     } else {
+        if (UNLIKELY(block_large_memory_alloc(size))) {
+            return nullptr;
+        }
+
         void* ptr = STARROCKS_MALLOC(size);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
         if (LIKELY(ptr != nullptr)) {
-            MEMORY_CONSUME_SIZE(STARROCKS_NALLOX(size, 0));
+            MEMORY_CONSUME_SIZE(alloc_size);
+        } else {
+            RESET_DELTA_MEMORY();
         }
         return ptr;
     }
@@ -303,9 +188,12 @@ void* my_malloc(size_t size) __THROW {
 // free
 void my_free(void* p) __THROW {
     if (UNLIKELY(p == nullptr)) {
+        RESET_DELTA_MEMORY();
         return;
     }
-    MEMORY_RELEASE_PTR(p);
+    int64_t malloc_size = STARROCKS_MALLOC_SIZE(p);
+    MEMORY_RELEASE_SIZE(malloc_size);
+    SET_DELTA_MEMORY(-malloc_size);
     STARROCKS_FREE(p);
 }
 
@@ -316,25 +204,31 @@ void* my_realloc(void* p, size_t size) __THROW {
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
+        RESET_DELTA_MEMORY();
         return nullptr;
     }
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
+    int64_t new_size = STARROCKS_NALLOX(size, 0);
+    SET_DELTA_MEMORY(new_size - old_size);
 
     if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0) - old_size, nullptr);
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
+        TRY_MEM_CONSUME(new_size - old_size, nullptr);
         void* ptr = STARROCKS_REALLOC(p, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0) - old_size);
+            MEMORY_RELEASE_SIZE(new_size - old_size);
+            RESET_DELTA_MEMORY();
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_REALLOC(p, size);
         if (ptr != nullptr) {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - old_size);
+            MEMORY_CONSUME_SIZE(new_size - old_size);
         } else {
             // nothing to do.
             // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+            RESET_DELTA_MEMORY();
         }
         return ptr;
     }
@@ -346,31 +240,44 @@ void* my_calloc(size_t n, size_t size) __THROW {
     // If size is zero, the behavior is implementation defined (null pointer may be returned
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
+        RESET_DELTA_MEMORY();
         return nullptr;
     }
 
     if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(n * size, nullptr);
         void* ptr = STARROCKS_CALLOC(n, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(n * size);
+            RESET_DELTA_MEMORY();
         } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - n * size);
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - n * size);
+            SET_DELTA_MEMORY(alloc_size);
         }
         return ptr;
     } else {
+        if (UNLIKELY(block_large_memory_alloc(n * size))) {
+            return nullptr;
+        }
         void* ptr = STARROCKS_CALLOC(n, size);
-        MEMORY_CONSUME_PTR(ptr);
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
         return ptr;
     }
 }
 
 void my_cfree(void* ptr) __THROW {
     if (UNLIKELY(ptr == nullptr)) {
+        RESET_DELTA_MEMORY();
         return;
     }
-    MEMORY_RELEASE_PTR(ptr);
+    int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+    MEMORY_RELEASE_SIZE(alloc_size);
+    SET_DELTA_MEMORY(-alloc_size);
     STARROCKS_CFREE(ptr);
 }
 
@@ -378,18 +285,24 @@ void my_cfree(void* ptr) __THROW {
 void* my_memalign(size_t align, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+            RESET_DELTA_MEMORY();
         } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
-        MEMORY_CONSUME_PTR(ptr);
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
         return ptr;
     }
 }
@@ -398,18 +311,24 @@ void* my_memalign(size_t align, size_t size) __THROW {
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+            RESET_DELTA_MEMORY();
         } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
-        MEMORY_CONSUME_PTR(ptr);
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
         return ptr;
     }
 }
@@ -418,18 +337,24 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 void* my_valloc(size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_VALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+            RESET_DELTA_MEMORY();
         } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_VALLOC(size);
-        MEMORY_CONSUME_PTR(ptr);
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
         return ptr;
     }
 }
@@ -438,18 +363,24 @@ void* my_valloc(size_t size) __THROW {
 void* my_pvalloc(size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_VALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+            RESET_DELTA_MEMORY();
         } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_VALLOC(size);
-        MEMORY_CONSUME_PTR(ptr);
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
         return ptr;
     }
 }
@@ -458,19 +389,27 @@ void* my_pvalloc(size_t size) __THROW {
 int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(-1);
         TRY_MEM_CONSUME(size, ENOMEM);
         int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
         if (UNLIKELY(ret != 0)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+            SET_DELTA_MEMORY(0);
         } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(*r) - size);
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(*r);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
         }
         return ret;
     } else {
         int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
         if (ret == 0) {
-            MEMORY_CONSUME_PTR(*r);
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(*r);
+            MEMORY_CONSUME_SIZE(alloc_size);
+            SET_DELTA_MEMORY(alloc_size);
+        } else {
+            RESET_DELTA_MEMORY();
         }
         return ret;
     }
@@ -491,7 +430,14 @@ void* aligned_alloc(size_t align, size_t size) __THROW ALIAS(my_aligned_alloc);
 void* valloc(size_t size) __THROW ALIAS(my_valloc);
 void* pvalloc(size_t size) __THROW ALIAS(my_pvalloc);
 int posix_memalign(void** r, size_t a, size_t s) __THROW ALIAS(my_posix_memalign);
-#ifdef USE_JEMALLOC
 size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
-#endif
+
+// This is the bug of glibc: https://sourceware.org/bugzilla/show_bug.cgi?id=17730,
+// some version of glibc will alloc thread local storage using __libc_memalign
+// If we use jemalloc, the tls memory will be allocated by __libc_memalign and
+// then released by memalign(hooked by je_aligned_alloc), so it will crash.
+// so we will hook the __libc_memalign to avoid this BUG.
+void* __libc_memalign(size_t alignment, size_t size) {
+    return memalign(alignment, size);
+}
 }

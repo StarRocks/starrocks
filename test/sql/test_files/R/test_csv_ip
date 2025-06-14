@@ -1,0 +1,28 @@
+-- name: test_csv_ip
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/ip.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 14. OK num: 1(upload 1 files).
+-- !result
+
+
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = "|", "csv.row_delimiter" = "\n");
+-- result:
+1	10.11.12.13
+-- !result
+
+desc files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = "|", "csv.row_delimiter" = "\n");
+-- result:
+$1	bigint	YES
+$2	varchar(1048576)	YES
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

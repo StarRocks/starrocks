@@ -1,0 +1,26 @@
+-- name: test_session_number_window_function
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1, 4096, 3));
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 4096, 2));
+
+-- basic test
+select c0, c1, session_number(c0, 4) over (partition by c1 order by c0) from t0 order by c1 limit 10;
+select c0, c1, session_number(c0, 2) over (partition by c1 order by c0) from t0 order by c1 limit 10;
+select c0, c1, session_number(c0, 1) over (partition by c1 order by c0) from t0 order by c1 limit 10;
+select c0, c1, session_number(null, null) over (partition by c1 order by c0) from t0 order by c1 limit 10;
+select c0, c1, session_number(c0, 2) over (partition by c1 order by c0) from t0 order by c1 limit 10;
+select c0, c1, session_number(c0, c1) over (partition by c1 order by c0) from t0 order by c1 limit 10;
+select sum(session), count(session) from (select c0, c1, session_number(c0, 2) over (partition by c1 order by c0) as session from t0) tb;
+
+-- test from empty table
+create table empty_tbl like t0;
+select c0, c1, session_number(c0, 2) over (partition by c1 order by c0) from empty_tbl;
+select c0, c1, session_number(c0, null) over (partition by c1 order by c0) from empty_tbl;
+
+-- test null input
+insert into t0 SELECT generate_series, null FROM TABLE(generate_series(1, 4096, 2));
+select c0, c1, session_number(c0, 2) over (partition by c1 order by c0) as session from t0 order by c1 limit 10;
+select sum(session), count(session) from (select c0, c1, session_number(c0, 2) over (partition by c1 order by c0) as session from t0) tb;

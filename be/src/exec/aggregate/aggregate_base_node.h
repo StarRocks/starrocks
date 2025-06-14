@@ -27,8 +27,10 @@ public:
     ~AggregateBaseNode() override;
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
+    void push_down_tuple_slot_mappings(RuntimeState* state,
+                                       const std::vector<TupleSlotMapping>& parent_mappings) override;
 
 protected:
     const TPlanNode& _tnode;
@@ -37,6 +39,7 @@ protected:
     std::vector<ExprContext*> _group_by_expr_ctxs;
     AggregatorPtr _aggregator = nullptr;
     bool _child_eos = false;
+    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 
 } // namespace starrocks

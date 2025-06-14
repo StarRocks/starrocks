@@ -35,6 +35,7 @@ public abstract class PredicateOperator extends ScalarOperator {
     public PredicateOperator(OperatorType operatorType, List<ScalarOperator> arguments) {
         super(operatorType, Type.BOOLEAN);
         this.arguments = requireNonNull(arguments, "arguments is null");
+        this.incrDepth(arguments);
     }
 
     public List<ScalarOperator> getChildren() {
@@ -85,6 +86,26 @@ public abstract class PredicateOperator extends ScalarOperator {
         }
         PredicateOperator other = (PredicateOperator) obj;
         return Objects.equals(this.arguments, other.arguments);
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        PredicateOperator other = (PredicateOperator) obj;
+        if (this.arguments.size() != other.arguments.size()) {
+            return false;
+        }
+        for (int i = 0; i < this.arguments.size(); i++) {
+            if (!this.arguments.get(i).equivalent(other.arguments.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

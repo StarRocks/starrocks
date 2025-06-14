@@ -21,15 +21,12 @@ CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day,
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1;
--- result:
-05511e19-da7e-11ed-a137-9671fef9d69f
--- !result
 SELECT * FROM mv1;
 -- result:
 -- !result
 SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 -- result:
-true	null
+true	
 -- !result
 DROP TABLE ss;
 -- result:
@@ -37,8 +34,4 @@ DROP TABLE ss;
 SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 -- result:
 false	base-table dropped: ss
--- !result
-REFRESH MATERIALIZED VIEW mv1;
--- result:
-E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because [mv1] is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE; .')
 -- !result

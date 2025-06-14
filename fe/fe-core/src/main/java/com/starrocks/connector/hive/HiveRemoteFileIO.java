@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.ObjectStorageUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -37,10 +36,12 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HiveRemoteFileIO implements RemoteFileIO {
@@ -62,38 +63,57 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
+        return getRemoteFiles(pathKey, false);
+    }
+
+    public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
-        String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
+        String path = pathKey.getPath();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
             URI uri = new Path(path).toUri();
             FileSystem fileSystem;
-
             if (!FeConstants.runningUnitTest) {
                 fileSystem = FileSystem.get(uri, configuration);
             } else {
                 fileSystem = this.fileSystem;
             }
-
-            RemoteIterator<LocatedFileStatus> blockIterator;
-            if (!pathKey.isRecursive()) {
-                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            List<Path> expandedPaths = Lists.newArrayList();
+            if (!expandWildCards) {
+                expandedPaths.add(new Path(uri.getPath()));
             } else {
-                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
-            }
-            while (blockIterator.hasNext()) {
-                LocatedFileStatus locatedFileStatus = blockIterator.next();
-                if (!isValidDataFile(locatedFileStatus)) {
-                    continue;
+                FileStatus[] status = fileSystem.globStatus(new Path(uri.getPath()));
+                for (FileStatus s : status) {
+                    expandedPaths.add(s.getPath());
                 }
-                String locateName = locatedFileStatus.getPath().toUri().getPath();
-                String fileName = PartitionUtil.getSuffixName(uri.getPath(), locateName);
-
-                BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
-                List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
-                fileDescs.add(new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of()));
             }
+            for (Path expandedPath : expandedPaths) {
+                RemoteIterator<LocatedFileStatus> blockIterator;
+                if (!pathKey.isRecursive()) {
+                    blockIterator = fileSystem.listLocatedStatus(expandedPath);
+                } else {
+                    blockIterator = listFilesRecursive(fileSystem, expandedPath);
+                }
+                while (blockIterator.hasNext()) {
+                    LocatedFileStatus locatedFileStatus = blockIterator.next();
+                    if (!isValidDataFile(locatedFileStatus)) {
+                        continue;
+                    }
+                    String locateName = locatedFileStatus.getPath().toUri().getPath();
+                    String fileName = PartitionUtil.getSuffixName(expandedPath.toUri().getPath(), locateName);
+
+                    BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
+                    List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
+                    RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
+                            locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs));
+                    if (expandWildCards) {
+                        fileDesc.setFullPath(locatedFileStatus.getPath().toString());
+                    }
+                    fileDescs.add(fileDesc);
+                }
+            }
+        } catch (FileNotFoundException e) {
+            LOG.warn("Hive remote file on path: {} not existed, ignore it", path, e);
         } catch (Exception e) {
             LOG.error("Failed to get hive remote file's metadata on path: {}", path, e);
             throw new StarRocksConnectorException("Failed to get hive remote file's metadata on path: %s. msg: %s",
@@ -103,14 +123,70 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         return resultPartitions.put(pathKey, fileDescs).build();
     }
 
+    private RemoteIterator<LocatedFileStatus> listFilesRecursive(FileSystem fileSystem, Path f)
+        throws FileNotFoundException, IOException {
+        return new RemoteIterator<LocatedFileStatus>() {
+            private Stack<RemoteIterator<LocatedFileStatus>> itors = new Stack<>();
+            private RemoteIterator<LocatedFileStatus> curItor = fileSystem.listLocatedStatus(f);
+            private LocatedFileStatus curFile;
+
+            @Override
+            public boolean hasNext() throws IOException {
+                while (curFile == null) {
+                    if (curItor.hasNext()) {
+                        handleFileStat(curItor.next());
+                    } else if (!itors.empty()) {
+                        curItor = itors.pop();
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            // Process the input stat.
+            // If it is a file, return the file stat.
+            // If it is a valid directory, traverse it.
+            private void handleFileStat(LocatedFileStatus stat) throws IOException {
+                if (stat.isFile()) {
+                    curFile = stat;
+                } else if (isValidDirectory(stat)) {
+                    try {
+                        RemoteIterator<LocatedFileStatus> newDirItor = fileSystem.listLocatedStatus(stat.getPath());
+                        itors.push(curItor);
+                        curItor = newDirItor;
+                    } catch (FileNotFoundException ignored) {
+                        LOG.debug("Directory {} deleted while attempting for recursive listing", stat.getPath());
+                    }
+                }
+            }
+
+            @Override
+            public LocatedFileStatus next() throws IOException {
+                if (hasNext()) {
+                    LocatedFileStatus result = curFile;
+                    curFile = null;
+                    return result;
+                }
+                throw new java.util.NoSuchElementException("No more entry in " + f);
+            }
+        };
+    }
     private boolean isValidDataFile(FileStatus fileStatus) {
-        if (fileStatus.isDirectory()) {
+        if (!fileStatus.isFile()) {
             return false;
         }
-
         String lcFileName = fileStatus.getPath().getName().toLowerCase();
         return !(lcFileName.startsWith(".") || lcFileName.startsWith("_") ||
                 lcFileName.endsWith(".copying") || lcFileName.endsWith(".tmp"));
+    }
+
+    private boolean isValidDirectory(FileStatus fileStatus) {
+        if (!fileStatus.isDirectory()) {
+            return false;
+        }
+        String dirName = fileStatus.getPath().getName();
+        return !(dirName.startsWith(".") || dirName.startsWith("_"));
     }
 
     protected List<RemoteFileBlockDesc> getRemoteFileBlockDesc(BlockLocation[] blockLocations) throws IOException {
@@ -158,5 +234,24 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     @VisibleForTesting
     public void setFileSystem(FileSystem fs) {
         this.fileSystem = fs;
+    }
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        if (files == null || files.length <= 0) {
+            return null;
+        }
+        FileSystem fileSystem;
+        if (!FeConstants.runningUnitTest) {
+            fileSystem = FileSystem.get(files[0].toUri(), configuration);
+        } else {
+            fileSystem = this.fileSystem;
+        }
+        List<FileStatus> fileStatuses = Lists.newArrayList();
+        for (Path file : files) {
+            FileStatus fileStatus = fileSystem.getFileStatus(file);
+            fileStatuses.add(fileStatus);
+        }
+        return fileStatuses.toArray(new FileStatus[0]);
     }
 }

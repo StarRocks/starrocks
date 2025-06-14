@@ -27,11 +27,16 @@ import java.util.Map;
 import java.util.Set;
 
 public class BaseResponse {
+    public static final String HEADER_QUERY_ID = "X-StarRocks-Query-Id";
     private String contentType;
     protected StringBuilder content = new StringBuilder();
 
     protected Map<String, List<String>> customHeaders = Maps.newHashMap();
     private Set<Cookie> cookies = Sets.newHashSet();
+
+    // whether the connection needs to be closed forcibly.
+    // Default: no, allow the client to reuse the connection whenever possible.
+    private boolean forceCloseConnection = false;
 
     public String getContentType() {
         return contentType;
@@ -39,6 +44,14 @@ public class BaseResponse {
 
     public void setContentType(String contentType) {
         this.contentType = contentType;
+    }
+
+    public boolean isForceCloseConnection() {
+        return forceCloseConnection;
+    }
+
+    public void setForceCloseConnection(boolean closeConnection) {
+        this.forceCloseConnection = closeConnection;
     }
 
     public StringBuilder getContent() {

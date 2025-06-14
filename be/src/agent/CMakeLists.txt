@@ -19,7 +19,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/agent")
 
 add_library(Agent STATIC
         agent_server.cpp
-        client_cache.cpp
         heartbeat_server.cpp
         task_worker_pool.cpp
         utils.cpp
@@ -29,4 +28,5 @@ add_library(Agent STATIC
         report_task.cpp
         agent_task.cpp
         task_signatures_manager.cpp
+        resource_group_usage_recorder.cpp
         )

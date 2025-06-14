@@ -42,9 +42,11 @@ import java.io.File;
 import java.util.Map;
 
 import static org.apache.iceberg.TableMetadata.newTableMetadata;
+import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
 
 public class TestTables {
-
+    private static final String TEST_METADATA_LOCATION =
+            "s3://bucket/test/location/metadata/v1.metadata.json";
     private TestTables() {}
 
     private static TestTable upgrade(File temp, String name, int newFormatVersion) {
@@ -75,7 +77,8 @@ public class TestTables {
         ops.commit(
                 null,
                 newTableMetadata(
-                        schema, spec, sortOrder, temp.toString(), ImmutableMap.of()));
+                        schema, spec, sortOrder, temp.toString(),
+                        ImmutableMap.of(FORMAT_VERSION, String.valueOf(formatVersion))));
 
         return new TestTable(ops, name);
     }
@@ -273,7 +276,8 @@ public class TestTables {
                     }
                     Integer version = VERSIONS.get(tableName);
                     // remove changes from the committed metadata
-                    this.current = TableMetadata.buildFrom(updatedMetadata).discardChanges().build();
+                    this.current = TableMetadata.buildFrom(updatedMetadata).discardChanges()
+                            .withMetadataLocation(TEST_METADATA_LOCATION).build();
                     VERSIONS.put(tableName, version == null ? 0 : version + 1);
                     METADATA.put(tableName, current);
                 } else {
@@ -325,6 +329,11 @@ public class TestTables {
             if (!new File(path).delete()) {
                 throw new RuntimeIOException("Failed to delete file: " + path);
             }
+        }
+
+        @Override
+        public Map<String, String> properties() {
+            return Maps.newHashMap();
         }
     }
 }

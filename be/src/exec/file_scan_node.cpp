@@ -170,11 +170,11 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status FileScanNode::close(RuntimeState* state) {
+void FileScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     _scan_finished.store(true);
     _queue_writer_cond.notify_all();
@@ -188,7 +188,7 @@ Status FileScanNode::close(RuntimeState* state) {
     }
     _cur_mem_usage = 0;
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 // This function is called after plan node has been prepared.
@@ -321,8 +321,7 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
             // todo: break if failed ?
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(WARNING) << "FileScanner[" << start_idx + i
-                             << "] process failed. status=" << status.get_error_msg();
+                LOG(WARNING) << "FileScanner[" << start_idx + i << "] process failed. status=" << status.message();
                 break;
             }
         }

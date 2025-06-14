@@ -59,6 +59,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
 #include "util/uid_util.h"
@@ -80,8 +81,7 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(DataStreamSender* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
-            bool send_query_statistics_with_every_batch)
+            PlanNodeId dest_node_id, bool is_transfer_chain, bool send_query_statistics_with_every_batch)
             : _parent(parent),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
@@ -120,7 +120,7 @@ public:
     // of close operation, client should call close_wait() to finish channel's close.
     // We split one close operation into two phases in order to make multiple channels
     // can run parallel.
-    void close(RuntimeState* state);
+    void close(RuntimeState* state) {}
 
     // Get close wait's response, to finish channel close operation.
     void close_wait(RuntimeState* state);
@@ -179,7 +179,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -197,6 +197,12 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         LOG(WARNING) << "there is no brpc destination address's hostname"
                         ", maybe version is not compatible.";
         return Status::InternalError("no brpc destination");
+    }
+    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    if (UNLIKELY(_brpc_stub == nullptr)) {
+        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
     }
 
     // initialize brpc request
@@ -221,7 +227,6 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         _is_inited = true;
         return Status::OK();
     }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
 
     _need_close = true;
     _is_inited = true;
@@ -293,7 +298,7 @@ Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, Chunk*
                                                      uint32_t from, uint32_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
-        _chunk = chunk->clone_empty_with_tuple();
+        _chunk = chunk->clone_empty();
     }
 
     if (_chunk->num_rows() + size > state->chunk_size()) {
@@ -336,10 +341,6 @@ Status DataStreamSender::Channel::close_internal() {
     return Status::OK();
 }
 
-void DataStreamSender::Channel::close(RuntimeState* state) {
-    state->log_error(close_internal().get_error_msg());
-}
-
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     if (_need_close) {
         auto st = _wait_prev_request();
@@ -359,8 +360,8 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
 DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc,
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
-                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
-                                   bool enable_exchange_pass_through, bool enable_exchange_perf)
+                                   bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
+                                   bool enable_exchange_perf)
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
@@ -389,7 +390,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         const auto& fragment_instance_id = destinations[i].fragment_instance_id;
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
             _channel_shared_ptrs.emplace_back(new Channel(this, destinations[i].brpc_server, fragment_instance_id,
-                                                          sink.dest_node_id, per_channel_buffer_size, is_transfer_chain,
+                                                          sink.dest_node_id, is_transfer_chain,
                                                           send_query_statistics_with_every_batch));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channel_shared_ptrs.size() - 1});
             _channels.push_back(_channel_shared_ptrs.back().get());
@@ -616,7 +617,7 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
         butil::IOBuf attachment;
         construct_brpc_attachment(&_chunk_request, &attachment);
         for (auto& _channel : _channels) {
-            _channel->send_chunk_request(&_chunk_request, attachment);
+            (void)_channel->send_chunk_request(&_chunk_request, attachment);
         }
     } else {
         for (auto& _channel : _channels) {

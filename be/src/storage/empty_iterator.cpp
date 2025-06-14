@@ -27,7 +27,14 @@ protected:
     Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override {
         return Status::EndOfFile("end of empty iterator");
     }
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override {
+        return Status::EndOfFile("end of empty iterator");
+    }
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override {
+        return Status::EndOfFile("end of empty iterator");
+    }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override {
         return Status::EndOfFile("end of empty iterator");
     }
 };

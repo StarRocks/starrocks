@@ -17,6 +17,7 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 
@@ -33,21 +34,24 @@ public:
         const TypeDescriptor& element_type = _type.children[0];
         const size_t num_elements = _children.size();
 
-        size_t num_rows = 1;
-        // when num_elements == 0, we should generate right num_rows.
-        if (num_elements == 0 && chunk) {
-            num_rows = chunk->num_rows();
+        size_t output_rows = 1;
+        // use chunk num_rows
+        if (chunk) {
+            output_rows = chunk->num_rows();
         }
 
-        std::vector<ColumnPtr> element_columns(num_elements);
+        bool all_const = true;
+        Columns element_columns(num_elements);
         for (size_t i = 0; i < num_elements; i++) {
             ASSIGN_OR_RETURN(auto col, _children[i]->evaluate_checked(context, chunk));
-            num_rows = std::max(num_rows, col->size());
+            output_rows = std::max(output_rows, col->size());
+            all_const &= col->is_constant();
             element_columns[i] = std::move(col);
         }
 
+        int cal_rows = all_const ? 1 : output_rows;
         for (size_t i = 0; i < num_elements; i++) {
-            element_columns[i] = ColumnHelper::unfold_const_column(element_type, num_rows, element_columns[i]);
+            element_columns[i] = ColumnHelper::unfold_const_column(element_type, cal_rows, element_columns[i]);
         }
 
         auto array_elements = ColumnHelper::create_column(element_type, true);
@@ -56,7 +60,7 @@ public:
         // fill array column.
         uint32_t curr_offset = 0;
         array_offsets->append(curr_offset);
-        for (size_t i = 0; i < num_rows; i++) {
+        for (size_t i = 0; i < cal_rows; i++) {
             for (const auto& element : element_columns) {
                 array_elements->append(*element, i, 1);
             }
@@ -64,7 +68,11 @@ public:
             array_offsets->append(curr_offset);
         }
 
-        return ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+        auto ptr = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+        if (all_const) {
+            return ConstColumn::create(std::move(ptr), output_rows);
+        }
+        return ptr;
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayExpr(*this)); }

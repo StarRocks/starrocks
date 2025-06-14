@@ -169,7 +169,8 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
 
     case Type::BOOL: {
         auto real_array = down_cast<const BooleanArray*>(array);
-        for (int i = 0; i < array->length(); i++) {
+        auto array_end_idx = std::min(array_start_idx + num_elements, static_cast<size_t>(array->length()));
+        for (size_t i = array_start_idx; i < array_end_idx; i++) {
             vpack::Builder builder;
             JsonValue json = JsonValue::from_bool(real_array->Value(i));
             output->append(std::move(json));
@@ -178,7 +179,8 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
     }
     case Type::STRING: {
         auto real_array = down_cast<const StringArray*>(array);
-        for (int i = 0; i < array->length(); i++) {
+        auto array_end_idx = std::min(array_start_idx + num_elements, static_cast<size_t>(array->length()));
+        for (size_t i = array_start_idx; i < array_end_idx; i++) {
             vpack::Builder builder;
             auto view = real_array->GetView(i);
             ASSIGN_OR_RETURN(auto json, JsonValue::parse_json_or_string({view.data(), view.length()}));
@@ -203,7 +205,7 @@ static Status convert_single_arrow_struct(const StructArray* array, int offset, 
     builder->openObject();
     const StructType* struct_type = array->struct_type();
     for (int i = 0; i < array->num_fields(); i++) {
-        auto field = array->field(i);
+        const auto& field = array->field(i);
         RETURN_IF_ERROR(convert_arrow_to_json_element(field.get(), field->type_id(), offset,
                                                       struct_type->field(i)->name(), builder));
     }
@@ -238,7 +240,7 @@ static StatusOr<std::string> convert_array_element_to_string(const Array* array,
 }
 
 static Status convert_single_arrow_map(const MapArray* array, int offset, vpack::Builder* builder) {
-    auto item_array = array->items();
+    const auto& item_array = array->items();
 
     builder->openObject();
     Type::type item_type = item_array->type_id();

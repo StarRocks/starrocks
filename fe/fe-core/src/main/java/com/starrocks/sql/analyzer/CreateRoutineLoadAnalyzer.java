@@ -18,7 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.apache.logging.log4j.LogManager;
@@ -41,7 +41,6 @@ public class CreateRoutineLoadAnalyzer {
             if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
-            label.setDbName(dbName);
         }
         if (Strings.isNullOrEmpty(statement.getTableName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR);
@@ -54,8 +53,8 @@ public class CreateRoutineLoadAnalyzer {
             statement.setRoutineLoadDesc(CreateRoutineLoadStmt.buildLoadDesc(statement.getLoadPropertyList()));
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
-        } catch (UserException e) {
-            LOG.error(e);
+        } catch (StarRocksException e) {
+            LOG.error(e.getMessage(), e);
             throw new SemanticException(e.getMessage());
         }
     }

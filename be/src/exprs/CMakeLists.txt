@@ -17,10 +17,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
-set(EXPR_FILES 
+set(EXPR_FILES
+  agg/data_sketch/ds_theta.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
+  agg/factory/aggregate_resolver_hypothesis_testing.cpp
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp
   agg/factory/aggregate_resolver_sumcount.cpp
@@ -28,7 +30,6 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
-  anyval_util.cpp
   base64.cpp
   binary_functions.cpp
   expr_context.cpp
@@ -41,12 +42,15 @@ set(EXPR_FILES
   array_element_expr.cpp
   array_expr.cpp
   array_functions.cpp
+  arrow_function_call.cpp
   binary_predicate.cpp
   bitmap_functions.cpp
   case_expr.cpp
   cast_expr.cpp
   cast_expr_array.cpp
   cast_expr_json.cpp
+  cast_expr_struct.cpp
+  cast_expr_map.cpp
   cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
@@ -63,6 +67,7 @@ set(EXPR_FILES
   hyperloglog_functions.cpp
   in_const_predicate.cpp
   info_func.cpp
+  inet_aton.cpp
   in_predicate.cpp
   is_null_predicate.cpp
   json_functions.cpp
@@ -78,6 +83,7 @@ set(EXPR_FILES
   runtime_filter_bank.cpp
   runtime_filter.cpp
   split.cpp
+  regexp_split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
@@ -92,6 +98,21 @@ set(EXPR_FILES
   subfield_expr.cpp
   map_apply_expr.cpp
   map_expr.cpp
+  substring_index.cpp
+  dict_query_expr.cpp
+  runtime_filter_layout.cpp
+  dictionary_get_expr.cpp
+  ngram.cpp
+  match_expr.cpp
+  gin_functions.cpp
 )
+
+if(STARROCKS_JIT_ENABLE)
+  set(EXPR_FILES ${EXPR_FILES}
+      jit/ir_helper.cpp
+      jit/jit_engine.cpp
+      jit/jit_expr.cpp)
+
+endif()
 
 add_library(Exprs ${EXPR_FILES})

@@ -30,40 +30,19 @@ std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
     return build_starlet_uri(tablet_id, "");
 }
 
-Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots) const {
-    if (roots == nullptr) {
-        return Status::InvalidArgument("roots set is NULL");
+StatusOr<std::string> StarletLocationProvider::real_location(const std::string& virtual_path) const {
+    ASSIGN_OR_RETURN(auto path_and_id, parse_starlet_uri(virtual_path));
+    auto info_or = g_worker->retrieve_shard_info(path_and_id.second);
+    if (!info_or.ok()) {
+        return to_status(info_or.status());
     }
-    if (g_worker == nullptr) {
-        return Status::OK();
+    const auto& root_path = info_or->path_info.full_path();
+    const auto& child_path = path_and_id.first;
+    if (root_path.ends_with('/') || child_path.starts_with('/')) {
+        return fmt::format("{}{}", info_or->path_info.full_path(), path_and_id.first);
+    } else {
+        return fmt::format("{}/{}", info_or->path_info.full_path(), path_and_id.first);
     }
-    auto shards = g_worker->shards();
-    std::unordered_map<std::string, staros::starlet::ShardId> root_ids;
-    for (const auto& shard : shards) {
-        if (shard.path_info.fs_info().fs_type() != staros::FileStoreType::S3 &&
-            shard.path_info.fs_info().fs_type() != staros::FileStoreType::HDFS &&
-            shard.path_info.fs_info().fs_type() != staros::FileStoreType::AZBLOB) {
-            return Status::NotSupported(
-                    fmt::format("Unsupported object store type: {}", shard.path_info.fs_info().fs_type()));
-        }
-        root_ids[shard.path_info.full_path()] = shard.id;
-    }
-    for (const auto& [uri, id] : root_ids) {
-        (void)uri;
-        roots->insert(root_location(id));
-    }
-    return Status::OK();
-}
-
-std::set<int64_t> StarletLocationProvider::owned_tablets() const {
-    std::set<int64_t> ret;
-    if (g_worker != nullptr) {
-        auto shards = g_worker->shards();
-        for (const auto& s : shards) {
-            ret.insert(s.id);
-        }
-    }
-    return ret;
 }
 
 } // namespace starrocks::lake

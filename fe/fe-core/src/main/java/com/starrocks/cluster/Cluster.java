@@ -45,7 +45,8 @@ import java.io.IOException;
 
 // Now Cluster don't have read interface, in order to be back compatible.
 // We will remove the persistent format later.
-@Deprecated
+
+@Deprecated // Can be deleted after version 3.3
 public class Cluster implements Writable {
     private Long id;
     private String name;

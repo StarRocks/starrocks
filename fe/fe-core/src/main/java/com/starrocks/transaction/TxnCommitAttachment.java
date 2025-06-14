@@ -37,15 +37,11 @@ package com.starrocks.transaction;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
-import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.thrift.TTxnCommitAttachment;
-import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -53,14 +49,9 @@ public abstract class TxnCommitAttachment implements Writable {
 
     @SerializedName("s")
     protected TransactionState.LoadJobSourceType sourceType;
-    protected boolean isTypeRead = false;
 
     public TxnCommitAttachment(TransactionState.LoadJobSourceType sourceType) {
         this.sourceType = sourceType;
-    }
-
-    public void setTypeRead(boolean isTypeRead) {
-        this.isTypeRead = isTypeRead;
     }
 
     public static TxnCommitAttachment fromThrift(TTxnCommitAttachment txnCommitAttachment) {
@@ -83,42 +74,9 @@ public abstract class TxnCommitAttachment implements Writable {
         }
     }
 
-    public static TxnCommitAttachment read(DataInput in) throws IOException {
-        TxnCommitAttachment attachment = null;
-        LoadJobSourceType type = LoadJobSourceType.valueOf(Text.readString(in));
-        if (type == LoadJobSourceType.ROUTINE_LOAD_TASK) {
-            attachment = new RLTaskTxnCommitAttachment();
-        } else if (type == LoadJobSourceType.BATCH_LOAD_JOB) {
-            attachment = new LoadJobFinalOperation();
-        } else if (type == LoadJobSourceType.BACKEND_STREAMING) {
-            // TODO: Any compatibility problem here with mini load?
-            attachment = new ManualLoadTxnCommitAttachment();
-        } else if (type == LoadJobSourceType.FRONTEND) {
-            // spark load
-            attachment = new LoadJobFinalOperation();
-        } else if (type == LoadJobSourceType.INSERT_STREAMING) {
-            attachment = new InsertTxnCommitAttachment();
-        } else if (type == LoadJobSourceType.FRONTEND_STREAMING) {
-            attachment = StreamLoadTxnCommitAttachment.loadStreamLoadTxnCommitAttachment(in);
-        } else {
-            throw new IOException("Unknown load job source type: " + type.name());
-        }
-
-        attachment.setTypeRead(true);
-        attachment.readFields(in);
-        return attachment;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         // ATTN: must write type first
         Text.writeString(out, sourceType.name());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isTypeRead) {
-            sourceType = LoadJobSourceType.valueOf(Text.readString(in));
-            isTypeRead = true;
-        }
     }
 }

@@ -19,7 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 
-add_library(Storage STATIC
+set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
@@ -34,14 +34,18 @@ add_library(Storage STATIC
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
+    publish_version_manager.cpp
     olap_common.cpp
+    olap_define.cpp
     olap_server.cpp
     options.cpp
-    page_cache.cpp
     persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
+    replication_txn_manager.cpp
+    replication_utils.cpp
+    segment_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -55,6 +59,7 @@ add_library(Storage STATIC
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
+    tablet_index.cpp
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp
@@ -71,12 +76,17 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+    rowset/json_column_compactor.cpp
+    rowset/json_column_iterator.cpp
+    rowset/json_column_writer.cpp
+    rowset/cast_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
     rowset/column_decoder.cpp
     rowset/default_value_column_iterator.cpp
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
+    rowset/fill_subfield_iterator.cpp
     rowset/scalar_column_iterator.cpp
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp
@@ -89,27 +99,29 @@ add_library(Storage STATIC
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
     rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
     rowset/storage_page_decoder.cpp
-    rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp
     rowset/bloom_filter_index_writer.cpp
-    rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
-    rowset/segment_chunk_iterator_adapter.cpp
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
     rowset/horizontal_update_rowset_writer.cpp
+    rowset/bitmap_index_evaluator.cpp
+    rowset/metadata_cache.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_manual_compaction_task.cpp
+    task/engine_compaction_control_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
@@ -121,8 +133,11 @@ add_library(Storage STATIC
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+    column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
+    runtime_filter_predicate.cpp
+    predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
     disjunctive_predicates.cpp
@@ -132,6 +147,9 @@ add_library(Storage STATIC
     projection_iterator.cpp
     push_handler.cpp
     row_source_mask.cpp
+    row_store_encoder.cpp
+    row_store_encoder_simple.cpp
+    row_store_encoder_factory.cpp
     schema_change.cpp
     schema_change_utils.cpp
     tablet_reader.cpp
@@ -163,27 +181,55 @@ add_library(Storage STATIC
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
+    primary_key_recover.cpp
+    local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
+    lake/compaction_task.cpp
+    lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
-    lake/gc.cpp
+    lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/primary_key_compaction_policy.cpp
+    lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
+    lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
+    lake/cloud_native_index_compaction_task.cpp
+    lake/metacache.cpp
+    lake/lake_primary_key_recover.cpp
+    lake/load_spill_block_manager.cpp
+    lake/spill_mem_table_sink.cpp
+    lake/tablet_retain_info.cpp
+    sstable/block_builder.cpp
+    sstable/block.cpp
+    sstable/coding.cpp
+    sstable/comparator.cpp
+    sstable/filter_block.cpp
+    sstable/format.cpp
+    sstable/table_builder.cpp
+    sstable/table.cpp
+    sstable/two_level_iterator.cpp
+    sstable/filter_policy.cpp
+    sstable/iterator.cpp
+    sstable/options.cpp
+    sstable/merger.cpp
+    lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -192,4 +238,44 @@ add_library(Storage STATIC
     binlog_reader.cpp
     lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
+    lake/lake_local_persistent_index.cpp
+    persistent_index_compaction_manager.cpp
+    persistent_index_load_executor.cpp
+    lake/local_pk_index_manager.cpp
+    persistent_index_tablet_loader.cpp
+    lake/lake_local_persistent_index_tablet_loader.cpp
+    lake/lake_persistent_index.cpp
+    lake/persistent_index_memtable.cpp
+    lake/local_pk_index_manager.cpp
+    lake/persistent_index_sstable.cpp
+    lake/lake_primary_key_compaction_conflict_resolver.cpp
+    lake/column_mode_partial_update_handler.cpp
+    primary_key_dump.cpp
+    dictionary_cache_manager.cpp
+    rows_mapper.cpp
+    primary_key_compaction_conflict_resolver.cpp
+    local_primary_key_compaction_conflict_resolver.cpp
+    index/inverted/inverted_index_iterator.cpp
+    index/inverted/inverted_index_option.cpp
+    index/inverted/inverted_plugin_factory.cpp
+    index/inverted/clucene/clucene_plugin.cpp
+    index/inverted/clucene/clucene_inverted_writer.cpp
+    index/inverted/clucene/clucene_inverted_reader.cpp
+    index/inverted/clucene/match_operator.cpp
+    index/vector/empty_index_reader.cpp
+    index/vector/vector_index_builder_factory.cpp
+    index/vector/vector_index_writer.cpp
+    index/vector/vector_index_builder.cpp
+    index/vector/vector_index_reader_factory.cpp
+    index/vector/tenann_index_reader.cpp
+    index/vector/tenann/del_id_filter.cpp
+    index/vector/tenann/tenann_index_builder.cpp
+    index/vector/tenann/tenann_index_utils.cpp)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
+endif()
+
+add_library(Storage STATIC
+    ${STORAGE_FILES}
 )

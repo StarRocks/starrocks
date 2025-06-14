@@ -22,9 +22,13 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TableConstraintsSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.TABLE_CONSTRAINTS_ID,
-                "table_constraints",
+    private static final String NAME = "table_constraints";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.TABLE_CONSTRAINTS_ID,
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(512))
@@ -33,6 +37,7 @@ public class TableConstraintsSystemTable {
                         .column("TABLE_SCHEMA", ScalarType.createVarchar(64))
                         .column("TABLE_NAME", ScalarType.createVarchar(64))
                         .column("CONSTRAINT_TYPE", ScalarType.createVarchar(64))
+                        .column("ENFORCED", ScalarType.createVarcharType(3))
                         .build(), TSchemaTableType.SCH_TABLE_CONSTRAINTS);
     }
 }

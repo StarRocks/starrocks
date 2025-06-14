@@ -40,17 +40,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TKafkaLoadInfo;
 import com.starrocks.thrift.TLoadSourceType;
-import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.DatabaseTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,6 +59,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import static com.starrocks.common.ErrorCode.ERR_ROUTINE_LOAD_OFFSET_INVALID;
 
 public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private static final Logger LOG = LogManager.getLogger(KafkaTaskInfo.class);
@@ -71,20 +74,21 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     // offset is the latest existing message offset + 1
     private Map<Integer, Long> latestPartOffset;
 
-    public KafkaTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs, long timeToExecuteMs,
-                         Map<Integer, Long> partitionIdToOffset) {
-        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs);
+    public KafkaTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs, long timeToExecuteMs,
+                         Map<Integer, Long> partitionIdToOffset, long taskTimeoutMs) {
+        super(id, job, taskScheduleIntervalMs, timeToExecuteMs, taskTimeoutMs);
         this.partitionIdToOffset = partitionIdToOffset;
     }
 
     public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
                          Map<Integer, Long> latestPartOffset) {
-        this(timeToExecuteMs, kafkaTaskInfo, partitionIdToOffset);
+        this(timeToExecuteMs, kafkaTaskInfo, partitionIdToOffset, kafkaTaskInfo.getTimeoutMs());
     }
 
-    public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset) {
-        super(UUID.randomUUID(), kafkaTaskInfo.getJobId(),
-                kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs, kafkaTaskInfo.getBeId());
+    public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
+                         long tastTimeoutMs) {
+        super(UUIDUtil.genUUID(), kafkaTaskInfo.getJob(), kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs,
+                kafkaTaskInfo.getBeId(), tastTimeoutMs);
         this.partitionIdToOffset = partitionIdToOffset;
     }
 
@@ -92,18 +96,36 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return new ArrayList<>(partitionIdToOffset.keySet());
     }
 
+    // checkReadyToExecuteFast compares the local latest partition offset and the consumed offset.
+    public boolean checkReadyToExecuteFast() {
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) job;
+        for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
+            int partitionId = entry.getKey();
+            Long consumeOffset = entry.getValue();
+            Long localLatestOffset = kafkaRoutineLoadJob.getPartitionOffset(partitionId);
+            // If any partition has newer data, the task should be scheduled.
+            if (localLatestOffset != null && localLatestOffset > consumeOffset) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
-    public boolean readyToExecute() throws UserException {
-        RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
-        if (routineLoadJob == null) {
-            return false;
+    public boolean readyToExecute() throws StarRocksException {
+        if (checkReadyToExecuteFast()) {
+            return true;
         }
 
-        KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) routineLoadJob;
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) job;
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
-                new ArrayList<>(partitionIdToOffset.keySet()));
+                new ArrayList<>(partitionIdToOffset.keySet()), getComputeResource());
+        for (Map.Entry<Integer, Long> entry : latestOffsets.entrySet()) {
+            kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
+        }
+
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
             int partitionId = entry.getKey();
             Long latestOffset = latestOffsets.get(partitionId);
@@ -114,7 +136,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     return true;
                 } else if (latestOffset < consumeOffset) {
                     throw new RoutineLoadPauseException(
-                            "partition " + partitionId + " offset " + consumeOffset + " has no data");
+                            ERR_ROUTINE_LOAD_OFFSET_INVALID.formatErrorMsg(consumeOffset, latestOffset, partitionId));
                 }
             }
         }
@@ -141,21 +163,21 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public TRoutineLoadTask createRoutineLoadTask() throws UserException {
-        KafkaRoutineLoadJob routineLoadJob = (KafkaRoutineLoadJob) routineLoadManager.getJob(jobId);
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+        KafkaRoutineLoadJob routineLoadJob = (KafkaRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
         TRoutineLoadTask tRoutineLoadTask = new TRoutineLoadTask();
         TUniqueId queryId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         tRoutineLoadTask.setId(queryId);
-        tRoutineLoadTask.setJob_id(jobId);
+        tRoutineLoadTask.setJob_id(routineLoadJob.getId());
         tRoutineLoadTask.setTxn_id(txnId);
-        Database database = GlobalStateMgr.getCurrentState().getDb(routineLoadJob.getDbId());
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(routineLoadJob.getDbId());
         if (database == null) {
             throw new MetaNotFoundException("database " + routineLoadJob.getDbId() + " does not exist");
         }
         tRoutineLoadTask.setDb(database.getFullName());
-        Table tbl = database.getTable(routineLoadJob.getTableId());
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), routineLoadJob.getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
@@ -173,7 +195,12 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setKafka_load_info(tKafkaLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.KAFKA);
         tRoutineLoadTask.setParams(plan(routineLoadJob));
-        tRoutineLoadTask.setMax_interval_s(Config.routine_load_task_consume_second);
+        // When the transaction times out, we reduce the consumption time to lower the BE load.
+        if (msg != null && msg.contains(DatabaseTransactionMgr.TXN_TIMEOUT_BY_MANAGER)) {
+            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond() / 2);
+        } else {
+            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond());
+        }
         tRoutineLoadTask.setMax_batch_rows(routineLoadJob.getMaxBatchRows());
         tRoutineLoadTask.setMax_batch_size(Config.max_routine_load_batch_size);
         if (!routineLoadJob.getFormat().isEmpty() && routineLoadJob.getFormat().equalsIgnoreCase("json")) {
@@ -201,11 +228,16 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return result.toString();
     }
 
+    @Override
+    String dataSourceType() {
+        return "kafka";
+    }
+
     public Map<Integer, Long> getLatestOffset() {
         return latestPartOffset;
     }
 
-    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
@@ -214,8 +246,6 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     getStreamLoadMgr().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }
-        TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
-        tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
         return tExecPlanFragmentParams;
     }
 }

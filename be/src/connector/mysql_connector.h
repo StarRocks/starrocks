@@ -55,6 +55,7 @@ public:
     ~MySQLDataSource() override = default;
 
     MySQLDataSource(const MySQLDataSourceProvider* provider, const TScanRange& scan_range);
+    std::string name() const override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;

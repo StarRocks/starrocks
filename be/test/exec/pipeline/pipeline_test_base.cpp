@@ -17,11 +17,14 @@
 #include <random>
 
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
 #include "storage/chunk_helper.h"
+#include "testutil/assert.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 #include "util/thrift_util.h"
@@ -42,7 +45,8 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
         auto pseudo_plan_node_id = -200;
-        auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
+        auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(_vector_chunk_size,
+                                                                  config::local_exchange_buffer_mem_limit_per_driver);
         auto local_exchange_source =
                 std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
         auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
@@ -51,7 +55,8 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
         // Add LocalExchangeSinkOperator to predecessor pipeline.
         pred_operators.emplace_back(std::move(local_exchange_sink));
         // predecessor pipeline comes to end.
-        _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipeline_id(), pred_operators));
+        _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipeline_id(), pred_operators,
+                                                           _fragment_ctx->_execution_groups[0].get()));
 
         OpFactories operators_source_with_local_exchange;
         // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
@@ -73,13 +78,14 @@ void PipelineTestBase::_prepare() {
     const auto& query_id = params.query_id;
     const auto& fragment_id = params.fragment_instance_id;
 
-    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(60);
     _query_ctx->set_query_expire_seconds(60);
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
-    _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+    _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
@@ -88,12 +94,12 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
-    _fragment_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
+    _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
 
-    _runtime_state->set_chunk_size(config::vector_chunk_size);
+    _runtime_state->set_chunk_size(_vector_chunk_size);
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
     _runtime_state->set_query_ctx(_query_ctx);
@@ -102,28 +108,23 @@ void PipelineTestBase::_prepare() {
     _obj_pool = _runtime_state->obj_pool();
 
     ASSERT_TRUE(_pipeline_builder != nullptr);
-    _pipelines.clear();
+    exec_group = ExecutionGroupBuilder::create_normal_exec_group();
     _pipeline_builder(_fragment_ctx->runtime_state());
-    _fragment_ctx->set_pipelines(std::move(_pipelines));
-    ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
-
-    const auto& pipelines = _fragment_ctx->pipelines();
-    const size_t num_pipelines = pipelines.size();
-    for (auto n = 0; n < num_pipelines; ++n) {
-        const auto& pipeline = pipelines[n];
-        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
+    for (auto pipeline : _pipelines) {
+        exec_group->add_pipeline(std::move(pipeline.get()));
     }
+    _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
+    _pipelines.clear();
+    ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
+    _fragment_ctx->iterate_pipeline([this](Pipeline* pipeline) { pipeline->instantiate_drivers(_runtime_state); });
 }
 
 void PipelineTestBase::_execute() {
-    Status prepare_status = _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
-    ASSERT_TRUE(prepare_status.ok());
+    _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
 
-    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-        exec_env->wg_driver_executor()->submit(driver.get());
-        return Status::OK();
-    });
+    _fragment_ctx->iterate_drivers(
+            [exec_env = _exec_env](const DriverPtr& driver) { exec_env->wg_driver_executor()->submit(driver.get()); });
 }
 
 ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num) {
@@ -298,11 +299,14 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     TDescriptorTable tbl;
     const uint8_t* buf = reinterpret_cast<uint8_t*>(content.data());
     uint32_t len = content.size();
-    deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl);
+    CHECK(deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl).ok());
 
     std::vector<SlotDescriptor> slots;
+    phmap::flat_hash_set<SlotId> seen_slots;
     for (auto& t_slot : tbl.slotDescriptors) {
-        slots.emplace_back(t_slot);
+        if (auto [_, is_new] = seen_slots.insert(t_slot.id); is_new) {
+            slots.emplace_back(t_slot);
+        }
     }
 
     std::vector<SlotDescriptor*> p_slots;

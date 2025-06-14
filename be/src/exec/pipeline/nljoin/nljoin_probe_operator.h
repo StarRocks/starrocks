@@ -59,6 +59,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    void update_exec_stats(RuntimeState* state) override;
 
 private:
     enum JoinStage {
@@ -68,24 +69,33 @@ private:
         Finished,      // Finish all job
     };
 
+    StatusOr<ChunkPtr> _pull_chunk_for_inner_join(size_t chunk_size);
+    StatusOr<ChunkPtr> _pull_chunk_for_other_join(size_t chunk_size);
+
     bool _is_build_side_empty() const;
     int _num_build_chunks() const;
     void _move_build_chunk_index(int index);
     void _reset_build_chunk_index();
-    void _next_build_chunk_index();
+    void _next_build_chunk_index_for_other_join();
+    void _next_probe_row_index_for_inner_join();
+    void _next_build_row_index_for_inner_join();
 
-    ChunkPtr _init_output_chunk(RuntimeState* state) const;
-    Status _probe(RuntimeState* state, const ChunkPtr& chunk);
+    ChunkPtr _init_output_chunk(size_t chunk_size) const;
+    Status _probe_for_other_join(const ChunkPtr& chunk);
+    Status _probe_for_inner_join(const ChunkPtr& chunk);
     void _advance_join_stage(JoinStage stage) const;
     bool _skip_probe() const;
     void _check_post_probe() const;
     void _init_build_match() const;
-    void _permute_probe_row(RuntimeState* state, const ChunkPtr& chunk);
-    ChunkPtr _permute_chunk(RuntimeState* state);
-    Status _permute_right_join(RuntimeState* state);
-    void _permute_left_join(RuntimeState* state, const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
+    Status _permute_probe_row(const ChunkPtr& chunk);
+    StatusOr<ChunkPtr> _permute_chunk_for_other_join(size_t chunk_size);
+    ChunkPtr _permute_chunk_for_inner_join(size_t chunk_size);
+    void _permute_chunk_base_left(ChunkPtr* chunk);
+    void _permute_chunk_base_right(ChunkPtr* chunk);
+    Status _permute_right_join(size_t chunk_size);
+    void _permute_left_join(const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
-    void iterate_enumerate_chunk(const ChunkPtr& chunk, std::function<void(bool, size_t, size_t)> call);
+    void iterate_enumerate_chunk(const ChunkPtr& chunk, const std::function<void(bool, size_t, size_t)>& call);
 
     // Join type check
     bool _is_left_join() const;
@@ -104,7 +114,6 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const std::shared_ptr<NLJoinContext>& _cross_join_context;
 
-    RuntimeState* _runtime_state = nullptr;
     bool _input_finished = false;
     mutable JoinStage _join_stage = JoinStage::Probe;
     mutable ChunkAccumulator _output_accumulator;
@@ -114,7 +123,8 @@ private:
     size_t _curr_build_chunk_index = 0;
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
-    mutable std::vector<uint8_t> _self_build_match_flag;
+    size_t _build_row_current = 0;
+    mutable Filter _self_build_match_flag;
 
     // Probe states
     ChunkPtr _probe_chunk = nullptr;
@@ -158,7 +168,7 @@ private:
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;
 
-    Buffer<SlotDescriptor*> _col_types;
+    std::vector<SlotDescriptor*> _col_types;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 

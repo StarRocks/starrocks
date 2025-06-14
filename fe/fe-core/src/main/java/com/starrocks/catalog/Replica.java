@@ -53,7 +53,6 @@ public class Replica implements Writable {
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
 
     public static final int DEPRECATED_PROP_SCHEMA_HASH = 0;
-    public static final int DEPRECATED_PROP_PATH_HASH = 0;
 
     public enum ReplicaState {
         NORMAL,
@@ -63,7 +62,8 @@ public class Replica implements Writable {
         SCHEMA_CHANGE,
         CLONE,
         ALTER, // replica is under rollup or schema change
-        DECOMMISSION; // replica is ready to be deleted
+        DECOMMISSION, // replica is ready to be deleted
+        RECOVER;  // replica is recovering
 
         public boolean canLoad() {
             return this == NORMAL || this == SCHEMA_CHANGE || this == ALTER;
@@ -98,10 +98,16 @@ public class Replica implements Writable {
     //   1. tablet has 2 replica A has version[7,8,9,10], B: [7,8,9,10]
     //   2. a newly cloned replica C full clone from replica A, then has version [10]
     //   3. current partition visible version is still 9
-    //   4. A query read this tablet at version 9, and picks replica C, but replica C doesn't have version 10,
+    //   4. A query read this tablet at version 9, and picks replica C, but replica C only have version 10,
     //      causing `version not found` error
     @SerializedName(value = "minReadableVersion")
     private volatile long minReadableVersion = 0;
+
+    // The last version reported from BE, this version should be increased monotonically.
+    // Use this version to detect data lose on BE.
+    // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
+    private volatile long lastReportVersion = 0;
+
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
     private volatile long dataSize = 0;
@@ -128,14 +134,14 @@ public class Replica implements Writable {
     private boolean bad = false;
     private boolean setBadForce = false;
 
-    /*
+    /**
      * If set to true, which means this replica need to be repaired explicitly.
      * This can happen when this replica is created by a balance clone task, and
      * when task finished, the version of this replica is behind the partition's visible version.
      * So this replica need a further repair.
      * If we do not do this, this replica will be treated as version stale, and will be removed,
      * so that the balance task is failed, which is unexpected.
-     *
+     * <p>
      * furtherRepairSetTime set alone with needFurtherRepair.
      * This is an insurance, in case that further repair task always fail. If 20 min passed
      * since we set needFurtherRepair to true, the 'needFurtherRepair' will be set to false.
@@ -175,6 +181,13 @@ public class Replica implements Writable {
     private volatile boolean lastWriteFail = false;
 
     private boolean isErrorState = false;
+
+    // This variable will be used in Primary Key table only. It is the max rowset creation time for
+    // the corresponding replica. This variable is in-memory only.
+    private long maxRowsetCreationTime = -1L;
+
+    // The data checksum of this replica
+    private long checksum = -1L;
 
     public Replica() {
     }
@@ -280,6 +293,14 @@ public class Replica implements Writable {
         return lastSuccessVersion;
     }
 
+    public long getMaxRowsetCreationTime() {
+        return maxRowsetCreationTime;
+    }
+
+    public long getChecksum() {
+        return checksum;
+    }
+
     public long getPathHash() {
         return pathHash;
     }
@@ -323,6 +344,19 @@ public class Replica implements Writable {
         }
         this.isErrorState = state;
         return true;
+    }
+
+    public boolean setMaxRowsetCreationTime(long newCreationTime) {
+        if (newCreationTime < maxRowsetCreationTime) {
+            return false;
+        }
+
+        maxRowsetCreationTime = newCreationTime;
+        return true;
+    }
+
+    public void setChecksum(long checksum) {
+        this.checksum = checksum;
     }
 
     public boolean needFurtherRepair() {
@@ -374,6 +408,16 @@ public class Replica implements Writable {
     public synchronized void updateVersion(long version) {
         updateReplicaInfo(version, this.lastFailedVersion,
                 this.lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
+    }
+
+    public synchronized void updateForRestore(long newVersion, long newDataSize,
+                                              long newRowCount) {
+        this.version = newVersion;
+        this.lastFailedVersion = -1;
+        this.lastSuccessVersion = newVersion;
+        this.dataSize = newDataSize;
+        this.rowCount = newRowCount;
+        this.minReadableVersion = newVersion;
     }
 
     /* last failed version:  LFV
@@ -533,6 +577,10 @@ public class Replica implements Writable {
         strBuffer.append(version);
         strBuffer.append(", versionHash=");
         strBuffer.append(0);
+        strBuffer.append(", minReadableVersion=");
+        strBuffer.append(minReadableVersion);
+        strBuffer.append(", lastReportVersion=");
+        strBuffer.append(lastReportVersion);
         strBuffer.append(", dataSize=");
         strBuffer.append(dataSize);
         strBuffer.append(", rowCount=");
@@ -641,5 +689,13 @@ public class Replica implements Writable {
 
     public long getWatermarkTxnId() {
         return watermarkTxnId;
+    }
+
+    public void setLastReportVersion(long lastReportVersion) {
+        this.lastReportVersion = lastReportVersion;
+    }
+
+    public long getLastReportVersion() {
+        return this.lastReportVersion;
     }
 }

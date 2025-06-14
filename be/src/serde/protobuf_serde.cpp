@@ -48,19 +48,12 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::s
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();
-    const auto& tuple_id_to_index = chunk.get_tuple_id_to_index_map();
     const auto& columns = chunk.columns();
 
     res->mutable_slot_id_map()->Reserve(static_cast<int>(slot_id_to_index.size()) * 2);
     for (const auto& kv : slot_id_to_index) {
         res->mutable_slot_id_map()->Add(kv.first);
         res->mutable_slot_id_map()->Add(static_cast<int>(kv.second));
-    }
-
-    res->mutable_tuple_id_map()->Reserve(static_cast<int>(tuple_id_to_index.size()) * 2);
-    for (const auto& kv : tuple_id_to_index) {
-        res->mutable_tuple_id_map()->Add(kv.first);
-        res->mutable_tuple_id_map()->Add(static_cast<int>(kv.second));
     }
 
     res->mutable_is_nulls()->Reserve(static_cast<int>(columns.size()));
@@ -73,7 +66,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::s
         res->mutable_is_consts()->Add(column->is_constant());
     }
 
-    DCHECK_EQ(columns.size(), tuple_id_to_index.size() + slot_id_to_index.size());
+    DCHECK_EQ(columns.size(), slot_id_to_index.size());
 
     // serialize extra meta
     auto* chunk_extra_data =
@@ -111,9 +104,8 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
 
     int padding_size = 0; // as streamvbyte may read up to 16 extra bytes from the input.
     if (context == nullptr) {
-        for (const auto& column : chunk.columns()) {
-            buff = ColumnArraySerde::serialize(*column, buff);
-            if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
+        for (auto i = 0; i < chunk.columns().size(); ++i) {
+            buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff);
         }
     } else {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
@@ -203,6 +195,15 @@ StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::stri
     return Chunk(std::move(*chunk));
 }
 
+static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, int target_index) {
+    for (const auto& [slot_id, index] : slot_id_to_index) {
+        if (index == target_index) {
+            return slot_id;
+        }
+    }
+    return -1;
+}
+
 StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
     using ColumnHelper = ColumnHelper;
     using Chunk = Chunk;
@@ -211,15 +212,15 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
 
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
-        return Status::Corruption("invalid version");
+        return Status::Corruption(fmt::format("invalid version: {}", version));
     }
     cur += 4;
 
     uint32_t rows = decode_fixed32_le(cur);
     cur += 4;
 
-    std::vector<ColumnPtr> columns;
-    columns.resize(_meta.slot_id_to_index.size() + _meta.tuple_id_to_index.size());
+    Columns columns;
+    columns.resize(_meta.slot_id_to_index.size());
     for (size_t i = 0, sz = _meta.is_nulls.size(); i < sz; ++i) {
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
     }
@@ -235,16 +236,21 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         }
     }
 
-    for (auto& col : columns) {
-        if (col->size() != rows) {
-            return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
+    for (int i = 0; i < columns.size(); ++i) {
+        size_t col_num_rows = columns[i]->size();
+        if (col_num_rows != rows) {
+            SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
+            return Status::Corruption(
+                    fmt::format("Internal error. Detail: deserialize chunk data failed. column slot id: {}, column row "
+                                "count: {}, expected row count: {}. There is probably a bug here.",
+                                slot_id, col_num_rows, rows));
         }
     }
 
     // deserialize extra data
     ChunkExtraDataPtr chunk_extra_data;
     if (!_meta.extra_data_metas.empty()) {
-        std::vector<ColumnPtr> extra_columns;
+        Columns extra_columns;
         extra_columns.resize(_meta.extra_data_metas.size());
         for (size_t i = 0, sz = _meta.extra_data_metas.size(); i < sz; ++i) {
             auto extra_meta = _meta.extra_data_metas[i];
@@ -254,16 +260,21 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         for (auto& column : extra_columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
-        for (auto& col : extra_columns) {
-            if (col->size() != rows) {
-                return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
+        for (int i = 0; i < extra_columns.size(); ++i) {
+            size_t col_num_rows = extra_columns[i]->size();
+            if (col_num_rows != rows) {
+                return Status::Corruption(
+                        fmt::format("Internal error. Detail: deserialize chunk data failed. extra column index: {}, "
+                                    "column row count: {}, expected "
+                                    "row count: {}. There is probably a bug here.",
+                                    i, col_num_rows, rows));
             }
         }
         chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));
     }
 
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());
-    return Chunk(std::move(columns), _meta.slot_id_to_index, _meta.tuple_id_to_index, std::move(chunk_extra_data));
+    return Chunk(std::move(columns), _meta.slot_id_to_index, std::move(chunk_extra_data));
 }
 
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb) {

@@ -22,9 +22,9 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksRoleEdgesScanner::_s_role_edges_columns[] = {
         //   name,       type,          size
-        {"FROM_ROLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TO_ROLE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TO_USER", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"FROM_ROLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TO_ROLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TO_USER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 };
 
 StarrocksRoleEdgesScanner::StarrocksRoleEdgesScanner()
@@ -36,13 +36,10 @@ Status StarrocksRoleEdgesScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     TGetRoleEdgesRequest role_edges_params;
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_role_edges(*(_param->ip), _param->port, role_edges_params, &_role_edges_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_role_edges(_ss_state, role_edges_params, &_role_edges_result));
     return Status::OK();
 }
 

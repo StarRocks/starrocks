@@ -26,6 +26,10 @@ namespace starrocks {
 
 class ConnectorScanner;
 
+namespace pipeline {
+struct ConnectorScanOperatorMemShareArbitrator;
+}
+
 class ConnectorScanNode final : public starrocks::ScanNode {
 public:
     ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -37,7 +41,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     bool accept_empty_scan_ranges() const override;
 
@@ -49,16 +53,30 @@ public:
     connector::ConnectorType connector_type() { return _connector_type; }
     bool always_shared_scan() const override;
 
-private:
-    RuntimeState* _runtime_state = nullptr;
-    connector::DataSourceProviderPtr _data_source_provider = nullptr;
-    connector::ConnectorType _connector_type;
+#ifdef BE_TEST
+    bool use_stream_load_thread_pool() { return _use_stream_load_thread_pool; };
+#endif
 
+    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges) override;
+
+    size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
+
+    bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }
+    bool is_asc_hint() const override { return _data_source_provider->is_asc_hint(); }
+    std::optional<bool> partition_order_hint() const override { return _data_source_provider->partition_order_hint(); }
+
+private:
     // non-pipeline methods.
     void _init_counter();
     Status _start_scan_thread(RuntimeState* state);
     Status _create_and_init_scanner(RuntimeState* state, TScanRange& scan_range);
     bool _submit_scanner(ConnectorScanner* scanner, bool blockable);
+    // The logic of _submit_streaming_load_scanner is almost the same as _submit_scanner,
+    // and the main difference if that we use a ThreadPool rather than PriorityPool
+    bool _submit_streaming_load_scanner(ConnectorScanner* scanner, bool blockable);
     void _scanner_thread(ConnectorScanner* scanner);
     void _release_scanner(ConnectorScanner* scanner);
     void _update_status(const Status& status);
@@ -81,8 +99,6 @@ private:
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;
     std::atomic<int32_t> _closed_scanners = 0;
-
-private:
     template <typename T>
     class Stack {
     public:
@@ -119,11 +135,20 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
     Profile _profile;
 
+private:
+    // pipeline fields and methods.
+    connector::DataSourceProviderPtr _data_source_provider = nullptr;
+    connector::ConnectorType _connector_type;
     void _estimate_scan_row_bytes();
-    void _estimate_mem_usage_per_chunk_source();
-    int _estimated_max_concurrent_chunks() const;
-    int64_t _mem_limit = 0;
+    void _estimate_data_source_mem_bytes();
+    int _estimate_max_concurrent_chunks() const;
+    int64_t _scan_mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
-    size_t _estimated_mem_usage_per_chunk_source = 0;
+    size_t _estimated_data_source_mem_bytes = 0;
+
+#ifdef BE_TEST
+    std::atomic_bool _use_stream_load_thread_pool = false;
+#endif
+    pipeline::ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
 };
 } // namespace starrocks

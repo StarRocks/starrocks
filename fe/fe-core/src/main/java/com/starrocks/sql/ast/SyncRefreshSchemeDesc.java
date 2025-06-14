@@ -18,7 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
-public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
+public class SyncRefreshSchemeDesc extends RefreshSchemeClause {
 
     public SyncRefreshSchemeDesc() {
         this(NodePosition.ZERO);
@@ -27,6 +27,4 @@ public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
     public SyncRefreshSchemeDesc(NodePosition pos) {
         super(MaterializedView.RefreshType.SYNC, pos, MaterializedView.RefreshMoment.IMMEDIATE);
     }
-
 }
-

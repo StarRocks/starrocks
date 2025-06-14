@@ -15,23 +15,23 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaViewsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHECK_OPTION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_UPDATABLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINER", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"SECURITY_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VIEW_DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHECK_OPTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_UPDATABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"SECURITY_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_SET_CLIENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLLATION_CONNECTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaViewsScanner::SchemaViewsScanner()
@@ -58,11 +58,9 @@ Status SchemaViewsScanner::start(RuntimeState* state) {
         }
     }
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
     return Status::OK();
 }
 
@@ -75,7 +73,9 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // TABLE_CATALOG
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
-                fill_data_column_with_null(column.get());
+                const char* str = "def";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
@@ -197,11 +197,7 @@ Status SchemaViewsScanner::get_new_table() {
     }
     table_params.__set_type(TTableType::VIEW);
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::list_table_status(*(_param->ip), _param->port, table_params, &_table_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::list_table_status(_ss_state, table_params, &_table_result));
     _table_index = 0;
     return Status::OK();
 }

@@ -43,7 +43,6 @@ import com.starrocks.common.io.Writable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -61,9 +60,10 @@ public class CreateTableInfo implements Writable {
         // for persist
     }
 
-    public CreateTableInfo(String dbName, Table table) {
+    public CreateTableInfo(String dbName, Table table, String storageVolumeId) {
         this.dbName = dbName;
         this.table = table;
+        this.storageVolumeId = storageVolumeId;
     }
 
     public String getDbName() {
@@ -74,10 +74,6 @@ public class CreateTableInfo implements Writable {
         return table;
     }
 
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
-    }
-
     public String getStorageVolumeId() {
         return storageVolumeId;
     }
@@ -86,18 +82,6 @@ public class CreateTableInfo implements Writable {
         // compatible with old version
         Text.writeString(out, ClusterNamespace.getFullName(dbName));
         table.write(out);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-
-        table = Table.read(in);
-    }
-
-    public static CreateTableInfo read(DataInput in) throws IOException {
-        CreateTableInfo createTableInfo = new CreateTableInfo();
-        createTableInfo.readFields(in);
-        return createTableInfo;
     }
 
     @Override

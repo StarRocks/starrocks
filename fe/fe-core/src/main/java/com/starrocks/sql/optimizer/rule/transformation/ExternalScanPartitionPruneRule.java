@@ -15,45 +15,47 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
 public class ExternalScanPartitionPruneRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(ExternalScanPartitionPruneRule.class);
 
-    public static final ExternalScanPartitionPruneRule HIVE_SCAN =
-            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final ExternalScanPartitionPruneRule HUDI_SCAN =
-            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
-    public static final ExternalScanPartitionPruneRule ICEBERG_SCAN =
-            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
-    public static final ExternalScanPartitionPruneRule DELTALAKE_SCAN =
-            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
-    public static final ExternalScanPartitionPruneRule FILE_SCAN =
-            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_FILE_SCAN);
-    public static final ExternalScanPartitionPruneRule ES_SCAN =
-            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ES_SCAN);
-    public static final ExternalScanPartitionPruneRule PAIMON_SCAN =
-            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_PAIMON_SCAN);
+    private static final ImmutableSet<OperatorType> SUPPORT = ImmutableSet.of(
+            OperatorType.LOGICAL_HIVE_SCAN,
+            OperatorType.LOGICAL_HUDI_SCAN,
+            OperatorType.LOGICAL_ICEBERG_SCAN,
+            OperatorType.LOGICAL_DELTALAKE_SCAN,
+            OperatorType.LOGICAL_FILE_SCAN,
+            OperatorType.LOGICAL_ES_SCAN,
+            OperatorType.LOGICAL_PAIMON_SCAN,
+            OperatorType.LOGICAL_ODPS_SCAN,
+            OperatorType.LOGICAL_KUDU_SCAN
+    );
 
-    public ExternalScanPartitionPruneRule(OperatorType logicalOperatorType) {
-        super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
+    public ExternalScanPartitionPruneRule() {
+        super(RuleType.TF_PARTITION_PRUNE, MultiOpPattern.of(SUPPORT));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator operator = (LogicalScanOperator) input.getOp();
+        if (operator.isOpRuleBitSet(OP_PARTITION_PRUNED)) {
+            return Collections.emptyList();
+        }
         OptExternalPartitionPruner.prunePartitions(context, operator);
+        operator.setOpRuleBit(OP_PARTITION_PRUNED);
         return Lists.newArrayList();
     }
 }

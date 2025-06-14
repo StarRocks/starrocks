@@ -1,0 +1,411 @@
+-- name: test_generated_column_rewrite
+CREATE DATABASE test_generated_column_rewrite;
+USE test_generated_column_rewrite;
+
+CREATE TABLE t (id BIGINT NOT NULL, g1 bigint null as id + 1) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t1 values(1);
+[UC]explain select * from (select id + 1 as v from t) t2;
+[UC]explain select v from (select id + 1 as v from t) t2;
+
+DROP DATABASE test_generated_column_rewrite;
+
+-- name: test_generated_column_complex_rewrite
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
+
+CREATE TABLE `t_generated_column_complex_rewrite_1` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `col` STRING AS CONCAT(CAST(id AS STRING), "_abc")
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t_generated_column_complex_rewrite_2` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `col` STRING AS CONCAT(CAST(id AS STRING), "_abc")
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_generated_column_complex_rewrite_1 VALUES (1);
+INSERT INTO t_generated_column_complex_rewrite_2 VALUES (1);
+INSERT INTO t_generated_column_complex_rewrite_2 VALUES (2);
+
+function: assert_explain_not_contains('SELECT CONCAT(CAST(id AS STRING), "_abc") FROM t_generated_column_complex_rewrite_1', "abc")
+function: assert_is_identical_explain_plan('SELECT CONCAT(CAST(id AS STRING), "_abc") FROM t_generated_column_complex_rewrite_1', "SELECT col FROM t_generated_column_complex_rewrite_1")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE col IS NOT NULL")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE col IS NOT NULL")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1 where id = 1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1 where id = 1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1 where id = 1) t_generated_column_complex_rewrite_1 WHERE col IS NOT NULL")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1 where id = 1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1 where id = 1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1 where id = 1) t_generated_column_complex_rewrite_1 WHERE col IS NOT NULL")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT col AS col1, id AS id1 FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id1 AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT col AS col1, id AS id1 FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id1 AS STRING), "_abc") IS NOT NULL', "SELECT COUNT(*) FROM (SELECT col AS col1, id AS id1 FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE col1 IS NOT NULL")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT * FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', 'abc')
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT * FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', 'SELECT COUNT(*) FROM (SELECT * FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE col IS NOT NULL')
+
+function: assert_explain_contains('SELECT COUNT(*) FROM (SELECT col AS id FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', 'abc')
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1 where id = 1) result WHERE CONCAT(CAST(result.id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1 where id = 1) result WHERE CONCAT(CAST(result.id AS STRING), "_abc") IS NOT NULL', "SELECT COUNT(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_1 where id = 1) result WHERE result.col IS NOT NULL")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1 where id = 1) result WHERE CONCAT(CAST(result.id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1 where id = 1) result WHERE CONCAT(CAST(result.id AS STRING), "_abc") IS NOT NULL', "SELECT COUNT(*) FROM (SELECT col, id FROM t_generated_column_complex_rewrite_1 where id = 1) result WHERE result.col IS NOT NULL")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_generated_column_complex_rewrite_1 t1, t_generated_column_complex_rewrite_2 t2 WHERE t1.id = t2.id) result WHERE CONCAT(CAST(result.col1 AS STRING), "_abc") = CONCAT(CAST(result.col3 AS STRING), "_abc")', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_generated_column_complex_rewrite_1 t1, t_generated_column_complex_rewrite_2 t2 WHERE t1.id = t2.id) result WHERE CONCAT(CAST(result.col1 AS STRING), "_abc") = CONCAT(CAST(result.col3 AS STRING), "_abc")', "SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_generated_column_complex_rewrite_1 t1, t_generated_column_complex_rewrite_2 t2 WHERE t1.id = t2.id) result WHERE result.col2 = result.col4")
+
+function: assert_explain_not_contains('SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_generated_column_complex_rewrite_1 t1, t_generated_column_complex_rewrite_2 t2 WHERE CONCAT(CAST(t1.id AS STRING), "_abc") = CONCAT(CAST(t2.id AS STRING), "_abc")) result where CONCAT(CAST(result.col1 AS STRING), "_abc") = CONCAT(CAST(result.col3 AS STRING), "_abc")', "abc")
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_generated_column_complex_rewrite_1 t1, t_generated_column_complex_rewrite_2 t2 WHERE CONCAT(CAST(t1.id AS STRING), "_abc") = CONCAT(CAST(t2.id AS STRING), "_abc")) result where CONCAT(CAST(result.col1 AS STRING), "_abc") = CONCAT(CAST(result.col3 AS STRING), "_abc")', "SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_generated_column_complex_rewrite_1 t1, t_generated_column_complex_rewrite_2 t2 WHERE t1.col = t2.col) result where result.col2 = result.col4")
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS SELECT * FROM t_generated_column_complex_rewrite_1;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE col IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS SELECT * FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE col IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS SELECT * FROM (SELECT * FROM t_generated_column_complex_rewrite_1) result;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE col IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS SELECT * FROM (SELECT id as id1, col as col1 FROM t_generated_column_complex_rewrite_1) result;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id1 AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(id1 AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE col1 IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 from t_generated_column_complex_rewrite_1 t1 join t_generated_column_complex_rewrite_2 t2 on t1.id = t2.id;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE col2 IS NOT NULL")
+function: assert_explain_not_contains('SELECT count(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_view) t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_view) t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_view) t_generated_column_complex_rewrite_view WHERE col2 IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 from t_generated_column_complex_rewrite_1 t1 join (SELECT * FROM t_generated_column_complex_rewrite_2) t2 on t1.id = t2.id;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view WHERE col2 IS NOT NULL")
+function: assert_explain_not_contains('SELECT count(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_view) t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_view) t_generated_column_complex_rewrite_view WHERE CONCAT(CAST(col1 AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM (SELECT * FROM t_generated_column_complex_rewrite_view) t_generated_column_complex_rewrite_view WHERE col2 IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS WITH tmp as (SELECT * FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL) select * from tmp;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view where CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view where CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view where col IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE VIEW t_generated_column_complex_rewrite_view AS WITH tmp as (SELECT * FROM (SELECT * FROM t_generated_column_complex_rewrite_1) t_generated_column_complex_rewrite_1 WHERE CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL) select * from tmp where CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL;
+function: assert_explain_not_contains('SELECT count(*) FROM t_generated_column_complex_rewrite_view where CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "abc")
+function: assert_is_identical_explain_plan('SELECT count(*) FROM t_generated_column_complex_rewrite_view where CONCAT(CAST(id AS STRING), "_abc") IS NOT NULL', "SELECT count(*) FROM t_generated_column_complex_rewrite_view where col IS NOT NULL")
+DROP VIEW t_generated_column_complex_rewrite_view;
+
+CREATE TABLE `t_generated_column_complex_rewrite_3` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `col` STRING AS cast(cast(cast(id + 10 as string) as string) as string) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_generated_column_complex_rewrite_3 VALUES (1);
+function: assert_explain_contains('SELECT COUNT(*) FROM t_generated_column_complex_rewrite_3 WHERE cast(id + 10 as string) IS NOT NULL', 'col')
+function: assert_is_identical_explain_plan('SELECT COUNT(*) FROM t_generated_column_complex_rewrite_3 WHERE cast(id + 10 as string) IS NOT NULL', 'SELECT COUNT(*) FROM t_generated_column_complex_rewrite_3 WHERE col IS NOT NULL')
+DROP table t_generated_column_complex_rewrite_3;
+
+CREATE TABLE `t_generated_column_complex_rewrite_4` (
+  `pday` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`pday`)
+PARTITION BY (`pday`)
+DISTRIBUTED BY HASH(`pday`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+CREATE TABLE `t_generated_column_complex_rewrite_5` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `json_string` varchar(1048576) NOT NULL COMMENT "",
+  `col1` varchar(65533) NULL AS get_json_string(`json_string`, 'a') COMMENT "",
+  `col2` varchar(65533) NULL AS get_json_string(`json_string`, 'b') COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+INSERT INTO t_generated_column_complex_rewrite_4 values (1);
+INSERT INTO t_generated_column_complex_rewrite_5 values (1,"{\"a\" : \"b\"}");
+
+select * from (select t4.* from t_generated_column_complex_rewrite_4 as t4 left join t_generated_column_complex_rewrite_5 as t5 on t4.pday = t5.id) result;
+
+DROP TABLE t_generated_column_complex_rewrite_4;
+DROP TABLE t_generated_column_complex_rewrite_5;
+
+-- name: test_bug_join_with_same_column_name
+CREATE TABLE `t_bug_join_with_same_column_name_1` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `col` STRING AS CONCAT(CAST(id AS STRING), "_abc")
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t_bug_join_with_same_column_name_2` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `col` STRING AS CONCAT(CAST(id AS STRING), "_abc")
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_bug_join_with_same_column_name_1 VALUES (1);
+INSERT INTO t_bug_join_with_same_column_name_1 VALUES (2);
+INSERT INTO t_bug_join_with_same_column_name_1 VALUES (3);
+INSERT INTO t_bug_join_with_same_column_name_2 VALUES (1);
+INSERT INTO t_bug_join_with_same_column_name_2 VALUES (10);
+INSERT INTO t_bug_join_with_same_column_name_2 VALUES (20);
+
+-- query with join, case1
+SELECT COUNT(*) FROM t_bug_join_with_same_column_name_1 t1, t_bug_join_with_same_column_name_2 t2 WHERE CONCAT(CAST(t1.id AS STRING), "_abc") = CONCAT(CAST(t2.id AS STRING), "_abc");
+
+-- query with join in subquery, case2
+SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM
+t_bug_join_with_same_column_name_1 t1, t_bug_join_with_same_column_name_2 t2) AS result WHERE CONCAT(CAST(result.col1 AS STRING), "_abc") = CONCAT(CAST(result.col3 AS STRING), "_abc");
+
+-- query with join in CTE, case3
+WITH tmp AS (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_bug_join_with_same_column_name_1 t1, t_bug_join_with_same_column_name_2 t2)
+SELECT COUNT(*) FROM tmp where CONCAT(CAST(tmp.col1 AS STRING), "_abc") = CONCAT(CAST(tmp.col3 AS STRING), "_abc");
+
+-- query case1 by view
+CREATE VIEW v1 AS SELECT COUNT(*) FROM t_bug_join_with_same_column_name_1 t1, t_bug_join_with_same_column_name_2 t2 WHERE CONCAT(CAST(t1.id AS STRING), "_abc") = CONCAT(CAST(t2.id AS STRING), "_abc");
+SELECT * FROM v1;
+DROP VIEW v1;
+
+-- query case2 by view
+CREATE VIEW v2 AS SELECT COUNT(*) FROM (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM
+t_bug_join_with_same_column_name_1 t1, t_bug_join_with_same_column_name_2 t2) AS result WHERE CONCAT(CAST(result.col1 AS STRING), "_abc") = CONCAT(CAST(result.col3 AS STRING), "_abc");
+SELECT * FROM v2;
+DROP VIEW v2;
+
+-- query case3 by view
+CREATE VIEW v3 AS WITH tmp AS (SELECT t1.id as col1, t1.col as col2, t2.id as col3, t2.col as col4 FROM t_bug_join_with_same_column_name_1 t1, t_bug_join_with_same_column_name_2 t2)
+SELECT COUNT(*) FROM tmp where CONCAT(CAST(tmp.col1 AS STRING), "_abc") = CONCAT(CAST(tmp.col3 AS STRING), "_abc");
+SELECT * FROM v3;
+DROP VIEW v3;
+
+create table testA (
+    `id` bigint(20) NOT NULL,
+    `fields` json NULL,
+    `fields_test_field` varchar(1048576) NULL AS CAST(fields->'testField' AS VARCHAR) COMMENT ""
+) PROPERTIES("replication_num" = "1");
+
+create table testB (
+    `id` bigint(20) NOT NULL,
+    `a_id` bigint(20) NOT NULL,
+    `fields` json NULL
+) PROPERTIES("replication_num" = "1");
+
+create view testA_B_with_gen_columns(
+    id,
+    a_id,
+    fields,
+    _a_id,
+    _a_fields,
+    _a_fields_test_field
+) AS 
+SELECT 
+    b.id,
+    b.a_id,
+    b.fields,
+    a.id as _a_id,
+    a.fields as _a_fields,
+    a.fields_test_field as _a_fields_test_field
+FROM testB b
+JOIN testA a ON b.a_id = a.id;
+
+create view testA_B_without_gen_columns(
+    id,
+    a_id,
+    fields,
+    _a_id,
+    _a_fields
+) AS 
+SELECT 
+    b.id,
+    b.a_id,
+    b.fields,
+    a.id as _a_id,
+    a.fields as _a_fields
+FROM testB b
+JOIN testA a ON b.a_id = a.id;
+
+INSERT INTO testA VALUES
+(0, cast('{"testField": "A"}' as JSON)),
+(1, cast('{"testField": "B"}' as JSON)),
+(2, cast('{"testField": "C"}' as JSON)),
+(3, cast('{"notTestField": "A"}' as JSON)),
+(4, cast('{"notTestField": "B"}' as JSON)),
+(5, cast('{"notTestField": "C"}' as JSON)),
+(6, null),
+(7, null),
+(8, null);
+
+INSERT INTO testB VALUES
+(0, 0, cast('{"testField": "A1"}' as JSON)),
+(1, 1, cast('{"notTestField": "B"}' as JSON)),
+(2, 2, null),
+(3, 3, cast('{"testField": "A1"}' as JSON)),
+(4, 4, cast('{"notTestField": "B"}' as JSON)),
+(5, 5, null),
+(6, 6, cast('{"testField": "A1"}' as JSON)),
+(7, 7, cast('{"notTestField": "B"}' as JSON)),
+(8, 8, null);
+
+SELECT 
+    id,
+    fields as b_fields,
+    _a_fields as a_fields,
+    CAST(fields->'testField' AS VARCHAR),
+    CAST(fields->'$.testField' AS VARCHAR),
+    CAST(_a_fields->'testField' AS VARCHAR)
+FROM testA_B_with_gen_columns 
+ORDER BY id asc;
+
+SELECT 
+    id,
+    fields as b_fields,
+    _a_fields as a_fields,
+    CAST(fields->'testField' AS VARCHAR),
+    CAST(fields->'$.testField' AS VARCHAR),
+    CAST(_a_fields->'testField' AS VARCHAR)
+FROM testA_B_without_gen_columns
+ORDER BY id asc;
+
+-- name test_rewrite_with_some_clause
+CREATE TABLE `t_rewrite_with_some_clause` (
+  `original` bigint(20) NOT NULL COMMENT "",
+  `col` bigint(20) AS original * original + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`original`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_rewrite_with_some_clause VALUES (1),(20),(40);
+
+function: assert_explain_not_contains('SELECT SUM(original * original + 10), AVG(original * original + 10) FROM t_rewrite_with_some_clause', "original")
+SELECT SUM(original * original + 10), AVG(original * original + 10) FROM t_rewrite_with_some_clause;
+
+function: assert_explain_not_contains('SELECT CONCAT(CAST(SUM(original * original + 10) AS STRING), CAST(AVG(original * original + 10) AS STRING)) FROM t_rewrite_with_some_clause', "original")
+SELECT CONCAT(CAST(SUM(original * original + 10) AS STRING), CAST(AVG(original * original + 10) AS STRING)) FROM t_rewrite_with_some_clause;
+
+function: assert_explain_not_contains('SELECT original * original + 10 FROM t_rewrite_with_some_clause ORDER by original LIMIT 1', "original * original")
+SELECT original * original + 10 FROM t_rewrite_with_some_clause ORDER by original LIMIT 1;
+
+-- name test_disable_generated_column_rewrite
+CREATE TABLE `t1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10 COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+
+CREATE TABLE `t2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10 COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+
+INSERT INTO t1 VALUES (1);
+INSERT INTO t2 VALUES (2);
+
+SET disable_generated_column_rewrite = true;
+
+function: assert_explain_contains('SELECT k + 10 FROM t1', "k + 10")
+function: assert_explain_contains('SELECT k + 10 FROM t2', "k + 10")
+function: assert_explain_contains('SELECT result.col1 + 10, result.col3 + 10 FROM (SELECT t1.k AS col1, t1.v AS col2, t2.k AS col3, t2.v AS col4 FROM t1, t2) AS result', "k + 10")
+function: assert_explain_contains('WITH tmp AS (SELECT t1.k AS col1, t1.v AS col2, t2.k AS col3, t2.v AS col4 FROM t1, t2) SELECT tmp.col1 + 10, tmp.col3 + 10 FROM tmp', "k + 10")
+
+CREATE VIEW v1 AS SELECT result.col1 + 10, result.col3 + 10 FROM (SELECT t1.k AS col1, t1.v AS col2, t2.k AS col3, t2.v AS col4 FROM t1, t2) AS result;
+function: assert_explain_contains('SELECT * FROM v1', "k + 10")
+DROP VIEW v1;
+
+CREATE VIEW v2 AS WITH tmp AS (SELECT t1.k AS col1, t1.v AS col2, t2.k AS col3, t2.v AS col4 FROM t1, t2) SELECT tmp.col1 + 10, tmp.col3 + 10 FROM tmp;
+function: assert_explain_contains('SELECT * FROM v2', "k + 10")
+DROP VIEW v2;

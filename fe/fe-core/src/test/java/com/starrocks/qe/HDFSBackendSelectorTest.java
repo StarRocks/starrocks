@@ -14,10 +14,17 @@
 
 package com.starrocks.qe;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.common.util.ConsistentHashRing;
+import com.starrocks.common.util.HashRing;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.HistoricalNodeMgr;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -27,25 +34,34 @@ import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class HDFSBackendSelectorTest {
     @Mocked
     private HdfsScanNode hdfsScanNode;
     @Mocked
     private HiveTable hiveTable;
+    @Mocked
+    private ConnectContext context;
     final int scanNodeId = 0;
     final int computeNodePort = 9030;
-    final String hostFormat = "Host%02d";
+    final String hostFormat = "192.168.1.%02d";
 
-    private List<TScanRangeLocations> createScanRanges(int number, int size) {
+    @Before
+    public void setUp() throws IOException {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        warehouseManager.initDefaultWarehouse();
+    }
+
+    private List<TScanRangeLocations> createScanRanges(long number, long size) {
         List<TScanRangeLocations> ans = new ArrayList<>();
 
         for (int i = 0; i < number; i++) {
@@ -69,22 +85,20 @@ public class HDFSBackendSelectorTest {
         return ans;
     }
 
-    private List<ComputeNode> createComputeNodes(int number) {
-        List<ComputeNode> ans = new ArrayList<>();
+    private ImmutableMap<Long, ComputeNode> createComputeNodes(int number) {
+        Map<Long, ComputeNode> ans = new HashMap<>();
         for (int i = 0; i < number; i++) {
             ComputeNode node = new ComputeNode(i, String.format(hostFormat, i), computeNodePort);
             node.setBePort(computeNodePort);
             node.setAlive(true);
-            ans.add(node);
+            ans.put((long) i, node);
         }
-        return ans;
+        return ImmutableMap.copyOf(ans);
     }
 
-    private Map<TNetworkAddress, Long> computeHostReadBytes(
-            FragmentScanRangeAssignment assignment,
-            int scanNodeId) {
-        Map<TNetworkAddress, Long> stats = new HashMap<>();
-        for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
+    private Map<Long, Long> computeWorkerIdToReadBytes(FragmentScanRangeAssignment assignment, int scanNodeId) {
+        Map<Long, Long> stats = new HashMap<>();
+        for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
             List<TScanRangeParams> scanRangeParams = entry.getValue().get(scanNodeId);
             for (TScanRangeParams params : scanRangeParams) {
                 THdfsScanRange scanRange = params.scan_range.hdfs_scan_range;
@@ -96,12 +110,134 @@ public class HDFSBackendSelectorTest {
 
     @Test
     public void testHdfsScanNodeHashRing() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
         new Expectations() {
             {
                 hdfsScanNode.getId();
                 result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
                 hiveTable.getTableLocation();
                 result = "hdfs://dfs00/dataset/";
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int scanRangeNumber = 10000;
+        int scanRangeSize = 10000;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true,
+                WarehouseManager.DEFAULT_RESOURCE
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false, context);
+        selector.computeScanRangeAssignment();
+
+        int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
+        double variance = 0.2 * avg;
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
+            Assert.assertTrue(entry.getValue() - avg < variance);
+        }
+
+        // test empty compute nodes
+        workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                true,
+                WarehouseManager.DEFAULT_RESOURCE
+        );
+        selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false, context);
+        try {
+            selector.computeScanRangeAssignment();
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Failed to find backend to execute", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testHdfsScanNodeScanRangeReBalance() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        long scanRangeNumber = 10000;
+        long scanRangeSize = 10000;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true,
+                WarehouseManager.DEFAULT_RESOURCE
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false, context);
+        selector.computeScanRangeAssignment();
+
+        long avg = (scanRangeNumber * scanRangeSize) / hostNumber + 1;
+        double variance = 0.2 * avg;
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
+            Assert.assertTrue((entry.getValue() - avg) < variance);
+        }
+
+        variance = 0.4 / 100 * scanRangeNumber * scanRangeSize;
+        double actual = 0;
+        for (Map.Entry<ComputeNode, Long> entry : selector.reBalanceBytesPerComputeNode.entrySet()) {
+            System.out.printf("%s -> %d bytes re-balance\n", entry.getKey(), entry.getValue());
+            actual = actual + entry.getValue();
+        }
+        Assert.assertTrue(actual < variance);
+    }
+
+    @Test
+    public void testHashRingAlgorithm() {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                context.getSessionVariable();
+                result = sessionVariable;
             }
         };
 
@@ -109,24 +245,37 @@ public class HDFSBackendSelectorTest {
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
-        FragmentScanRangeAssignment assignment =
-                new FragmentScanRangeAssignment();
-        Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
-        Set<Long> usedBackendIDs = new HashSet<>();
-        List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
-
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true,
+                WarehouseManager.DEFAULT_RESOURCE
+        );
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), false, false, false);
-        selector.computeScanRangeAssignment();
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false, context);
 
-        int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
-        int variance = 5 * scanRangeSize;
-        Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
-        for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
-            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
-            Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
-        }
+
+        HashRing hashRing = selector.makeHashRing(computeNodes.values());
+        Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
+        ConsistentHashRing consistentHashRing = (ConsistentHashRing) hashRing;
+        Assert.assertTrue(consistentHashRing.getVirtualNumber() ==
+                HDFSBackendSelector.CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
+
+        sessionVariable.setHdfsBackendSelectorHashAlgorithm("rendezvous");
+        hashRing = selector.makeHashRing(computeNodes.values());
+        Assert.assertTrue(hashRing.policy().equals("RendezvousHash"));
+
+        sessionVariable.setHdfsBackendSelectorHashAlgorithm("consistent");
+        sessionVariable.setConsistentHashVirtualNodeNum(64);
+        hashRing = selector.makeHashRing(computeNodes.values());
+        Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
+        consistentHashRing = (ConsistentHashRing) hashRing;
+        Assert.assertTrue(consistentHashRing.getVirtualNumber() == 64);
     }
 
     @Test
@@ -158,21 +307,148 @@ public class HDFSBackendSelectorTest {
             }
         }
 
-        FragmentScanRangeAssignment assignment =
-                new FragmentScanRangeAssignment();
-        Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
-        Set<Long> usedBackendIDs = new HashSet<>();
-        List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true,
+                WarehouseManager.DEFAULT_RESOURCE
+        );
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), true, true, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        true, false, false, context);
         selector.computeScanRangeAssignment();
 
-        Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
         Assert.assertEquals(stats.size(), localHostNumber);
-        for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
         }
+    }
+
+    @Test
+    public void testHdfsScanNodeIncrementalScanRanges() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int scanRangeNumber = 1;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true,
+                WarehouseManager.DEFAULT_RESOURCE
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, true, context);
+        selector.computeScanRangeAssignment();
+        Assert.assertEquals(assignment.size(), 3);
+        int scanRanges = 0;
+        for (Map<Integer, List<TScanRangeParams>> scanNodes : assignment.values()) {
+            Assert.assertEquals(scanNodes.size(), 1);
+            List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
+            Assert.assertTrue(scanRangeParams.size() >= 1);
+            TScanRangeParams last = scanRangeParams.get(scanRangeParams.size() - 1);
+            Assert.assertTrue(last.isSetEmpty());
+            Assert.assertTrue(last.isSetHas_more());
+            Assert.assertTrue(last.isEmpty());
+            Assert.assertTrue(last.has_more == false);
+            for (TScanRangeParams p : scanRangeParams) {
+                if (!p.isEmpty()) {
+                    scanRanges += 1;
+                }
+            }
+        }
+        Assert.assertEquals(scanRanges, scanRangeNumber);
+    }
+
+    @Test
+    public void testHdfsScanNodeCandidateWorker() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableDataCacheSharing(true);
+
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int scanRangeNumber = 1;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true,
+                WarehouseManager.DEFAULT_RESOURCE
+        );
+
+        ImmutableMap.Entry<Long, ComputeNode> candidateNode = computeNodes.entrySet().asList().get(0);
+        List<Long> candidateNodeIds = Collections.singletonList(candidateNode.getKey());
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+        historicalNodeMgr.updateHistoricalComputeNodeIds(candidateNodeIds, System.currentTimeMillis(),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        systemInfoService.addComputeNode(candidateNode.getValue());
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, true, context);
+        selector.computeScanRangeAssignment();
+        Assert.assertEquals(assignment.size(), 3);
+        int scanRanges = 0;
+        for (Map<Integer, List<TScanRangeParams>> scanNodes : assignment.values()) {
+            Assert.assertEquals(scanNodes.size(), 1);
+            List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
+            Assert.assertTrue(scanRangeParams.size() >= 1);
+
+            for (TScanRangeParams p : scanRangeParams) {
+                if (!p.isEmpty()) {
+                    Assert.assertTrue(p.scan_range.hdfs_scan_range.isSetCandidate_node());
+                    scanRanges += 1;
+                }
+            }
+        }
+        Assert.assertEquals(scanRanges, scanRangeNumber);
     }
 }

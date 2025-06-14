@@ -21,16 +21,16 @@ using namespace starrocks;
 
 namespace starrocks::pipeline {
 Status AssertNumRowsOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
 
     // AssertNumRows should return exactly one row, report error if more than one row, return null if empty input
     ChunkPtr chunk = std::make_shared<Chunk>();
 
     for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
         for (const auto& slot : desc->slots()) {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             column->append_nulls(1);
-            chunk->append_column(column, slot->id());
+            chunk->append_column(std::move(column), slot->id());
         }
     }
 

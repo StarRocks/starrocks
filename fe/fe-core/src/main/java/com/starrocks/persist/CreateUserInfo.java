@@ -12,40 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
-import com.starrocks.common.io.Text;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.ObjectTypeDeprecate;
-import com.starrocks.privilege.PrivilegeEntry;
-import com.starrocks.privilege.UserPrivilegeCollection;
-import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.ast.UserIdentity;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
-import java.util.Map;
 
-public class CreateUserInfo implements Writable {
+public class CreateUserInfo implements Writable, GsonPostProcessable {
     @SerializedName(value = "u")
     UserIdentity userIdentity;
     @SerializedName(value = "a")
     UserAuthenticationInfo authenticationInfo;
     @SerializedName(value = "p")
     UserProperty userProperty;
-
-    //Deprecated attribute, can be removed in version 3.2
-    @SerializedName(value = "c")
-    @Deprecated
-    UserPrivilegeCollection userPrivilegeCollection;
 
     @SerializedName(value = "c2")
     UserPrivilegeCollectionV2 userPrivilegeCollectionV2;
@@ -84,19 +70,7 @@ public class CreateUserInfo implements Writable {
     }
 
     public UserPrivilegeCollectionV2 getUserPrivilegeCollection() {
-        if (userPrivilegeCollectionV2 == null) {
-            UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
-            collection.grantRoles(userPrivilegeCollection.getAllRoles());
-            collection.setDefaultRoleIds(userPrivilegeCollection.getDefaultRoleIds());
-
-            Map<ObjectTypeDeprecate, List<PrivilegeEntry>> m = userPrivilegeCollection.getTypeToPrivilegeEntryList();
-            for (Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> e : m.entrySet()) {
-                collection.getTypeToPrivilegeEntryList().put(e.getKey().toObjectType(), e.getValue());
-            }
-            return collection;
-        } else {
-            return userPrivilegeCollectionV2;
-        }
+        return userPrivilegeCollectionV2;
     }
 
     public short getPluginId() {
@@ -108,19 +82,11 @@ public class CreateUserInfo implements Writable {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static CreateUserInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        CreateUserInfo ret = GsonUtils.GSON.fromJson(json, CreateUserInfo.class);
+    public void gsonPostProcess() throws IOException {
         try {
-            ret.authenticationInfo.analyze();
+            authenticationInfo.analyze();
         } catch (AuthenticationException e) {
             throw new IOException(e);
         }
-        return ret;
     }
-
 }

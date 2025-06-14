@@ -20,6 +20,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -33,14 +34,8 @@ import java.util.List;
 
 // For SQL select * from table limit x, we could only query a few of tablets
 public class LimitPruneTabletsRule extends TransformationRule {
-    private LimitPruneTabletsRule() {
+    public LimitPruneTabletsRule() {
         super(RuleType.TF_LIMIT_TABLETS_PRUNE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
-    }
-
-    private static final LimitPruneTabletsRule INSTANCE = new LimitPruneTabletsRule();
-
-    public static LimitPruneTabletsRule getInstance() {
-        return INSTANCE;
     }
 
     @Override
@@ -71,23 +66,28 @@ public class LimitPruneTabletsRule extends TransformationRule {
                 break;
             }
             Partition partition = olapTable.getPartition(partitionId);
-            long version = partition.getVisibleVersion();
-            MaterializedIndex index = partition.getIndex(olapScanOperator.getSelectedIndexId());
-
-            for (Tablet tablet : index.getTablets()) {
-                // Note: the tablet row count metadata in FE maybe delay because of BE tablet row count.
-                // So the tablet row count in FE is less than or equal real tablet row count.
-                long tabletRowCount = tablet.getRowCount(version);
-
-                // Needn't select empty tablet
-                if (tabletRowCount == 0) {
-                    continue;
-                }
-                totalRow += tabletRowCount;
-
-                result.add(tablet.getId());
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 if (totalRow >= limit) {
                     break;
+                }
+                long version = physicalPartition.getVisibleVersion();
+                MaterializedIndex index = physicalPartition.getIndex(olapScanOperator.getSelectedIndexId());
+
+                for (Tablet tablet : index.getTablets()) {
+                    // Note: the tablet row count metadata in FE maybe delay because of BE tablet row count.
+                    // So the tablet row count in FE is less than or equal real tablet row count.
+                    long tabletRowCount = tablet.getRowCount(version);
+
+                    // Needn't select empty tablet
+                    if (tabletRowCount == 0) {
+                        continue;
+                    }
+                    totalRow += tabletRowCount;
+
+                    result.add(tablet.getId());
+                    if (totalRow >= limit) {
+                        break;
+                    }
                 }
             }
         }

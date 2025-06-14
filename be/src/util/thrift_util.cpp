@@ -58,7 +58,10 @@
 namespace starrocks {
 
 ThriftSerializer::ThriftSerializer(bool compact, int initial_buffer_size)
-        : _mem_buffer(new apache::thrift::transport::TMemoryBuffer(initial_buffer_size)) {
+        : _mem_buffer(new apache::thrift::transport::TMemoryBuffer(
+                  initial_buffer_size, std::make_shared<apache::thrift::TConfiguration>(
+                                               config::thrift_max_message_size, config::thrift_max_frame_size,
+                                               config::thrift_max_recursion_depth))) {
     if (compact) {
         apache::thrift::protocol::TCompactProtocolFactoryT<apache::thrift::transport::TMemoryBuffer> factory;
         _protocol = factory.getProtocol(_mem_buffer);
@@ -149,4 +152,24 @@ bool t_network_address_comparator(const TNetworkAddress& a, const TNetworkAddres
 
     return false;
 }
+
+void thrift_from_json_string(::apache::thrift::TBase* base, const std::string& json_val) {
+    using namespace apache::thrift::transport;
+    using namespace apache::thrift::protocol;
+    auto* buffer = new TMemoryBuffer((uint8_t*)json_val.c_str(), (uint32_t)json_val.size());
+    std::shared_ptr<TTransport> trans(buffer);
+    TJSONProtocol protocol(trans);
+    base->read(&protocol);
+}
+
+std::string thrift_to_json_string(const ::apache::thrift::TBase* base) {
+    using namespace apache::thrift::transport;
+    using namespace apache::thrift::protocol;
+    auto* buffer = new TMemoryBuffer();
+    std::shared_ptr<TTransport> trans(buffer);
+    TJSONProtocol protocol(trans);
+    base->write(&protocol);
+    return buffer->getBufferAsString();
+}
+
 } // namespace starrocks

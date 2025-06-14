@@ -31,10 +31,13 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -42,6 +45,8 @@ public class LogicalJoinOperator extends LogicalOperator {
     private JoinOperator joinType;
     private ScalarOperator onPredicate;
     private String joinHint;
+    private ScalarOperator skewColumn;
+    private List<ScalarOperator> skewValues;
     // For mark the node has been push down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
     private boolean hasDeriveIsNotNullPredicate = false;
@@ -49,6 +54,8 @@ public class LogicalJoinOperator extends LogicalOperator {
     // NOTE: we keep the original onPredicate for MV's rewrite to distinguish on-predicates and
     // where-predicates. Take care to pass through original on-predicates when creating a new JoinOperator.
     private ScalarOperator originalOnPredicate;
+
+    private int transformMask;
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
         this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false, onPredicate);
@@ -121,6 +128,26 @@ public class LogicalJoinOperator extends LogicalOperator {
         return joinHint;
     }
 
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public void setSkewColumn(ScalarOperator skewColumn) {
+        this.skewColumn = skewColumn;
+    }
+
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
+    }
+
+    public void setSkewValues(List<ScalarOperator> skewValues) {
+        this.skewValues = skewValues;
+    }
+
+    public int getTransformMask() {
+        return transformMask;
+    }
+
     public ColumnRefSet getRequiredChildInputColumns() {
         ColumnRefSet result = new ColumnRefSet();
         if (onPredicate != null) {
@@ -181,6 +208,16 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        DomainProperty leftDomainProperty = inputs.get(0).getDomainProperty();
+        DomainProperty rightDomainProperty = inputs.get(1).getDomainProperty();
+        return DomainProperty.mergeDomainProperty(List.of(leftDomainProperty, rightDomainProperty));
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalJoin(this, context);
     }
@@ -236,6 +273,8 @@ public class LogicalJoinOperator extends LogicalOperator {
             builder.joinType = joinOperator.joinType;
             builder.onPredicate = joinOperator.onPredicate;
             builder.joinHint = joinOperator.joinHint;
+            builder.skewColumn = joinOperator.skewColumn;
+            builder.skewValues = joinOperator.skewValues;
             builder.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
             builder.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
             builder.originalOnPredicate = joinOperator.originalOnPredicate;
@@ -262,13 +301,23 @@ public class LogicalJoinOperator extends LogicalOperator {
             return this;
         }
 
-        public Builder setRowOutputInfo(RowOutputInfo rowOutputInfo) {
-            builder.rowOutputInfo = rowOutputInfo;
+        public Builder setSkewColumn(ScalarOperator column) {
+            builder.skewColumn = column;
+            return this;
+        }
+
+        public Builder setSkewValues(List<ScalarOperator> values) {
+            builder.skewValues = values;
             return this;
         }
 
         public Builder setOriginalOnPredicate(ScalarOperator originalOnPredicate) {
             builder.originalOnPredicate = originalOnPredicate;
+            return this;
+        }
+
+        public Builder setTransformMask(int mask) {
+            builder.transformMask = mask;
             return this;
         }
     }

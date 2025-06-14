@@ -18,6 +18,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
+#include "fmt/format.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -31,6 +32,12 @@ OlapScanOperatorFactory::OlapScanOperatorFactory(int32_t id, ScanNode* scan_node
         : ScanOperatorFactory(id, scan_node), _ctx_factory(std::move(ctx_factory)) {}
 
 Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
+    auto olap_scan_node = dynamic_cast<OlapScanNode*>(_scan_node);
+    DCHECK(olap_scan_node != nullptr);
+    const TOlapScanNode& thrift_olap_scan_node = olap_scan_node->thrift_olap_scan_node();
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
+    DCHECK(tuple_desc != nullptr);
+    _ctx_factory->set_scan_table_id(tuple_desc->table_desc()->table_id());
     return Status::OK();
 }
 
@@ -86,9 +93,10 @@ bool OlapScanOperator::is_finished() const {
     return ScanOperator::is_finished();
 }
 
-Status OlapScanOperator::do_prepare(RuntimeState*) {
+Status OlapScanOperator::do_prepare(RuntimeState* state) {
     bool shared_scan = _ctx->is_shared_scan();
     _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
+    _ctx->attach_observer(state, observer());
     return Status::OK();
 }
 
@@ -98,6 +106,10 @@ ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t c
     auto* olap_scan_node = down_cast<OlapScanNode*>(_scan_node);
     return std::make_shared<OlapChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                              olap_scan_node, _ctx.get());
+}
+
+int64_t OlapScanOperator::get_scan_table_id() const {
+    return _ctx->get_scan_table_id();
 }
 
 void OlapScanOperator::attach_chunk_source(int32_t source_index) {
@@ -112,40 +124,25 @@ bool OlapScanOperator::has_shared_chunk_source() const {
     return _ctx->has_active_input();
 }
 
-size_t OlapScanOperator::num_buffered_chunks() const {
-    return _ctx->get_chunk_buffer().size(_driver_sequence);
+BalancedChunkBuffer& OlapScanOperator::get_chunk_buffer() const {
+    return _ctx->get_chunk_buffer();
 }
 
-ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
-    ChunkPtr chunk = nullptr;
-    if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
-        return chunk;
-    }
-    return nullptr;
+bool OlapScanOperator::need_notify_all() {
+    return (!_ctx->only_one_observer() && _ctx->active_inputs_empty_event()) || has_full_events();
 }
 
-size_t OlapScanOperator::buffer_size() const {
-    return _ctx->get_chunk_buffer().limiter()->size();
-}
-
-size_t OlapScanOperator::buffer_capacity() const {
-    return _ctx->get_chunk_buffer().limiter()->capacity();
-}
-
-size_t OlapScanOperator::default_buffer_capacity() const {
-    return _ctx->get_chunk_buffer().limiter()->default_capacity();
-}
-
-ChunkBufferTokenPtr OlapScanOperator::pin_chunk(int num_chunks) {
-    return _ctx->get_chunk_buffer().limiter()->pin(num_chunks);
-}
-
-bool OlapScanOperator::is_buffer_full() const {
-    return _ctx->get_chunk_buffer().limiter()->is_full();
-}
-
-void OlapScanOperator::set_buffer_finished() {
-    _ctx->get_chunk_buffer().set_finished(_driver_sequence);
+std::string OlapScanOperator::get_name() const {
+    std::string finished = is_finished() ? "X" : "O";
+    bool full = is_buffer_full();
+    int io_tasks = _num_running_io_tasks;
+    bool has_active = _ctx->has_active_input();
+    std::string morsel_queue_name = _morsel_queue->name();
+    bool morsel_queue_empty = _morsel_queue->empty();
+    return fmt::format(
+            "{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{} has_output:{}}}", _name,
+            _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(), morsel_queue_name,
+            morsel_queue_empty, has_output());
 }
 
 } // namespace starrocks::pipeline

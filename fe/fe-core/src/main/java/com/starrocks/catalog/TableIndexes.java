@@ -42,7 +42,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -110,10 +109,11 @@ public class TableIndexes implements Writable {
         this.properties = properties;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+
+    public TableIndexes shallowCopy() {
+        return new TableIndexes(getCopiedIndexes(), getCopiedProperties());
     }
+
 
     public static TableIndexes read(DataInput in) throws IOException {
         String json = Text.readString(in);

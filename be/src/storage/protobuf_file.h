@@ -17,6 +17,7 @@
 #include <string>
 
 #include "common/status.h"
+#include "gutil/macros.h"
 
 namespace google::protobuf {
 class Message;
@@ -25,19 +26,43 @@ class Message;
 namespace starrocks {
 
 class FileSystem;
+class Slice;
 
 class ProtobufFile {
 public:
-    ProtobufFile(std::string path, FileSystem* fs = nullptr);
-    ~ProtobufFile() = default;
+    explicit ProtobufFile(std::string path) : _path(std::move(path)) {}
 
-    Status save(const ::google::protobuf::Message& message, bool sync);
+    explicit ProtobufFile(std::string path, std::shared_ptr<FileSystem> fs) : _path(std::move(path)), _fs(fs) {}
 
-    Status load(::google::protobuf::Message* message);
+    DISALLOW_COPY_AND_MOVE(ProtobufFile);
+
+    Status save(const ::google::protobuf::Message& message, bool sync = true);
+
+    Status load(::google::protobuf::Message* message, bool fill_cache = true);
 
 private:
     std::string _path;
-    FileSystem* _fs;
+    std::shared_ptr<FileSystem> _fs;
+};
+
+class ProtobufFileWithHeader {
+public:
+    explicit ProtobufFileWithHeader(std::string path) : _path(std::move(path)) {}
+
+    explicit ProtobufFileWithHeader(std::string path, std::shared_ptr<FileSystem> fs)
+            : _path(std::move(path)), _fs(fs) {}
+
+    DISALLOW_COPY_AND_MOVE(ProtobufFileWithHeader);
+
+    Status save(const ::google::protobuf::Message& message, bool sync = true);
+
+    Status load(::google::protobuf::Message* message, bool fill_cache = true);
+
+    static Status load(::google::protobuf::Message* message, std::string_view data);
+
+private:
+    std::string _path;
+    std::shared_ptr<FileSystem> _fs;
 };
 
 } // namespace starrocks

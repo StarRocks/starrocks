@@ -1,36 +1,3 @@
-[sql]
-select
-    c_name,
-    c_custkey,
-    o_orderkey,
-    o_orderdate,
-    o_totalprice,
-    sum(l_quantity)
-from
-    customer,
-    orders,
-    lineitem
-where
-        o_orderkey in (
-        select
-            l_orderkey
-        from
-            lineitem
-        group by
-            l_orderkey having
-                sum(l_quantity) > 315
-    )
-  and c_custkey = o_custkey
-  and o_orderkey = l_orderkey
-group by
-    c_name,
-    c_custkey,
-    o_orderkey,
-    o_orderdate,
-    o_totalprice
-order by
-    o_totalprice desc,
-    o_orderdate limit 100;
 [fragment statistics]
 PLAN FRAGMENT 0(F10)
 Output Exprs:2: c_name | 1: c_custkey | 9: o_orderkey | 13: o_orderdate | 12: o_totalprice | 52: sum
@@ -100,8 +67,6 @@ OutPut Exchange Id: 20
 16:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
 |  equal join conjunct: [18: l_orderkey, INT, true] = [9: o_orderkey, INT, true]
-|  build runtime filters:
-|  - filter_id = 2, build_expr = (9: o_orderkey), remote = true
 |  output columns: 1, 2, 9, 12, 13, 22
 |  cardinality: 600036646
 |  column statistics:
@@ -131,8 +96,6 @@ OutPut Exchange Id: 20
 |    14:HASH JOIN
 |    |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE(S))
 |    |  equal join conjunct: [9: o_orderkey, INT, true] = [34: l_orderkey, INT, true]
-|    |  build runtime filters:
-|    |  - filter_id = 1, build_expr = (34: l_orderkey), remote = false
 |    |  output columns: 1, 2, 9, 12, 13
 |    |  cardinality: 149999686
 |    |  column statistics:
@@ -168,15 +131,11 @@ OutPut Exchange Id: 20
 |       distribution type: SHUFFLE
 |       partition exprs: [9: o_orderkey, INT, true]
 |       cardinality: 150000000
-|       probe runtime filters:
-|       - filter_id = 1, probe_expr = (9: o_orderkey)
 |
 1:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [18: l_orderkey, INT, true]
 cardinality: 600037902
-probe runtime filters:
-- filter_id = 2, probe_expr = (18: l_orderkey)
 
 PLAN FRAGMENT 2(F08)
 
@@ -198,6 +157,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 34: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+dataCacheOptions={populate: false}
 cardinality: 600037902
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
@@ -260,6 +220,7 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+dataCacheOptions={populate: false}
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -276,6 +237,7 @@ TABLE: orders
 NON-PARTITION PREDICATES: 10: o_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
+dataCacheOptions={populate: false}
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -296,9 +258,8 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+dataCacheOptions={populate: false}
 cardinality: 600037902
-probe runtime filters:
-- filter_id = 2, probe_expr = (18: l_orderkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE

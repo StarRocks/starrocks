@@ -22,11 +22,12 @@
 
 #include "testutil/sync_point_impl.h"
 
-#include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#if !defined(NDEBUG) || defined(BE_TEST)
+#include <csignal>
+
+#if defined(BE_TEST)
 namespace starrocks {
 KillPoint* KillPoint::GetInstance() {
     static KillPoint kp;

@@ -23,11 +23,12 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Util;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -47,7 +48,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
-    public AlterJobV2 build() throws UserException {
+    public AlterJobV2 build() throws StarRocksException {
         if (newIndexSchema.isEmpty() && !hasIndexChanged) {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }
@@ -58,6 +59,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
+        schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
         /*
          * Create schema change job
          * 1. For each index which has been changed, create a SHADOW index, and save the mapping of origin index to SHADOW index.
@@ -76,20 +78,22 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
             while (currentSchemaHash == newSchemaHash) {
                 newSchemaHash = Util.generateSchemaHash();
             }
-            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PRFIX + table.getIndexNameById(originIndexId);
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameById(originIndexId);
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 
             // create SHADOW index for each partition
             List<Tablet> addedTablets = Lists.newArrayList();
-            for (Partition partition : table.getPartitions()) {
-                long partitionId = partition.getId();
+            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+                long physicalPartitionId = partition.getId();
+                long partitionId = partition.getParentId();
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+                short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
                 // index state is SHADOW
                 MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
                 MaterializedIndex originIndex = partition.getIndex(originIndexId);
-                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, newSchemaHash, medium);
-                short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
+                TabletMeta shadowTabletMeta = new TabletMeta(
+                        dbId, tableId, physicalPartitionId, shadowIndexId, newSchemaHash, medium);
                 for (Tablet originTablet : originIndex.getTablets()) {
                     long originTabletId = originTablet.getId();
                     long shadowTabletId = globalStateMgr.getNextId();
@@ -98,7 +102,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     addedTablets.add(shadowTablet);
 
-                    schemaChangeJob.addTabletIdMap(partitionId, shadowIndexId, shadowTabletId, originTabletId);
+                    schemaChangeJob.addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTabletId, originTabletId);
                     List<Replica> originReplicas = ((LocalTablet) originTablet).getImmutableReplicas();
 
                     int healthyReplicaNum = 0;
@@ -137,14 +141,14 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                          * if the quorum of replica number is not satisfied.
                          */
                         for (Tablet tablet : addedTablets) {
-                            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
+                            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tablet.getId());
                         }
                         throw new DdlException(
                                 "tablet " + originTabletId + " has few healthy replica: " + healthyReplicaNum);
                     }
                 }
 
-                schemaChangeJob.addPartitionShadowIndex(partitionId, shadowIndexId, shadowIndex);
+                schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
             } // end for partition
             schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newSchemaVersion, newSchemaHash,
                     newShortKeyColumnCount, entry.getValue());

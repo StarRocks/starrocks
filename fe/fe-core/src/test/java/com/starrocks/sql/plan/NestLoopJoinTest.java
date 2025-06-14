@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -62,7 +63,7 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
@@ -100,7 +101,7 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ");
     }
@@ -138,13 +139,11 @@ public class NestLoopJoinTest extends PlanTestBase {
                 " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
         assertPlanContains(sql, "13:Project\n" +
                 "  |  <slot 20> : 1\n" +
-                "  |  limit: 1\n" +
                 "  |  \n" +
                 "  12:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 14: substr = 15: substr\n" +
-                "  |  limit: 1");
+                "  |  equal join conjunct: 18: substr = 19: substr");
 
         // RIGHT ANTI JOIN + AGGREGATE count(*)
         sql = "select count(*) from (select t2.id_char, t2.id_varchar " +
@@ -277,10 +276,10 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertPlanContains(sql, "NESTLOOP JOIN");
 
         assertPlanContains("select * from t0,t1 where 1 in (select 2 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
-                "NESTLOOP JOIN");
+                "0:EMPTYSET");
         assertPlanContains("select * from t0,t1 where 1 in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
-        assertPlanContains("select * from t0,t1 where v1 in (select 1+2+3 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+        assertPlanContains("select * from t0,t1 where v1 in (select 1+2+3 from t2,t3 where t0.v1 = 6 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
         assertPlanContains(
                 "select * from t0,t1 where abs(1) - 1 in (select 'abc' from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
@@ -348,31 +347,26 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "       join t0 c " +
                 "       join t0 d " +
                 ") e on a.v1 < e.v1";
-        assertPlanContains(sql, "  12:NESTLOOP JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 1: v1 < 10: v1\n" +
+        assertPlanContains(sql, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: \n" +
                 "  |  \n" +
-                "  |----11:Project\n" +
-                "  |    |  <slot 10> : 10: v1\n" +
-                "  |    |  \n" +
-                "  |    10:NESTLOOP JOIN\n" +
-                "  |    |  join op: CROSS JOIN\n" +
-                "  |    |  colocate: false, reason: \n" +
-                "  |    |  \n" +
-                "  |    |----9:EXCHANGE\n" +
-                "  |    |    \n" +
-                "  |    7:Project\n" +
-                "  |    |  <slot 19> : 1\n" +
-                "  |    |  \n" +
-                "  |    6:NESTLOOP JOIN\n" +
-                "  |    |  join op: CROSS JOIN\n" +
-                "  |    |  colocate: false, reason: \n" +
-                "  |    |  \n" +
-                "  |    |----5:EXCHANGE\n" +
-                "  |    |    \n" +
-                "  |    2:EMPTYSET\n" +
-                "  |    \n" +
-                "  1:EXCHANGE");
+                "  0:EMPTYSET");
+    }
+
+    @Test
+    public void testNotAllowCrossJoin() throws Exception {
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(false);
+        String sql = "select * from t0 a cross join t0 b;";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(true);
+    }
+
+    @Test
+    public void testNotAllowNestLoopJoin() throws Exception {
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(false);
+        String sql = "select count(a.v3) from t0 a join t0 b on a.v3 < b.v3;";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(true);
     }
 }

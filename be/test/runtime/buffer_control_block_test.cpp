@@ -34,8 +34,11 @@
 
 #include "runtime/buffer_control_block.h"
 
+#include <arrow/api.h>
 #include <gtest/gtest.h>
 #include <pthread.h>
+
+#include <future>
 
 #include "gen_cpp/InternalService_types.h"
 
@@ -86,7 +89,7 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
     BufferControlBlock control_block(TUniqueId(), 1024);
     ASSERT_TRUE(control_block.init().ok());
 
-    ASSERT_TRUE(control_block.cancel().ok());
+    control_block.cancel();
     std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
     add_result->result_batch.rows.emplace_back("hello test");
     ASSERT_FALSE(control_block.add_batch(add_result).ok());
@@ -107,16 +110,24 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
     BufferControlBlock control_block(TUniqueId(), 1);
     ASSERT_TRUE(control_block.init().ok());
 
-    pthread_t id;
-    pthread_create(&id, nullptr, cancel_thread, &control_block);
+    // add_batch in main thread -> cancel in cancel_thread -> add_batch in main thread
+    std::promise<void> p1, p2;
+    std::future<void> f1 = p1.get_future(), f2 = p2.get_future();
+    auto cancel_thread = std::thread([&]() {
+        f1.wait();
+        control_block.cancel();
+        p2.set_value();
+    });
 
     {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.emplace_back("hello test1");
         add_result->result_batch.rows.emplace_back("hello test2");
         ASSERT_TRUE(control_block.add_batch(add_result).ok());
+        p1.set_value();
     }
     {
+        f2.wait();
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.emplace_back("hello test1");
         add_result->result_batch.rows.emplace_back("hello test2");
@@ -126,7 +137,7 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
     TFetchDataResult get_result;
     ASSERT_FALSE(control_block.get_batch(&get_result).ok());
 
-    pthread_join(id, nullptr);
+    cancel_thread.join();
 }
 
 TEST_F(BufferControlBlockTest, get_then_cancel) {
@@ -194,6 +205,55 @@ TEST_F(BufferControlBlockTest, get_then_close) {
     ASSERT_EQ(0U, get_result.result_batch.rows.size());
 
     pthread_join(id, nullptr);
+}
+
+TEST_F(BufferControlBlockTest, is_full_arrow_batch_queue) {
+    BufferControlBlock control_block(TUniqueId(), 1);
+    ASSERT_TRUE(control_block.init().ok());
+
+    arrow::Int32Builder builder;
+    ASSERT_TRUE(builder.Resize(4097).ok());
+    for (int i = 0; i < 4097; ++i) {
+        ASSERT_TRUE(builder.Append(i).ok());
+    }
+
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_TRUE(builder.Finish(&array).ok());
+
+    auto schema = arrow::schema({arrow::field("int_col", arrow::int32())});
+    auto record_batch = arrow::RecordBatch::Make(schema, 4097, {array});
+    ASSERT_TRUE(control_block.add_arrow_batch(record_batch).ok());
+
+    ASSERT_TRUE(control_block.is_full());
+}
+
+TEST_F(BufferControlBlockTest, get_arrow_batch_simple) {
+    BufferControlBlock control_block(TUniqueId(), 1024);
+    ASSERT_TRUE(control_block.init().ok());
+
+    arrow::Int32Builder builder;
+    ASSERT_TRUE(builder.Append(100).ok());
+    ASSERT_TRUE(builder.Append(200).ok());
+
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_TRUE(builder.Finish(&array).ok());
+
+    auto schema = arrow::schema({arrow::field("int_col", arrow::int32())});
+    auto record_batch = arrow::RecordBatch::Make(schema, 2, {array});
+
+    ASSERT_TRUE(control_block.add_arrow_batch(record_batch).ok());
+
+    std::shared_ptr<arrow::RecordBatch> result;
+    Status st = control_block.get_arrow_batch(&result);
+
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(result != nullptr);
+    ASSERT_EQ(result->num_rows(), 2);
+    ASSERT_EQ(result->num_columns(), 1);
+
+    auto int_array = std::static_pointer_cast<arrow::Int32Array>(result->column(0));
+    ASSERT_EQ(int_array->Value(0), 100);
+    ASSERT_EQ(int_array->Value(1), 200);
 }
 
 } // namespace starrocks

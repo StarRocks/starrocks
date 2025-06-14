@@ -15,10 +15,14 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
+import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.HashMap;
@@ -29,70 +33,60 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
-public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKey, Optional<TableStatistic>> {
+public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKey, Optional<Long>> {
+    private static final Logger LOG = LogManager.getLogger(TableStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
-    public @NonNull CompletableFuture<Optional<TableStatistic>> asyncLoad(@NonNull TableStatsCacheKey cacheKey, @
+    public @NonNull CompletableFuture<Optional<Long>> asyncLoad(@NonNull TableStatsCacheKey cacheKey, @
             NonNull Executor executor) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
-                connectContext.setThreadLocalInfo();
-                List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableId, cacheKey.partitionId);
-                if (statisticData.size() == 0) {
-                    return Optional.of(new TableStatistic(cacheKey.getTableId(), cacheKey.getPartitionId(), 0L));
-                } else {
-                    return Optional.of(new TableStatistic(cacheKey.getTableId(), cacheKey.getPartitionId(),
-                            statisticData.get(0).rowCount));
-                }
-            } catch (RuntimeException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new CompletionException(e);
-            }
-        }, executor);
+
+        return asyncLoadAll(Lists.newArrayList(cacheKey), executor)
+                .thenApply(x -> x.get(cacheKey));
     }
 
     @Override
-    public @NonNull CompletableFuture<Map<@NonNull TableStatsCacheKey, @NonNull Optional<TableStatistic>>> asyncLoadAll(
+    public @NonNull CompletableFuture<Map<@NonNull TableStatsCacheKey, @NonNull Optional<Long>>> asyncLoadAll(
             @NonNull Iterable<? extends @NonNull TableStatsCacheKey> cacheKey,
             @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            Map<TableStatsCacheKey, Optional<Long>> result = new HashMap<>();
             try {
-                TableStatsCacheKey tableStatsCacheKey = cacheKey.iterator().next();
-                long tableId = tableStatsCacheKey.getTableId();
-
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
-                List<TStatisticData> statisticData = queryStatisticsData(connectContext, tableStatsCacheKey.getTableId());
+                List<Long> pids = Lists.newArrayList();
+                long tableId = -1;
+                for (TableStatsCacheKey statsCacheKey : cacheKey) {
+                    pids.add(statsCacheKey.getPartitionId());
+                    tableId = statsCacheKey.getTableId();
+                    if (pids.size() > Config.expr_children_limit / 2) {
+                        List<TStatisticData> statisticData =
+                                statisticExecutor.queryTableStats(connectContext, statsCacheKey.getTableId(), pids);
 
-                Map<TableStatsCacheKey, Optional<TableStatistic>> result = new HashMap<>();
-                for (TStatisticData tStatisticData : statisticData) {
-                    result.put(new TableStatsCacheKey(tableId, tStatisticData.partitionId),
-                            Optional.of(new TableStatistic(tableId, tStatisticData.partitionId, tStatisticData.rowCount)));
+                        statisticData.forEach(tStatisticData -> result.put(
+                                new TableStatsCacheKey(statsCacheKey.getTableId(), tStatisticData.partitionId),
+                                Optional.of(tStatisticData.rowCount)));
+                        pids.clear();
+                    }
+                }
+                List<TStatisticData> statisticData = statisticExecutor.queryTableStats(connectContext, tableId, pids);
+                for (TStatisticData data : statisticData) {
+                    result.put(new TableStatsCacheKey(tableId, data.partitionId), Optional.of(data.rowCount));
                 }
                 for (TableStatsCacheKey key : cacheKey) {
                     if (!result.containsKey(key)) {
                         result.put(key, Optional.empty());
                     }
                 }
-
                 return result;
-
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
-    }
-
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId) {
-        return statisticExecutor.queryTableStats(context, tableId);
-    }
-
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, long partitionId) {
-        return statisticExecutor.queryTableStats(context, tableId, partitionId);
     }
 }

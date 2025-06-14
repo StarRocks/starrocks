@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 /// CollectStatsSinkOperator.
 CollectStatsSinkOperator::CollectStatsSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                    const int32_t driver_sequence, CollectStatsContextRawPtr ctx)
-        : Operator(factory, id, "collect_stats_sink", plan_node_id, driver_sequence), _ctx(ctx) {}
+        : Operator(factory, id, "collect_stats_sink", plan_node_id, true, driver_sequence), _ctx(ctx) {}
 
 Status CollectStatsSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));

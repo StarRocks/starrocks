@@ -46,9 +46,14 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -57,13 +62,12 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -73,6 +77,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -180,7 +185,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public boolean addTableToGroup(Database db,
-                                OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
+                                   OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
             throws DdlException {
         if (Strings.isNullOrEmpty(colocateGroup)) {
             return false;
@@ -219,6 +224,8 @@ public class ColocateTableIndex implements Writable {
     public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId,
                                    boolean isReplay)
             throws DdlException {
+        Preconditions.checkArgument(tbl.getDefaultDistributionInfo().supportColocate(),
+                "colocate not supported");
         writeLock();
         try {
             boolean groupAlreadyExist = true;
@@ -237,8 +244,16 @@ public class ColocateTableIndex implements Writable {
                     groupAlreadyExist = false;
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+                if (!(tbl instanceof ExternalOlapTable)) {
+                    // Colocate table should keep the same bucket number across the partitions
+                    if (distributionInfo.getBucketNum() == 0) {
+                        int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                        distributionInfo.setBucketNum(bucketNum);
+                    }
+                }
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
-                        distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
+                        MetaUtils.getColumnsByColumnIds(tbl, distributionInfo.getDistributionColumns()),
+                        distributionInfo.getBucketNum(),
                         tbl.getDefaultReplicationNum());
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);
@@ -249,9 +264,10 @@ public class ColocateTableIndex implements Writable {
                     LakeTable ltbl = (LakeTable) tbl;
                     List<Long> shardGroupIds = ltbl.getShardGroupIds();
                     if (!groupAlreadyExist) {
-                        GlobalStateMgr.getCurrentStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
+                        GlobalStateMgr.getCurrentState().getStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
                     } else {
-                        GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
+                        GlobalStateMgr.getCurrentState().getStarOSAgent()
+                                .updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
                     }
                 }
                 lakeGroups.add(groupId);
@@ -268,7 +284,11 @@ public class ColocateTableIndex implements Writable {
     public void addBackendsPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
         writeLock();
         try {
-            group2BackendsPerBucketSeq.put(groupId, backendsPerBucketSeq);
+            List<List<Long>> previous = group2BackendsPerBucketSeq.put(groupId, backendsPerBucketSeq);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Colocate group {} changed bucket seq from {} to {}, caller stack: {}",
+                        groupId, previous, backendsPerBucketSeq, LogUtil.getCurrentStackTraceToList());
+            }
         } finally {
             writeUnlock();
         }
@@ -323,10 +343,10 @@ public class ColocateTableIndex implements Writable {
                 LakeTable ltbl = (LakeTable) tbl;
                 List<Long> shardGroupIds = ltbl.getShardGroupIds();
                 try {
-                    GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
                             false /* isJoin */);
                 } catch (DdlException e) {
-                    LOG.error(e.getMessage());
+                    LOG.error(e.getMessage(), e);
                 }
             }
 
@@ -359,7 +379,7 @@ public class ColocateTableIndex implements Writable {
         readLock();
         try {
             if (lakeGroups.contains(groupId)) {
-                return !GlobalStateMgr.getCurrentStarOSAgent().queryMetaGroupStable(groupId.grpId);
+                return !GlobalStateMgr.getCurrentState().getStarOSAgent().queryMetaGroupStable(groupId.grpId);
             } else {
                 return unstableGroups.contains(groupId);
             }
@@ -472,19 +492,21 @@ public class ColocateTableIndex implements Writable {
 
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(groupId.dbId);
         int numOfTablets = 0;
         if (db != null && !allTableIds.isEmpty()) {
+            Locker locker = new Locker();
             try {
-                db.readLock();
+                locker.lockDatabase(db.getId(), LockType.READ);
                 for (long tableId : allTableIds) {
-                    OlapTable tbl = (OlapTable) db.getTable(tableId);
+                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
                     if (tbl != null) {
                         numOfTablets += tbl.getNumberOfPartitions();
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return numOfTablets;
@@ -587,9 +609,9 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable(info.getTableId());
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId());
         Preconditions.checkNotNull(tbl);
 
         writeLock();
@@ -601,7 +623,7 @@ public class ColocateTableIndex implements Writable {
             addTableToGroup(info.getGroupId().dbId, tbl, tbl.getColocateGroup(), info.getGroupId(), true /* isReplay */);
         } catch (DdlException e) {
             // should not happen, just log an error here
-            LOG.error(e.getMessage());
+            LOG.error(e.getMessage(), e);
         } finally {
             writeUnlock();
         }
@@ -638,12 +660,19 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    protected boolean validDbIdAndTableId(long dbId, long tableId) {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+    protected Optional<String> getTableName(long dbId, long tableId) {
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
-            return false;
+            return Optional.empty();
         }
-        return database.getTable(tableId) != null;
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+
+        if (table == null) {
+            return Optional.empty();
+        }
+
+        return Optional.of(table.getName());
     }
 
     /**
@@ -661,17 +690,20 @@ public class ColocateTableIndex implements Writable {
                 GroupId groupId = entry.getValue();
                 info.add(groupId.toString());
                 info.add(entry.getKey());
-                StringBuilder sb = new StringBuilder();
+                StringJoiner tblIdJoiner = new StringJoiner(", ");
+                StringJoiner tblNameJoiner = new StringJoiner(", ");
                 for (Long tableId : group2Tables.get(groupId)) {
-                    if (sb.length() > 0) {
-                        sb.append(", ");
-                    }
-                    sb.append(tableId);
-                    if (!validDbIdAndTableId(groupId.dbId, tableId)) {
-                        sb.append("*");
+                    Optional<String> tblName = getTableName(groupId.dbId, tableId);
+                    if (!tblName.isPresent()) {
+                        tblIdJoiner.add(tableId + "*");
+                        tblNameJoiner.add("[deleted]");
+                    } else {
+                        tblIdJoiner.add(tableId.toString());
+                        tblNameJoiner.add(tblName.get());
                     }
                 }
-                info.add(sb.toString());
+                info.add(tblIdJoiner.toString());
+                info.add(tblNameJoiner.toString());
                 ColocateGroupSchema groupSchema = group2Schema.get(groupId);
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));
@@ -771,22 +803,8 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
-        GlobalStateMgr.getCurrentColocateIndex().readFields(dis);
-        // clean up if dbId or tableId not found, this is actually a bug
-        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
-        constructLakeGroups(GlobalStateMgr.getCurrentState());
-        LOG.info("finished replay colocateTableIndex from image");
-        return checksum;
-    }
-
-    public long saveColocateTableIndex(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
-    public void saveColocateTableIndexV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COLOCATE_TABLE_INDEX, 1);
+    public void saveColocateTableIndexV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.COLOCATE_TABLE_INDEX, 1);
         writer.writeJson(this);
         writer.close();
     }
@@ -801,6 +819,7 @@ public class ColocateTableIndex implements Writable {
         this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
         this.unstableGroups = data.unstableGroups;
 
+        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
         constructLakeGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
     }
@@ -940,33 +959,17 @@ public class ColocateTableIndex implements Writable {
             // set this group as unstable
             markGroupUnstable(groupId, false /* edit log is along with modify table log */);
             table.setColocateGroup(colocateGroup);
-            table.setInColocateMvGroup(false);
         } else {
             // unset colocation group
             if (Strings.isNullOrEmpty(oldGroup)) {
                 // this table is not a colocate table, do nothing
                 return;
             }
-
-            // there is not any colocate mv related to the table
-            // just remove the table from colocate group
-            if (table.getColocateMaterializedViewNames().isEmpty()) {
-                // when replayModifyTableColocate, we need the groupId info
-                String fullGroupName = db.getId() + "_" + oldGroup;
-                groupId = getGroupSchema(fullGroupName).getGroupId();
-                removeTable(table.getId(), table, isReplay);
-                table.setColocateGroup(null);
-                table.setInColocateMvGroup(false);
-            } else {
-                // change the table's group from oldGroup to a new colocate group
-                // which is named by dbName + ":" + mvName
-                Optional<String> anyMvName = table.getColocateMaterializedViewNames().stream().findAny();
-                Preconditions.checkState(anyMvName.isPresent());
-                String groupName = db.getFullName() + ":" + anyMvName.get();
-                groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId, isReplay);
-                table.setColocateGroup(groupName);
-                table.setInColocateMvGroup(true);
-            }
+            // when replayModifyTableColocate, we need the groupId info
+            String fullGroupName = db.getId() + "_" + oldGroup;
+            groupId = getGroupSchema(fullGroupName).getGroupId();
+            removeTable(table.getId(), table, isReplay);
+            table.setColocateGroup(null);
         }
 
         if (!isReplay) {
@@ -975,6 +978,7 @@ public class ColocateTableIndex implements Writable {
             TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
         }
+        table.lastSchemaUpdateTime.set(System.nanoTime());
         LOG.info("finished modify table's colocation property. table: {}, is replay: {}",
                 table.getName(), isReplay);
     }
@@ -983,17 +987,15 @@ public class ColocateTableIndex implements Writable {
         long tableId = info.getTableId();
         Map<String, String> properties = info.getPropertyMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
-        db.writeLock();
-        try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tableId), LockType.WRITE)) {
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
                     info.getGroupId());
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table colocate", e);
-        } finally {
-            db.writeUnlock();
         }
     }
 
@@ -1006,12 +1008,12 @@ public class ColocateTableIndex implements Writable {
         for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
-            Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             if (database == null) {
                 LOG.warn("cannot find db {}, will remove invalid table {} from group {}",
                         dbId, tableId, entry.getValue());
             } else {
-                Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
+                Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
                 if (table != null) {
                     // this is a valid table/database, do nothing
                     continue;
@@ -1047,14 +1049,14 @@ public class ColocateTableIndex implements Writable {
             List<Long> shardGroupIds = ltbl.getShardGroupIds();
             LOG.info("update meta group id {}, table {}, shard groups: {}, join: {}",
                     groupId.grpId, olapTable.getId(), shardGroupIds, isJoin);
-            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, isJoin);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, isJoin);
         } finally {
             writeUnlock();
         }
     }
 
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedNothingMode()) {
             return;
         }
 
@@ -1062,8 +1064,8 @@ public class ColocateTableIndex implements Writable {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
             // database and table should be valid if reach here
-            Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
-            Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
+            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
             if (table.isCloudNativeTable()) {
                 lakeGroups.add(entry.getValue());
             }

@@ -21,7 +21,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -41,12 +43,18 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private boolean hasTableHints;
     private List<Long> selectedTabletId;
     private List<Long> hintsTabletIds;
+    private List<Long> hintsReplicaIds;
 
     private List<ScalarOperator> prunedPartitionPredicates;
     private boolean usePkIndex;
+    private TableSampleClause sample;
 
     // record if this scan is derived from SplitScanORToUnionRule
     private boolean fromSplitOR;
+
+    private long gtid = 0;
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -67,6 +75,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 false,
                 Lists.newArrayList(),
                 Lists.newArrayList(),
+                Lists.newArrayList(),
                 false);
     }
 
@@ -83,6 +92,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             boolean hasTableHints,
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds,
+            List<Long> hintsReplicaIds,
             boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
@@ -95,6 +105,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.hasTableHints = hasTableHints;
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
+        this.hintsReplicaIds = hintsReplicaIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
         this.usePkIndex = usePkIndex;
     }
@@ -124,8 +135,22 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return selectedTabletId;
     }
 
+    public long getGtid() {
+        return gtid;
+    }
+
+    @Override
+    public boolean isEmptyOutputRows() {
+        return selectedTabletId == null || selectedTabletId.isEmpty() ||
+                selectedPartitionId == null || selectedPartitionId.isEmpty();
+    }
+
     public List<Long> getHintsTabletIds() {
         return hintsTabletIds;
+    }
+
+    public List<Long> getHintsReplicaIds() {
+        return hintsReplicaIds;
     }
 
     public boolean hasTableHints() {
@@ -142,6 +167,26 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public boolean isFromSplitOR() {
         return fromSplitOR;
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
+    }
+
+    public boolean isSample() {
+        return sample != null && sample.isUseSampling();
     }
 
     @Override
@@ -161,17 +206,20 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
+                gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId) &&
-                Objects.equals(hintsTabletIds, that.hintsTabletIds);
+                Objects.equals(sample, that.sample) &&
+                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
+                Objects.equals(hintsReplicaIds, that.hintsReplicaIds);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
-                selectedTabletId, hintsTabletIds);
+        return Objects.hash(super.hashCode(), selectedIndexId, gtid, selectedPartitionId,
+                selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 
     public static Builder builder() {
@@ -191,18 +239,28 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
             builder.distributionSpec = scanOperator.distributionSpec;
             builder.selectedIndexId = scanOperator.selectedIndexId;
+            builder.gtid = scanOperator.gtid;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
             builder.hasTableHints = scanOperator.hasTableHints;
             builder.selectedTabletId = scanOperator.selectedTabletId;
             builder.hintsTabletIds = scanOperator.hintsTabletIds;
+            builder.hintsReplicaIds = scanOperator.hintsReplicaIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             builder.usePkIndex = scanOperator.usePkIndex;
+            builder.fromSplitOR = scanOperator.fromSplitOR;
+            builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
+            builder.sample = scanOperator.getSample();
             return this;
         }
 
         public Builder setSelectedIndexId(long selectedIndexId) {
             builder.selectedIndexId = selectedIndexId;
+            return this;
+        }
+
+        public Builder setGtid(long gtid) {
+            builder.gtid = gtid;
             return this;
         }
 
@@ -212,7 +270,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
-            builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
+            if (selectedPartitionId == null) {
+                builder.selectedPartitionId = null;
+            } else {
+                builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
+            }
             return this;
         }
 
@@ -236,6 +298,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             return this;
         }
 
+        public Builder setHintsReplicaIds(List<Long> hintsReplicaIds) {
+            builder.hintsReplicaIds = ImmutableList.copyOf(hintsReplicaIds);
+            return this;
+        }
+
         public Builder setHasTableHints(boolean hasTableHints) {
             builder.hasTableHints = hasTableHints;
             return this;
@@ -248,6 +315,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setUsePkIndex(boolean usePkIndex) {
             builder.usePkIndex = usePkIndex;
+            return this;
+        }
+
+        public Builder setSample(TableSampleClause sample) {
+            builder.sample = sample;
             return this;
         }
     }

@@ -65,6 +65,11 @@ void AggregateFuncResolver::register_window() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("row_number", true,
                                                             AggregateFactory::MakeRowNumberWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("ntile", true, AggregateFactory::MakeNtileWindowFunction());
+
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>(
+            "session_number", true, AggregateFactory::MakeSessionNumberWindowFunction<TYPE_BIGINT>());
+    add_aggregate_mapping_notnull<TYPE_INT, TYPE_BIGINT>("session_number", true,
+                                                         AggregateFactory::MakeSessionNumberWindowFunction<TYPE_INT>());
 }
 
 } // namespace starrocks

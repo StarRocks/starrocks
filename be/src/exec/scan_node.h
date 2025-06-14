@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <optional>
 #include <string>
 
 #include "column/column_access_path.h"
@@ -84,8 +86,8 @@ public:
     StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-            int pipeline_dop, bool enable_tablet_internal_parallel,
-            TTabletInternalParallelMode::type tablet_internal_parallel_mode);
+            int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan = false);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
@@ -119,12 +121,30 @@ public:
 
     virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
     virtual bool always_shared_scan() const { return false; }
+    virtual bool output_chunk_by_bucket() const { return false; }
+    virtual bool is_asc_hint() const { return true; }
+    virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);
     bool is_shared_scan_enabled() const;
 
     const std::vector<ColumnAccessPathPtr>& column_access_paths() const { return _column_access_paths; }
+
+    bool is_enable_topn_filter_back_pressure() const { return this->_enable_topn_filter_back_pressure; }
+    void set_enable_topn_filter_back_pressure(bool value) { this->_enable_topn_filter_back_pressure = value; }
+    int get_back_pressure_max_rounds() const { return this->_back_pressure_max_rounds; }
+    void set_back_pressure_max_rounds(int value) { this->_back_pressure_max_rounds = value; }
+    size_t get_back_pressure_num_rows() const { return this->_back_pressure_num_rows; }
+    void set_back_pressure_num_rows(size_t value) { this->_back_pressure_num_rows = value; }
+    int64_t get_back_pressure_throttle_time() const { return this->_back_pressure_throttle_time; }
+    void set_back_pressure_throttle_time(int64_t value) { this->_back_pressure_throttle_time = value; }
+    int64_t get_back_pressure_throttle_time_upper_bound() const {
+        return this->_back_pressure_throttle_time_upper_bound;
+    }
+    void set_back_pressure_throttle_time_upper_bound(int64_t value) {
+        this->_back_pressure_throttle_time_upper_bound = value;
+    }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
@@ -145,6 +165,12 @@ protected:
     int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
+
+    bool _enable_topn_filter_back_pressure = false;
+    int _back_pressure_max_rounds = 5;
+    size_t _back_pressure_num_rows = 10240;
+    int64_t _back_pressure_throttle_time = 500;
+    int64_t _back_pressure_throttle_time_upper_bound = 5000;
 };
 
 } // namespace starrocks

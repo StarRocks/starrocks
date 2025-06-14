@@ -120,7 +120,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_cumulative_compac
     // <4,5> means version 4,5 selected for cumulative compaction
     int64_t prev_end_version = _tablet->cumulative_layer_point() - 1;
     bool only_cal_score = false;
-    for (auto rowset : candidate_rowsets) {
+    for (const auto& rowset : candidate_rowsets) {
         if (only_cal_score) {
             compaction_score += rowset->rowset_meta()->get_compaction_score();
             continue;
@@ -351,7 +351,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_base_compact(std:
         return Status::OK();
     }
 
-    VLOG(1) << "don't satisfy the base compaction policy. tablet=" << _tablet->tablet_id()
+    VLOG(2) << "don't satisfy the base compaction policy. tablet=" << _tablet->tablet_id()
             << ", num_cumulative_rowsets=" << input_rowsets->size() - 1
             << ", cumulative_base_ratio=" << cumulative_base_ratio
             << ", interval_since_last_base_compaction=" << interval_since_last_base_compaction

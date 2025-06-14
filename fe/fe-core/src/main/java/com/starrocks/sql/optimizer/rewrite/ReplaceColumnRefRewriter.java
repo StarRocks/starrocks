@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -26,16 +25,17 @@ import java.util.Map;
 // Replace the corresponding ColumnRef with ScalarOperator
 public class ReplaceColumnRefRewriter {
     private final Rewriter rewriter = new Rewriter();
-    private final Map<ColumnRefOperator, ScalarOperator> operatorMap;
+    private final Map<ColumnRefOperator, ? extends ScalarOperator> operatorMap;
 
     private final boolean isRecursively;
 
-    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ScalarOperator> operatorMap) {
+    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ? extends ScalarOperator> operatorMap) {
         this.operatorMap = operatorMap;
         this.isRecursively = false;
     }
 
-    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ScalarOperator> operatorMap, boolean isRecursively) {
+    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ? extends ScalarOperator> operatorMap,
+                                    boolean isRecursively) {
         this.operatorMap = operatorMap;
         this.isRecursively = isRecursively;
     }
@@ -45,6 +45,13 @@ public class ReplaceColumnRefRewriter {
             return null;
         }
         return origin.clone().accept(rewriter, null);
+    }
+
+    public ScalarOperator rewriteWithoutClone(ScalarOperator origin) {
+        if (origin == null) {
+            return null;
+        }
+        return origin.accept(rewriter, null);
     }
 
     private class Rewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
@@ -66,15 +73,21 @@ public class ReplaceColumnRefRewriter {
             // The rewritten predicate will be rewritten continually,
             // Rewiring predicate shouldn't change the origin project columnRefMap
 
-            ScalarOperator mapperOperator = operatorMap.get(column).clone();
-            if (isRecursively) {
-                while (mapperOperator.getChildren().isEmpty() && operatorMap.containsKey(mapperOperator)) {
+            ScalarOperator mapperOperator = operatorMap.get(column);
+            if (column.equals(mapperOperator)) {
+                return column;
+            }
+            if (!isRecursively) {
+                return mapperOperator.clone();
+            } else {
+                while (mapperOperator instanceof ColumnRefOperator && operatorMap.containsKey(mapperOperator)) {
                     ScalarOperator mapped = operatorMap.get(mapperOperator);
                     if (mapped.equals(mapperOperator)) {
                         break;
                     }
-                    mapperOperator = mapped.clone();
+                    mapperOperator = mapped;
                 }
+                mapperOperator = mapperOperator.clone();
                 for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
                     mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
                 }

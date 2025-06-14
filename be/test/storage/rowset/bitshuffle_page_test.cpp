@@ -59,7 +59,7 @@ public:
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, true);
         size_t n = 1;
-        decoder->next_batch(&n, column.get());
+        ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
@@ -90,7 +90,7 @@ public:
         footer.set_type(starrocks::DATA_PAGE);
         starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
@@ -99,7 +99,13 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
-
+        for (uint i = 0; i < size; i++) {
+            CppType out;
+            page_decoder.at_index(i, &out);
+            if (src[i] != out) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << out;
+            }
+        }
         auto column = ChunkHelper::column_from_field_type(Type, false);
 
         status = page_decoder.next_batch(&size, column.get());
@@ -116,7 +122,7 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
-            page_decoder.seek_to_position_in_page(seek_off);
+            ASSERT_TRUE(page_decoder.seek_to_position_in_page(seek_off).ok());
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);
@@ -144,7 +150,7 @@ public:
         OwnedSlice s = page_builder.finish()->build();
 
         Slice encoded_data = s.slice();
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
         {
             starrocks::PageFooterPB footer;
             footer.set_type(starrocks::DATA_PAGE);
@@ -159,6 +165,15 @@ public:
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
+            CppType src_value = 0;
+            for (uint i = 0; i < count; i++) {
+                CppType out;
+                page_decoder.at_index(i, &out);
+                if (src_value != out) {
+                    FAIL() << "Fail at index " << i << " inserted=" << src_value << " got=" << out;
+                }
+                src_value++;
+            }
 
             auto dst = ChunkHelper::column_from_field_type(Type, false);
             dst->reserve(count);
@@ -203,10 +218,10 @@ public:
             ASSERT_EQ(0, page_decoder.current_index());
 
             auto dst = ChunkHelper::column_from_field_type(Type, false);
-            SparseRange read_range;
-            read_range.add(Range(0, count / 3));
-            read_range.add(Range(count / 2, (count * 2 / 3)));
-            read_range.add(Range((count * 3 / 4), count));
+            SparseRange<> read_range;
+            read_range.add(Range<>(0, count / 3));
+            read_range.add(Range<>(count / 2, (count * 2 / 3)));
+            read_range.add(Range<>((count * 3 / 4), count));
             size_t read_num = read_range.span_size();
 
             dst->reserve(read_range.span_size());
@@ -216,9 +231,9 @@ public:
 
             TypeInfoPtr type_info = get_type_info(Type);
             size_t offset = 0;
-            SparseRangeIterator read_iter = read_range.new_iterator();
+            SparseRangeIterator<> read_iter = read_range.new_iterator();
             while (read_iter.has_more()) {
-                Range r = read_iter.next(read_num);
+                Range<> r = read_iter.next(read_num);
                 for (int i = 0; i < r.span_size(); ++i) {
                     ASSERT_EQ(0, type_info->cmp(src->get(r.begin() + i), dst->get(i + offset)))
                             << " row " << i << ": " << datum_to_string(type_info.get(), src->get(r.begin() + i))
@@ -247,7 +262,7 @@ public:
         footer.set_type(starrocks::DATA_PAGE);
         starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
@@ -319,7 +334,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderRandom) {
 
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = random() + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_FLOAT, BitshufflePageBuilder<TYPE_FLOAT>, BitShufflePageDecoder<TYPE_FLOAT>>(
@@ -332,7 +347,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderRandom) {
 
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = random() + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_DOUBLE, BitshufflePageBuilder<TYPE_DOUBLE>,
@@ -428,7 +443,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = i + 100 + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = i + 100 + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     float small_than_smallest = 99.9;
@@ -443,7 +458,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = i + 100 + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = i + 100 + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
 
     double small_than_smallest = 99.9;

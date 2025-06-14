@@ -16,11 +16,6 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.google.common.collect.Lists;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -28,7 +23,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
@@ -40,7 +34,6 @@ import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,8 +41,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
-
-import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<Histogram>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
@@ -72,9 +63,12 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return Optional.empty();
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }
@@ -84,14 +78,15 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             Map<ColumnStatsCacheKey, Optional<Histogram>> result = new HashMap<>();
+            long tableId = -1;
+            List<String> columns = new ArrayList<>();
+            for (ColumnStatsCacheKey key : keys) {
+                tableId = key.tableId;
+                columns.add(key.column);
+                result.put(key, Optional.empty());
+            }
+
             try {
-                long tableId = -1;
-                List<String> columns = new ArrayList<>();
-                for (ColumnStatsCacheKey key : keys) {
-                    tableId = key.tableId;
-                    columns.add(key.column);
-                    result.put(key, Optional.empty());
-                }
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
@@ -104,9 +99,12 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }
@@ -123,73 +121,16 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
     }
 
     private Histogram convert2Histogram(TStatisticData statisticData) throws AnalysisException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statisticData.dbId);
         MetaUtils.checkDbNullAndReport(db, String.valueOf(statisticData.dbId));
-        Table table = db.getTable(statisticData.tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), statisticData.tableId);
         if (!(table instanceof OlapTable)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
         }
-        Column column = table.getColumn(statisticData.columnName);
-        if (column == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);
-        }
+        Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
 
-        List<Bucket> buckets = convertBuckets(statisticData.histogram, column.getType());
-        Map<String, Long> mcv = convertMCV(statisticData.histogram);
+        List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, columnType);
+        Map<String, Long> mcv = HistogramUtils.convertMCV(statisticData.histogram);
         return new Histogram(buckets, mcv);
-    }
-
-    private List<Bucket> convertBuckets(String histogramString, Type type) throws AnalysisException {
-        JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
-
-        JsonElement jsonElement = jsonObject.get("buckets");
-        if (jsonElement.isJsonNull()) {
-            return Collections.emptyList();
-        }
-
-        JsonArray histogramObj = (JsonArray) jsonElement;
-        List<Bucket> buckets = Lists.newArrayList();
-        for (int i = 0; i < histogramObj.size(); ++i) {
-            JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-
-            double low;
-            double high;
-            if (type.isDate()) {
-                low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATE_FORMATTER_UNIX));
-                high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(1).getAsString(), DateUtils.DATE_FORMATTER_UNIX));
-            } else if (type.isDatetime()) {
-                low = (double) getLongFromDateTime(DateUtils.parseDatTimeString(
-                        bucketJsonArray.get(0).getAsString()));
-                high = (double) getLongFromDateTime(DateUtils.parseDatTimeString(
-                        bucketJsonArray.get(1).getAsString()));
-            } else {
-                low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
-                high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
-            }
-
-            Bucket bucket = new Bucket(low, high,
-                    Long.parseLong(bucketJsonArray.get(2).getAsString()),
-                    Long.parseLong(bucketJsonArray.get(3).getAsString()));
-            buckets.add(bucket);
-        }
-        return buckets;
-    }
-
-    private Map<String, Long> convertMCV(String histogramString) {
-        JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
-        JsonElement jsonElement = jsonObject.get("mcv");
-        if (jsonElement.isJsonNull()) {
-            return Collections.emptyMap();
-        }
-
-        JsonArray histogramObj = (JsonArray) jsonElement;
-        Map<String, Long> mcv = new HashMap<>();
-        for (int i = 0; i < histogramObj.size(); ++i) {
-            JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-            mcv.put(bucketJsonArray.get(0).getAsString(), Long.parseLong(bucketJsonArray.get(1).getAsString()));
-        }
-        return mcv;
     }
 }

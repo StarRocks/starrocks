@@ -35,11 +35,7 @@ public class SchemaScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSchemaScanOperator logical = (LogicalSchemaScanOperator) input.getOp();
         PhysicalSchemaScanOperator physical =
-                new PhysicalSchemaScanOperator(logical.getTable(),
-                        logical.getColRefToColumnMetaMap(),
-                        logical.getLimit(),
-                        logical.getPredicate(),
-                        logical.getProjection());
+                new PhysicalSchemaScanOperator(logical);
 
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);

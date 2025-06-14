@@ -17,13 +17,13 @@
 #include "column/chunk_extra_data.h"
 
 namespace starrocks {
-void ChunkExtraColumnsData::filter(const Buffer<uint8_t>& selection) const {
+void ChunkExtraColumnsData::filter(const Buffer<uint8_t>& selection) {
     for (auto& col : _columns) {
         col->filter(selection);
     }
 }
 
-void ChunkExtraColumnsData::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) const {
+void ChunkExtraColumnsData::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& col : _columns) {
         col->filter_range(selection, from, to);
     }
@@ -36,11 +36,11 @@ ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
         columns[i]->reserve(size);
     }
     auto extra_data_metas = _data_metas;
-    return std::make_shared<ChunkExtraColumnsData>(extra_data_metas, columns);
+    return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(columns));
 }
 
 void ChunkExtraColumnsData::append(const ChunkExtraColumnsData& src, size_t offset, size_t count) {
-    auto src_columns = src.columns();
+    auto& src_columns = src.columns();
     DCHECK_EQ(src_columns.size(), _columns.size());
     for (size_t i = 0; i < _columns.size(); ++i) {
         _columns[i]->append(*src_columns[i], offset, count);
@@ -49,7 +49,7 @@ void ChunkExtraColumnsData::append(const ChunkExtraColumnsData& src, size_t offs
 
 void ChunkExtraColumnsData::append_selective(const ChunkExtraColumnsData& src, const uint32_t* indexes, uint32_t from,
                                              uint32_t size) {
-    auto src_columns = src.columns();
+    auto& src_columns = src.columns();
     DCHECK_EQ(src_columns.size(), _columns.size());
     for (size_t i = 0; i < _columns.size(); ++i) {
         _columns[i]->append_selective(*src_columns[i], indexes, from, size);
@@ -75,24 +75,24 @@ size_t ChunkExtraColumnsData::bytes_usage(size_t from, size_t size) const {
 int64_t ChunkExtraColumnsData::max_serialized_size(const int encode_level) {
     DCHECK_EQ(encode_level, 0);
     int64_t serialized_size = 0;
-    for (auto i = 0; i < _columns.size(); ++i) {
-        serialized_size += serde::ColumnArraySerde::max_serialized_size(*_columns[i], 0);
+    for (auto& column : _columns) {
+        serialized_size += serde::ColumnArraySerde::max_serialized_size(*column, 0);
     }
     return serialized_size;
 }
 
 uint8_t* ChunkExtraColumnsData::serialize(uint8_t* buff, bool sorted, const int encode_level) {
     DCHECK_EQ(encode_level, 0);
-    for (auto i = 0; i < _columns.size(); ++i) {
-        buff = serde::ColumnArraySerde::serialize(*_columns[i], buff, sorted, encode_level);
+    for (auto& column : _columns) {
+        buff = serde::ColumnArraySerde::serialize(*column, buff, sorted, encode_level);
     }
     return buff;
 }
 
 const uint8_t* ChunkExtraColumnsData::deserialize(const uint8_t* buff, bool sorted, const int encode_level) {
     DCHECK_EQ(encode_level, 0);
-    for (auto i = 0; i < _columns.size(); ++i) {
-        buff = serde::ColumnArraySerde::deserialize(buff, _columns[i].get(), sorted, encode_level);
+    for (auto& column : _columns) {
+        buff = serde::ColumnArraySerde::deserialize(buff, column.get(), sorted, encode_level);
     }
     return buff;
 }

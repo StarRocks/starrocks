@@ -15,14 +15,20 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.TableName;
+
 import java.util.Map;
 
 public class InternalCatalog extends Catalog {
     public static final String DEFAULT_INTERNAL_CATALOG_NAME = "default_catalog";
     public static final long DEFAULT_INTERNAL_CATALOG_ID = -11;
 
-    public InternalCatalog(long id, String name, Map<String, String> config, String comment) {
+    public InternalCatalog(long id, Map<String, String> config, String comment) {
         super(id, DEFAULT_INTERNAL_CATALOG_NAME, config, comment);
+    }
+
+    public static boolean isFromDefault(TableName name) {
+        return name != null && DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(name.getCatalog());
     }
 
 }

@@ -28,6 +28,7 @@ import java.util.Map;
 
 public class LogicalPaimonScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean hasUnknownColumn;
 
     public LogicalPaimonScanOperator(Table table,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -51,6 +52,20 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
     public ScanOperatorPredicates getScanOperatorPredicates() {
         return this.predicates;
     }
+
+    @Override
+    public boolean isEmptyOutputRows() {
+        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+    public boolean hasUnknownColumn() {
+        return hasUnknownColumn;
+    }
+
+    public void setHasUnknownColumn(boolean hasUnknownColumn) {
+        this.hasUnknownColumn = hasUnknownColumn;
+    }
+
 
     @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {

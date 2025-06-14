@@ -37,15 +37,15 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.fs.HdfsUtil;
@@ -53,9 +53,9 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
-import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
 
@@ -77,10 +77,9 @@ public class OutFileClause implements ParseNode {
         PARQUET_COMPRESSION_TYPE_MAP.put("brotli", TCompressionType.BROTLI);
         PARQUET_COMPRESSION_TYPE_MAP.put("zstd", TCompressionType.ZSTD);
         PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TCompressionType.LZ4);
-        PARQUET_COMPRESSION_TYPE_MAP.put("lzo", TCompressionType.LZO);
-        PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TCompressionType.BZIP2);
         PARQUET_COMPRESSION_TYPE_MAP.put("zlib", TCompressionType.ZLIB);
-        PARQUET_COMPRESSION_TYPE_MAP.put("default", TCompressionType.DEFAULT_COMPRESSION);
+        PARQUET_COMPRESSION_TYPE_MAP.put("uncompressed", TCompressionType.NO_COMPRESSION);
+        PARQUET_COMPRESSION_TYPE_MAP.put("none", TCompressionType.NO_COMPRESSION);
     }
 
     public static final Set<PrimitiveType> PARQUET_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(
@@ -97,7 +96,8 @@ public class OutFileClause implements ParseNode {
         PrimitiveType.VARCHAR,
         PrimitiveType.DECIMAL32,
         PrimitiveType.DECIMAL64,
-        PrimitiveType.DECIMAL128
+        PrimitiveType.DECIMAL128,
+        PrimitiveType.VARBINARY
     );
 
     public static final Set<PrimitiveType> CSV_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(
@@ -238,14 +238,14 @@ public class OutFileClause implements ParseNode {
             if (!isCsvFormat()) {
                 throw new SemanticException(PROP_COLUMN_SEPARATOR + " is only for CSV format");
             }
-            columnSeparator = properties.get(PROP_COLUMN_SEPARATOR);
+            columnSeparator = Delimiter.convertDelimiter(properties.get(PROP_COLUMN_SEPARATOR));
         }
 
         if (properties.containsKey(PROP_LINE_DELIMITER)) {
             if (!isCsvFormat()) {
                 throw new SemanticException(PROP_LINE_DELIMITER + " is only for CSV format");
             }
-            rowDelimiter = properties.get(PROP_LINE_DELIMITER);
+            rowDelimiter = Delimiter.convertDelimiter(properties.get(PROP_LINE_DELIMITER));
         }
 
         if (properties.containsKey(PARQUET_COMPRESSION_TYPE)) {
@@ -281,7 +281,7 @@ public class OutFileClause implements ParseNode {
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
             try {
-                maxFileSizeBytes = ParseUtil.analyzeDataVolumn(properties.get(PROP_MAX_FILE_SIZE));
+                maxFileSizeBytes = ParseUtil.analyzeDataVolume(properties.get(PROP_MAX_FILE_SIZE));
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -428,7 +428,7 @@ public class OutFileClause implements ParseNode {
                 THdfsProperties hdfsProperties = new THdfsProperties();
                 try {
                     HdfsUtil.getTProperties(filePath, brokerDesc, hdfsProperties);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
                 sinkOptions.setHdfs_properties(hdfsProperties);

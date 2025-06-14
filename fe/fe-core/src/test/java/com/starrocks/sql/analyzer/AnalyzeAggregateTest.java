@@ -40,13 +40,15 @@ public class AnalyzeAggregateTest {
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2) over ()))",
                 "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2))",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2)))",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(max(v2)) from t0",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(1 + max(v2)) from t0",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
+        analyzeFail("select min(v1) col from t0 order by min(col) + 1,  min(col)",
+                "Column 'col' cannot be resolved");
 
         analyzeFail("select v1 from t0 group by v1,cast(v2 as int) having cast(v2 as boolean)",
                 "must be an aggregate expression or appear in GROUP BY clause");
@@ -100,9 +102,9 @@ public class AnalyzeAggregateTest {
         analyzeFail("select grouping(v1) from t0 group by v1",
                 "cannot use GROUPING functions without [grouping sets|rollup|cube] clause");
 
-        //grouping functions only support column.
+        //The arguments of GROUPING must be expressions referenced by GROUP BY
         analyzeFail("select v1, grouping(v1+1) from t0 group by grouping sets((v1))",
-                "grouping functions only support column.");
+                "The arguments of GROUPING must be expressions referenced by GROUP BY.");
 
         //cannot contain grouping
         analyzeFail("select v1 from t0 inner join t1 on grouping(v1)= v4", "JOIN clause cannot contain grouping");
@@ -131,16 +133,21 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct v1 from t0 order by v2",
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select distinct v1 as v from t0 order by v2",
-                "must be an aggregate expression or appear in GROUP BY clause");
+                " must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select * from t0 order by max(v2)",
+                "column must appear in the GROUP BY clause or be used in an aggregate function.");
+        analyzeFail("select distinct max(v1) from t0");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v1)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v2)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
 
         analyzeSuccess("select distinct v1 as v from t0 having v = 1");
         analyzeFail("select distinct v1 as v from t0 having v2 = 2",
                 "must be an aggregate expression or appear in GROUP BY clause");
 
-        analyzeFail("select distinct v1,sum(v2) from t0",
-                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-        analyzeFail("select distinct v2 from t0 group by v1,v2",
-                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+        analyzeFail("select distinct v1,sum(v2) from t0");
+        analyzeSuccess("select distinct v2 from t0 group by v1,v2");
 
         analyzeSuccess("select distinct v1, v2 from t0");
         analyzeFail("select v2, distinct v1 from t0");
@@ -153,43 +160,59 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct v1,v2 from t0 order by v3");
         analyzeFail("select distinct v1 from t0 order by sum(v2)");
 
-        analyzeFail("select count(distinct v1), count(distinct v3) from tarray",
-                "No matching function with signature: multi_distinct_count(array");
+        analyzeSuccess("select count(distinct v1), count(distinct v3) from tarray");
 
         analyzeFail("select abs(distinct v1) from t0");
         analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");
         analyzeFail("select distinct v1 from t0 having sum(v1) > 2");
     }
+
+    @Test
+    public void testDistinctWithAggFunc() {
+        analyzeSuccess("select distinct v1, count(v2) from t0 group by v1");
+        analyzeSuccess("select distinct v1, count(v2) from t0 group by v1, v2");
+        analyzeSuccess("select distinct v1 + v2, count(v2) from t0 group by v1, v2");
+        analyzeFail("select distinct v1 * v2, sum(v3) from t0 group by v2");
+        analyzeFail("select distinct v1 + v2, sum(v3) from t0 group by v1, v2 + 1");
+        analyzeSuccess("select distinct v1 + 1, sum(v3) from t0 group by v1, v2 + 1");
+        analyzeSuccess("select distinct v1 + v2, count(v2) from t0 group by v1, v2 having max(v1) = 1");
+        analyzeFail("select distinct v1 + v2, count(v2) from t0 having max(v1) = 1");
+        analyzeSuccess("select distinct v1 from t0 having abs(v1) = 1");
+        analyzeFail("select distinct v1 + v2 from t0 having abs(v1) = 1");
+        analyzeSuccess("select distinct v1 from t0 having v1 > 1");
+        analyzeFail("select distinct v1 from t0 having v2 > 1");
+        analyzeSuccess("select distinct v1 from t0 group by v1");
+        analyzeFail("select distinct v1 from t0 group by v2");
+        analyzeSuccess("select distinct vs.a, avg(vs.b) from ttypes group by vs.a");
+        analyzeSuccess("select distinct vs.a, avg(vs1.b) from ttypes group by vs.a");
+        analyzeFail("select distinct vs.a, vs1.b from ttypes group by vs.a");
+        analyzeFail("select distinct vs.a, vs1.b from ttypes group by vs");
+        analyzeSuccess("select distinct vs.a, vs1.b from ttypes group by vs.a, vs1.b");
+    }
+    
     @Test
     public void testDistinctAggOnComplexTypes() {
         analyzeSuccess("select count(distinct va) from ttypes group by v1");
         analyzeSuccess("select count(*) from ttypes group by va");
 
         // more than one count distinct
-        analyzeFail("select count(distinct va), count(distinct va1) from ttypes group by v1");
-        analyzeFail("select count(distinct va), count(distinct va1) from ttypes");
-        analyzeFail("select count(distinct vm), count(distinct vm1) from ttypes group by v1");
-        analyzeFail("select count(distinct vm), count(distinct vm1) from ttypes");
-        analyzeFail("select count(distinct vs), count(distinct vs1) from ttypes group by v1");
-        analyzeFail("select count(distinct vs), count(distinct vs1) from ttypes");
+        analyzeSuccess("select count(distinct va), count(distinct va1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct va), count(distinct va1) from ttypes");
+        analyzeSuccess("select count(distinct vm), count(distinct vm1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vm), count(distinct vm1) from ttypes");
+        analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes");
         analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes group by v1");
         analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes");
 
         // single count distinct
-        analyzeFail("select count(distinct vm) from ttypes",
-                "No matching function with signature: multi_distinct_count(map");
-        analyzeFail("select count(distinct vs) from ttypes",
-                "No matching function with signature: multi_distinct_count(struct");
-        analyzeFail("select count(distinct vj) from ttypes",
-                "No matching function with signature: multi_distinct_count(json");
-        analyzeFail("select count(distinct vm) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(map");
-        analyzeFail("select count(distinct vs) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(struct");
-        analyzeFail("select count(distinct vj) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(json");
-        analyzeFail("select count(distinct va),count(distinct vm) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(array");
+        analyzeSuccess("select count(distinct vm) from ttypes");
+        analyzeSuccess("select count(distinct vs) from ttypes");
+        analyzeFail("select count(distinct vj) from ttypes");
+        analyzeSuccess("select count(distinct vm) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vs) from ttypes group by v1");
+        analyzeFail("select count(distinct vj) from ttypes group by v1");
+        analyzeSuccess("select count(distinct va),count(distinct vm) from ttypes group by v1");
 
         // group by complex types
         analyzeSuccess("select count(*) from ttypes group by vm");
@@ -264,11 +287,15 @@ public class AnalyzeAggregateTest {
         analyzeFail("select percentile_approx('c',0.5) from tall group by tb");
         analyzeFail("select percentile_approx(1,'c') from tall group by tb");
         analyzeFail("select percentile_approx(1,1,'c') from tall group by tb");
-        analyzeFail("select percentile_approx(1,1,tc) from tall group by tb");
         analyzeFail("select percentile_approx(1,1,0.5,tc) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1,1,tc) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,5) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,0.5,1047) from tall group by tb");
         analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
+        analyzeSuccess("select percentile_cont(tj,0.5) from tall group by tb");
+        analyzeSuccess("select percentile_cont(tj, cast(0.5 as double)) from tall group by tb");
+        analyzeSuccess("select percentile_cont(1, 0.4);");
+        analyzeSuccess("select percentile_cont(1, cast(0.4 as double));");
     }
 
     @Test
@@ -305,5 +332,4 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [ta='a', ta='b']) FROM tall");
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [true, true, false]) FROM tall");
     }
-
 }

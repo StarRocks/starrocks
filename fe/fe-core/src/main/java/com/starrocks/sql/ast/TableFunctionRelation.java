@@ -18,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -39,6 +40,8 @@ public class TableFunctionRelation extends Relation {
     private final FunctionParams functionParams;
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
+
+    private boolean isLeftJoin = false;
 
     public TableFunctionRelation(FunctionCallExpr functionCallExpr) {
         this(functionCallExpr.getFnName().toString().toLowerCase(), functionCallExpr.getParams(), functionCallExpr.getPos());
@@ -66,12 +69,25 @@ public class TableFunctionRelation extends Relation {
         this.tableFunction = tableFunction;
     }
 
+    public void setIsLeftJoin(boolean isLeftJoin) {
+        this.isLeftJoin = isLeftJoin;
+    }
+
+    public boolean getIsLeftJoin() {
+        return isLeftJoin;
+    }
+
     public List<Expr> getChildExpressions() {
         return childExpressions;
     }
 
     public void setChildExpressions(List<Expr> childExpressions) {
         this.childExpressions = childExpressions;
+    }
+
+    @Override
+    public TableName getResolveTableName() {
+        return alias != null ? alias : new TableName(null, "table_function_" + functionName.getFunction());
     }
 
     @Override

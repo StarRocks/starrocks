@@ -37,15 +37,18 @@ package com.starrocks.clone;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.clone.BalanceStatus.ErrCode;
+import com.starrocks.clone.BackendsFitStatus.ErrCode;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -57,7 +60,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class BackendLoadStatistic {
@@ -147,10 +149,18 @@ public class BackendLoadStatistic {
     private SystemInfoService infoService;
     private TabletInvertedIndex invertedIndex;
 
+    @SerializedName(value = "beId")
     private long beId;
+    @SerializedName(value = "clusterName")
     private String clusterName;
-
+    @SerializedName(value = "isAvailable")
     private boolean isAvailable;
+    @SerializedName(value = "cpuCores")
+    private int cpuCores;
+    @SerializedName(value = "memLimit")
+    private long memLimit;
+    @SerializedName(value = "memUsed")
+    private long memUsed;
 
     public static class LoadScore {
         public double replicaNumCoefficient = 0.5;
@@ -210,7 +220,7 @@ public class BackendLoadStatistic {
         double maxUsedPercent = Double.MIN_VALUE;
         double minUsedPercent = Double.MAX_VALUE;
         for (RootPathLoadStatistic pathStat : pathStats) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE) {
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
                 continue;
             }
 
@@ -263,6 +273,9 @@ public class BackendLoadStatistic {
         }
 
         isAvailable = be.isAvailable();
+        cpuCores = be.getCpuCores();
+        memLimit = be.getMemLimitBytes();
+        memUsed = be.getMemUsedBytes();
 
         ImmutableMap<String, DiskInfo> disks = be.getDisks();
         for (DiskInfo diskInfo : disks.values()) {
@@ -305,6 +318,10 @@ public class BackendLoadStatistic {
         long totalCapacity = 0;
         long totalUsedCapacity = 0;
         for (RootPathLoadStatistic pathStat : pathStatistics) {
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
+                continue;
+            }
+
             if (pathStat.getStorageMedium() == medium) {
                 totalCapacity += pathStat.getCapacityB();
                 totalUsedCapacity += pathStat.getUsedCapacityB();
@@ -317,6 +334,11 @@ public class BackendLoadStatistic {
         int highCounter = 0;
         for (RootPathLoadStatistic pathStat : pathStatistics) {
             if (pathStat.getStorageMedium() != medium) {
+                continue;
+            }
+
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
+                pathStat.setClazz(Classification.MID);
                 continue;
             }
 
@@ -381,9 +403,9 @@ public class BackendLoadStatistic {
         return loadScore;
     }
 
-    public BalanceStatus isFit(long tabletSize, TStorageMedium medium,
-                               List<RootPathLoadStatistic> result, boolean isSupplement) {
-        BalanceStatus status = new BalanceStatus(ErrCode.COMMON_ERROR);
+    public BackendsFitStatus isFit(long tabletSize, TStorageMedium medium,
+                                   List<RootPathLoadStatistic> result, boolean isSupplement) {
+        BackendsFitStatus status = new BackendsFitStatus(ErrCode.COMMON_ERROR);
         // try choosing path from first to end (low usage to high usage)
         List<RootPathLoadStatistic> mediumNotMatchedPath = Lists.newArrayList();
         for (RootPathLoadStatistic pathStatistic : pathStatistics) {
@@ -392,80 +414,30 @@ public class BackendLoadStatistic {
                 continue;
             }
 
-            BalanceStatus bStatus = pathStatistic.isFit(tabletSize);
+            BackendsFitStatus bStatus = pathStatistic.isFit(tabletSize);
             if (!bStatus.ok()) {
                 status.addErrMsgs(bStatus.getErrMsgs());
                 continue;
             }
 
             result.add(pathStatistic);
-            return BalanceStatus.OK;
+            return BackendsFitStatus.OK;
         }
 
         // if this is a supplement task, ignore the storage medium
         if (isSupplement || !Config.enable_strict_storage_medium_check) {
             for (RootPathLoadStatistic filteredPathStatistic : mediumNotMatchedPath) {
-                BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize);
+                BackendsFitStatus bStatus = filteredPathStatistic.isFit(tabletSize);
                 if (!bStatus.ok()) {
                     status.addErrMsgs(bStatus.getErrMsgs());
                     continue;
                 }
 
                 result.add(filteredPathStatistic);
-                return BalanceStatus.OK;
+                return BackendsFitStatus.OK;
             }
         }
         return status;
-    }
-
-    public boolean hasAvailDisk() {
-        for (RootPathLoadStatistic rootPathLoadStatistic : pathStatistics) {
-            if (rootPathLoadStatistic.getDiskState() == DiskState.ONLINE) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Classify the paths into 'low', 'mid' and 'high',
-     * and skip offline path, and path with different storage medium
-     */
-    public void getPathStatisticByClass(
-            Set<Long> low, Set<Long> mid, Set<Long> high, TStorageMedium storageMedium) {
-
-        for (RootPathLoadStatistic pathStat : pathStatistics) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE
-                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
-                continue;
-            }
-
-            if (pathStat.getClazz() == Classification.LOW) {
-                low.add(pathStat.getPathHash());
-            } else if (pathStat.getClazz() == Classification.HIGH) {
-                high.add(pathStat.getPathHash());
-            } else {
-                mid.add(pathStat.getPathHash());
-            }
-        }
-
-        LOG.debug("after adjust, backend {}, medium: {}, path classification low/mid/high: {}/{}/{}",
-                beId, storageMedium, low.size(), mid.size(), high.size());
-    }
-
-    public Set<Long> getPathStatisticForMIDAndClazz(Classification clazz, TStorageMedium storageMedium) {
-        Set<Long> paths = Sets.newHashSet();
-        for (RootPathLoadStatistic pathStat : pathStatistics) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE
-                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
-                continue;
-            }
-
-            if (pathStat.getClazz() == clazz || pathStat.getClazz() == Classification.MID) {
-                paths.add(pathStat.getPathHash());
-            }
-        }
-        return paths;
     }
 
     public List<RootPathLoadStatistic> getPathStatistics() {
@@ -482,11 +454,6 @@ public class BackendLoadStatistic {
         return pathStat.isPresent() ? pathStat.get() : null;
     }
 
-    public long getAvailPathNum(TStorageMedium medium) {
-        return pathStatistics.stream().filter(
-                p -> p.getDiskState() == DiskState.ONLINE && p.getStorageMedium() == medium).count();
-    }
-
     public boolean hasMedium(TStorageMedium medium) {
         for (RootPathLoadStatistic rootPathLoadStatistic : pathStatistics) {
             if (rootPathLoadStatistic.getStorageMedium() == medium) {
@@ -498,20 +465,30 @@ public class BackendLoadStatistic {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("be id: ").append(beId).append(", is available: ").append(isAvailable).append(", mediums: [");
+        // Basic information
+        JsonObject json = (JsonObject) GsonUtils.GSON.toJsonTree(this);
+
+        // Mediums
+        JsonArray mediums = new JsonArray();
         for (TStorageMedium medium : TStorageMedium.values()) {
-            sb.append("{medium: ").append(medium).append(", replica: ").append(totalReplicaNumMap.get(medium));
-            sb.append(", used: ").append(totalUsedCapacityMap.getOrDefault(medium, 0L));
-            final Long totalCapacity = totalCapacityMap.getOrDefault(medium, 0L);
-            sb.append(", total: ").append(new ByteSizeValue(totalCapacity));
-            sb.append(", score: ").append(loadScoreMap.getOrDefault(medium, LoadScore.DUMMY).score).append("},");
+            JsonObject mediumJson = new JsonObject();
+            mediumJson.addProperty("medium", medium.toString());
+            mediumJson.addProperty("replica", totalReplicaNumMap.get(medium));
+            mediumJson.addProperty("used", totalUsedCapacityMap.getOrDefault(medium, 0L));
+            mediumJson.addProperty("total", new ByteSizeValue(totalCapacityMap.getOrDefault(medium, 0L)).toString());
+            mediumJson.addProperty("score", loadScoreMap.getOrDefault(medium, LoadScore.DUMMY).score);
+            mediums.add(mediumJson);
         }
-        sb.append("], paths: [");
+        json.add("mediums", mediums);
+
+        // Paths
+        JsonArray paths = new JsonArray();
         for (RootPathLoadStatistic pathStat : pathStatistics) {
-            sb.append("{").append(pathStat).append("},");
+            paths.add(pathStat.toJson());
         }
-        return sb.append("]").toString();
+        json.add("paths", paths);
+
+        return json.toString();
     }
 
     public List<String> getInfo(TStorageMedium medium) {

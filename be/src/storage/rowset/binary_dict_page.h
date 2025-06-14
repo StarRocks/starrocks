@@ -131,7 +131,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 
@@ -143,7 +143,7 @@ public:
 
     Status next_dict_codes(size_t* n, Column* dst) override;
 
-    Status next_dict_codes(const SparseRange& range, Column* dst) override;
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
 private:
     Slice _data;
@@ -151,7 +151,7 @@ private:
     const BinaryPlainPageDecoder<Type>* _dict_decoder = nullptr;
     bool _parsed;
     EncodingTypePB _encoding_type;
-    std::shared_ptr<Column> _vec_code_buf;
+    ColumnPtr _vec_code_buf;
 
     uint32_t _max_value_legth = 0;
 };

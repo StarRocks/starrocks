@@ -46,6 +46,7 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -347,7 +348,7 @@ TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
 }
 
 static void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context,
-                                         const std::string& schema_hash_path, const TabletSchema* tablet_schema,
+                                         const std::string& schema_hash_path, const TabletSchemaCSPtr tablet_schema,
                                          int64_t start_ver, int64_t end_ver, int64_t rid) {
     RowsetId rowset_id;
     rowset_id.init(rid);
@@ -362,7 +363,7 @@ static void create_rowset_writer_context(RowsetWriterContext* rowset_writer_cont
     rowset_writer_context->version.second = end_ver;
 }
 
-static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchema& tablet_schema) {
+static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
     std::vector<std::string> test_data;
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, 1024);
@@ -417,7 +418,7 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
     TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
     TabletSharedPtr tablet = tablet_manager->get_tablet(12347);
     ASSERT_TRUE(tablet != nullptr);
-    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    const auto& tablet_schema = tablet->tablet_schema();
 
     // create rowset <2, 2>, <3, 3>, <3, 4>, <4, 4>, <4, 5>, <5, 5>, <5, 6>
     std::vector<Version> ver_list;
@@ -442,7 +443,7 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
     int64_t rid = 10000;
     for (auto&& ver : ver_list) {
         RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), &tablet_schema, ver.first,
+        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), tablet_schema, ver.first,
                                      ver.second, rid++);
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
@@ -453,7 +454,7 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         to_add.push_back(std::move(src_rowset));
     }
 
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 0);
     tmp_list.clear();
     tablet->list_versions(&tmp_list);
@@ -478,18 +479,18 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         to_remove.push_back(to_add[i]);
     }
     to_add.clear();
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 0);
 
     // delete same rowset again
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 0);
 
     // replace stale rowset
     to_remove.clear();
     for (int i = 0; i < 3; i++) {
         RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), &tablet_schema,
+        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), tablet_schema,
                                      ver_list[i].first, ver_list[i].second, rid++);
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
@@ -499,8 +500,36 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         RowsetSharedPtr src_rowset = *rowset_writer->build();
         to_remove.push_back(std::move(src_rowset));
     }
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 3);
+
+    ASSERT_TRUE(tablet->get_average_row_size() > 0);
+}
+
+TEST_F(TabletMgrTest, RemoveTabletInDiskDisable) {
+    TTabletId tablet_id = 4251234;
+    TSchemaHash schema_hash = 3929134;
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(tablet_id, schema_hash);
+    Status create_st = _tablet_mgr->create_tablet(create_tablet_req, _data_dirs);
+    std::vector<TabletInfo> tablet_info_vec;
+    TabletInfo tablet_info(tablet_id, schema_hash, UniqueId::gen_uid());
+
+    tablet_info_vec.push_back(tablet_info);
+    _tablet_mgr->drop_tablets_on_error_root_path(tablet_info_vec);
+}
+
+TEST_F(TabletMgrTest, GetTabletReportInfo) {
+    TTabletId tablet_id = 4251234666;
+    TSchemaHash schema_hash = 3929134666;
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(tablet_id, schema_hash);
+    Status create_st = _tablet_mgr->create_tablet(create_tablet_req, _data_dirs);
+    ASSERT_TRUE(create_st.ok());
+
+    TReportRequest request;
+    request.__isset.tablets = true;
+    Status st_report = _tablet_mgr->report_all_tablets_info(&request.tablets);
+    ASSERT_TRUE(st_report.ok());
+    ASSERT_TRUE(request.tablets.size() == 1);
 }
 
 } // namespace starrocks

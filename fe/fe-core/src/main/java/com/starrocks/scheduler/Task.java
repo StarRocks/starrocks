@@ -20,11 +20,12 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
@@ -50,6 +51,9 @@ public class Task implements Writable {
     @SerializedName("createTime")
     private long createTime;
 
+    @SerializedName("catalogName")
+    private String catalogName;
+
     @SerializedName("dbName")
     private String dbName;
 
@@ -70,7 +74,13 @@ public class Task implements Writable {
 
     // set default to ROOT is for compatibility
     @SerializedName("createUser")
+    @Deprecated
     private String createUser = AuthenticationMgr.ROOT_USER;
+
+    @SerializedName("createUserIdentity")
+    private UserIdentity userIdentity;
+
+    public Task() {}
 
     public Task(String name) {
         this.name = name;
@@ -129,6 +139,14 @@ public class Task implements Writable {
         this.createTime = createTime;
     }
 
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
+
     public String getDbName() {
         return ClusterNamespace.getNameFromFullName(dbName);
     }
@@ -148,6 +166,10 @@ public class Task implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public String getPropertiesString() {
+        return PropertyAnalyzer.stringifyProperties(properties);
     }
 
     public void setProperties(Map<String, String> properties) {
@@ -178,6 +200,14 @@ public class Task implements Writable {
         this.createUser = createUser;
     }
 
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
+    }
+
+    public void setUserIdentity(UserIdentity userIdentity) {
+        this.userIdentity = userIdentity;
+    }
+
     public String getPostRun() {
         return postRun;
     }
@@ -189,12 +219,6 @@ public class Task implements Writable {
     public static Task read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Task.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
     }
 
     @Override

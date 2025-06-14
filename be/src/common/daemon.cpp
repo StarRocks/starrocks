@@ -35,29 +35,30 @@
 #include "common/daemon.h"
 
 #include <gflags/gflags.h>
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
-#include <gperftools/malloc_extension.h>
-#endif
 
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
+#include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
-#include "runtime/memory/mem_chunk_allocator.h"
+#include "jemalloc/jemalloc.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+#include "service/backend_options.h"
+#include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
-#include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/misc.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
@@ -69,79 +70,6 @@
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
-// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-std::atomic<bool> k_starrocks_exit = false;
-
-// NOTE: when call `/api/_stop_be` http interface, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-// The difference between k_starrocks_exit and the flag is that
-// k_starrocks_exit not only require waiting for all existing fragment to complete,
-// but also waiting for all threads to exit gracefully.
-std::atomic<bool> k_starrocks_exit_quick = false;
-
-class ReleaseColumnPool {
-public:
-    explicit ReleaseColumnPool(double ratio) : _ratio(ratio) {}
-
-    template <typename Pool>
-    void operator()() {
-        _freed_bytes += Pool::singleton()->release_free_columns(_ratio);
-    }
-
-    size_t freed_bytes() const { return _freed_bytes; }
-
-private:
-    double _ratio;
-    size_t _freed_bytes = 0;
-};
-
-void gc_memory(void* arg_this) {
-    using namespace starrocks;
-    const static float kFreeRatio = 0.5;
-    GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
-
-    auto* daemon = static_cast<Daemon*>(arg_this);
-    while (!daemon->stopped()) {
-        sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-        MallocExtension::instance()->MarkThreadBusy();
-#endif
-        ReleaseColumnPool releaser(kFreeRatio);
-        ForEach<ColumnPoolList>(releaser);
-        LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-        size_t used_size = 0;
-        size_t free_size = 0;
-        MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
-        MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &free_size);
-        size_t phy_size = used_size + free_size; // physical memory usage
-        size_t total_bytes_to_gc = 0;
-        if (phy_size > config::tc_use_memory_min) {
-            size_t max_free_size = phy_size * config::tc_free_memory_rate / 100;
-            if (free_size > max_free_size) {
-                total_bytes_to_gc = free_size - max_free_size;
-            }
-        }
-        size_t bytes_to_gc = gch.bytes_should_gc(MonoTime::Now(), total_bytes_to_gc);
-        if (bytes_to_gc > 0) {
-            size_t bytes = bytes_to_gc;
-            while (bytes >= GCBYTES_ONE_STEP) {
-                MallocExtension::instance()->ReleaseToSystem(GCBYTES_ONE_STEP);
-                bytes -= GCBYTES_ONE_STEP;
-            }
-            if (bytes > 0) {
-                MallocExtension::instance()->ReleaseToSystem(bytes);
-            }
-        }
-        MallocExtension::instance()->MarkThreadIdle();
-#endif
-    }
-}
-
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
  * 1. push bytes per second
@@ -149,6 +77,7 @@ void gc_memory(void* arg_this) {
  * 3. max io util of all disks
  * 4. max network send bytes rate
  * 5. max network receive bytes rate
+ * 6. datacache memory usage
  */
 void calculate_metrics(void* arg_this) {
     int64_t last_ts = -1L;
@@ -209,16 +138,73 @@ void calculate_metrics(void* arg_this) {
 
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
-                "metadata({}), compaction({}), schema_change({}), column_pool({}), "
-                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({})",
+                "metadata({}), compaction({}), schema_change({}), "
+                "page_cache({}), update({}), chunk_allocator({}), passthrough({}), clone({}), consistency({}), "
+                "datacache({}), jit({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
-                mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
-                mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
-                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
+                mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
+                mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->passthrough_mem_bytes.value(),
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(),
+                mem_metrics->datacache_mem_bytes.value(), mem_metrics->jit_cache_mem_bytes.value());
 
-        sleep(15); // 15 seconds
+        StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
+        nap_sleep(15, [daemon] { return daemon->stopped(); });
+    }
+}
+
+struct JemallocStats {
+    int64_t allocated = 0;
+    int64_t active = 0;
+    int64_t metadata = 0;
+    int64_t resident = 0;
+    int64_t mapped = 0;
+    int64_t retained = 0;
+};
+
+static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    uint64_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+
+    int64_t value = 0;
+    sz = sizeof(value);
+    if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
+        stats->allocated = value;
+    }
+    if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
+        stats->active = value;
+    }
+    if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
+        stats->metadata = value;
+    }
+    if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
+        stats->resident = value;
+    }
+    if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
+        stats->mapped = value;
+    }
+    if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
+        stats->retained = value;
+    }
+}
+
+// Tracker the memory usage of jemalloc
+void jemalloc_tracker_daemon(void* arg_this) {
+    auto* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
+        JemallocStats stats;
+        retrieve_jemalloc_stats(&stats);
+
+        // Jemalloc metadata
+        if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
+            auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
+            int64_t delta = stats.metadata - tracker->consumption();
+            tracker->consume(delta);
+        }
+
+        nap_sleep(1, [daemon] { return daemon->stopped(); });
     }
 }
 
@@ -234,12 +220,12 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     if (init_system_metrics) {
         auto st = DiskInfo::get_disk_devices(paths, &disk_devices);
         if (!st.ok()) {
-            LOG(WARNING) << "get disk devices failed, status=" << st.get_error_msg();
+            LOG(WARNING) << "get disk devices failed, status=" << st.message();
             return;
         }
-        st = get_inet_interfaces(&network_interfaces);
+        st = get_inet_interfaces(&network_interfaces, BackendOptions::is_bind_ipv6());
         if (!st.ok()) {
-            LOG(WARNING) << "get inet interfaces failed, status=" << st.get_error_msg();
+            LOG(WARNING) << "get inet interfaces failed, status=" << st.message();
             return;
         }
     }
@@ -247,8 +233,12 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
 }
 
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
-    LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
-    k_starrocks_exit.store(true);
+    if (info == nullptr) {
+        LOG(ERROR) << "got signal: " << strsignal(signo) << "from unknown pid, is going to exit";
+    } else {
+        LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
+    }
+    set_process_exit();
 }
 
 int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
@@ -287,11 +277,8 @@ void init_minidump() {
 #endif
 }
 
-void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
-    // google::SetVersionString(get_build_version(false));
-    // google::ParseCommandLineFlags(&argc, &argv, true);
-    google::ParseCommandLineFlags(&argc, &argv, true);
-    if (FLAGS_cn) {
+void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
+    if (as_cn) {
         init_glog("cn", true);
     } else {
         init_glog("be", true);
@@ -307,16 +294,21 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     LOG(INFO) << DiskInfo::debug_string();
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
+    LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
+    auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
+    if (!unsupported_flags.empty()) {
+        LOG(FATAL) << fmt::format(
+                "CPU flags check failed! The following instruction sets are enabled during compiling but not supported "
+                "in current running env: {}!",
+                fmt::join(unsupported_flags, ","));
+        std::abort();
+    }
 
-    UserFunctionCache::instance()->init(config::user_function_dir);
+    CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
     date::init_date_cache();
 
     TimezoneUtils::init_time_zones();
-
-    std::thread gc_thread(gc_memory, this);
-    Thread::set_thread_name(gc_thread, "gc_daemon");
-    _daemon_threads.emplace_back(std::move(gc_thread));
 
     init_starrocks_metrics(paths);
 
@@ -326,8 +318,22 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }
 
+    if (config::enable_jemalloc_memory_tracker) {
+        std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
+        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
+        _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
+    }
+
     init_signals();
     init_minidump();
+#if defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
+#else
+    // Don't bother set the limit if the process is running with very limited memory capacity
+    if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
+        // set mem hook to reject the memory allocation if large than available physical memory detected.
+        set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
+    }
+#endif
 }
 
 void Daemon::stop() {

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -27,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -43,10 +43,16 @@ public class MergeTwoProjectRule extends TransformationRule {
         LogicalProjectOperator firstProject = (LogicalProjectOperator) input.getOp();
         LogicalProjectOperator secondProject = (LogicalProjectOperator) input.getInputs().get(0).getOp();
 
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(secondProject.getColumnRefMap());
         Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : firstProject.getColumnRefMap().entrySet()) {
-            resultMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+            ScalarOperator result = rewriter.rewrite(entry.getValue());
+            if (result.isConstant()) {
+                // better to rewrite all expression, but it's unnecessary
+                result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            }
+            resultMap.put(entry.getKey(), result);
         }
 
         // ASSERT_TRUE must be executed in the runtime, so it should be kept anyway.

@@ -46,6 +46,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -73,7 +75,7 @@ SnapshotManager* SnapshotManager::instance() {
     if (_s_instance == nullptr) {
         std::lock_guard<std::mutex> lock(_mlock);
         if (_s_instance == nullptr) {
-            _s_instance = new SnapshotManager(ExecEnv::GetInstance()->clone_mem_tracker());
+            _s_instance = new SnapshotManager(GlobalEnv::GetInstance()->clone_mem_tracker());
         }
     }
     return _s_instance;
@@ -166,9 +168,11 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // load original tablet meta
     std::string cloned_header_file = clone_dir + "/" + std::to_string(tablet_id) + ".hdr";
     std::string cloned_meta_file = clone_dir + "/meta";
+    std::string clone_dcgs_snapshot_file = clone_dir + "/" + std::to_string(tablet_id) + ".dcgs_snapshot";
 
     bool has_header_file = fs::path_exist(cloned_header_file);
     bool has_meta_file = fs::path_exist(cloned_meta_file);
+    bool has_dcgs_snapshot_file = fs::path_exist(clone_dcgs_snapshot_file);
     if (has_header_file && has_meta_file) {
         return Status::InternalError("found both header and meta file");
     }
@@ -196,7 +200,38 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // equal to tablet id in meta
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
-    TabletSchema tablet_schema(new_tablet_meta_pb.schema());
+    auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
+
+    // handle inverted index file
+    std::vector<std::string> all_files;
+    std::vector<std::string> new_inverted_index_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
+    for (const auto& file : all_files) {
+        if (CLucenePlugin::is_index_files(file)) {
+            auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
+            auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
+            auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
+            if (p1 == nullptr || p2 == nullptr || p3 == nullptr) {
+                return Status::InternalError("invalid index file name: " + file);
+            }
+
+            std::string rowsetid = file.substr(0, p1 - file.data());
+            std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
+            std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
+            std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
+                    clone_dir, rowsetid, std::stoi(segment_id), std::stoi(index_id));
+
+            if (!fs::path_exist(inverted_index_path)) {
+                RETURN_IF_ERROR(fs::create_directories(inverted_index_path));
+            }
+
+            std::string new_file_name = file.substr(p3 - file.data() + 1, file.data() + file.size() - p3);
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file,
+                                                               inverted_index_path + "/" + new_file_name));
+        }
+    }
+
+    std::unordered_map<string, string> old_to_new_rowsetid;
 
     std::unordered_map<Version, RowsetMetaPB*, HashOfVersion> rs_version_map;
     for (const auto& visible_rowset : cloned_tablet_meta_pb.rs_metas()) {
@@ -207,6 +242,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
         rowset_meta->set_tablet_schema_hash(schema_hash);
         Version rowset_version = {visible_rowset.start_version(), visible_rowset.end_version()};
         rs_version_map[rowset_version] = rowset_meta;
+        old_to_new_rowsetid.insert({visible_rowset.rowset_id(), rowset_id.to_string()});
     }
 
     for (const auto& inc_rowset : cloned_tablet_meta_pb.inc_rs_metas()) {
@@ -222,18 +258,40 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
         RETURN_IF_ERROR(_rename_rowset_id(inc_rowset, clone_dir, tablet_schema, rowset_id, rowset_meta));
         rowset_meta->set_tablet_id(tablet_id);
         rowset_meta->set_tablet_schema_hash(schema_hash);
+        old_to_new_rowsetid.insert({inc_rowset.rowset_id(), rowset_id.to_string()});
+    }
+
+    if (has_dcgs_snapshot_file) {
+        DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+        auto st = DeltaColumnGroupListHelper::parse_snapshot(clone_dcgs_snapshot_file, dcg_snapshot_pb);
+        if (!st.ok()) {
+            return Status::InternalError("failed to parse dcgs meta");
+        }
+
+        // reset rowsetid, tablet id in PB
+        int idx = 0;
+        for (auto& rowset_id : (*dcg_snapshot_pb.mutable_rowset_id())) {
+            rowset_id = old_to_new_rowsetid[rowset_id];
+            (*dcg_snapshot_pb.mutable_tablet_id())[idx] = tablet_id;
+            idx++;
+        }
+
+        st = DeltaColumnGroupListHelper::save_snapshot(clone_dcgs_snapshot_file, dcg_snapshot_pb);
+        if (!st.ok()) {
+            return Status::InternalError("failed to save dcgs meta");
+        }
     }
 
     return TabletMeta::save(cloned_header_file, new_tablet_meta_pb);
 }
 
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
-                                          TabletSchema& tablet_schema, const RowsetId& rowset_id,
+                                          TabletSchemaCSPtr& tablet_schema, const RowsetId& rowset_id,
                                           RowsetMetaPB* new_rs_meta_pb) {
     // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
+    if (!RowsetFactory::create_rowset(tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -247,7 +305,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.partition_id = org_rowset_meta->partition_id();
     context.tablet_schema_hash = org_rowset_meta->tablet_schema_hash();
     context.rowset_path_prefix = new_path;
-    context.tablet_schema = &tablet_schema;
+    context.tablet_schema = org_rowset_meta->tablet_schema() ? org_rowset_meta->tablet_schema() : tablet_schema;
     context.rowset_state = org_rowset_meta->rowset_state();
     context.version = org_rowset_meta->version();
     // keep segments_overlap same as origin rowset
@@ -268,8 +326,8 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
         LOG(WARNING) << "Fail to load new rowset: " << st;
         return st;
     }
-    (*new_rowset)->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
-    org_rowset->remove();
+    (*new_rowset)->rowset_meta()->get_full_meta_pb(new_rs_meta_pb);
+    RETURN_IF_ERROR(org_rowset->remove());
     return Status::OK();
 }
 
@@ -319,6 +377,9 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
             return Status::VersionAlreadyMerged(strings::Substitute("version $0 has been merged", v));
         } else if (rowset == nullptr) {
             return Status::RuntimeError(strings::Substitute("no incremental rowset $0", v));
+        } else if (rowset->rowset_meta()->partial_schema_change()) {
+            return Status::RuntimeError(
+                    strings::Substitute("rowset with version $0 has done partial schema change", v));
         }
         snapshot_rowsets.emplace_back(std::move(rowset));
     }
@@ -379,7 +440,8 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
 
     // 4. Link files to snapshot directory.
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id(), 0 /*snapshot_version*/);
+        auto st = rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id(),
+                                        0 /*snapshot_version*/);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
@@ -443,7 +505,8 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     }
 
     for (const auto& snapshot_rowset : snapshot_rowsets) {
-        auto st = snapshot_rowset->link_files_to(snapshot_dir, snapshot_rowset->rowset_id(), snapshot_version);
+        auto st = snapshot_rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir,
+                                                 snapshot_rowset->rowset_id(), snapshot_version);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
@@ -454,6 +517,61 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     // 4. Build snapshot header/meta file for the non-PrimaryKey tablet.
     if (tablet->updates() != nullptr) {
         return snapshot_id_path;
+    }
+
+    // 5. snapshot dcgs for non-PrimaryKey tablet
+    auto meta_store = tablet->data_dir()->get_meta();
+    DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+    for (const auto& snapshot_rowset : snapshot_rowsets) {
+        for (int i = 0; i < snapshot_rowset->num_segments(); ++i) {
+            int64_t tablet_id = tablet->tablet_id();
+            RowsetId rowsetid = snapshot_rowset->rowset_meta()->rowset_id();
+
+            DeltaColumnGroupList dcgs;
+            RETURN_IF_ERROR(TabletMetaManager::get_delta_column_group(meta_store, tablet_id, rowsetid, i,
+                                                                      snapshot_version, &dcgs));
+
+            DeltaColumnGroupListPB dcg_list_pb;
+            DeltaColumnGroupListSerializer::serialize_delta_column_group_list(dcgs, &dcg_list_pb);
+
+            dcg_snapshot_pb.add_tablet_id(tablet_id);
+            dcg_snapshot_pb.add_rowset_id(rowsetid.to_string());
+            dcg_snapshot_pb.add_segment_id(i);
+
+            auto add_dcg_list_pb = dcg_snapshot_pb.add_dcg_lists();
+            add_dcg_list_pb->CopyFrom(dcg_list_pb);
+        }
+    }
+
+    std::stringstream dcg_snapshot_path;
+    dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
+    RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
+
+    // handle inverted index files
+    std::vector<std::string> all_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir, &all_files));
+    for (const auto& file : all_files) {
+        auto is_dir = fs::is_directory(snapshot_dir + "/" + file);
+        if (is_dir.ok() && is_dir.value() && file.find("ivt", 0) != std::string::npos) {
+            std::vector<std::string> index_files;
+            RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir + "/" + file, &index_files));
+            for (const auto& index_file : index_files) {
+                auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
+                auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
+                auto* p3 = (char*)std::memchr(p2 + 1, '.', file.size() - (p2 - file.data() + 1));
+
+                std::string rowsetid = file.substr(0, p1 - file.data());
+                std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
+                std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
+
+                std::string old_name = snapshot_dir + "/" + file + "/" + index_file;
+                std::string new_name =
+                        snapshot_dir + "/" + rowsetid + "_" + segment_id + "_" + index_id + "_" + index_file;
+
+                RETURN_IF_ERROR(FileSystem::Default()->rename_file(old_name, new_name));
+            }
+            RETURN_IF_ERROR(FileSystem::Default()->delete_dir_recursive(snapshot_dir + "/" + file));
+        }
     }
 
     snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
@@ -481,7 +599,17 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
     // 1. get missing rowsets for snapshot
     std::shared_lock rdlock(tablet->get_header_lock());
     auto st = tablet->updates()->get_rowsets_for_incremental_snapshot(missing_version_ranges, snapshot_rowsets);
-    if (st.ok() && snapshot_rowsets.empty()) {
+
+    bool need_full_snapshot = false;
+    for (const auto& rowset : snapshot_rowsets) {
+        if (rowset->rowset_meta()->partial_schema_change()) {
+            need_full_snapshot = true;
+            LOG(FATAL) << "incremental rowset with partial schema change";
+            break;
+        }
+    }
+
+    if (st.ok() && (snapshot_rowsets.empty() || need_full_snapshot)) {
         snapshot_type = SNAPSHOT_TYPE_FULL;
         full_snapshot_version = tablet->updates()->max_version();
         st = tablet->updates()->get_applied_rowsets(full_snapshot_version, &snapshot_rowsets);
@@ -536,7 +664,8 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
 
     // 4. Link files to snapshot directory.
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id(), full_snapshot_version);
+        auto st = rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id(),
+                                        full_snapshot_version);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
@@ -616,8 +745,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         auto version = meta_pb.mutable_updates()->add_versions();
 
         uint32_t next_segment_id = 0;
-        version->mutable_version()->set_major(snapshot_version);
-        version->mutable_version()->set_minor(0);
+        version->mutable_version()->set_major_number(snapshot_version);
+        version->mutable_version()->set_minor_number(0);
         version->set_creation_time(time(nullptr));
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rsid = rowset_meta_pb.rowset_seg_id();
@@ -626,8 +755,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);
         meta_pb.mutable_updates()->set_next_log_id(0);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_major(snapshot_version);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_major_number(snapshot_version);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_minor_number(0);
     }
 
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -645,7 +774,8 @@ StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& f
     return std::move(snapshot_meta);
 }
 
-Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir) {
+Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
+                                             const TabletSchemaCSPtr& tablet_schema) {
     for (auto& rowset_meta_pb : snapshot_meta->rowset_metas()) {
         RowsetId old_rowset_id;
         RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -657,6 +787,42 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             auto old_path = Rowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
             auto new_path = Rowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
+            if (tablet_schema != nullptr && !tablet_schema->indexes()->empty()) {
+                int segment_n = seg_id;
+                const auto& indexes = *tablet_schema->indexes();
+                for (const auto& index : indexes) {
+                    if (index.index_type() == GIN) {
+                        std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
+                                clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                        std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
+                                clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
+
+                        RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
+                        std::set<std::string> files;
+                        RETURN_IF_ERROR(fs::list_dirs_files(src_inverted_file_path, nullptr, &files));
+                        for (const auto& file : files) {
+                            auto src_absolute_path = fmt::format("{}/{}", src_inverted_file_path, file);
+                            auto dst_absolute_path = fmt::format("{}/{}", dst_inverted_link_path, file);
+
+                            if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
+                                PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
+                                return Status::RuntimeError(
+                                        strings::Substitute("Fail to link index inverted file from $0 to $1",
+                                                            src_absolute_path, dst_absolute_path));
+                            }
+                        }
+                    } else if (index.index_type() == VECTOR) {
+                        std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
+                                clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                        std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
+                                clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
+                        if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
+                            PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
+                            return Status::RuntimeError("Fail to link index data file");
+                        }
+                    }
+                }
+            }
         }
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = Rowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
@@ -669,6 +835,9 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
+        // reset rowsetid means that it is different from the rowset in snapshot meta.
+        // It is reasonable that reset the creation time here.
+        rowset_meta_pb.set_creation_time(UnixSeconds());
     }
     return Status::OK();
 }

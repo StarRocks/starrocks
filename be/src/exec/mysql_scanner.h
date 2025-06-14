@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "util/slice.h"
 
 #ifndef __StarRocksMysql
 #define __StarRocksMysql void

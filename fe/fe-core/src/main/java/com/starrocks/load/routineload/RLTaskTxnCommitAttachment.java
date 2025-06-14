@@ -40,7 +40,6 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -62,6 +61,8 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private long taskExecutionTimeMs;
     @SerializedName("progress")
     private RoutineLoadProgress progress;
+    @SerializedName("timestampProgress")
+    private RoutineLoadProgress timestampProgress;
     private String errorLogUrl;
     private long loadedBytes;
 
@@ -82,10 +83,14 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
         switch (rlTaskTxnCommitAttachment.getLoadSourceType()) {
             case KAFKA:
-                this.progress = new KafkaProgress(rlTaskTxnCommitAttachment.getKafkaRLTaskProgress());
+                this.progress = new KafkaProgress(rlTaskTxnCommitAttachment.getKafkaRLTaskProgress()
+                        .getPartitionCmtOffset());
+                this.timestampProgress = new KafkaProgress(rlTaskTxnCommitAttachment.getKafkaRLTaskProgress().
+                        getPartitionCmtOffsetTimestamp());
                 break;
             case PULSAR:
                 this.progress = new PulsarProgress(rlTaskTxnCommitAttachment.getPulsarRLTaskProgress());
+                this.timestampProgress = new PulsarProgress();
                 break;
             default:
                 break;
@@ -136,6 +141,10 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         return progress;
     }
 
+    public RoutineLoadProgress getTimestampProgress() {
+        return timestampProgress;
+    }
+
     public String getErrorLogUrl() {
         return errorLogUrl;
     }
@@ -161,15 +170,5 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         out.writeLong(receivedBytes);
         out.writeLong(taskExecutionTimeMs);
         progress.write(out);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        filteredRows = in.readLong();
-        loadedRows = in.readLong();
-        unselectedRows = in.readLong();
-        receivedBytes = in.readLong();
-        taskExecutionTimeMs = in.readLong();
-        progress = RoutineLoadProgress.read(in);
     }
 }

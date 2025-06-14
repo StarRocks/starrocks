@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <storage/flat_json_config.h>
+
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/global_dict/types_fwd_decl.h"
@@ -57,8 +59,9 @@ public:
 
     std::string rowset_path_prefix;
 
-    const TabletSchema* tablet_schema = nullptr;
-    std::shared_ptr<TabletSchema> partial_update_tablet_schema = nullptr;
+    TabletSchemaCSPtr tablet_schema = nullptr;
+    TabletSchemaCSPtr full_tablet_schema = nullptr;
+    bool is_partial_update = false;
     std::vector<int32_t> referenced_column_ids;
 
     RowsetId rowset_id{};
@@ -89,6 +92,17 @@ public:
 
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+
+    // gtid
+    int64_t gtid = 0;
+    // Is pk compaction output writer
+    bool is_pk_compaction = false;
+    // is compaction job
+    bool is_compaction = false;
+
+    std::map<string, string>* column_to_expr_value = nullptr;
+
+    std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
 };
 
 } // namespace starrocks

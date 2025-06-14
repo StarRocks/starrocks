@@ -1,28 +1,10 @@
--- name: test_without_property
+-- name: test_without_property @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1;
 insert into ss values('2021-01-01', 1);
 select * from ss;
 
 -- name: test_automatic_partition_table_pipeline
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
-insert into ss values('2023-02-14', 2),('2033-03-01',2);
-select count(*) from ss;
-show partitions from ss;
-insert into ss select date(add_months(event_day, 1)),pv from ss;
-select count(*) from ss;
-show partitions from ss;
-insert into ss select date(add_months(event_day, 6)),pv from ss;
-select count(*) from ss;
-show partitions from ss;
-insert into ss select date(add_months(event_day, 12)),pv from ss;
-select count(*) from ss;
-show partitions from ss;
-insert into ss select * from ss;
-select count(*) from ss;
-show partitions from ss;
--- name: test_automatic_partition_table_non_pipeline
-CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
-set enable_pipeline=false;
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
 select count(*) from ss;
 show partitions from ss;
@@ -88,7 +70,7 @@ CREATE TABLE dt_minute( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) 
 CREATE TABLE dt_second( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('second', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
--- name: test_time_slice
+-- name: test_automatic_partition_time_slice
 CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss_month values('2023-02-14 12:31:07', 2);
 show partitions from ss_month;
@@ -117,7 +99,7 @@ show partitions from ss_year;
 -- show partitions from ss_hour;
 -- insert into ss_hour values('2023-02-14 14:31:08', 2);
 -- show partitions from ss_hour;
--- name: test_automatic_partition_in_new_node
+-- name: test_automatic_partition_in_new_node @sequential
 CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into dt_month values('2023-02-14 12:31:07', 2);
 insert into dt_month values('2023-03-14 12:31:07', 2);
@@ -128,7 +110,7 @@ create table p(c1 int null, c2 date null)engine=olap duplicate key(c1,c2) partit
 insert into p values(1,'2021-01-01');
 show partitions from p;
 select * from p;
--- name: test_multi_fragment_open_new_node_channel
+-- name: test_multi_fragment_open_new_node_channel @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
 insert into ss select date(add_months(event_day, 1)),pv from ss;
@@ -169,7 +151,7 @@ show partitions from ss;
 insert into ss values('2002-01-01', 2);
 show partitions from ss;
 
--- name: test_shadown_partition
+-- name: test_shadow_partition @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="true");
 show partitions from ss;
@@ -184,3 +166,48 @@ insert into ss values('0001-02-01', 2);
 select * from ss;
 alter table ss drop partition p200201;
 select * from ss;
+
+-- name: test_two_replica
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "2");
+insert into ss values('2002-01-01', 2);
+insert into ss values('2002-01-02', 2);
+insert into ss values('2002-01-03', 2);
+insert into ss values('2002-01-04', 2);
+insert into ss values('2002-01-05', 2);
+insert into ss values('2002-01-06', 2);
+insert into ss values('2002-01-07', 2);
+insert into ss values('2002-01-08', 2);
+insert into ss values('2002-01-09', 2);
+select * from ss;
+
+
+-- name: test_schema_change
+CREATE TABLE ss( event_day DATE, pv BIGINT, cc int) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into ss values('2002-01-01', 1, 2);
+insert into ss values('2002-01-02', 1, 2);
+alter table ss modify column cc INT AFTER event_day;
+insert into ss values('2002-01-03', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-04', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-05', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-06', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-07', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-08', 1, 2);
+select sleep(3);
+function: wait_alter_table_not_pending()
+select * from ss;
+
+
+-- name: test_time_slice_with_minute_granularity
+create table tt(k datetime) partition by time_slice(k, interval 10 minute);
+insert into tt values(now());
+select count(*) from tt;
+
+-- name: test_date_trunc_with_minute_granularity
+create table tt(k datetime) partition by date_trunc('minute', k);
+insert into tt values(now());
+select count(*) from tt;

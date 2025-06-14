@@ -19,6 +19,7 @@
 
 #include "column/column_helper.h"
 #include "exec/connector_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -72,10 +73,10 @@ ChunkPtr HdfsScanNodeTest::_create_chunk() {
     auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
     auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true);
     auto col4 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME), true);
-    chunk->append_column(col1, 0);
-    chunk->append_column(col2, 1);
-    chunk->append_column(col3, 2);
-    chunk->append_column(col4, 3);
+    chunk->append_column(std::move(col1), 0);
+    chunk->append_column(std::move(col2), 1);
+    chunk->append_column(std::move(col3), 2);
+    chunk->append_column(std::move(col4), 3);
 
     return chunk;
 }
@@ -140,18 +141,19 @@ void HdfsScanNodeTest::_create_runtime_state() {
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
     _runtime_state->init_mem_trackers(id);
+    pipeline::FragmentContext* fragment_context = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
+    fragment_context->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_ctx(fragment_context);
 }
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -163,14 +165,12 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_partition() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     // partition_conjuncts
@@ -235,7 +235,9 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
 
     THdfsPartition partition;
     std::map<int64_t, THdfsPartition> p_map;
@@ -267,7 +269,9 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
 
     // hdfs table
     THdfsTable t_hdfs_table;
@@ -336,7 +340,7 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
-    _table_desc->create_key_exprs(_runtime_state.get(), _pool, _runtime_state->chunk_size());
+    _table_desc->create_key_exprs(_runtime_state.get(), _pool);
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;
@@ -370,8 +374,7 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         ASSERT_FALSE(eos);
         ASSERT_EQ(chunk->num_rows(), 4);
 
-        status = hdfs_scan_node->close(_runtime_state.get());
-        ASSERT_TRUE(status.ok());
+        hdfs_scan_node->close(_runtime_state.get());
     }
 
     // test filter partition
@@ -406,8 +409,7 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         status = hdfs_scan_node->get_next(_runtime_state.get(), &chunk, &eos);
         ASSERT_TRUE(eos);
 
-        status = hdfs_scan_node->close(_runtime_state.get());
-        ASSERT_TRUE(status.ok());
+        hdfs_scan_node->close(_runtime_state.get());
     }
 }
 } // namespace starrocks

@@ -15,14 +15,14 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.StarRocksFE;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.http.UnauthorizedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 
 public class StopFeAction extends RestBaseAction {
@@ -36,9 +36,8 @@ public class StopFeAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws UnauthorizedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        checkActionOnSystem(currentUser, PrivilegeType.OPERATE);
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        Authorizer.checkSystemAction(ConnectContext.get(), PrivilegeType.OPERATE);
 
         response.setContentType("application/json");
         RestResult result = new RestResult();

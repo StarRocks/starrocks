@@ -79,7 +79,17 @@ add_self()
     while true
     do
         log_stderr "Add myself ($MY_SELF:$HEARTBEAT_PORT) into FE ..."
-        timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\";"
+        # if KUBE_STARROCKS_MULTI_WAREHOUSE environment variable is set, add compute node to the specified warehouse
+        if  [[ "x$KUBE_STARROCKS_MULTI_WAREHOUSE" != "x" ]] ; then
+            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
+              "CREATE WAREHOUSE IF NOT EXISTS $KUBE_STARROCKS_MULTI_WAREHOUSE;"
+            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
+              "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\" INTO WAREHOUSE $KUBE_STARROCKS_MULTI_WAREHOUSE;"
+        else
+            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
+              "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\";"
+        fi
+
         memlist=`show_compute_nodes $svc`
         if echo "$memlist" | grep -q -w "$MY_SELF" &>/dev/null ; then
             break;
@@ -103,7 +113,8 @@ drop_my_self()
     local start=`date +%s`
     local memlist=
 
-    while true
+    # If we infinitely retry to drop myself, it may cause the pod to be stuck in the Terminating state.
+    for ((i=0;i<3;++i))
     do
         log_stderr "try to drop myself($MY_SELF) from FE ..."
         memlist=`show_compute_nodes $svc`
@@ -112,11 +123,12 @@ drop_my_self()
             # return code 0: no error
             selfinfo=`echo "$memlist" | grep -w "\<$MY_SELF\>" | awk '{printf("%s:%s\n", $2, $3);}'`
             if [[ "x$selfinfo" == "x" ]] ; then
-                log_stderr "myself $selfinfo is not in fe cluster"
+                log_stderr "myself is not in fe cluster"
                 return 0
             else
                 log_stderr "drop my self $selfinfo ..."
                 timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM DROP COMPUTE NODE \"$selfinfo\";"
+                break;
             fi
         else
             log_stderr "Got error $ret, sleep and retry ..."
@@ -160,11 +172,11 @@ if [[ "x$svc_name" == "x" ]] ; then
     exit 1
 fi
 
+update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
 trap exit_clean SIGTERM
 
-update_conf_from_configmap
 log_stderr "run start_cn.sh"
 
 addition_args=
@@ -173,3 +185,12 @@ if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     addition_args="--logconsole"
 fi
 $STARROCKS_HOME/bin/start_cn.sh $addition_args
+ret=$?
+if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
+    nol=50
+    log_stderr "Last $nol lines of cn.INFO ..."
+    tail -n $nol $STARROCKS_HOME/log/cn.INFO
+    log_stderr "Last $nol lines of cn.out ..."
+    tail -n $nol $STARROCKS_HOME/log/cn.out
+fi
+exit $ret

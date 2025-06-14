@@ -48,8 +48,12 @@ public class FieldReference extends Expr {
         return fieldIndex;
     }
 
+    public TableName getTblName() {
+        return tblName;
+    }
+
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsWithoutChild(Object o) {
         if (this == o) {
             return true;
         }

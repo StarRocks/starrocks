@@ -30,4 +30,7 @@ class RoundRobinState;
 class PassthroughState;
 struct AdaptiveDopParam;
 
+class Event;
+using EventPtr = std::shared_ptr<Event>;
+
 } // namespace starrocks::pipeline

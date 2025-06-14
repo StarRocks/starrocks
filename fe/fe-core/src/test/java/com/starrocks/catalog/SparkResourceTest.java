@@ -36,14 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.privilege.PrivilegeActions;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.utframe.UtFrameUtils;
@@ -82,24 +79,28 @@ public class SparkResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                             @Injectable Auth auth)
-            throws UserException {
+    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
-                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
-                result = true;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 
         // master: spark, deploy_mode: cluster
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         SparkResource resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertEquals(name, resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());
@@ -114,7 +115,6 @@ public class SparkResourceTest {
         properties.put("spark.submit.deployMode", "client");
         stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertEquals("client", resource.getDeployMode().name().toLowerCase());
 
@@ -128,7 +128,6 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertTrue(resource.isYarnMaster());
         Map<String, String> map = resource.getSparkConfigs();
@@ -151,7 +150,6 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertTrue(resource.isYarnMaster());
         map = resource.getSparkConfigs();
@@ -159,15 +157,8 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                                            @Injectable Auth auth) throws UserException {
-        new Expectations() {
-            {
-                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
-                result = true;
-            }
-        };
-
+    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
         // master: yarn, deploy_mode: cluster
         // yarn resource manager ha
         properties.put("spark.master", "yarn");
@@ -178,23 +169,35 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm3", "host3");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         Resource.fromStmt(stmt);
     }
 
     @Test
-    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                           @Injectable Auth auth)
-            throws UserException {
+    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
-                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
-                result = true;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 
@@ -205,7 +208,6 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         SparkResource resource = (SparkResource) Resource.fromStmt(stmt);
         SparkResource copiedResource = resource.getCopiedResource();
         Map<String, String> newProperties = Maps.newHashMap();
@@ -221,24 +223,27 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                             @Injectable Auth auth)
-            throws UserException {
+    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws StarRocksException {
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = false;
-                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
-                result = true;
-                result = true;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         Resource.fromStmt(stmt);
     }
 }

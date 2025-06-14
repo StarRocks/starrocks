@@ -29,12 +29,19 @@ public class ShowCatalogsStmt extends ShowStmt {
                     .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
                     .build();
 
-    public ShowCatalogsStmt() {
-        this(NodePosition.ZERO);
+    private final String pattern;
+
+    public ShowCatalogsStmt(String pattern) {
+        this(pattern, NodePosition.ZERO);
     }
 
-    public ShowCatalogsStmt(NodePosition pos) {
+    public ShowCatalogsStmt(String pattern, NodePosition pos) {
         super(pos);
+        this.pattern = pattern;
+    }
+
+    public String getPattern() {
+        return pattern;
     }
 
     @Override

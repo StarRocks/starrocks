@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "exec/avro_cpp_scanner.h"
 #include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
@@ -21,12 +22,17 @@
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
 #include "exprs/expr.h"
+#include "file_chunk_sink.h"
 
 namespace starrocks::connector {
 
 DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<FileDataSourceProvider>(scan_node, plan_node);
+}
+
+std::unique_ptr<ConnectorChunkSinkProvider> FileConnector::create_data_sink_provider() const {
+    return std::make_unique<FileChunkSinkProvider>();
 }
 
 // ================================
@@ -57,6 +63,10 @@ FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TSc
     }
 }
 
+std::string FileDataSource::name() const {
+    return "FileDataSource";
+}
+
 Status FileDataSource::open(RuntimeState* state) {
     DCHECK(state != nullptr);
     RETURN_IF_CANCELLED(state);
@@ -85,7 +95,14 @@ Status FileDataSource::_create_scanner() {
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
-        _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        if (_scan_range.params.__isset.file_scan_type &&
+            (_scan_range.params.file_scan_type == TFileScanType::FILES_INSERT ||
+             _scan_range.params.file_scan_type == TFileScanType::FILES_QUERY)) {
+            _scanner = std::make_unique<AvroCppScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        } else {
+            // avro routine load
+            _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        }
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }
@@ -104,7 +121,6 @@ void FileDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
         _scanner->close();
     }
-    Expr::close(_conjunct_ctxs, state);
 }
 
 Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -171,7 +187,7 @@ void FileDataSource::_init_counter() {
     _scanner_total_timer = ADD_TIMER(_runtime_profile, "ScannerTotalTime");
     {
         static const char* prefix = "FileScanner";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         RuntimeProfile* p = _runtime_profile;
         _scanner_fill_timer = ADD_CHILD_TIMER(p, "FillTime", prefix);
         _scanner_read_timer = ADD_CHILD_TIMER(p, "ReadTime", prefix);
@@ -179,6 +195,7 @@ void FileDataSource::_init_counter() {
         _scanner_materialize_timer = ADD_CHILD_TIMER(p, "MaterializeTime", prefix);
         _scanner_init_chunk_timer = ADD_CHILD_TIMER(p, "CreateChunkTime", prefix);
         _scanner_file_reader_timer = ADD_CHILD_TIMER(p, "FileReadTime", prefix);
+        _scanner_file_read_count = ADD_CHILD_COUNTER(p, "FileReadCount", TUnit::UNIT, prefix);
     }
 }
 
@@ -193,6 +210,7 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_materialize_timer, _counter.materialize_ns);
     COUNTER_UPDATE(_scanner_init_chunk_timer, _counter.init_chunk_ns);
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
+    COUNTER_UPDATE(_scanner_file_read_count, _counter.file_read_count);
 }
 
 } // namespace starrocks::connector

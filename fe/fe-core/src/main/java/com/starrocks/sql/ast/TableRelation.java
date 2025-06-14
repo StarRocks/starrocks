@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -44,30 +45,44 @@ public class TableRelation extends Relation {
     // Support temporary partition
     private PartitionNames partitionNames;
     private final List<Long> tabletIds;
+    private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
-    // optional temporal clause for external MySQL tables that support this syntax
-    private String temporalClause;
+    // used for mysql external table
+    private String queryPeriodString;
+
+    // used for time travel
+    private QueryPeriod queryPeriod;
+
+    // TABLE SAMPLE
+    private TableSampleClause sampleClause;
 
     private Expr partitionPredicate;
 
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+
+    private List<String> pruneScanColumns = Collections.emptyList();
+
+    private long gtid = 0;
 
     public TableRelation(TableName name) {
         super(name.getPos());
         this.name = name;
         this.partitionNames = null;
         this.tabletIds = Lists.newArrayList();
+        this.replicaIds = Lists.newArrayList();
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds) {
-        this(name, partitionNames, tabletIds, NodePosition.ZERO);
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds) {
+        this(name, partitionNames, tabletIds, replicaIds, NodePosition.ZERO);
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, NodePosition pos) {
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds,
+                         NodePosition pos) {
         super(pos);
         this.name = name;
         this.partitionNames = partitionNames;
         this.tabletIds = tabletIds;
+        this.replicaIds = replicaIds;
     }
 
     public TableName getName() {
@@ -92,11 +107,16 @@ public class TableRelation extends Relation {
 
     // Check whether the table has some table hints, some rules should not be applied.
     public boolean hasTableHints() {
-        return partitionNames != null || isSyncMVQuery() || (tabletIds != null && !tabletIds.isEmpty());
+        return partitionNames != null || isSyncMVQuery() || (tabletIds != null && !tabletIds.isEmpty()) ||
+                (replicaIds != null && !replicaIds.isEmpty());
     }
 
     public List<Long> getTabletIds() {
         return tabletIds;
+    }
+
+    public List<Long> getReplicaIds() {
+        return replicaIds;
     }
 
     public Column getColumn(Field field) {
@@ -105,6 +125,14 @@ public class TableRelation extends Relation {
 
     public void setColumns(Map<Field, Column> columns) {
         this.columns = columns;
+    }
+
+    public List<String> getPruneScanColumns() {
+        return pruneScanColumns;
+    }
+
+    public void setPruneScanColumns(List<String> pruneScanColumns) {
+        this.pruneScanColumns = pruneScanColumns;
     }
 
     public Map<Field, Column> getColumns() {
@@ -178,12 +206,28 @@ public class TableRelation extends Relation {
         return name.toString();
     }
 
-    public void setTemporalClause(String temporalClause) {
-        this.temporalClause = temporalClause;
+    public String getQueryPeriodString() {
+        return queryPeriodString;
     }
 
-    public String getTemporalClause() {
-        return this.temporalClause;
+    public void setQueryPeriodString(String queryPeriodString) {
+        this.queryPeriodString = queryPeriodString;
+    }
+
+    public QueryPeriod getQueryPeriod() {
+        return queryPeriod;
+    }
+
+    public void setQueryPeriod(QueryPeriod queryPeriod) {
+        this.queryPeriod = queryPeriod;
+    }
+
+    public TableSampleClause getSampleClause() {
+        return sampleClause;
+    }
+
+    public void setSampleClause(TableSampleClause sampleClause) {
+        this.sampleClause = sampleClause;
     }
 
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
@@ -192,5 +236,13 @@ public class TableRelation extends Relation {
 
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
+    }
+
+    public void setGtid(long gtid) {
+        this.gtid = gtid;
+    }
+
+    public long getGtid() {
+        return gtid;
     }
 }

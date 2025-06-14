@@ -24,9 +24,13 @@ import static com.starrocks.catalog.system.SystemTable.builder;
 import static com.starrocks.thrift.TSchemaTableType.SCH_PROCEDURES;
 
 public class RoutinesSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.ROUTINES_ID,
-                "routines",
+    private static final String NAME = "routines";
+
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.ROUTINES_ID,
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("SPECIFIC_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
