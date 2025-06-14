@@ -1351,7 +1351,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: false
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Whether to enable UDF.
 - Introduced in: -
 
