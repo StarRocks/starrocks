@@ -38,6 +38,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Snapshot;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.starrocks.common.FeConstants;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.jvm.JvmStats.BufferPool;
 import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
@@ -276,9 +277,10 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"alive\"} ")
             .append(systemInfoService.getAliveComputeNodeNumber()).append("\n");
 
-        // only master FE has this metrics, to help the Grafana knows who is the leader
+        // only the leader FE has this metric, to help the Grafana knows who is the leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {
-            sb.append(NODE_INFO).append("{type=\"is_master\"} ").append(1).append("\n");
+            sb.append(NODE_INFO).append("{type=\"").append(FeConstants.METRIC_LABEL_IS_LEADER).append("\"} ").append(1)
+                    .append("\n");
         }
     }
 
