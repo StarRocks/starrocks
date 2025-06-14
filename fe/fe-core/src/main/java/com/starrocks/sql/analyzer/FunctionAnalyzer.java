@@ -241,8 +241,13 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.LAG)
-                || fnName.getFunction().equals(FunctionSet.LEAD)) {
+        if (fnName.getFunction().equals(FunctionSet.LAG)) {
+            if (!functionCallExpr.isAnalyticFnCall()) {
+                throw new SemanticException(fnName.getFunction() + " only used in analytic function",
+                        functionCallExpr.getPos());
+            }
+        }
+        if (fnName.getFunction().equals(FunctionSet.LEAD)) {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function",
                         functionCallExpr.getPos());
