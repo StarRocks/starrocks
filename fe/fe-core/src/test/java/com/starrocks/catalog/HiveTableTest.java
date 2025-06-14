@@ -42,6 +42,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.HiveTableFactory;
@@ -58,6 +59,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -86,6 +88,11 @@ public class HiveTableTest {
                 "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")");
         starRocksAssert.withDatabase("db");
         hiveClient = new HiveMetastoreTest.MockedHiveMetaClient();
+    }
+
+    @After
+    public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
     }
 
     com.starrocks.catalog.Table createTable(CreateTableStmt stmt) throws DdlException {
