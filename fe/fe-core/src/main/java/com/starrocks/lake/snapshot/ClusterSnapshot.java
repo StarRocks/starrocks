@@ -57,9 +57,19 @@ public class ClusterSnapshot {
         this.starMgrJournalId = starMgrJournalId;
     }
 
+    public ClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs,
+                           long finishedTimeMs, long feJournalId, long starMgrJournalId) {
+        this(id, snapshotName, ClusterSnapshotType.AUTOMATED, storageVolumeName, createdTimeMs, finishedTimeMs,
+                feJournalId, starMgrJournalId);
+    }
+
     public void setJournalIds(long feJournalId, long starMgrJournalId) {
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
+    }
+
+    public void setCreatedTimeMs(long createdTimeMs) {
+        this.createdTimeMs = createdTimeMs;
     }
 
     public void setFinishedTimeMs(long finishedTimeMs) {
@@ -92,6 +102,18 @@ public class ClusterSnapshot {
 
     public long getId() {
         return id;
+    }
+
+    public boolean isAutomated() {
+        return type == ClusterSnapshotType.AUTOMATED;
+    }
+
+    public boolean needClusterSnapshotInfo() {
+        return false;
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        return;
     }
 
     public TClusterSnapshotsItem getInfo() {
