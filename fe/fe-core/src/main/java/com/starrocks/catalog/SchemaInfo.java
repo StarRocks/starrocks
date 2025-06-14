@@ -54,6 +54,8 @@ public class SchemaInfo {
     private final Set<ColumnId> bloomFilterColumnNames;
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
+    @SerializedName("distributionKeyColumnIds")
+    private final List<Integer> distributionKeyColumnIds;
 
     private SchemaInfo(Builder builder) {
         this.id = builder.id;
@@ -68,6 +70,7 @@ public class SchemaInfo {
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
         this.schemaHash = builder.schemaHash;
+        this.distributionKeyColumnIds = builder.distributionKeyColumnIds;
     }
 
     public long getId() {
@@ -148,6 +151,10 @@ public class SchemaInfo {
         if (bloomFilterColumnNames != null) {
             tSchema.setBloom_filter_fpp(bloomFilterFpp);
         }
+
+        if (distributionKeyColumnIds != null) {
+            tSchema.setDistribution_key_column_ids(distributionKeyColumnIds);
+        }
         return tSchema;
     }
 
@@ -168,6 +175,7 @@ public class SchemaInfo {
         private List<Index> indexes;
         private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
+        private List<Integer> distributionKeyColumnIds;
 
         private Builder() {
         }
@@ -246,6 +254,12 @@ public class SchemaInfo {
 
         public Builder setSchemaHash(int schemaHash) {
             this.schemaHash = schemaHash;
+            return this;
+        }
+
+        public Builder setDistributionKeyColumnIds(List<Integer> distributionKeyColumnIds) {
+            Preconditions.checkState(this.distributionKeyColumnIds == null);
+            this.distributionKeyColumnIds = distributionKeyColumnIds;
             return this;
         }
 

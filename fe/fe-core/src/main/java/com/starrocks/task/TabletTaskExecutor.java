@@ -248,6 +248,7 @@ public class TabletTaskExecutor {
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
                 .addColumns(indexMeta.getSchema())
+                .setDistributionKeyColumnIds(table.getDistributionKeyColumnIds())
                 .build().toTabletSchema();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
