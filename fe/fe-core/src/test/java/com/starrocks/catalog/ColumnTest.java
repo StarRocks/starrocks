@@ -361,4 +361,13 @@ public class ColumnTest {
         Column column = GsonUtils.GSON.fromJson(str, Column.class);
         Assert.assertEquals("test", column.getColumnId().getId());
     }
+
+    @Test
+    public void testToSqlWithoutAggregateTypeName() {
+        String comment = "{\"id\":\"0\",\"value\":\"1\"}";
+        Column column = new Column("col", ScalarType.createType(PrimitiveType.JSON), false, null, true, null, comment);
+        String toSql = column.toSqlWithoutAggregateTypeName(null);
+
+        Assert.assertEquals("`col` json NULL COMMENT \"{\\\"id\\\":\\\"0\\\",\\\"value\\\":\\\"1\\\"}\"", toSql);
+    }
 }
