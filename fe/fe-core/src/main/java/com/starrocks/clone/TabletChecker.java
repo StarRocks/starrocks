@@ -903,8 +903,7 @@ public class TabletChecker extends FrontendDaemon {
             } else {
                 Pair<String, String> backendLocKV = backend.getSingleLevelLocationKV();
                 if (backendLocKV != null) {
-                    if (!uniqueReplicaLocations.contains(backendLocKV) &&
-                            isLocationMatch(backendLocKV.first, backendLocKV.second, requiredLocation)) {
+                    if (isLocationMatch(backendLocKV.first, backendLocKV.second, requiredLocation)) {
                         stats.incrLocationMatchCnt();
                         uniqueReplicaLocations.add(backendLocKV);
                     }
