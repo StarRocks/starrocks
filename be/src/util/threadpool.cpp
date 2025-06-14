@@ -707,8 +707,8 @@ Status ConcurrencyLimitedThreadPoolToken::submit(std::shared_ptr<Runnable> task,
         auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
         return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
     }
-    auto token_task =
-            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); }, [sem = _sem] { sem->release(); });
+    auto token_task = std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); },
+                                                          [sem = _sem](bool) { sem->release(); });
     return _pool->submit(std::move(token_task));
 }
 

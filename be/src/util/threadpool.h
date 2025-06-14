@@ -79,15 +79,19 @@ public:
 // up work can be done under no condition.
 class AutoCleanRunnable : public Runnable {
 public:
-    AutoCleanRunnable(std::function<void()> runner, std::function<void()> cleaner)
+    AutoCleanRunnable(std::function<void()> runner, std::function<void(bool)> cleaner)
             : _runnable(std::move(runner)), _cleaner(std::move(cleaner)) {}
-    virtual ~AutoCleanRunnable() { _cleaner(); }
+    virtual ~AutoCleanRunnable() { _cleaner(_is_done); }
 
-    virtual void run() override { _runnable(); }
+    virtual void run() override {
+        _is_done = true;
+        _runnable();
+    }
 
 protected:
+    bool _is_done = false;
     std::function<void()> _runnable;
-    std::function<void()> _cleaner;
+    std::function<void(bool)> _cleaner;
 };
 
 // ThreadPool takes a lot of arguments. We provide sane defaults with a builder.
