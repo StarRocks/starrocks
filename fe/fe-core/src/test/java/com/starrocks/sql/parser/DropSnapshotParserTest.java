@@ -15,6 +15,7 @@
 package com.starrocks.sql.parser;
 
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
@@ -70,7 +71,7 @@ public class DropSnapshotParserTest {
         // Verify the WHERE clause is a binary predicate
         Assert.assertTrue(stmt.getWhere() instanceof BinaryPredicate);
         BinaryPredicate predicate = (BinaryPredicate) stmt.getWhere();
-        Assert.assertEquals(BinaryPredicate.Operator.LE, predicate.getOp());
+        Assert.assertEquals(BinaryType.LE, predicate.getOp());
     }
 
     @Test
@@ -88,7 +89,7 @@ public class DropSnapshotParserTest {
         // Verify the WHERE clause is a binary predicate with >= operator
         Assert.assertTrue(stmt.getWhere() instanceof BinaryPredicate);
         BinaryPredicate predicate = (BinaryPredicate) stmt.getWhere();
-        Assert.assertEquals(BinaryPredicate.Operator.GE, predicate.getOp());
+        Assert.assertEquals(BinaryType.GE, predicate.getOp());
     }
 
     @Test
@@ -265,10 +266,16 @@ public class DropSnapshotParserTest {
         SqlParser.parse(sql, 0);
     }
 
-    @Test(expected = ParsingException.class)
-    public void testParseDropSnapshotInvalidOperator() {
-        // Test invalid operator
+    @Test
+    public void testParseDropSnapshotValidSyntaxInvalidSemantics() {
+        // Test that invalid operators parse successfully (semantic validation happens later)
         String sql = "DROP SNAPSHOT ON repo WHERE SNAPSHOT > 'backup1'";
-        SqlParser.parse(sql, 0);
+        StatementBase stmt = SqlParser.parse(sql, 0).get(0);
+        Assert.assertTrue(stmt instanceof DropSnapshotStmt);
+
+        // Test LIKE operator also parses successfully
+        sql = "DROP SNAPSHOT ON repo WHERE SNAPSHOT LIKE 'backup%'";
+        stmt = SqlParser.parse(sql, 0).get(0);
+        Assert.assertTrue(stmt instanceof DropSnapshotStmt);
     }
 }

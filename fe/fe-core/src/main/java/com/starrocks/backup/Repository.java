@@ -800,71 +800,7 @@ public class Repository implements Writable, GsonPostProcessable {
         return info;
     }
 
-    // Delete snapshot from repository
-    public Status deleteSnapshot(String snapshotName) {
-        // Delete snapshot directory and all its contents
-        // eg: /location/__starrocks_repository_repo_name/__ss_my_ss1/
-        String snapshotPath = Joiner.on(PATH_DELIMITER).join(location,
-                joinPrefix(prefixRepo, name),
-                joinPrefix(PREFIX_SNAPSHOT_DIR, snapshotName));
 
-        LOG.info("Deleting snapshot {} from repository {}, path: {}", snapshotName, name, snapshotPath);
-
-        Status st = storage.delete(snapshotPath);
-        if (!st.ok()) {
-            LOG.warn("Failed to delete snapshot {} from repository {}: {}", snapshotName, name, st.getErrMsg());
-            return st;
-        }
-
-        LOG.info("Successfully deleted snapshot {} from repository {}", snapshotName, name);
-        return Status.OK;
-    }
-
-    // Delete snapshots based on timestamp filter
-    public Status deleteSnapshotsByTimestamp(String timestampOperator, String timestamp) {
-        // First list all snapshots
-        List<String> snapshotNames = Lists.newArrayList();
-        Status status = listSnapshots(snapshotNames);
-        if (!status.ok()) {
-            return status;
-        }
-
-        int deletedCount = 0;
-        for (String snapshotName : snapshotNames) {
-            // Get snapshot info to check timestamp
-            List<String> info = getSnapshotInfo(snapshotName, null);
-            if (info.size() < 2) {
-                continue;
-            }
-
-            String snapshotTimestamp = info.get(1);
-            if (Strings.isNullOrEmpty(snapshotTimestamp) || snapshotTimestamp.equals(FeConstants.NULL_STRING)) {
-                continue;
-            }
-
-            // Compare timestamps based on operator
-            boolean shouldDelete = false;
-            if ("<=".equals(timestampOperator)) {
-                shouldDelete = snapshotTimestamp.compareTo(timestamp) <= 0;
-            } else if (">=".equals(timestampOperator)) {
-                shouldDelete = snapshotTimestamp.compareTo(timestamp) >= 0;
-            }
-
-            if (shouldDelete) {
-                Status deleteStatus = deleteSnapshot(snapshotName);
-                if (deleteStatus.ok()) {
-                    deletedCount++;
-                } else {
-                    LOG.warn("Failed to delete snapshot {} with timestamp {}: {}",
-                            snapshotName, snapshotTimestamp, deleteStatus.getErrMsg());
-                }
-            }
-        }
-
-        LOG.info("Deleted {} snapshots from repository {} with timestamp {} {}",
-                deletedCount, name, timestampOperator, timestamp);
-        return Status.OK;
-    }
 
     public static Repository read(DataInput in) throws IOException {
         Repository repo = new Repository();

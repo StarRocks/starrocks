@@ -139,6 +139,7 @@ public class AnalyzeDropSnapshotTest {
         // Test invalid expressions
         analyzeFail("DROP SNAPSHOT ON `repo` WHERE 1 = 1;");
         analyzeFail("DROP SNAPSHOT ON `repo` WHERE SNAPSHOT LIKE 'backup%';");
+        analyzeFail("DROP SNAPSHOT ON `repo` WHERE SNAPSHOT > 'backup1';");
     }
 
     @Test

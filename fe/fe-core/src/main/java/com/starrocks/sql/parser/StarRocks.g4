@@ -1924,7 +1924,7 @@ showSnapshotStatement
 
 dropSnapshotStatement
     : DROP SNAPSHOT ON repoName=identifier
-    (WHERE expression)?
+    WHERE expression
     ;
 
 createRepositoryStatement

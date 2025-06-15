@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
@@ -28,11 +29,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DropSnapshotStmt;
-<<<<<<< Updated upstream
-import com.starrocks.sql.ast.ShowStmt;
-import com.starrocks.sql.common.MetaUtils;
-=======
->>>>>>> Stashed changes
 
 public class DropSnapshotAnalyzer {
 
@@ -105,10 +101,15 @@ public class DropSnapshotAnalyzer {
 
                             String snapshotName = ((StringLiteral) expr).getStringValue();
                             if (Strings.isNullOrEmpty(snapshotName)) {
-                                continue;
+                                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                        "Snapshot name cannot be empty");
                             }
                             dropSnapshotStmt.addSnapshotName(snapshotName);
                         }
+                    } else {
+                        // Unsupported predicate type (e.g., LikePredicate, etc.)
+                        ok = false;
+                        break CHECK;
                     }
                 }
 
@@ -123,9 +124,9 @@ public class DropSnapshotAnalyzer {
         }
 
         private boolean analyzeSubExpr(DropSnapshotStmt dropSnapshotStmt, BinaryPredicate binaryPredicate) {
-            if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ
-                    && binaryPredicate.getOp() != BinaryPredicate.Operator.LE
-                    && binaryPredicate.getOp() != BinaryPredicate.Operator.GE) {
+            if (binaryPredicate.getOp() != BinaryType.EQ
+                    && binaryPredicate.getOp() != BinaryType.LE
+                    && binaryPredicate.getOp() != BinaryType.GE) {
                 return false;
             }
 
@@ -138,19 +139,27 @@ public class DropSnapshotAnalyzer {
             StringLiteral stringLiteral = (StringLiteral) binaryPredicate.getChild(1);
 
             if (slotRef.getColumnName().equalsIgnoreCase("snapshot")) {
-                if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                if (binaryPredicate.getOp() != BinaryType.EQ) {
                     return false;
                 }
-                dropSnapshotStmt.setSnapshotName(stringLiteral.getStringValue());
+                String snapshotName = stringLiteral.getStringValue();
+                if (Strings.isNullOrEmpty(snapshotName)) {
+                    return false;
+                }
+                dropSnapshotStmt.setSnapshotName(snapshotName);
             } else if (slotRef.getColumnName().equalsIgnoreCase("timestamp")) {
-                if (binaryPredicate.getOp() == BinaryPredicate.Operator.LE) {
+                if (binaryPredicate.getOp() == BinaryType.LE) {
                     dropSnapshotStmt.setTimestampOperator("<=");
-                } else if (binaryPredicate.getOp() == BinaryPredicate.Operator.GE) {
+                } else if (binaryPredicate.getOp() == BinaryType.GE) {
                     dropSnapshotStmt.setTimestampOperator(">=");
                 } else {
                     return false;
                 }
-                dropSnapshotStmt.setTimestamp(stringLiteral.getStringValue());
+                String timestamp = stringLiteral.getStringValue();
+                if (Strings.isNullOrEmpty(timestamp)) {
+                    return false;
+                }
+                dropSnapshotStmt.setTimestamp(timestamp);
             } else {
                 return false;
             }

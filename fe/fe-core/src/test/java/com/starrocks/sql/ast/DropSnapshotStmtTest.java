@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -80,7 +81,7 @@ public class DropSnapshotStmtTest {
         // Create a simple WHERE clause: SNAPSHOT = 'test_snapshot'
         SlotRef slotRef = new SlotRef(null, "SNAPSHOT");
         StringLiteral stringLiteral = new StringLiteral("test_snapshot");
-        BinaryPredicate where = new BinaryPredicate(BinaryPredicate.Operator.EQ, slotRef, stringLiteral);
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, slotRef, stringLiteral);
         
         DropSnapshotStmt stmt = new DropSnapshotStmt("test_repo", where);
         String sql = stmt.toSql();
