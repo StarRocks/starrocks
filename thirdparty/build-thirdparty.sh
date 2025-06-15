@@ -324,11 +324,9 @@ build_llvm() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
-    export REQUIRES_RTTI=1
-
     # TODO(yueyang): Add more targets.
     # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
+    REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
 
