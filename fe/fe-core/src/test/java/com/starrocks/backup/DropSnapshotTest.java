@@ -21,7 +21,10 @@ import org.junit.Test;
 
 import java.util.List;
 
-
+/**
+ * Simple unit tests for DropSnapshotStmt functionality
+ * For BackupHandler integration tests, see BackupHandlerDropSnapshotTest
+ */
 public class DropSnapshotTest {
 
     @Test
@@ -127,6 +130,12 @@ public class DropSnapshotTest {
         stmt3.getSnapshotNames().clear();
         Assert.assertTrue(stmt3.getSnapshotNames().isEmpty());
     }
+
+
+
+
+
+
 
     @Test
     public void testDropSnapshotValidation() {
