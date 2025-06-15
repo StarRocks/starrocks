@@ -72,7 +72,7 @@ public class RepositoryDropSnapshotTest {
     }
 
     // Test deleteSnapshot method - lines 328-350
-    
+
     @Test
     public void testDeleteSnapshotsByTimestampMethodLogic() {
         // Test deleteSnapshotsByTimestamp method logic simulation
@@ -178,10 +178,4 @@ public class RepositoryDropSnapshotTest {
         // This test verifies that the methods exist and basic logic paths work
         Assert.assertTrue("Repository DROP SNAPSHOT methods are implemented and tested", true);
     }
-
-
-
-
-
-
 }

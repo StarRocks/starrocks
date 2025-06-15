@@ -92,7 +92,7 @@ public class DropSnapshotStmtTest {
     @Test
     public void testVisitorPattern() {
         DropSnapshotStmt stmt = new DropSnapshotStmt("test_repo", null);
-        
+
         // Create a simple visitor to test the pattern
         AstVisitor<String, Void> visitor = new AstVisitor<String, Void>() {
             @Override
@@ -100,9 +100,97 @@ public class DropSnapshotStmtTest {
                 return "visited_drop_snapshot";
             }
         };
-        
+
         String result = stmt.accept(visitor, null);
         Assert.assertEquals("visited_drop_snapshot", result);
+    }
+
+    @Test
+    public void testDefaultVisitorBehavior() {
+        DropSnapshotStmt stmt = new DropSnapshotStmt("test_repo", null);
+
+        // Create a visitor that uses the default visitDropSnapshotStatement implementation
+        // This will test the line: return visitDDLStatement(statement, context);
+        AstVisitor<String, Void> defaultVisitor = new AstVisitor<String, Void>() {
+            @Override
+            public String visitDDLStatement(DdlStmt statement, Void context) {
+                return "visited_ddl_statement";
+            }
+
+            // Don't override visitDropSnapshotStatement to test the default behavior
+        };
+
+        String result = stmt.accept(defaultVisitor, null);
+        Assert.assertEquals("visited_ddl_statement", result);
+    }
+
+    @Test
+    public void testVisitorPatternWithContext() {
+        DropSnapshotStmt stmt = new DropSnapshotStmt("test_repo", null);
+
+        // Test visitor pattern with context parameter
+        AstVisitor<String, String> contextVisitor = new AstVisitor<String, String>() {
+            @Override
+            public String visitDropSnapshotStatement(DropSnapshotStmt statement, String context) {
+                return "visited_" + statement.getRepoName() + "_with_" + context;
+            }
+        };
+
+        String result = stmt.accept(contextVisitor, "test_context");
+        Assert.assertEquals("visited_test_repo_with_test_context", result);
+    }
+
+    @Test
+    public void testVisitorPatternWithDifferentReturnTypes() {
+        DropSnapshotStmt stmt = new DropSnapshotStmt("test_repo", null);
+        stmt.setSnapshotName("test_snapshot");
+
+        // Test visitor that returns Integer
+        AstVisitor<Integer, Void> intVisitor = new AstVisitor<Integer, Void>() {
+            @Override
+            public Integer visitDropSnapshotStatement(DropSnapshotStmt statement, Void context) {
+                return statement.getRepoName().length();
+            }
+        };
+
+        Integer intResult = stmt.accept(intVisitor, null);
+        Assert.assertEquals(Integer.valueOf(9), intResult); // "test_repo".length() = 9
+
+        // Test visitor that returns Boolean
+        AstVisitor<Boolean, Void> boolVisitor = new AstVisitor<Boolean, Void>() {
+            @Override
+            public Boolean visitDropSnapshotStatement(DropSnapshotStmt statement, Void context) {
+                return statement.getSnapshotName() != null;
+            }
+        };
+
+        Boolean boolResult = stmt.accept(boolVisitor, null);
+        Assert.assertTrue(boolResult);
+    }
+
+    @Test
+    public void testDefaultVisitorWithDifferentStatements() {
+        DropSnapshotStmt stmt1 = new DropSnapshotStmt("repo1", null);
+        DropSnapshotStmt stmt2 = new DropSnapshotStmt("repo2", null);
+        stmt2.setSnapshotName("snapshot2");
+
+        // Test that the default visitor behavior works consistently
+        AstVisitor<String, Void> defaultVisitor = new AstVisitor<String, Void>() {
+            @Override
+            public String visitDDLStatement(DdlStmt statement, Void context) {
+                if (statement instanceof DropSnapshotStmt) {
+                    DropSnapshotStmt dropStmt = (DropSnapshotStmt) statement;
+                    return "ddl_" + dropStmt.getRepoName();
+                }
+                return "ddl_unknown";
+            }
+        };
+
+        String result1 = stmt1.accept(defaultVisitor, null);
+        String result2 = stmt2.accept(defaultVisitor, null);
+
+        Assert.assertEquals("ddl_repo1", result1);
+        Assert.assertEquals("ddl_repo2", result2);
     }
 
     @Test
