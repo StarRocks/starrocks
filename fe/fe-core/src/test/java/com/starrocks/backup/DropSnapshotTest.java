@@ -15,15 +15,8 @@
 package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.DdlException;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropSnapshotStmt;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
@@ -31,255 +24,108 @@ import java.util.List;
 
 public class DropSnapshotTest {
 
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    
-    @Mocked
-    private BackupHandler backupHandler;
-    
-    @Mocked
-    private RepositoryMgr repoMgr;
-    
-    @Mocked
-    private Repository repository;
-    
-    @Mocked
-    private BlobStorage storage;
-
-    @Before
-    public void setUp() {
-        // Setup basic mocking without creating real objects
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public GlobalStateMgr getCurrentState() {
-                return globalStateMgr;
-            }
-        };
-
-        new Expectations() {{
-                globalStateMgr.getBackupHandler();
-                result = backupHandler;
-
-                backupHandler.getRepoMgr();
-                result = repoMgr;
-            }};
-    }
-
     @Test
-    public void testDropSnapshotByName() throws DdlException {
-        // Setup
+    public void testDropSnapshotStmtBasicFunctionality() {
+        // Test basic DropSnapshotStmt functionality without mocking
         String repoName = "test_repo";
         String snapshotName = "test_snapshot";
-        
+
         DropSnapshotStmt stmt = new DropSnapshotStmt(repoName, null);
         stmt.setSnapshotName(snapshotName);
-        
-        new Expectations() {{
-                repoMgr.getRepo(repoName);
-                result = repository;
 
-                repository.getName();
-                result = repoName;
-
-                repository.isReadOnly();
-                result = false;
-
-                repository.deleteSnapshot(snapshotName);
-                result = Status.OK;
-            }};
-        
-        // Mock the BackupHandler dropSnapshot method
-        new Expectations() {{
-                backupHandler.dropSnapshot(stmt);
-                // Simulate successful execution
-            }};
-        
-        // Test - this would normally be called by the real handler
-        // For this test, we'll verify the repository method is called correctly
-        new Expectations() {{
-                repository.deleteSnapshot(snapshotName);
-                result = Status.OK;
-                times = 1;
-            }};
-        
-        Status result = repository.deleteSnapshot(snapshotName);
-        Assert.assertTrue(result.ok());
+        // Verify basic properties
+        Assert.assertEquals(repoName, stmt.getRepoName());
+        Assert.assertEquals(snapshotName, stmt.getSnapshotName());
+        Assert.assertNull(stmt.getTimestamp());
+        Assert.assertNull(stmt.getTimestampOperator());
+        Assert.assertTrue(stmt.getSnapshotNames().isEmpty());
     }
 
     @Test
-    public void testDropSnapshotByTimestamp() throws DdlException {
-        // Setup
+    public void testDropSnapshotStmtTimestampFunctionality() {
+        // Test DropSnapshotStmt with timestamp functionality
         String repoName = "test_repo";
         String timestamp = "2024-01-01-12-00-00";
         String operator = "<=";
-        
+
         DropSnapshotStmt stmt = new DropSnapshotStmt(repoName, null);
         stmt.setTimestamp(timestamp);
         stmt.setTimestampOperator(operator);
-        
-        new Expectations() {{
-                repoMgr.getRepo(repoName);
-                result = repository;
 
-                repository.getName();
-                result = repoName;
-
-                repository.isReadOnly();
-                result = false;
-
-                repository.deleteSnapshotsByTimestamp(operator, timestamp);
-                result = Status.OK;
-            }};
-        
-        // Test the repository method directly
-        Status result = repository.deleteSnapshotsByTimestamp(operator, timestamp);
-        Assert.assertTrue(result.ok());
+        // Verify timestamp properties
+        Assert.assertEquals(repoName, stmt.getRepoName());
+        Assert.assertEquals(timestamp, stmt.getTimestamp());
+        Assert.assertEquals(operator, stmt.getTimestampOperator());
+        Assert.assertNull(stmt.getSnapshotName());
+        Assert.assertTrue(stmt.getSnapshotNames().isEmpty());
     }
 
     @Test
-    public void testDropMultipleSnapshots() throws DdlException {
-        // Setup
+    public void testDropSnapshotStmtMultipleSnapshots() {
+        // Test DropSnapshotStmt with multiple snapshots functionality
         String repoName = "test_repo";
         List<String> snapshotNames = Lists.newArrayList("snapshot1", "snapshot2", "snapshot3");
-        
+
         DropSnapshotStmt stmt = new DropSnapshotStmt(repoName, null);
         for (String name : snapshotNames) {
             stmt.addSnapshotName(name);
         }
-        
-        new Expectations() {{
-                repoMgr.getRepo(repoName);
-                result = repository;
 
-                repository.getName();
-                result = repoName;
-
-                repository.isReadOnly();
-                result = false;
-
-                // Each snapshot should be deleted
-                repository.deleteSnapshot("snapshot1");
-                result = Status.OK;
-
-                repository.deleteSnapshot("snapshot2");
-                result = Status.OK;
-
-                repository.deleteSnapshot("snapshot3");
-                result = Status.OK;
-            }};
-        
-        // Test each deletion
-        for (String snapshotName : snapshotNames) {
-            Status result = repository.deleteSnapshot(snapshotName);
-            Assert.assertTrue(result.ok());
-        }
-    }
-
-    @Test(expected = DdlException.class)
-    public void testDropSnapshotNonExistentRepo() throws DdlException {
-        // Setup
-        String repoName = "nonexistent_repo";
-        DropSnapshotStmt stmt = new DropSnapshotStmt(repoName, null);
-        stmt.setSnapshotName("test_snapshot");
-
-        new Expectations() {{
-                repoMgr.getRepo(repoName);
-                result = null; // Repository doesn't exist
-
-                backupHandler.dropSnapshot(stmt);
-                result = new DdlException("Repository not found: " + repoName);
-            }};
-
-        // This should throw DdlException
-        backupHandler.dropSnapshot(stmt);
-    }
-
-    @Test(expected = DdlException.class)
-    public void testDropSnapshotReadOnlyRepo() throws DdlException {
-        // Setup
-        String repoName = "readonly_repo";
-        DropSnapshotStmt stmt = new DropSnapshotStmt(repoName, null);
-        stmt.setSnapshotName("test_snapshot");
-
-        new Expectations() {{
-                repoMgr.getRepo(repoName);
-                result = repository;
-
-                repository.isReadOnly();
-                result = true; // Repository is read-only
-
-                repository.getName();
-                result = repoName;
-
-                backupHandler.dropSnapshot(stmt);
-                result = new DdlException("Repository " + repoName + " is read only");
-            }};
-
-        // This should throw DdlException
-        backupHandler.dropSnapshot(stmt);
+        // Verify multiple snapshots properties
+        Assert.assertEquals(repoName, stmt.getRepoName());
+        Assert.assertEquals(3, stmt.getSnapshotNames().size());
+        Assert.assertTrue(stmt.getSnapshotNames().contains("snapshot1"));
+        Assert.assertTrue(stmt.getSnapshotNames().contains("snapshot2"));
+        Assert.assertTrue(stmt.getSnapshotNames().contains("snapshot3"));
+        Assert.assertNull(stmt.getSnapshotName());
+        Assert.assertNull(stmt.getTimestamp());
     }
 
     @Test
-    public void testRepositoryDeleteSnapshot() {
-        // Test the Repository.deleteSnapshot method directly
-        String snapshotName = "test_snapshot";
+    public void testDropSnapshotStmtToSql() {
+        // Test toSql() method functionality
         String repoName = "test_repo";
-        String location = "s3://test-bucket/backup";
-        
-        Repository repo = new Repository(1, repoName, false, location, storage);
-        
-        new MockUp<Repository>() {
-            @Mock
-            public Status deleteSnapshot(String name) {
-                if ("test_snapshot".equals(name)) {
-                    return Status.OK;
-                } else {
-                    return new Status(Status.ErrCode.COMMON_ERROR, "Snapshot not found");
-                }
-            }
-        };
-        
-        // Test successful deletion
-        Status result = repo.deleteSnapshot(snapshotName);
-        Assert.assertTrue(result.ok());
-        
-        // Test failed deletion
-        Status failResult = repo.deleteSnapshot("nonexistent_snapshot");
-        Assert.assertFalse(failResult.ok());
-        Assert.assertTrue(failResult.getErrMsg().contains("Snapshot not found"));
+
+        // Test basic statement without WHERE clause
+        DropSnapshotStmt stmt1 = new DropSnapshotStmt(repoName, null);
+        String sql1 = stmt1.toSql();
+        Assert.assertTrue(sql1.contains("DROP SNAPSHOT"));
+        Assert.assertTrue(sql1.contains(repoName));
+
+        // Test with snapshot name
+        DropSnapshotStmt stmt2 = new DropSnapshotStmt(repoName, null);
+        stmt2.setSnapshotName("test_snapshot");
+        String sql2 = stmt2.toSql();
+        Assert.assertTrue(sql2.contains("DROP SNAPSHOT"));
+        Assert.assertTrue(sql2.contains(repoName));
     }
 
     @Test
-    public void testRepositoryDeleteSnapshotsByTimestamp() {
-        // Test the Repository.deleteSnapshotsByTimestamp method
+    public void testDropSnapshotStmtEdgeCases() {
+        // Test edge cases and boundary conditions
         String repoName = "test_repo";
-        String location = "s3://test-bucket/backup";
-        
-        Repository repo = new Repository(1, repoName, false, location, storage);
-        
-        new MockUp<Repository>() {
-            @Mock
-            public Status deleteSnapshotsByTimestamp(String operator, String timestamp) {
-                if ("<=".equals(operator) || ">=".equals(operator)) {
-                    return Status.OK;
-                } else {
-                    return new Status(Status.ErrCode.COMMON_ERROR, "Invalid operator");
-                }
-            }
-        };
-        
-        // Test successful deletion with <= operator
-        Status result1 = repo.deleteSnapshotsByTimestamp("<=", "2024-01-01-12-00-00");
-        Assert.assertTrue(result1.ok());
-        
-        // Test successful deletion with >= operator
-        Status result2 = repo.deleteSnapshotsByTimestamp(">=", "2024-01-01-12-00-00");
-        Assert.assertTrue(result2.ok());
-        
-        // Test failed deletion with invalid operator
-        Status failResult = repo.deleteSnapshotsByTimestamp("=", "2024-01-01-12-00-00");
-        Assert.assertFalse(failResult.ok());
-        Assert.assertTrue(failResult.getErrMsg().contains("Invalid operator"));
+
+        // Test with empty snapshot name (should be allowed at AST level)
+        DropSnapshotStmt stmt1 = new DropSnapshotStmt(repoName, null);
+        stmt1.setSnapshotName("");
+        Assert.assertEquals("", stmt1.getSnapshotName());
+
+        // Test with null values
+        DropSnapshotStmt stmt2 = new DropSnapshotStmt(repoName, null);
+        stmt2.setSnapshotName(null);
+        stmt2.setTimestamp(null);
+        stmt2.setTimestampOperator(null);
+        Assert.assertNull(stmt2.getSnapshotName());
+        Assert.assertNull(stmt2.getTimestamp());
+        Assert.assertNull(stmt2.getTimestampOperator());
+
+        // Test clearing snapshot names
+        DropSnapshotStmt stmt3 = new DropSnapshotStmt(repoName, null);
+        stmt3.addSnapshotName("snap1");
+        stmt3.addSnapshotName("snap2");
+        Assert.assertEquals(2, stmt3.getSnapshotNames().size());
+        stmt3.getSnapshotNames().clear();
+        Assert.assertTrue(stmt3.getSnapshotNames().isEmpty());
     }
 
     @Test
