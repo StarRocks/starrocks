@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;

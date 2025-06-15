@@ -15,7 +15,6 @@
 package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropSnapshotStmt;
@@ -28,7 +27,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
+
 
 public class DropSnapshotTest {
 
@@ -58,12 +57,12 @@ public class DropSnapshotTest {
         };
 
         new Expectations() {{
-            globalStateMgr.getBackupHandler();
-            result = backupHandler;
+                globalStateMgr.getBackupHandler();
+                result = backupHandler;
 
-            backupHandler.getRepoMgr();
-            result = repoMgr;
-        }};
+                backupHandler.getRepoMgr();
+                result = repoMgr;
+            }};
     }
 
     @Test
@@ -76,32 +75,32 @@ public class DropSnapshotTest {
         stmt.setSnapshotName(snapshotName);
         
         new Expectations() {{
-            repoMgr.getRepo(repoName);
-            result = repository;
-            
-            repository.getName();
-            result = repoName;
-            
-            repository.isReadOnly();
-            result = false;
-            
-            repository.deleteSnapshot(snapshotName);
-            result = Status.OK;
-        }};
+                repoMgr.getRepo(repoName);
+                result = repository;
+
+                repository.getName();
+                result = repoName;
+
+                repository.isReadOnly();
+                result = false;
+
+                repository.deleteSnapshot(snapshotName);
+                result = Status.OK;
+            }};
         
         // Mock the BackupHandler dropSnapshot method
         new Expectations() {{
-            backupHandler.dropSnapshot(stmt);
-            // Simulate successful execution
-        }};
+                backupHandler.dropSnapshot(stmt);
+                // Simulate successful execution
+            }};
         
         // Test - this would normally be called by the real handler
         // For this test, we'll verify the repository method is called correctly
         new Expectations() {{
-            repository.deleteSnapshot(snapshotName);
-            result = Status.OK;
-            times = 1;
-        }};
+                repository.deleteSnapshot(snapshotName);
+                result = Status.OK;
+                times = 1;
+            }};
         
         Status result = repository.deleteSnapshot(snapshotName);
         Assert.assertTrue(result.ok());
@@ -119,18 +118,18 @@ public class DropSnapshotTest {
         stmt.setTimestampOperator(operator);
         
         new Expectations() {{
-            repoMgr.getRepo(repoName);
-            result = repository;
-            
-            repository.getName();
-            result = repoName;
-            
-            repository.isReadOnly();
-            result = false;
-            
-            repository.deleteSnapshotsByTimestamp(operator, timestamp);
-            result = Status.OK;
-        }};
+                repoMgr.getRepo(repoName);
+                result = repository;
+
+                repository.getName();
+                result = repoName;
+
+                repository.isReadOnly();
+                result = false;
+
+                repository.deleteSnapshotsByTimestamp(operator, timestamp);
+                result = Status.OK;
+            }};
         
         // Test the repository method directly
         Status result = repository.deleteSnapshotsByTimestamp(operator, timestamp);
@@ -149,25 +148,25 @@ public class DropSnapshotTest {
         }
         
         new Expectations() {{
-            repoMgr.getRepo(repoName);
-            result = repository;
-            
-            repository.getName();
-            result = repoName;
-            
-            repository.isReadOnly();
-            result = false;
-            
-            // Each snapshot should be deleted
-            repository.deleteSnapshot("snapshot1");
-            result = Status.OK;
-            
-            repository.deleteSnapshot("snapshot2");
-            result = Status.OK;
-            
-            repository.deleteSnapshot("snapshot3");
-            result = Status.OK;
-        }};
+                repoMgr.getRepo(repoName);
+                result = repository;
+
+                repository.getName();
+                result = repoName;
+
+                repository.isReadOnly();
+                result = false;
+
+                // Each snapshot should be deleted
+                repository.deleteSnapshot("snapshot1");
+                result = Status.OK;
+
+                repository.deleteSnapshot("snapshot2");
+                result = Status.OK;
+
+                repository.deleteSnapshot("snapshot3");
+                result = Status.OK;
+            }};
         
         // Test each deletion
         for (String snapshotName : snapshotNames) {
@@ -184,12 +183,12 @@ public class DropSnapshotTest {
         stmt.setSnapshotName("test_snapshot");
 
         new Expectations() {{
-            repoMgr.getRepo(repoName);
-            result = null; // Repository doesn't exist
+                repoMgr.getRepo(repoName);
+                result = null; // Repository doesn't exist
 
-            backupHandler.dropSnapshot(stmt);
-            result = new DdlException("Repository not found: " + repoName);
-        }};
+                backupHandler.dropSnapshot(stmt);
+                result = new DdlException("Repository not found: " + repoName);
+            }};
 
         // This should throw DdlException
         backupHandler.dropSnapshot(stmt);
@@ -203,18 +202,18 @@ public class DropSnapshotTest {
         stmt.setSnapshotName("test_snapshot");
 
         new Expectations() {{
-            repoMgr.getRepo(repoName);
-            result = repository;
+                repoMgr.getRepo(repoName);
+                result = repository;
 
-            repository.isReadOnly();
-            result = true; // Repository is read-only
+                repository.isReadOnly();
+                result = true; // Repository is read-only
 
-            repository.getName();
-            result = repoName;
+                repository.getName();
+                result = repoName;
 
-            backupHandler.dropSnapshot(stmt);
-            result = new DdlException("Repository " + repoName + " is read only");
-        }};
+                backupHandler.dropSnapshot(stmt);
+                result = new DdlException("Repository " + repoName + " is read only");
+            }};
 
         // This should throw DdlException
         backupHandler.dropSnapshot(stmt);
