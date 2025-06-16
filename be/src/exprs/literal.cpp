@@ -141,6 +141,10 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
         _value = const_column_from_literal<TYPE_DECIMAL128>(node, this->type().precision, this->type().scale);
         break;
     }
+    case TYPE_DECIMAL256: {
+        _value = const_column_from_literal<TYPE_DECIMAL256>(node, this->type().precision, this->type().scale);
+        break;
+    }
     case TYPE_VARBINARY: {
         // @IMPORTANT: build slice though get_data, else maybe will cause multi-thread crash in scanner
         _value = ColumnHelper::create_const_column<TYPE_VARBINARY>(Slice(node.binary_literal.value), 1);
