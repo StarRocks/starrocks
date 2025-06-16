@@ -6,12 +6,12 @@ displayed_sidebar: docs
 
 ## v3.5.0-RC01
 
-发布日期：2025 年 5 月 21 日
+发布日期：2025 年 6 月 13 日
 
 ### 升级注意事项
 
 - 从 StarRocks v3.5.0 起，需使用 JDK 17 或更高版本。
-  - 如从 v3.4 或更早版本升级集群，需先升级 JDK，并在 FE 配置文件 **fe.conf** 中移除 `JAVA_OPTS` 中与 JDK 17 不兼容的参数（如 CMS 和 GC 参数）。
+  - 如从 v3.4 或更早版本升级集群，需先升级 JDK，并在 FE 配置文件 **fe.conf** 中移除 `JAVA_OPTS` 中与 JDK 17 不兼容的参数（如 CMS 和 GC 参数）。推荐直接使用 v3.5 版本的 `JAVA_OPTS` 默认值。
   - 对于使用 External Catalog 的集群，需要在 BE 配置文件 **be.conf** 的配置项 `JAVA_OPTS` 中添加 `--add-opens=java.base/java.util=ALL-UNNAMED`。
   - 此外，自 v3.5.0 起，StarRocks 不再提供特定 JDK 版本的 JVM 配置，所有 JDK 版本统一使用 `JAVA_OPTS`。
 
@@ -37,7 +37,7 @@ displayed_sidebar: docs
   - 支持分区级基数估算。系统复用了 `_statistics_.column_statistics` 视图记录各分区的 NDV。[#51513](https://github.com/StarRocks/starrocks/pull/51513)
   - 支持[多列联合 NDV 收集](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/#%E5%A4%9A%E5%88%97%E8%81%94%E5%90%88%E7%BB%9F%E8%AE%A1%E4%BF%A1%E6%81%AF)，用于优化 CBO 在列间存在关联场景下的查询计划生成。[#56481](https://github.com/StarRocks/starrocks/pull/56481) [#56715](https://github.com/StarRocks/starrocks/pull/56715) [#56766](https://github.com/StarRocks/starrocks/pull/56766) [#56836](https://github.com/StarRocks/starrocks/pull/56836)
   - 支持使用直方图估算 Join 节点的基数和 in_predicate 的选择率，提高数据倾斜场景下的估算精度。[#57874](https://github.com/StarRocks/starrocks/pull/57874)
-  - 支持 [Query Feedback](https://docs.starrocks.io/zh/docs/using_starrocks/query_feedback/) 功能：结构相同但参数不同的查询会归为同一类型，共享 Tuning Guide 信息。[#58306](https://github.com/StarRocks/starrocks/pull/58306)
+  - 优化 [Query Feedback](https://docs.starrocks.io/zh/docs/using_starrocks/query_feedback/) 功能：结构相同但参数值不同的查询会归为同一类型，共享 Tuning Guide 信息。[#58306](https://github.com/StarRocks/starrocks/pull/58306)
 - 在特定场景下，支持使用 Runtime Bitset Filter 替代 Bloom Filter 进行优化。[#57157](https://github.com/StarRocks/starrocks/pull/57157)
 - 支持将 Join Runtime Filter 下推到存储层。[#55124](https://github.com/StarRocks/starrocks/pull/55124)
 - 支持 Pipeline Event Scheduler。[#54259](https://github.com/StarRocks/starrocks/pull/54259)
@@ -62,20 +62,20 @@ displayed_sidebar: docs
 
 ### 物化视图
 
-- 支持指定多个分区列或表达式，实现更灵活的数据分区策略。[#52576](https://github.com/StarRocks/starrocks/issues/52576)
+- 支持创建多个分区列的物化视图，实现更灵活的数据分区策略。[#52576](https://github.com/StarRocks/starrocks/issues/52576)
 - 支持将 `query_rewrite_consistency` 设置为 `force_mv`，强制系统在改写查询时使用物化视图，以保证性能的稳定性（可能牺牲部分数据实时性）。[#53819](https://github.com/StarRocks/starrocks/pull/53819)
 
 ### 数据导入与导出
 
 - 支持设置 `pause_on_json_parse_error` 为 `true`，在 JSON 解析失败时暂停 Routine Load 作业。[#56062](https://github.com/StarRocks/starrocks/pull/56062)
-- **[实验性功能]** 支持包含[多个 SQL 语句的事务](https://docs.starrocks.io/zh/docs/loading/SQL_transaction/)（目前仅支持 INSERT 语句）。用户可启动、提交或撤销事务，以实现多次导入操作的 ACID 事务保障。[#53978](https://github.com/StarRocks/starrocks/issues/53978)
+- **[Beta]** 支持包含[多个 SQL 语句的事务](https://docs.starrocks.io/zh/docs/loading/SQL_transaction/)（目前仅支持 INSERT 语句）。用户可启动、提交或撤销事务，以实现多次导入操作的 ACID 事务保障。[#53978](https://github.com/StarRocks/starrocks/issues/53978)
 
 ### 函数支持
 
 - 引入系统变量 `lower_upper_support_utf8`（Session 级和全局级），增强大小写转换函数（如 `upper()`、`lower()`）对 UTF-8（特别是非 ASCII 字符）的支持。[#56192](https://github.com/StarRocks/starrocks/pull/56192)
 - 新增函数：
   - [`field()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/field/) [#55331](https://github.com/StarRocks/starrocks/pull/55331)
-  - `ds_theta_count_distinct()` [#56960](https://github.com/StarRocks/starrocks/pull/56960)
+  - [`ds_theta_count_distinct()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/ds_theta_count_distinct/) [#56960](https://github.com/StarRocks/starrocks/pull/56960)
   - [`array_flatten()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_flatten/) [#50080](https://github.com/StarRocks/starrocks/pull/50080)
   - [`inet_aton()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/inet_aton/) [#51883](https://github.com/StarRocks/starrocks/pull/51883)
-  - `percentile_approx_weight()` [#57410](https://github.com/StarRocks/starrocks/pull/57410)
+  - [`percentile_approx_weight()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/percentile_approx_weight/) [#57410](https://github.com/StarRocks/starrocks/pull/57410)
