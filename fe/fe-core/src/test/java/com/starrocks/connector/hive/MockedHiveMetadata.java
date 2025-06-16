@@ -46,6 +46,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -1720,7 +1721,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                                                               List<String> partitionColumnNames,
                                                               Map<String, HivePartitionStats> hivePartitionStatsMap,
                                                               double avgNumPerPartition, double rowCount) {
-        HiveMetaClient metaClient = new HiveMetaClient(new HiveConf());
+        HiveMetaClient metaClient = new HiveMetaClient(new HiveConf(),
+                HiveMetadataMetricsRegistry.getInstance().getHMSEntity("MockedHiveMetastore"));
         HiveMetastore metastore = new HiveMetastore(metaClient, MOCKED_HIVE_CATALOG_NAME, MetastoreType.HMS);
         CachingHiveMetastore cachingHiveMetastore =
                 createCatalogLevelInstance(metastore, Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
@@ -1746,6 +1748,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                     rowCount);
         } catch (Exception e) {
             throw new StarRocksConnectorException("get partition statistics failed", e);
+        } finally {
+            HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
         }
     }
 

@@ -44,6 +44,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.ImageWriter;
@@ -250,6 +251,7 @@ public class CatalogMgr {
                 GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
             }
         } finally {
+            HiveMetadataMetricsRegistry.getInstance().removeHMSEntity(catalogName);
             writeUnLock();
         }
     }
@@ -415,6 +417,7 @@ public class CatalogMgr {
             Authorizer.getInstance().removeAccessControl(catalogName);
             catalogs.remove(catalogName);
         } finally {
+            HiveMetadataMetricsRegistry.getInstance().removeHMSEntity(catalogName);
             writeUnLock();
         }
     }

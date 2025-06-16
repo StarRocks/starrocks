@@ -74,7 +74,7 @@ public class DeltaLakeInternalMgr {
 
     public IDeltaLakeMetastore createHMSBackedDeltaLakeMetastore() {
         HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment,
-                deltaLakeCatalogProperties.getProperties());
+                deltaLakeCatalogProperties.getProperties(), catalogName);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
         HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore(catalogName, hiveMetastore,
                 hdfsEnvironment.getConfiguration(), deltaLakeCatalogProperties);
