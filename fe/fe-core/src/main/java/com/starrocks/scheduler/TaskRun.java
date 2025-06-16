@@ -309,7 +309,7 @@ public class TaskRun implements Comparable<TaskRun> {
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         processor.prepare(taskRunContext);
         // process task run
-        processor.processTaskRun(taskRunContext);
+        Constants.TaskRunState taskRunState = processor.processTaskRun(taskRunContext);
 
         QueryState queryState = runCtx.getState();
         LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
@@ -323,7 +323,7 @@ public class TaskRun implements Comparable<TaskRun> {
             status.setErrorCode(errorCode);
             return Constants.TaskRunState.FAILED;
         }
-        return Constants.TaskRunState.SUCCESS;
+        return taskRunState;
     }
 
     public ConnectContext getRunCtx() {
