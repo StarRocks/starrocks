@@ -1875,8 +1875,8 @@ public class StmtExecutor {
         Authorizer.check(addBackendBlackListStmt, context);
         for (Long beId : addBackendBlackListStmt.getBackendIds()) {
             SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            if (sis.getBackend(beId) == null) {
-                throw new StarRocksException("Not found backend: " + beId);
+            if (sis.getBackend(beId) == null && sis.getComputeNode(beId) == null) {
+                throw new StarRocksException("Not found backend or cn: " + beId);
             }
             SimpleScheduler.getHostBlacklist().addByManual(beId);
         }

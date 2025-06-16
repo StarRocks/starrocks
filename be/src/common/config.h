@@ -1145,6 +1145,7 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 // rpc timeout between starlet and starmgr, default as 5s
 CONF_mInt32(starlet_starmgr_client_rpc_timeout_ms, "5000");
 CONF_mBool(starlet_enable_cache_stat, "false");
+CONF_mBool(starlet_enable_on_demand_shard_cache, "true");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");

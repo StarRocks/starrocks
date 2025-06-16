@@ -258,7 +258,25 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    return g_starlet->get_shard_info(id);
+    auto result = g_starlet->get_shard_info(id);
+    if (config::starlet_enable_on_demand_shard_cache && result.ok()) {
+        std::unique_lock l(_mtx);
+        if (_shards.find(id) != _shards.end()) {
+            // shard has been proactively added, no need to add it again
+            return result;
+        }
+        // Shard is not belonging to this worker, but we still add it into _shards to prevent massive rpc calls while some
+        // worker is down and all shards request transfer to this worker.
+        // These shards will be removed after next round of starlet heartbeat and a `remove_shard` call will be triggered
+        // when the shard is found not belonging to this worker.
+        auto shard = result.value();
+        DCHECK(id == shard.id);
+        auto ret = _shards.insert_or_assign(id, ShardInfoDetails(shard));
+        if (ret.second) {
+            LOG(INFO) << "On-demand added shard info into cache for id: " << id;
+        }
+    }
+    return result;
 }
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
