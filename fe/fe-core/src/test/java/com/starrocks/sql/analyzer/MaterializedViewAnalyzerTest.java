@@ -225,6 +225,27 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+    public void testCreateIcebergTable2WithAdaptive() throws Exception {
+        String mvName = "iceberg_parttbl_mv1";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                        "PARTITION BY date \n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "properties (\n" +
+                        "'replication_num' = '1',\n" +
+                        "'partition_refresh_strategy' = 'adaptive'" +
+                        ") \n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+        Table mv = starRocksAssert.getTable("test", mvName);
+        Assert.assertTrue(mv != null);
+        Assert.assertTrue(mv instanceof MaterializedView);
+        PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+        Assert.assertTrue(partitionInfo.isListPartition());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
     public void testCreateIcebergTable3() {
         try {
             starRocksAssert.useDatabase("test")

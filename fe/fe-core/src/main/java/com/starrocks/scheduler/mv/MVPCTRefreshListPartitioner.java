@@ -430,66 +430,23 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames, boolean tentative) {
-        Map<String, PCell> partitionToCells = Maps.newHashMap();
-        Map<String, PListCell> listPartitionMap = mv.getListPartitionItems();
-        for (String partitionName : mvPartitionsToRefresh) {
-            PListCell listCell = listPartitionMap.get(partitionName);
-            if (listCell == null) {
-                logger.warn("Partition {} is not found in materialized view {}", partitionName, mv.getName());
-                continue;
-            }
-            partitionToCells.put(partitionName, listCell);
-        }
-
-        // filter by partition ttl
-        filterPartitionsByTTL(partitionToCells, false);
-        if (CollectionUtils.sizeIsEmpty(partitionToCells)) {
-            return;
-        }
-        Map<String, PListCell> toRefreshPartitions = partitionToCells.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> (PListCell) e.getValue()));
-
-        // filter by partition refresh number
-        int filterNumber = mv.getTableProperty().getPartitionRefreshNumber();
-        // TODO: Sort by List Partition's value is weird because there maybe meaningless or un-sortable,
-        // users should take care of `partition_ttl_number` for list partition.
-        LinkedHashMap<String, PListCell> sortedPartition = toRefreshPartitions.entrySet().stream()
-                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue())) // reverse order(max heap)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-        Iterator<Map.Entry<String, PListCell>> iter = sortedPartition.entrySet().iterator();
-        // iterate partition_ttl_number times
-        for (int i = 0; i < filterNumber; i++) {
-            if (iter.hasNext()) {
-                iter.next();
-            }
-        }
-        // compute next partition list cells in the next task run
-        Set<PListCell> nextPartitionValues = Sets.newHashSet();
-        while (iter.hasNext()) {
-            Map.Entry<String, PListCell> entry = iter.next();
-            nextPartitionValues.add(entry.getValue());
-            // remove the partition which is not reserved
-            toRefreshPartitions.remove(entry.getKey());
-        }
-        logger.info("Filter partitions by partition_ttl_number, ttl_number:{}, result:{}, remains:{}",
-                filterNumber, toRefreshPartitions, nextPartitionValues);
-        // do filter input mvPartitionsToRefresh since it's a reference
-        mvPartitionsToRefresh.retainAll(toRefreshPartitions.keySet());
-        if (CollectionUtils.isEmpty(nextPartitionValues)) {
-            return;
-        }
-        if (!tentative) {
-            // partitionNameIter has just been traversed, and endPartitionName is not updated
-            // will cause endPartitionName == null
-            mvContext.setNextPartitionValues(PListCell.batchSerialize(nextPartitionValues));
-        }
+    public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh, Set<String> mvPotentialPartitionNames,
+                                               boolean tentative) {
+        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
+                MaterializedView.PartitionRefreshStrategy.STRICT);
     }
 
-    public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                                       Set<String> mvPotentialPartitionNames,
+    @Override
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh, Set<String> mvPotentialPartitionNames,
                                                        boolean tentative) {
+        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
+                MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
+    }
+
+    public void filterPartitionByRefreshNumberInternal(Set<String> mvPartitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
+                                                       boolean tentative,
+                                                       MaterializedView.PartitionRefreshStrategy refreshStrategy) {
         Map<String, PCell> partitionToCells = Maps.newHashMap();
         Map<String, PListCell> listPartitionMap = mv.getListPartitionItems();
         for (String partitionName : mvPartitionsToRefresh) {
@@ -508,8 +465,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         Map<String, PListCell> toRefreshPartitions = partitionToCells.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> (PListCell) e.getValue()));
-
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
 
         // TODO: Sort by List Partition's value is weird because there maybe meaningless or un-sortable,
         // users should take care of `partition_ttl_number` for list partition.
@@ -519,15 +474,15 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Iterator<String> toSelectedPartitionNameIter = sortedPartition.keySet().iterator();
 
         // dynamically obtain the number of partitions to be refreshed this time
-        int adaptivePartitionRefreshNumber = getAdaptivePartitionRefreshNumber(toSelectedPartitionNameIter);
+        int refreshNumber = getRefreshNumberByMode(toSelectedPartitionNameIter, refreshStrategy);
         Iterator<Map.Entry<String, PListCell>> iter = sortedPartition.entrySet().iterator();
-        // iterate adaptivePartitionRefreshNumber times
-        for (int i = 0; i < adaptivePartitionRefreshNumber; i++) {
+
+        // iterate refreshNumber times
+        for (int i = 0; i < refreshNumber; i++) {
             if (iter.hasNext()) {
                 iter.next();
             }
         }
-
         // compute next partition list cells in the next task run
         Set<PListCell> nextPartitionValues = Sets.newHashSet();
         while (iter.hasNext()) {
@@ -536,8 +491,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // remove the partition which is not reserved
             toRefreshPartitions.remove(entry.getKey());
         }
-        logger.info("Filter partitions by adaptive_partition_number, ttl_number:{}, result:{}, remains:{}",
-                adaptivePartitionRefreshNumber, toRefreshPartitions, nextPartitionValues);
+        logger.info("Filter partitions by refresh number, ttl_number:{}, result:{}, remains:{}",
+                refreshNumber, toRefreshPartitions, nextPartitionValues);
         // do filter input mvPartitionsToRefresh since it's a reference
         mvPartitionsToRefresh.retainAll(toRefreshPartitions.keySet());
         if (CollectionUtils.isEmpty(nextPartitionValues)) {
@@ -550,13 +505,12 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
     }
 
-    private int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) {
-
+    public int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
+        Map<Table, Map<String, Set<String>>> extRBTMvPartitions = mvContext.getExternalRefBaseTableMVPartitionMap();
         MVRefreshPartitionSelector mvRefreshPartitionSelector =
                 new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh,
-                        Config.mv_max_partitions_num_per_refresh);
-
+                        Config.mv_max_partitions_num_per_refresh, extRBTMvPartitions);
         int adaptiveRefreshNumber = 0;
         while (partitionNameIter.hasNext()) {
             String partitionName = partitionNameIter.next();

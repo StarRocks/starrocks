@@ -5713,4 +5713,21 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "mv1");
     }
+
+    @Test
+    public void testAdaptiveRefreshMVWithExternalTable1() throws Exception {
+        String sql = "create materialized view mv_table_with_external_table " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(a) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1',\n" +
+                "'partition_refresh_strategy' = 'adaptive'" +
+                ") \n" +
+                "as select a, b, d, bitmap_union(to_bitmap(t1.c))" +
+                " from iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " group by a, b, d;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "mv_table_with_external_table");
+    }
 }

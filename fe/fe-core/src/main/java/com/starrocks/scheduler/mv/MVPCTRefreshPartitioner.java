@@ -44,6 +44,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -147,6 +148,26 @@ public abstract class MVPCTRefreshPartitioner {
     public abstract void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                         Set<String> mvPotentialPartitionNames,
                                                         boolean tentative);
+
+    public int getRefreshNumberByMode(Iterator<String> sortedPartitionIterator,
+                                       MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+        try {
+            switch (refreshStrategy) {
+                case ADAPTIVE:
+                    return getAdaptivePartitionRefreshNumber(sortedPartitionIterator);
+                case STRICT:
+                default:
+                    return mv.getTableProperty().getPartitionRefreshNumber();
+            }
+        } catch (MVAdaptiveRefreshException e) {
+            logger.warn("Adaptive refresh failed for mode '{}', falling back to STRICT mode. Reason: {}",
+                    refreshStrategy, e.getMessage(), e);
+            return mv.getTableProperty().getPartitionRefreshNumber();
+        }
+    }
+
+    protected abstract int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter)
+            throws MVAdaptiveRefreshException;
 
     /**
      * Check whether the base table is supported partition refresh or not.
