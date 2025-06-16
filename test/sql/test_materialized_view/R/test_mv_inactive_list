@@ -58,6 +58,15 @@ False
 -- !result
 function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
 -- result:
+False
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+False
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
 True
 -- !result
 function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
