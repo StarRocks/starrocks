@@ -218,6 +218,11 @@ public:
                                    _build_tie);
     }
 
+    Status do_visit(const RowIdColumn& column) {
+        DCHECK(false) << "not support row id column";
+        return Status::NotSupported("not support row id column sort_and_tie");
+    }
+
 private:
     const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
@@ -405,6 +410,12 @@ public:
                                             _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
+    }
+
+    Status do_visit(const RowIdColumn& column) {
+        // @TODO just compre uint32 column 3times
+        DCHECK(false) << "not support row id column";
+        return Status::NotSupported("not support row id column");
     }
 
 private:

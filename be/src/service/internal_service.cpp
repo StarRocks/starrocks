@@ -1358,6 +1358,47 @@ void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::Rpc
     _exec_env->batch_write_mgr()->update_transaction_state(request, response);
 }
 
+template <typename T>
+void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_base, const PLookUpRequest* request,
+                                         PLookUpResponse* response, google::protobuf::Closure* done) {
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* req = const_cast<PLookUpRequest*>(request);
+
+    Status st;
+    DeferOp defer([&]() {
+        if (!st.ok()) {
+            st.to_protobuf(response->mutable_status());
+            done->Run();
+        }
+    });
+
+    if (cntl->request_attachment().size() > 0) {
+        // parse chunk
+        butil::IOBuf& io_buf = cntl->request_attachment();
+        for (size_t i = 0; i < request->row_id_columns_size(); i++) {
+            auto p_row_id_column = req->mutable_row_id_columns(i);
+            if (UNLIKELY(io_buf.size() < p_row_id_column->data_size())) {
+                auto msg = fmt::format("io_buf size {} is less than row_id_column data size {}", io_buf.size(),
+                                       p_row_id_column->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+            size_t size = io_buf.cutn(p_row_id_column->mutable_data(), p_row_id_column->data_size());
+            if (UNLIKELY(size != p_row_id_column->data_size())) {
+                auto msg = fmt::format("iobuf read {} != expected {}", size, p_row_id_column->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+        }
+    } else {
+        st = Status::InternalError("no attachment in lookup request");
+        return;
+    }
+    st = _exec_env->lookup_dispatcher_mgr()->lookup(RemoteLookUpRequest{cntl, request, response, done});
+}
+
 template class PInternalServiceImplBase<PInternalService>;
 
 } // namespace starrocks

@@ -14,7 +14,10 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <memory>
+#include <sstream>
 #include <string_view>
 #include <unordered_map>
 
@@ -336,6 +339,11 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
             index = _tablet_schema->num_columns();
             _params.vector_search_option->vector_column_id = index;
             _params.vector_search_option->vector_slot_id = slot->id();
+        } else if (slot->type().is_row_id_type()) {
+            _params.need_generate_global_rowid = true;
+            _params.row_id_column_slot = slot->id();
+            _query_slots.push_back(slot);
+            continue;
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
@@ -346,6 +354,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
             return Status::InternalError(ss.str());
         }
         scanner_columns.push_back(index);
+
         if (!_unused_output_column_ids.count(index)) {
             _query_slots.push_back(slot);
         }
@@ -504,6 +513,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     // schema is new object, but fields not
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
+    if (_params.need_generate_global_rowid) {
+        // @TODO we should make sure cid not conflict with other column id
+        // _params.row_id_column_id = child_schema.num_fields();
+        _params.row_id_column_id = *(std::max_element(reader_columns.begin(), reader_columns.end())) + 1;
+        child_schema.append(std::make_shared<Field>(_params.row_id_column_id, "global_row_id", TYPE_ROW_ID, false));
+    }
+
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
     // will modify schema field, need to copy schema
     RETURN_IF_ERROR(_prune_schema_by_access_paths(&child_schema));
@@ -591,10 +607,14 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk));
-
         TRY_CATCH_ALLOC_SCOPE_START()
 
         for (auto slot : _query_slots) {
+            if (slot->type().is_row_id_type()) {
+                DCHECK_EQ(slot->id(), _params.row_id_column_slot);
+                chunk->set_slot_id_to_index(slot->id(), chunk->schema()->get_row_id_field_index());
+                continue;
+            }
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }

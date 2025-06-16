@@ -14,9 +14,13 @@
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
+#include <memory>
+#include <vector>
+
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/runtime_filter_bank.h"
+#include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
 namespace starrocks::pipeline {
@@ -100,6 +104,20 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
     _rowset_release_guard = MultiRowsetReleaseGuard(std::move(tablet_rowsets), adopt_acquire_t{});
 
     return Status::OK();
+}
+GlobalLateMaterilizationCtx::~GlobalLateMaterilizationCtx() {
+    for (auto& guard : _rowset_release_guards) {
+        guard->reset();
+    }
+}
+
+void GlobalLateMaterilizationCtx::add_captured_tablet_rowsets(std::vector<std::vector<RowsetSharedPtr>> rowsets) {
+    for (const auto& rowset_vec : rowsets) {
+        Rowset::acquire_readers(rowset_vec);
+    }
+    std::unique_lock l(_mu);
+    _rowset_release_guards.emplace_back(
+            std::make_unique<MultiRowsetReleaseGuard>(std::move(rowsets), adopt_acquire_t{}));
 }
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,

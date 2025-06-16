@@ -542,6 +542,12 @@ public:
         _size += JsonColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
+    Status do_visit(const RowIdColumn& column) {
+        _size += FixedLengthColumnSerde<uint32_t, false>::max_serialized_size(*column.be_ids_column(), _encode_level);
+        _size += FixedLengthColumnSerde<uint32_t, false>::max_serialized_size(*column.seg_ids_column(), _encode_level);
+        _size += FixedLengthColumnSerde<uint32_t, false>::max_serialized_size(*column.ord_ids_column(), _encode_level);
+        return Status::OK();
+    }
 
     int64_t size() const { return _size; }
 
@@ -604,6 +610,13 @@ public:
 
     Status do_visit(const JsonColumn& column) {
         _cur = JsonColumnSerde::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    Status do_visit(const RowIdColumn& column) {
+        _cur = FixedLengthColumnSerde<uint32_t, false>::serialize(*column.be_ids_column(), _cur, _encode_level);
+        _cur = FixedLengthColumnSerde<uint32_t, false>::serialize(*column.seg_ids_column(), _cur, _encode_level);
+        _cur = FixedLengthColumnSerde<uint32_t, false>::serialize(*column.ord_ids_column(), _cur, _encode_level);
         return Status::OK();
     }
 
@@ -676,6 +689,14 @@ public:
 
     Status do_visit(JsonColumn* column) {
         _cur = JsonColumnSerde::deserialize(_cur, column);
+        return Status::OK();
+    }
+    Status do_visit(RowIdColumn* column) {
+        _cur = FixedLengthColumnSerde<uint32_t, false>::deserialize(_cur, column->be_ids_column().get(), _encode_level);
+        _cur = FixedLengthColumnSerde<uint32_t, false>::deserialize(_cur, column->seg_ids_column().get(),
+                                                                    _encode_level);
+        _cur = FixedLengthColumnSerde<uint32_t, false>::deserialize(_cur, column->ord_ids_column().get(),
+                                                                    _encode_level);
         return Status::OK();
     }
 

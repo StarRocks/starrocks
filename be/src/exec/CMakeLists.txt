@@ -21,6 +21,8 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
+    fetch_node.cpp
+    lookup_node.cpp
     capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
@@ -301,6 +303,10 @@ set(EXEC_FILES
     pipeline/schedule/pipeline_timer.cpp
     pipeline/wait_operator.cpp
     pipeline/runtime_filter_types.cpp
+    pipeline/fetch_processor.cpp
+    pipeline/fetch_sink_operator.cpp
+    pipeline/fetch_source_operator.cpp
+    pipeline/lookup_operator.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
