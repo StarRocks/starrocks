@@ -3821,4 +3821,22 @@ public class OlapTable extends Table {
         }
         return true;
     }
+
+    // Get the column name of the distribution columns when OlapTable supports distribution by hash
+    // return empty list if the table is distributed by random
+    public List<String> getDistributionKeyColumnNames() {
+        List<String> distColumnNames = Lists.newArrayList();
+        switch (defaultDistributionInfo.getType()) {
+            case HASH: {
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
+                for (ColumnId columnId : hashDistributionInfo.getDistributionColumns()) {
+                    distColumnNames.add(columnId.getId());
+                }
+                break;
+            }
+            default:
+                return distColumnNames;
+        }
+        return distColumnNames;
+    }
 }

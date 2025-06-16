@@ -297,6 +297,8 @@ public:
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
 
+    std::vector<std::string> distribution_key_column_names() const { return _distribution_key_column_names; }
+
     size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
@@ -382,6 +384,8 @@ private:
     std::vector<ColumnId> _sort_key_idxes;
     std::vector<ColumnUID> _sort_key_uids;
     std::unordered_set<ColumnUID> _sort_key_uids_set;
+
+    std::vector<std::string> _distribution_key_column_names;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;

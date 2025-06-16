@@ -103,6 +103,9 @@ TEST(MetadataUtilTest, testConvertThriftSchemaToPbSchema) {
         });
     }
 
+    schema.__isset.distribution_key_column_names = true;
+    schema.distribution_key_column_names.emplace_back("c0");
+
     TabletSchemaPB schemaPb;
     ASSERT_TRUE(convert_t_schema_to_pb_schema(schema, TCompressionType::LZ4, &schemaPb).ok());
 
@@ -142,6 +145,9 @@ TEST(MetadataUtilTest, testConvertThriftSchemaToPbSchema) {
     ASSERT_EQ(schemaPb.table_indices(1).col_unique_id_size(), 1);
     ASSERT_EQ(schemaPb.table_indices(1).col_unique_id(0), 1);
     ASSERT_EQ(schemaPb.table_indices(1).index_name(), "vector_index");
+
+    ASSERT_EQ(schemaPb.distribution_key_column_names().size(), 1);
+    ASSERT_EQ(schemaPb.distribution_key_column_names(0), "c0");
 }
 
 } // namespace starrocks

@@ -55,6 +55,7 @@ struct TTabletSchema {
     10: optional list<i32> sort_key_idxes
     11: optional list<i32> sort_key_unique_ids
     12: optional i32 schema_version;
+    13: optional list<string> distribution_key_column_names;
 }
 
 // this enum stands for different storage format in src_backends

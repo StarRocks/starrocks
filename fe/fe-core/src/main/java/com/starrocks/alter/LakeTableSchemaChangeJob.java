@@ -407,6 +407,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             .setStorageType(TStorageType.COLUMN)
                             .addColumns(shadowSchema)
                             .setSchemaHash(0)
+                            .setDistributionKeyColumnNames(table.getDistributionKeyColumnNames())
                             .build().toTabletSchema();
 
                     boolean createSchemaFile = true;

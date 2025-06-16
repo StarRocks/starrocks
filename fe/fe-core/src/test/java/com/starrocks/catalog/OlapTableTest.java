@@ -39,6 +39,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
@@ -432,5 +433,38 @@ public class OlapTableTest {
         Assert.assertTrue(result.size() == 2);
         Assert.assertTrue(result.get(0).getIndexName().equals("index1"));
         Assert.assertTrue(result.get(1).getIndexName().equals("index2"));
+    }
+
+    @Test
+    public void testGetDistributionKeyColumnNames() {
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
+
+        Column c0 = new Column("c0", Type.BIGINT, true, null, null, false, null, "cc0", 1);
+        Column c1 = new Column("c1", Type.DATETIME, true, null, null, false, null, "cc1", 2);
+        Column c2 = new Column("c2", Type.VARCHAR, true, null, null, false, null, "cc2", 3);
+        List<Column> columns = Lists.newArrayList(c0, c1, c2);
+
+        OlapTable olapTable = new OlapTable(
+                66,
+                "testName",
+                columns,
+                KeysType.DUP_KEYS,
+                new SinglePartitionInfo(),
+                new HashDistributionInfo(8, Lists.newArrayList(c0)),
+                new TableIndexes(),
+                Table.TableType.OLAP
+        );
+
+        Assert.assertTrue(olapTable.getDefaultDistributionInfo().getType() == DistributionInfoType.HASH);
+        Assert.assertTrue(olapTable.getDistributionKeyColumnNames().size() == 1);
+        Assert.assertTrue(olapTable.getDistributionKeyColumnNames().get(0).equals("c0"));
+
+        new MockUp<DistributionInfo>() {
+            @Mock
+            public DistributionInfoType getType() {
+                return DistributionInfoType.RANDOM;
+            }
+        };
+        Assert.assertTrue(olapTable.getDistributionKeyColumnNames().isEmpty());
     }
 }

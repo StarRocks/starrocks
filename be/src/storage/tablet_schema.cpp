@@ -541,6 +541,15 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
     _schema_version = schema.schema_version();
+
+    // The following cases which has empty distribution key column names:
+    // 1. The tablet is created in the older version and upgrade.
+    // 2. The table does not organized by hash distribution.
+    if (!schema.distribution_key_column_names().empty()) {
+        for (const auto& col_name : schema.distribution_key_column_names()) {
+            _distribution_key_column_names.emplace_back(col_name);
+        }
+    }
 }
 
 Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t version,
@@ -608,6 +617,8 @@ Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t ver
         _has_bf_fpp = false;
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
+
+    _distribution_key_column_names = ori_tablet_schema.distribution_key_column_names();
     return Status::OK();
 }
 
@@ -633,6 +644,10 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     for (auto& index : _indexes) {
         auto* tablet_index_pb = tablet_schema_pb->add_table_indices();
         index.to_schema_pb(tablet_index_pb);
+    }
+
+    for (const auto& col_name : _distribution_key_column_names) {
+        tablet_schema_pb->add_distribution_key_column_names(col_name);
     }
 }
 

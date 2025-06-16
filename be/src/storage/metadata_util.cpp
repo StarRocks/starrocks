@@ -398,6 +398,10 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     if (has_bf_columns && tablet_schema.__isset.bloom_filter_fpp) {
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);
     }
+
+    for (const auto& col_name : tablet_schema.distribution_key_column_names) {
+        schema->add_distribution_key_column_names(col_name);
+    }
     return validate_tablet_schema(*schema);
 }
 

@@ -170,4 +170,29 @@ TEST(TabletSchemaTest, test_is_support_checksum) {
     ASSERT_FALSE(map_column2.is_support_checksum());
 }
 
+TEST(TabletSchemaTest, test_schema_with_distribution_key) {
+    // init tablet schema
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("f1");
+    c1->set_type("VARCHAR");
+    c1->set_is_key(true);
+
+    auto c2 = schema_pb.add_column();
+    c2->set_unique_id(2);
+    c2->set_name("f2");
+    c2->set_type("SMALLINT");
+    c2->set_is_key(false);
+
+    schema_pb.add_distribution_key_column_names("f1");
+    TabletSchema tablet_schema(schema_pb);
+
+    ASSERT_TRUE(tablet_schema.distribution_key_column_names().size() == 1);
+    ASSERT_TRUE(tablet_schema.distribution_key_column_names()[0] == "f1");
+}
+
 } // namespace starrocks
