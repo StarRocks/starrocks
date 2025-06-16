@@ -20,9 +20,9 @@ import java.util.Map;
 
 public class DatabaseSnapshotInfo {
     @SerializedName(value = "dbId")
-    public long dbId;
+    public final long dbId;
     @SerializedName(value = "tableInfos")
-    public Map<Long, TableSnapshotInfo> tableInfos;
+    public final Map<Long, TableSnapshotInfo> tableInfos;
 
     public DatabaseSnapshotInfo(long dbId, Map<Long, TableSnapshotInfo> tableInfos) {
         this.dbId = dbId;

@@ -20,9 +20,9 @@ import java.util.Map;
 
 public class PartitionSnapshotInfo {
     @SerializedName(value = "partitionId")
-    public long partitionId;
+    public final long partitionId;
     @SerializedName(value = "physicalPartInfos")
-    public Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos;
+    public final Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos;
 
     public PartitionSnapshotInfo(long partitionId, Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos) {
         this.partitionId = partitionId;

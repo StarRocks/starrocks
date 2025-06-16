@@ -18,7 +18,7 @@ import com.google.gson.annotations.SerializedName;
 
 public class MaterializedIndexSnapshotInfo {
     @SerializedName(value = "indexId")
-    public long indexId;
+    public final long indexId;
 
     public MaterializedIndexSnapshotInfo(long indexId) {
         this.indexId = indexId;

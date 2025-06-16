@@ -20,11 +20,11 @@ import java.util.Map;
 
 public class PhysicalPartitionSnapshotInfo {
     @SerializedName(value = "physicalPartitionId")
-    public long physicalPartitionId;
+    public final long physicalPartitionId;
     @SerializedName(value = "version")
-    public long version;
+    public final long version;
     @SerializedName(value = "indexInfos")
-    public Map<Long, MaterializedIndexSnapshotInfo> indexInfos;
+    public final Map<Long, MaterializedIndexSnapshotInfo> indexInfos;
 
     public PhysicalPartitionSnapshotInfo(long physicalPartId, long visibleVersion,
                                          Map<Long, MaterializedIndexSnapshotInfo> indexInfos) {

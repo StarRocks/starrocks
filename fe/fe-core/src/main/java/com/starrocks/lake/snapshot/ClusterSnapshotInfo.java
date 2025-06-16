@@ -20,7 +20,7 @@ import java.util.Map;
 
 public class ClusterSnapshotInfo {
     @SerializedName(value = "dbInfos")
-    private Map<Long, DatabaseSnapshotInfo> dbInfos;
+    private final Map<Long, DatabaseSnapshotInfo> dbInfos;
 
     public ClusterSnapshotInfo(Map<Long, DatabaseSnapshotInfo> dbInfos) {
         this.dbInfos = dbInfos;
