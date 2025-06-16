@@ -69,6 +69,9 @@ public enum AlterOpType {
     ALTER_BRANCH,
     ALTER_TAG,
     ALTER_TABLE_OPERATION,
+
+    ALTER_AUTO_INCREMENT,
+
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.
