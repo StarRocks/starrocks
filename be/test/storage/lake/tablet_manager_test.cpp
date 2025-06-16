@@ -35,6 +35,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/bthreads/util.h"
+#include "util/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
 
 // NOTE: intend to put the following header to the end of the include section
@@ -656,7 +657,16 @@ TEST_F(LakeTabletManagerTest, put_aggregate_tablet_metadata) {
     }
 
     {
+        std::string fp_name = "tablet_schema_not_found_in_shared_metadata";
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
         auto res = _tablet_manager->get_tablet_metadata(2, 2);
+        ASSERT_FALSE(res.ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+        res = _tablet_manager->get_tablet_metadata(2, 2);
         ASSERT_TRUE(res.ok());
         TabletMetadataPtr metadata = std::move(res).value();
         ASSERT_EQ(metadata->schema().id(), 11);

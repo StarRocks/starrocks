@@ -462,6 +462,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     return metadata_or.value();
 }
 
+DEFINE_FAIL_POINT(tablet_schema_not_found_in_shared_metadata);
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                       bool fill_cache, int64_t expected_gtid,
                                                                       const std::shared_ptr<FileSystem>& fs) {
@@ -529,6 +530,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         return Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
     }
 
+    FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_shared_metadata, { tablet_id = 10003; });
     auto schema_id = shared_metadata->tablet_to_schema().find(tablet_id);
     if (schema_id == shared_metadata->tablet_to_schema().end()) {
         return Status::Corruption(
