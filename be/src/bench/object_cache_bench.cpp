@@ -18,13 +18,14 @@
 #include <random>
 
 #include "cache/cache_options.h"
-#include "cache/object_cache/lrucache_module.h"
-#include "cache/object_cache/starcache_module.h"
+#include "cache/lrucache_engine.h"
+#include "cache/object_cache/page_cache.h"
 #include "cache/starcache_engine.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
+#include "util/disk_info.h"
 #include "util/mem_info.h"
 
 namespace starrocks {
@@ -50,15 +51,16 @@ public:
 
     static void init_env();
     static std::string get_cache_type_str(CacheType type);
-    ObjectCache* get_object_cache(CacheType type);
 
     void init_cache(CacheType cache_type);
-    void prepare_data(ObjectCache* cache, int64_t count);
-    void prepare_sequence_data(ObjectCache* cache, int64_t count);
-    void random_query(benchmark::State& state, ObjectCache* cache, size_t ratio, int64_t iter_count, int64_t count);
+    void prepare_data(StoragePageCache* cache, int64_t count);
+    void prepare_sequence_data(StoragePageCache* cache, int64_t count);
+    void random_query(benchmark::State& state, StoragePageCache* cache, size_t ratio, int64_t iter_count,
+                      int64_t count);
 
-    static void random_query_multi_threads(benchmark::State* state, ObjectCache* cache, size_t ratio, size_t count);
-    static void random_insert_multi_threads(benchmark::State* state, ObjectCache* cache, size_t count,
+    static void random_query_multi_threads(benchmark::State* state, StoragePageCache* cache, size_t ratio,
+                                           size_t count);
+    static void random_insert_multi_threads(benchmark::State* state, StoragePageCache* cache, size_t count,
                                             size_t page_size);
 
     void insert_to_cache(benchmark::State& state, CacheType cache_type, int64_t count);
@@ -71,10 +73,9 @@ private:
     size_t _capacity = 100L * 1024 * 1024 * 1024;
     size_t _page_size = 1024;
 
-    std::shared_ptr<StarCacheEngine> _local_cache;
-    std::shared_ptr<ShardedLRUCache> _shared_lru_cache;
-    std::shared_ptr<LRUCacheModule> _lru_cache;
-    std::shared_ptr<StarCacheModule> _star_cache;
+    std::shared_ptr<LRUCacheEngine> _lru_cache;
+    std::shared_ptr<StarCacheEngine> _star_cache;
+    std::shared_ptr<StoragePageCache> _page_cache;
 };
 
 void ObjectCacheBench::init_env() {
@@ -103,85 +104,75 @@ std::string ObjectCacheBench::get_cache_type_str(CacheType type) {
     }
 }
 
-ObjectCache* ObjectCacheBench::get_object_cache(CacheType type) {
-    if (type == CacheType::LRU) {
-        return _lru_cache.get();
-    } else {
-        return _star_cache.get();
-    }
-}
-
 void ObjectCacheBench::init_cache(CacheType cache_type) {
-    if (cache_type == CacheType::LRU) {
-        _shared_lru_cache = std::make_shared<ShardedLRUCache>(_capacity);
-        _lru_cache = std::make_shared<LRUCacheModule>(_shared_lru_cache);
-        LOG(ERROR) << "init lru cache success";
-    } else {
-        CacheOptions opt;
-        opt.mem_space_size = _capacity;
-        opt.block_size = config::datacache_block_size;
-        opt.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
-        opt.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
-        opt.enable_checksum = config::datacache_checksum_enable;
-        opt.enable_direct_io = config::datacache_direct_io_enable;
-        opt.enable_tiered_cache = config::datacache_tiered_cache_enable;
-        opt.skip_read_factor = config::datacache_skip_read_factor;
-        opt.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
-        opt.enable_datacache_persistence = false;
-        opt.inline_item_count_limit = config::datacache_inline_item_count_limit;
-        opt.engine = "starcache";
-        opt.eviction_policy = config::datacache_eviction_policy;
+    CacheOptions opt;
+    opt.mem_space_size = _capacity;
+    opt.block_size = config::datacache_block_size;
+    opt.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
+    opt.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
+    opt.enable_checksum = config::datacache_checksum_enable;
+    opt.enable_direct_io = config::datacache_direct_io_enable;
+    opt.enable_tiered_cache = config::datacache_tiered_cache_enable;
+    opt.skip_read_factor = config::datacache_skip_read_factor;
+    opt.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
+    opt.enable_datacache_persistence = false;
+    opt.inline_item_count_limit = config::datacache_inline_item_count_limit;
+    opt.eviction_policy = config::datacache_eviction_policy;
 
-        _local_cache = std::make_shared<StarCacheEngine>();
-        Status st = _local_cache->init(opt);
+    if (cache_type == CacheType::LRU) {
+        _lru_cache = std::make_shared<LRUCacheEngine>();
+        Status st = _lru_cache->init(opt);
         if (!st.ok()) {
             LOG(FATAL) << "init star cache failed: " << st;
         }
+        LOG(INFO) << "init lru cache success";
+        _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());
+    } else {
+        opt.engine = "starcache";
 
-        _star_cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
+        _star_cache = std::make_shared<StarCacheEngine>();
+        Status st = _star_cache->init(opt);
+        if (!st.ok()) {
+            LOG(FATAL) << "init star cache failed: " << st;
+        }
+        _page_cache = std::make_shared<StoragePageCache>(_star_cache.get());
         LOG(INFO) << "init star cache succ";
     }
 }
 
-void ObjectCacheBench::prepare_sequence_data(ObjectCache* cache, int64_t count) {
-    auto deleter = [](const starrocks::CacheKey& key, void* value) { free(value); };
+void ObjectCacheBench::prepare_sequence_data(StoragePageCache* cache, int64_t count) {
     for (size_t i = 0; i < count; i++) {
         std::string key = "str:" + std::to_string(rand() % count);
-        void* ptr = malloc(_page_size);
-        *(int*)ptr = 1;
-        ObjectCacheHandlePtr handle = nullptr;
+        auto* ptr = new std::vector<uint8_t>(_page_size);
+        (*ptr)[0] = 1;
+        PageCacheHandle handle;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, options);
+        Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
             }
-        } else {
-            cache->release(handle);
         }
     }
 }
 
-void ObjectCacheBench::prepare_data(ObjectCache* cache, int64_t count) {
-    auto deleter = [](const starrocks::CacheKey& key, void* value) { free(value); };
+void ObjectCacheBench::prepare_data(StoragePageCache* cache, int64_t count) {
     for (size_t i = 0; i < count; i++) {
         std::string key = "str:" + std::to_string(rand());
-        void* ptr = malloc(_page_size);
-        *(int*)ptr = 1;
-        ObjectCacheHandlePtr handle = nullptr;
+        auto* ptr = new std::vector<uint8_t>(_page_size);
+        (*ptr)[0] = 1;
+        PageCacheHandle handle;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
             }
-        } else {
-            cache->release(handle);
         }
     }
 }
 
-void ObjectCacheBench::random_query(benchmark::State& state, ObjectCache* cache, size_t ratio, int64_t iter_count,
+void ObjectCacheBench::random_query(benchmark::State& state, StoragePageCache* cache, size_t ratio, int64_t iter_count,
                                     int64_t count) {
     thread_local std::mt19937 gen(std::random_device{}());
     thread_local std::uniform_int_distribution<> dis(1, 1073741824);
@@ -189,21 +180,13 @@ void ObjectCacheBench::random_query(benchmark::State& state, ObjectCache* cache,
     LOG(ERROR) << "random query start";
     for (size_t i = 0; i < iter_count; i++) {
         std::string key = "str:" + std::to_string(dis(gen) % (count * ratio));
-        ObjectCacheHandlePtr handle = nullptr;
-        Status st = cache->lookup(key, &handle, nullptr);
-        if (!st.ok()) {
-            if (!st.is_not_found()) {
-                LOG(FATAL) << "query failed: " << st;
-            }
-        } else {
-            cache->release(handle);
-        }
+        PageCacheHandle handle;
+        (void)cache->lookup(key, &handle);
     }
-    LOG(ERROR) << "random query end: lookup=" << cache->metrics().lookup_count
-               << ", hit=" << cache->metrics().hit_count;
+    LOG(ERROR) << "random query end: lookup=" << cache->get_lookup_count() << ", hit=" << cache->get_hit_count();
 }
 
-void ObjectCacheBench::random_query_multi_threads(benchmark::State* state, ObjectCache* cache, size_t ratio,
+void ObjectCacheBench::random_query_multi_threads(benchmark::State* state, StoragePageCache* cache, size_t ratio,
                                                   size_t count) {
     state->ResumeTiming();
     thread_local std::mt19937 gen(std::random_device{}());
@@ -211,20 +194,13 @@ void ObjectCacheBench::random_query_multi_threads(benchmark::State* state, Objec
 
     for (size_t i = 0; i < count; i++) {
         std::string key = "str:" + std::to_string(dis(gen) % (count * ratio));
-        ObjectCacheHandlePtr handle = nullptr;
-        Status st = cache->lookup(key, &handle, nullptr);
-        if (!st.ok()) {
-            if (!st.is_not_found()) {
-                LOG(FATAL) << "query failed: " << st;
-            }
-        } else {
-            cache->release(handle);
-        }
+        PageCacheHandle handle;
+        (void)cache->lookup(key, &handle);
     }
     state->PauseTiming();
 }
 
-void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, ObjectCache* cache, size_t count,
+void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, StoragePageCache* cache, size_t count,
                                                    size_t page_size) {
     state->ResumeTiming();
     thread_local std::mt19937 gen(std::random_device{}());
@@ -233,17 +209,15 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Obje
     auto deleter = [](const starrocks::CacheKey& key, void* value) { free(value); };
     for (size_t i = 0; i < count; i++) {
         std::string key = "str:" + std::to_string(dis(gen));
-        void* ptr = malloc(page_size);
-        *(int*)ptr = 1;
-        ObjectCacheHandlePtr handle = nullptr;
+        auto* ptr = new std::vector<uint8_t>(page_size);
+        (*ptr)[0] = 1;
+        PageCacheHandle handle;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
             }
-        } else {
-            cache->release(handle);
         }
     }
 
@@ -254,14 +228,13 @@ void ObjectCacheBench::insert_to_cache(benchmark::State& state, CacheType cache_
     int64_t old_mem_usage = CurrentThread::mem_tracker()->consumption();
     std::string type_str = get_cache_type_str(cache_type);
     init_cache(cache_type);
-    ObjectCache* cache = get_object_cache(cache_type);
 
     state.ResumeTiming();
-    prepare_data(cache, count);
+    prepare_data(_page_cache.get(), count);
     state.PauseTiming();
 
     int64_t new_mem_usage = CurrentThread::mem_tracker()->consumption();
-    int64_t calc_usage = cache->metrics().usage / 1024 / 1024;
+    int64_t calc_usage = _page_cache->memory_usage() / 1024 / 1024;
     int64_t real_usage = (new_mem_usage - old_mem_usage) / 1024 / 1024;
 
     LOG(INFO) << "insert: type=" << type_str << ", metric=" << calc_usage << "M, lru=" << real_usage << "M";
@@ -270,11 +243,10 @@ void ObjectCacheBench::insert_to_cache(benchmark::State& state, CacheType cache_
 void ObjectCacheBench::random_query(benchmark::State& state, CacheType cache_type, size_t ratio, int64_t iter_count,
                                     int64_t count) {
     init_cache(cache_type);
-    ObjectCache* cache = get_object_cache(cache_type);
-    prepare_sequence_data(cache, count);
+    prepare_sequence_data(_page_cache.get(), count);
 
     state.ResumeTiming();
-    random_query(state, cache, ratio, iter_count, count);
+    random_query(state, _page_cache.get(), ratio, iter_count, count);
     state.PauseTiming();
 }
 
@@ -282,19 +254,18 @@ void ObjectCacheBench::random_query_multi_threads_test(benchmark::State& state, 
                                                        int64_t count) {
     state.PauseTiming();
     init_cache(cache_type);
-    ObjectCache* cache = get_object_cache(cache_type);
-    prepare_sequence_data(cache, count);
+    prepare_sequence_data(_page_cache.get(), count);
 
     LOG(INFO) << "start random query test";
     std::vector<std::thread> threads;
     for (size_t i = 0; i < 10; i++) {
-        threads.emplace_back(random_query_multi_threads, &state, cache, ratio, count);
+        threads.emplace_back(random_query_multi_threads, &state, _page_cache.get(), ratio, count);
     }
     for (auto& t : threads) {
         t.join();
     }
-    LOG(INFO) << "end random query test: lookup=" << cache->metrics().lookup_count
-              << ", hit=" << cache->metrics().hit_count;
+    LOG(INFO) << "end random query test: lookup=" << _page_cache->get_lookup_count()
+              << ", hit=" << _page_cache->get_hit_count();
 
     threads.clear();
     state.ResumeTiming();
@@ -303,12 +274,11 @@ void ObjectCacheBench::random_query_multi_threads_test(benchmark::State& state, 
 void ObjectCacheBench::insert_cache_multi_threads_test(benchmark::State& state, CacheType cache_type, int64_t count) {
     state.PauseTiming();
     init_cache(cache_type);
-    ObjectCache* cache = get_object_cache(cache_type);
     int64_t old_mem_usage = CurrentThread::mem_tracker()->consumption();
 
     std::vector<std::thread> threads;
     for (size_t i = 0; i < 5; i++) {
-        threads.emplace_back(random_insert_multi_threads, &state, cache, count, _page_size);
+        threads.emplace_back(random_insert_multi_threads, &state, _page_cache.get(), count, _page_size);
     }
     for (auto& t : threads) {
         t.join();
