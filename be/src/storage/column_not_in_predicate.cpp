@@ -359,6 +359,10 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
+    // TODO(stephen): implement it later
+    case TYPE_DECIMAL256:
+    case TYPE_INT256:
+        return nullptr;
     case TYPE_CHAR:
         return new BinaryColumnNotInPredicate<TYPE_CHAR>(type_info, id, strs);
     case TYPE_VARCHAR:

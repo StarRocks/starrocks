@@ -118,7 +118,7 @@ public class DecimalLiteral extends LiteralExpr {
         return new DecimalLiteral(this);
     }
 
-    // Precision and scale of BigDecimal is subtly different from Decimal32/64/128.
+    // Precision and scale of BigDecimal is subtly different from Decimal32/64/128/256.
     // In BigDecimal, the precision is the number of digits in the unscaled BigInteger value.
     // there are two types of subnormal BigDecimal violate the invariants:  0 < P and 0 <= S <= P
     // type 1: 0 <= S but S > P.  i.e. BigDecimal("0.0001"), unscaled BigInteger is 1, the scale is 4
@@ -156,8 +156,8 @@ public class DecimalLiteral extends LiteralExpr {
             int precision = getRealPrecision(this.value);
             int scale = getRealScale(this.value);
             int integerPartWidth = precision - scale;
-            int maxIntegerPartWidth = 38;
-            // integer part of decimal literal should not exceed 38
+            int maxIntegerPartWidth = 76;
+            // integer part of decimal literal should not exceed 76
             if (integerPartWidth > maxIntegerPartWidth) {
                 String errMsg = String.format(
                         "Non-typed decimal literal is overflow, value='%s' (precision=%d, scale=%d)",
@@ -230,10 +230,10 @@ public class DecimalLiteral extends LiteralExpr {
         return false;
     }
 
-    final private static BigDecimal[] SCALE_FACTOR = new BigDecimal[39];
+    final private static BigDecimal[] SCALE_FACTOR = new BigDecimal[77];
 
     static {
-        for (int i = 0; i < 39; ++i) {
+        for (int i = 0; i < 77; ++i) {
             SCALE_FACTOR[i] = new BigDecimal("1" + Strings.repeat("0", i));
         }
     }
@@ -274,6 +274,7 @@ public class DecimalLiteral extends LiteralExpr {
                 buffer.putLong(scaledValue.longValue());
                 break;
             case DECIMAL128:
+            case DECIMAL256:
             case DECIMALV2:
                 // BigInteger::toByteArray returns a big-endian byte[], so copy in reverse order one by one byte.
                 byte[] bytes = scaledValue.toBigInteger().toByteArray();
@@ -282,13 +283,13 @@ public class DecimalLiteral extends LiteralExpr {
                 }
                 // pad with sign bits
                 byte prefixByte = scaledValue.signum() >= 0 ? (byte) 0 : (byte) 0xff;
-                int numPaddingBytes = 16 - bytes.length;
+                int numPaddingBytes = type.getTypeSize() - bytes.length;
                 for (int i = 0; i < numPaddingBytes; ++i) {
                     buffer.put(prefixByte);
                 }
                 break;
             default:
-                Preconditions.checkArgument(false, "Type bust be decimal type");
+                Preconditions.checkArgument(false, "Type must be decimal type");
         }
         buffer.flip();
         return buffer;

@@ -186,18 +186,18 @@ class ParserTest {
         SessionVariable sessionVariable = ctx.getSessionVariable();
         try {
             sessionVariable.setSqlDialect("sr");
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            SqlParser.parse(sql, sessionVariable);
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
             sessionVariable.setSqlDialect("trino");
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            SqlParser.parse(sql, sessionVariable);
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
@@ -206,9 +206,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -217,9 +217,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -228,9 +228,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
+            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -239,13 +239,13 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
+            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
         try {
             sessionVariable.setLargeDecimalUnderlyingType("foobar");
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable error) {
 
         }

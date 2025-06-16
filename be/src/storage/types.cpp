@@ -338,7 +338,8 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
 TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
     if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
-    } else if (field_type == TYPE_DECIMAL32 || field_type == TYPE_DECIMAL64 || field_type == TYPE_DECIMAL128) {
+    } else if (field_type == TYPE_DECIMAL32 || field_type == TYPE_DECIMAL64 || field_type == TYPE_DECIMAL128 ||
+               field_type == TYPE_DECIMAL256) {
         return get_decimal_type_info(field_type, precision, scale);
     } else {
         return nullptr;
@@ -981,7 +982,7 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
             src_type->type() == TYPE_BIGINT || src_type->type() == TYPE_LARGEINT || src_type->type() == TYPE_FLOAT ||
             src_type->type() == TYPE_DOUBLE || src_type->type() == TYPE_DECIMAL || src_type->type() == TYPE_DECIMALV2 ||
             src_type->type() == TYPE_DECIMAL32 || src_type->type() == TYPE_DECIMAL64 ||
-            src_type->type() == TYPE_DECIMAL128) {
+            src_type->type() == TYPE_DECIMAL128 || src_type->type() == TYPE_DECIMAL256) {
             auto result = src_type->to_string(src);
             auto slice = reinterpret_cast<Slice*>(dest);
             slice->data = reinterpret_cast<char*>(mem_pool->allocate(result.size()));
@@ -1054,5 +1055,10 @@ int TypeComparator<ftype>::cmp(const void* lhs, const void* rhs) {
 #define M(ftype) template struct TypeComparator<ftype>;
 APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
 #undef M
+
+// TODO(stephen): support this trait in next patch
+// template <>
+// struct ScalarTypeInfoImplBase<TYPE_INT256> {
+// };
 
 } // namespace starrocks

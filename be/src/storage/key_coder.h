@@ -98,7 +98,8 @@ class KeyCoderTraits {};
 
 template <LogicalType field_type>
 class KeyCoderTraits<field_type,
-                     typename std::enable_if_t<std::is_integral_v<typename CppTypeTraits<field_type>::CppType>>> {
+                     typename std::enable_if_t<std::is_integral_v<typename CppTypeTraits<field_type>::CppType> &&
+                                               field_type != TYPE_INT256>> {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using UnsignedCppType = typename CppTypeTraits<field_type>::UnsignedCppType;
@@ -297,6 +298,25 @@ public:
     }
 };
 
+// TODO (stephen): implement this trait later. because we can't test it in the current patch.
+template <>
+class KeyCoderTraits<TYPE_INT256> {
+public:
+    using CppType = int256_t;
+
+    static void full_encode_ascending(const void* value, std::string* buf) {}
+
+    static void full_encode_ascending_datum(const Datum& value, std::string* buf) {}
+
+    static void encode_ascending(const void* value, size_t index_size, std::string* buf) {}
+
+    static void encode_ascending_datum(const Datum& value, size_t index_size, std::string* buf) {}
+
+    static Status decode_ascending(Slice* encoded_key, size_t index_size, uint8_t* cell_ptr, MemPool* pool) {
+        return Status::OK();
+    }
+};
+
 template <>
 class KeyCoderTraits<TYPE_DECIMAL32> : KeyCoderTraits<TYPE_INT> {};
 
@@ -305,6 +325,9 @@ class KeyCoderTraits<TYPE_DECIMAL64> : KeyCoderTraits<TYPE_BIGINT> {};
 
 template <>
 class KeyCoderTraits<TYPE_DECIMAL128> : KeyCoderTraits<TYPE_LARGEINT> {};
+
+template <>
+class KeyCoderTraits<TYPE_DECIMAL256> : KeyCoderTraits<TYPE_INT256> {};
 
 template <>
 class KeyCoderTraits<TYPE_CHAR> {

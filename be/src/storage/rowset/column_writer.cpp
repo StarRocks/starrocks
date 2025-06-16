@@ -683,7 +683,6 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
-
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
             is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;

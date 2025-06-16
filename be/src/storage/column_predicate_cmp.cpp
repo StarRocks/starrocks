@@ -138,6 +138,10 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         DCHECK(st.ok());
         return new Predicate<TYPE_DECIMAL128>(type_info, id, value);
     }
+    // TODO(stephen): implement it later
+    case TYPE_DECIMAL256:
+    case TYPE_INT256:
+        return nullptr;
     case TYPE_DATE_V1: {
         uint24_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());

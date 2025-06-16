@@ -777,6 +777,7 @@ InsitializeColumnValueRange(int16_t);
 InsitializeColumnValueRange(int32_t);
 InsitializeColumnValueRange(int64_t);
 InsitializeColumnValueRange(__int128);
+InsitializeColumnValueRange(int256_t);
 InsitializeColumnValueRange(Slice);
 InsitializeColumnValueRange(DecimalV2Value);
 InsitializeColumnValueRange(bool);
