@@ -1542,19 +1542,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return sb.toString();
     }
 
-    private static final ImmutableSet<String> NEED_SHOW_PROPS;
-
-    static {
-        NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
-                .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
-                .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
-                .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)
-                .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
-                .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
-                .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
-                .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)
-                .build();
-    }
+    private static final ImmutableSet<String> NEED_SHOW_PROPS = ImmutableSet.of(
+            PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
+            PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+            PropertyAnalyzer.PROPERTIES_PARTITION_TTL,
+            PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
+            PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
+            PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
+            PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY
+    );
 
     public Map<String, String> getMaterializedViewPropMap() {
 

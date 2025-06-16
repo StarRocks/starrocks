@@ -3063,7 +3063,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         boolean isNonPartitioned = partitionInfo.isUnPartitioned();
         DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
-        PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
+        AlterMVJobExecutor.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
                 stmt.getPartitionByExprToAdjustExprMap());
         final long warehouseId = materializedView.getWarehouseId();
         try {
