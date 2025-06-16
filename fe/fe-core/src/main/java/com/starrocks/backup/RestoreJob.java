@@ -1035,7 +1035,7 @@ public class RestoreJob extends AbstractJob {
                         .setBloomFilterColumnNames(bfColumns)
                         .setBloomFilterFpp(bfFpp)
                         .setIndexes(localTbl.getCopiedIndexes())
-                        .setDistributionKeyColumnNames(localTbl.getDistributionKeyColumnNames())
+                        .setDistributionKeyColumnNames(localTbl.getDistributionKeyColumnIds())
                         .build().toTabletSchema();
                 for (Tablet restoreTablet : restoredIdx.getTablets()) {
                     globalStateMgr.getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);

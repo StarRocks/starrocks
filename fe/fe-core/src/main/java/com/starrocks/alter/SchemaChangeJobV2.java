@@ -357,7 +357,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
                             .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
                             .addColumns(shadowSchema)
-                            .setDistributionKeyColumnNames(tbl.getDistributionKeyColumnNames())
+                            .setDistributionKeyColumnNames(tbl.getDistributionKeyColumnIds())
                             .build().toTabletSchema();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();

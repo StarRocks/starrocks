@@ -3097,7 +3097,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
                     .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                     .setIndexes(schemaChangeData.getIndexes())
-                    .setDistributionKeyColumnNames(schemaChangeData.getTable().getDistributionKeyColumnNames())
+                    .setDistributionKeyColumnNames(schemaChangeData.getTable().getDistributionKeyColumnIds())
                     .build();
             job.setIndexTabletSchema(indexId, indexName, schemaInfo);
         }

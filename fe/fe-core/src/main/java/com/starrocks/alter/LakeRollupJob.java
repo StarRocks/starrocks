@@ -191,7 +191,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
                         .setSortKeyUniqueIds(null)
                         .addColumns(rollupSchema)
-                        .setDistributionKeyColumnNames(table.getDistributionKeyColumnNames())
+                        .setDistributionKeyColumnNames(table.getDistributionKeyColumnIds())
                         .build().toTabletSchema();
 
                 boolean createSchemaFile = true;

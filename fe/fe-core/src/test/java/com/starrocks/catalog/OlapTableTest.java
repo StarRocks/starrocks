@@ -436,7 +436,7 @@ public class OlapTableTest {
     }
 
     @Test
-    public void testGetDistributionKeyColumnNames() {
+    public void testGetDistributionKeyColumnIds() {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         Column c0 = new Column("c0", Type.BIGINT, true, null, null, false, null, "cc0", 1);
@@ -456,8 +456,8 @@ public class OlapTableTest {
         );
 
         Assert.assertTrue(olapTable.getDefaultDistributionInfo().getType() == DistributionInfoType.HASH);
-        Assert.assertTrue(olapTable.getDistributionKeyColumnNames().size() == 1);
-        Assert.assertTrue(olapTable.getDistributionKeyColumnNames().get(0).equals("c0"));
+        Assert.assertTrue(olapTable.getDistributionKeyColumnIds().size() == 1);
+        Assert.assertTrue(olapTable.getDistributionKeyColumnIds().get(0).equals("c0"));
 
         new MockUp<DistributionInfo>() {
             @Mock
@@ -465,6 +465,6 @@ public class OlapTableTest {
                 return DistributionInfoType.RANDOM;
             }
         };
-        Assert.assertTrue(olapTable.getDistributionKeyColumnNames().isEmpty());
+        Assert.assertTrue(olapTable.getDistributionKeyColumnIds().isEmpty());
     }
 }
