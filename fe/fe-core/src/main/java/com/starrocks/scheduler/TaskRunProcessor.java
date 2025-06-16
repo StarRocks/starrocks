@@ -22,7 +22,13 @@ public interface TaskRunProcessor {
      */
     void prepare(TaskRunContext context) throws Exception;
 
-    void processTaskRun(TaskRunContext context) throws Exception;
+    /**
+    * Process a task run with the given context.
+    * @param context: the context containing information about the task run, such as the task definition,
+    * @return: the state of the task run after processing, which can be SUCCESS, FAILED, or SKIPPED.
+    * @throws Exception: if any error occurs during the processing of the task run.
+    */
+    Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception;
 
     void postTaskRun(TaskRunContext context) throws Exception;
 }
