@@ -290,9 +290,18 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
                   [](const OlapTableIndexTablets& lhs, const OlapTableIndexTablets& rhs) {
                       return lhs.index_id < rhs.index_id;
                   });
+
+        // If virtual buckets is not set, set its value with tablets.
+        // This may happen during cluster upgrading, when BE is upgraded to the new version but FE is still on the old version.
+        for (auto& index : part->indexes) {
+            if (!index.__isset.virtual_buckets) {
+                index.__set_virtual_buckets(index.tablets);
+            }
+        }
+
         // check index
         for (int j = 0; j < num_indexes; ++j) {
-            auto& index_tablets = part->indexes[j];
+            const auto& index_tablets = part->indexes[j];
             const auto& index_schema = _schema->indexes()[j];
             if (index_tablets.index_id != index_schema->index_id) {
                 std::stringstream ss;
@@ -300,12 +309,6 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
                    << ", part_index=" << index_tablets.index_id << ", schema_index=" << index_schema->index_id;
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
-            }
-
-            // If virtual buckets is not set, set its value with tablets.
-            // This may happen during cluster upgrading, when BE is upgraded to the new version but FE is still on the old version.
-            if (!index_tablets.__isset.virtual_buckets) {
-                index_tablets.__set_virtual_buckets(index_tablets.tablets);
             }
         }
         _partitions.emplace(part->id, part);
@@ -509,6 +512,15 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
                   [](const OlapTableIndexTablets& lhs, const OlapTableIndexTablets& rhs) {
                       return lhs.index_id < rhs.index_id;
                   });
+
+        // If virtual buckets is not set, set its value with tablets.
+        // This may happen during cluster upgrading, when BE is upgraded to the new version but FE is still on the old version.
+        for (auto& index : part->indexes) {
+            if (!index.__isset.virtual_buckets) {
+                index.__set_virtual_buckets(index.tablets);
+            }
+        }
+
         // check index
         // If an add_partition operation is executed during the ALTER process, the ALTER operation will be canceled first.
         // Therefore, the latest indexes will not include shadow indexes.
