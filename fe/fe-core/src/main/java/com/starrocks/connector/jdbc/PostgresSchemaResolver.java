@@ -118,6 +118,9 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
+            case Types.BINARY:
+            case Types.VARBINARY:
+                return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -130,7 +133,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
         }
 
         if (typeName.equalsIgnoreCase("uuid")) {
-            return ScalarType.createVarcharType(36);
+            return ScalarType.createVarbinary(columnSize);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {

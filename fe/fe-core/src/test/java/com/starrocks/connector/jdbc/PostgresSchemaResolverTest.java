@@ -56,7 +56,7 @@ public class PostgresSchemaResolverTest {
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
         columnResult.addColumn("DATA_TYPE", Arrays.asList(Types.BIT, Types.INTEGER, Types.INTEGER, Types.REAL, Types.DOUBLE,
-                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.VARCHAR));
+                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.VARBINARY));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("BOOL", "INTEGER", "SERIAL", "FLOAT4", "FLOAT8",
                 "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP", "UUID"));
         columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29, 36));
@@ -172,7 +172,7 @@ public class PostgresSchemaResolverTest {
             Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
             Assert.assertEquals(12, table.getColumns().size());
             Assert.assertTrue(table.getColumn("h").getType().isStringType());
-            Assert.assertTrue(table.getColumn("l").getType().isStringType());
+            Assert.assertTrue(table.getColumn("l").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
