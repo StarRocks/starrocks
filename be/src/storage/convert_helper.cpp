@@ -1642,6 +1642,8 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
         case TYPE_DECIMAL32:
         case TYPE_DECIMAL64:
         case TYPE_DECIMAL128:
+        case TYPE_DECIMAL256:
+        case TYPE_INT256:
         case TYPE_ARRAY:
         case TYPE_UNSIGNED_TINYINT:
         case TYPE_UNSIGNED_SMALLINT:

@@ -164,9 +164,27 @@ public:
 
     /// Convert to boolean (true if non-zero)
     operator bool() const { return high != 0 || low != 0; }
-
-    /// High precision conversion using bit manipulation
-    operator double() const;
+    //
+    // /// High precision conversion using bit manipulation
+    // operator double() const;
+    //
+    // /// Convert to size_t (safe conversion with overflow checking)
+    // operator size_t() const {
+    //     if (high < 0) {
+    //         throw std::out_of_range("Cannot convert negative int256_t to size_t");
+    //     }
+    //
+    //     if (high > 0) {
+    //         throw std::out_of_range("int256_t value too large for size_t");
+    //     }
+    //
+    //     constexpr uint128_t max_size_t = std::numeric_limits<size_t>::max();
+    //     if (low > max_size_t) {
+    //         throw std::out_of_range("int256_t value too large for size_t");
+    //     }
+    //
+    //     return static_cast<size_t>(low);
+    // }
 
     // =============================================================================
     // Unary Operators
@@ -621,6 +639,13 @@ struct hash<starrocks::int256_t> {
         return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
     }
 };
+
+/// std::to_string overload for int256_t
+/// @param value int256_t value to convert
+/// @return String representation of the value
+inline std::string to_string(const starrocks::int256_t& value) {
+    return value.to_string();
+}
 
 /// Absolute value function specialization for int256_t
 /// @param value Input int256_t value

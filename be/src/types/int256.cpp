@@ -24,37 +24,37 @@ namespace starrocks {
 // Type Conversion Operators Implementation
 // =============================================================================
 
-int256_t::operator double() const {
-    if (*this == 0) return 0.0;
-
-    const bool negative = (high < 0);
-    const int256_t abs_val = negative ? -*this : *this;
-
-    // Find the position of the most significant bit
-    int bit_count = 0;
-    int256_t temp = abs_val;
-    while (temp > 0) {
-        temp >>= 1;
-        bit_count++;
-    }
-
-    if (bit_count <= 53) {
-        // Can represent exactly in double
-        double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
-        if (abs_val.high != 0) {
-            result += static_cast<double>(static_cast<uint64_t>(abs_val.high)) * (1ULL << 32) * (1ULL << 32) *
-                      (1ULL << 32) * (1ULL << 32);
-        }
-        return negative ? -result : result;
-    } else {
-        // Need to round to fit in double precision
-        const int shift = bit_count - 53;
-        const int256_t rounded = (abs_val + (int256_t(1) << (shift - 1))) >> shift;
-        const double mantissa = static_cast<double>(static_cast<uint64_t>(rounded.low));
-        const double result = mantissa * pow(2.0, shift);
-        return negative ? -result : result;
-    }
-}
+// int256_t::operator double() const {
+//     if (*this == 0) return 0.0;
+//
+//     const bool negative = (high < 0);
+//     const int256_t abs_val = negative ? -*this : *this;
+//
+//     // Find the position of the most significant bit
+//     int bit_count = 0;
+//     int256_t temp = abs_val;
+//     while (temp > 0) {
+//         temp >>= 1;
+//         bit_count++;
+//     }
+//
+//     if (bit_count <= 53) {
+//         // Can represent exactly in double
+//         double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
+//         if (abs_val.high != 0) {
+//             result += static_cast<double>(static_cast<uint64_t>(abs_val.high)) * (1ULL << 32) * (1ULL << 32) *
+//                       (1ULL << 32) * (1ULL << 32);
+//         }
+//         return negative ? -result : result;
+//     } else {
+//         // Need to round to fit in double precision
+//         const int shift = bit_count - 53;
+//         const int256_t rounded = (abs_val + (int256_t(1) << (shift - 1))) >> shift;
+//         const double mantissa = static_cast<double>(static_cast<uint64_t>(rounded.low));
+//         const double result = mantissa * pow(2.0, shift);
+//         return negative ? -result : result;
+//     }
+// }
 
 // =============================================================================
 // Multiplication Runtime Implementation - Helper Functions

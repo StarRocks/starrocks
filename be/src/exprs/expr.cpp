@@ -168,6 +168,7 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_DECIMAL32:
         case TYPE_DECIMAL64:
         case TYPE_DECIMAL128:
+        case TYPE_DECIMAL256:
             _node_type = TExprNodeType::DECIMAL_LITERAL;
             break;
         case TYPE_UNKNOWN:

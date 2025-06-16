@@ -112,7 +112,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
 
     TypeInfoPtr type_info = nullptr;
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_DECIMAL32 ||
-        type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
+        type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
         // ARRAY and DECIMAL should be handled specially
         // Array is nested type, the message is stored in TabletColumn
         // Decimal has precision and scale, the message is stored in TabletColumn
@@ -282,6 +282,8 @@ struct ColumnPtrBuilder {
                 return NullableIfNeed(get_decimal_column_ptr<Decimal64Column>(precision, scale));
             case TYPE_DECIMAL128:
                 return NullableIfNeed(get_decimal_column_ptr<Decimal128Column>(precision, scale));
+            case TYPE_DECIMAL256:
+                return NullableIfNeed(get_decimal_column_ptr<Decimal256Column>(precision, scale));
             default: {
                 return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType>());
             }
@@ -404,6 +406,8 @@ MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
         return NullableIfNeed(Decimal64Column::create(field.type()->precision(), field.type()->scale()));
     case TYPE_DECIMAL128:
         return NullableIfNeed(Decimal128Column::create(field.type()->precision(), field.type()->scale()));
+    case TYPE_DECIMAL256:
+        return NullableIfNeed(Decimal256Column::create(field.type()->precision(), field.type()->scale()));
     case TYPE_ARRAY: {
         return NullableIfNeed(ArrayColumn::create(column_from_field(field.sub_field(0)), UInt32Column::create()));
     }

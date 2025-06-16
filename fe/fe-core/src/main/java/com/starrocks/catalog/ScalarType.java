@@ -295,12 +295,15 @@ public class ScalarType extends Type implements Cloneable {
         final int decimal32MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL32);
         final int decimal64MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL64);
         final int decimal128MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        final int decimal256MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
         if (0 < precision && precision <= decimal32MaxPrecision) {
             return createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
         } else if (decimal32MaxPrecision < precision && precision <= decimal64MaxPrecision) {
             return createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
         } else if (decimal64MaxPrecision < precision && precision <= decimal128MaxPrecision) {
             return createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+        } else if (decimal128MaxPrecision < precision && precision <= decimal256MaxPrecision) {
+            return createDecimalV3Type(PrimitiveType.DECIMAL256, precision, scale);
         } else {
             Preconditions.checkState(false,
                     "Illegal decimal precision(1 to 76): precision=" + precision);

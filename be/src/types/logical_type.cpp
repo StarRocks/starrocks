@@ -17,7 +17,6 @@
 #include <algorithm>
 
 #include "column/type_traits.h"
-#include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type_infra.h"
 
@@ -56,6 +55,8 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "DECIMAL32") return TYPE_DECIMAL32;
     if (upper_type_str == "DECIMAL64") return TYPE_DECIMAL64;
     if (upper_type_str == "DECIMAL128") return TYPE_DECIMAL128;
+    if (upper_type_str == "DECIMAL256") return TYPE_DECIMAL256;
+    if (upper_type_str == "INT256") return TYPE_INT256;
     if (upper_type_str == "JSON") return TYPE_JSON;
     if (upper_type_str == "VARBINARY") return TYPE_VARBINARY;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
@@ -108,6 +109,10 @@ const char* logical_type_to_string(LogicalType type) {
         return "DECIMAL64";
     case TYPE_DECIMAL128:
         return "DECIMAL128";
+    case TYPE_DECIMAL256:
+        return "DECIMAL256";
+    case TYPE_INT256:
+        return "INT256";
     case TYPE_VARCHAR:
         return "VARCHAR";
     case TYPE_BOOLEAN:
@@ -157,9 +162,6 @@ LogicalType thrift_to_type(TPrimitiveType::type ttype) {
         return TYPE_UNKNOWN;
     case TPrimitiveType::NULL_TYPE:
         return TYPE_NULL;
-    // TODO(stephen): compatibility for this will be in the next patch
-    case TPrimitiveType::DECIMAL256:
-        return TYPE_UNKNOWN;
 #define M(ttype)                \
     case TPrimitiveType::ttype: \
         return TYPE_##ttype;
@@ -276,6 +278,8 @@ public:
         _data[TYPE_DECIMAL128] = TYPE_DECIMAL128;
         _data[TYPE_JSON] = TYPE_JSON;
         _data[TYPE_VARBINARY] = TYPE_VARBINARY;
+        _data[TYPE_DECIMAL256] = TYPE_DECIMAL256;
+        _data[TYPE_INT256] = TYPE_INT256;
     }
     LogicalType get_logical_type(LogicalType field_type) { return _data[field_type]; }
 

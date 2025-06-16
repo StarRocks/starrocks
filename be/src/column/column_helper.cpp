@@ -304,6 +304,8 @@ struct ColumnBuilder {
             return Decimal64Column::create(type_desc.precision, type_desc.scale, size);
         case TYPE_DECIMAL128:
             return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
+        case TYPE_DECIMAL256:
+            return Decimal256Column::create(type_desc.precision, type_desc.scale, size);
         default:
             return RunTimeColumnType<ltype>::create(size);
         }

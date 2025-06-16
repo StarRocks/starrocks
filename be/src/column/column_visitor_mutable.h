@@ -51,6 +51,7 @@ public:
     virtual Status visit(Decimal32Column* column);
     virtual Status visit(Decimal64Column* column);
     virtual Status visit(Decimal128Column* column);
+    virtual Status visit(Decimal256Column* column);
     virtual Status visit(HyperLogLogColumn* column);
     virtual Status visit(BitmapColumn* column);
     virtual Status visit(PercentileColumn* column);
@@ -70,6 +71,7 @@ public:
     virtual Status visit(FixedLengthColumnBase<int64_t>* column);
     virtual Status visit(FixedLengthColumnBase<uint64_t>* column);
     virtual Status visit(FixedLengthColumnBase<int128_t>* column);
+    virtual Status visit(FixedLengthColumnBase<int256_t>* column);
     virtual Status visit(FixedLengthColumnBase<float>* column);
     virtual Status visit(FixedLengthColumnBase<double>* column);
     virtual Status visit(FixedLengthColumnBase<DateValue>* column);

@@ -143,6 +143,7 @@ public enum PrimitiveType {
                     .addAll(TIME_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
                     .build();
+
     private static final ImmutableSortedSet<String> VARIABLE_TYPE_SET =
             ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
                     .add(PrimitiveType.CHAR.toString())
