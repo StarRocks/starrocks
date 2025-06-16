@@ -61,7 +61,7 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
-            type == TYPE_DECIMAL128) {
+            type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
             DCHECK(scalar_type.__isset.precision);
             DCHECK(scalar_type.__isset.scale);
         }
@@ -242,6 +242,8 @@ std::string TypeDescriptor::debug_string() const {
         return strings::Substitute("DECIMAL64($0, $1)", precision, scale);
     case TYPE_DECIMAL128:
         return strings::Substitute("DECIMAL128($0, $1)", precision, scale);
+    case TYPE_DECIMAL256:
+        return strings::Substitute("DECIMAL256($0, $1)", precision, scale);
     case TYPE_ARRAY:
         return strings::Substitute("ARRAY<$0>", children[0].debug_string());
     case TYPE_MAP:
@@ -355,6 +357,9 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
+    case TYPE_DECIMAL256:
+    case TYPE_INT256:
+        return 32;
     case TYPE_ARRAY:
     case TYPE_MAP:
         return sizeof(void*); // sizeof(Collection*)

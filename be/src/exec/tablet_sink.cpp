@@ -1120,6 +1120,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMAL128:
             _validate_decimal<TYPE_DECIMAL128>(state, chunk, column, desc, &_validate_selection);
             break;
+        case TYPE_DECIMAL256:
+            _validate_decimal<TYPE_DECIMAL256>(state, chunk, column, desc, &_validate_selection);
+            break;
         case TYPE_MAP: {
             column = ColumnHelper::get_data_column(column);
             auto* map = down_cast<MapColumn*>(column);

@@ -52,6 +52,7 @@ private:
         add_mapping<TYPE_BIGINT>();
         add_mapping<TYPE_UNSIGNED_BIGINT>();
         add_mapping<TYPE_LARGEINT>();
+        add_mapping<TYPE_INT256>();
         add_mapping<TYPE_DATETIME_V1>();
         add_mapping<TYPE_DATETIME>();
 
