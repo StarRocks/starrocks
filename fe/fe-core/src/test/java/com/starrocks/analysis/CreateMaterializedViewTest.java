@@ -426,7 +426,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
         List<TaskRunStatus> taskRuns = waitingTaskFinish();
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+        Assert.assertEquals(Constants.TaskRunState.SKIPPED, taskRuns.get(0).getState());
         Collection<Partition> baseTablePartitions = baseTable.getPartitions();
         Collection<Partition> mvPartitions = materializedView.getPartitions();
         Assert.assertEquals(2, mvPartitions.size());
