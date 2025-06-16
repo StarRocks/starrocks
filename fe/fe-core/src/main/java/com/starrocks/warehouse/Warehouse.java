@@ -15,8 +15,14 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
+import com.starrocks.system.ComputeNode;
 
 import java.util.List;
 
@@ -50,6 +56,10 @@ public abstract class Warehouse implements Writable {
 
     public abstract Long getAnyWorkerGroupId();
 
+    public abstract void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException;
+
+    public abstract void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException;
+
     public abstract List<Long> getWorkerGroupIds();
 
     public abstract List<String> getWarehouseInfo();
@@ -57,4 +67,16 @@ public abstract class Warehouse implements Writable {
     public abstract List<List<String>> getWarehouseNodesInfo();
 
     public abstract ProcResult fetchResult();
+
+    public abstract void createCNGroup(CreateCnGroupStmt stmt) throws DdlException;
+
+    public abstract void dropCNGroup(DropCnGroupStmt stmt) throws DdlException;
+
+    public abstract void enableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException;
+
+    public abstract void disableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException;
+
+    public abstract void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException;
+
+    public abstract void replayInternalOpLog(String payload);
 }

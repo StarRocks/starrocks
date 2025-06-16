@@ -57,6 +57,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
@@ -84,6 +85,7 @@ import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -266,6 +268,35 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE +
                                 " must be CLOUD_NATIVE or LOCAL");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                " must be bool type(false/true)");
+            }
+
+            if (!table.isCloudNativeTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                    " only support cloud native table");
+            }
+
+            boolean fileBundling = properties.get(
+                            PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("true");
+            OlapTable olapTable = (OlapTable) table;
+            if (fileBundling == olapTable.isFileBundling()) {
+                String msg = String.format("table: %s file_bundling is %s, nothing need to do",
+                        olapTable.getName(), fileBundling);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, msg);
+            }
+            
+            if (!olapTable.allowUpdateFileBundling()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                    " cannot be updated now because this table contains mixed metadata types "  + 
+                                    "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
@@ -469,8 +500,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
             String functionName = functionCallExpr.getFnName().getFunction();
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Unsupported change to %s partition function when merge partitions", functionName);
+                ErrorReport.reportSemanticException("Unsupported change to %s partition function when merge partitions",
+                        ErrorCode.ERR_COMMON_ERROR, functionName);
             }
             if (clause.getDistributionDesc() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -480,6 +511,41 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Unsupported specify partitions when merge partitions");
             }
+            PartitionMeasure alterMeasure = null;
+            try {
+                alterMeasure = AnalyzerUtils.checkAndGetPartitionMeasure(functionCallExpr);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+            if (alterMeasure.getInterval() != 1) {
+                ErrorReport.reportSemanticException("Unsupported partition interval %s when merge partitions",
+                        ErrorCode.ERR_COMMON_ERROR, alterMeasure.getInterval());
+            }
+
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported table partition type when merge partitions");
+            }
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+            if (partitionExprs.size() != 1) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported partition type when merge partitions");
+            }
+            Expr expr = partitionExprs.get(0);
+            PartitionMeasure originMeasure = null;
+            try {
+                originMeasure = AnalyzerUtils.checkAndGetPartitionMeasure(expr);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+
+            if (!AnalyzerUtils.isGranularityGreater(alterMeasure.getGranularity(), originMeasure.getGranularity())) {
+                ErrorReport.reportSemanticException("Unsupported from granularity %s to granularity %s when merge partitions",
+                        ErrorCode.ERR_COMMON_ERROR, originMeasure.getGranularity(), alterMeasure.getGranularity());
+            }
+
             try {
                 expressionPartitionDesc.analyze(columnDefs, olapTable.getProperties());
             } catch (AnalysisException e) {
@@ -903,6 +969,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
         clause.setColumn(columnDef.toColumn(table));
+        return null;
+    }
+
+    @Override
+    public Void visitModifyColumnCommentClause(ModifyColumnCommentClause clause, ConnectContext context) {
+        if (Strings.isNullOrEmpty(clause.getColumnName())) {
+            throw new SemanticException("Column name is not set");
+        }
         return null;
     }
 

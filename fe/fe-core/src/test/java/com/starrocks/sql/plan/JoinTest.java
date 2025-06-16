@@ -2024,7 +2024,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v4\n" +
                 "  |  \n" +
                 "  9:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  join op: LEFT SEMI JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v4 = 10: cast");
     }

@@ -11,7 +11,7 @@ import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase
 
 该语句用于将一个或多个权限授予给角色或用户，以及将角色授予给用户或其他角色。
 
-有关权限项的详细信息，参见[权限项](../../../administration/user_privs/privilege_item.md)。
+有关权限项的详细信息，参见[权限项](../../../administration/user_privs/authorization/privilege_item.md)。
 
 授权后，您可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 来查看权限授予的信息；通过 [REVOKE](REVOKE.md) 来撤销权限或角色。
 
@@ -267,4 +267,4 @@ GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 
 <UserPrivilegeCase />
 
-有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/user_privs/User_privilege.md#多业务线权限管理)。
+有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/user_privs/authorization/User_privilege.md#多业务线权限管理)。

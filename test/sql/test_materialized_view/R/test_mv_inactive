@@ -60,7 +60,7 @@ False
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
 [UC]ALTER MATERIALIZED VIEW mv1 active;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Can not active materialized view [mv1] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv1` (`k1`, `k2`)\nDISTRIBUTED BY RANDOM\nREFRESH MANUAL\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT `db_98906810339046979f924c9f5f34c09a`.`v1`.`k1`, `db_98906810339046979f924c9f5f34c09a`.`v1`.`k2`\nFROM `db_98906810339046979f924c9f5f34c09a`.`v1`;\n\nCause an error: column schema not compatible: (`k2` int(11) NULL COMMENT "") and (`k2` double NULL COMMENT "").')
+[REGEX].*Can not active materialized view [mv_on_view_1] because analyze materialized view define sql.*
 -- !result
 [UC]ALTER VIEW v1 AS SELECT k1,max(k2) as k2,max(k3) as k3 FROM t1 GROUP BY k1;
 -- result:

@@ -29,6 +29,29 @@
 
 namespace starrocks::parquet {
 
+Status Decoder::next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                      Column* dst, const FilterData* filter) {
+    const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+    size_t idx = 0;
+    size_t off = 0;
+    while (idx < count) {
+        bool is_null = is_nulls[idx++];
+        size_t run = 1;
+        while (idx < count && is_nulls[idx] == is_null) {
+            idx++;
+            run++;
+        }
+        if (is_null) {
+            dst->append_nulls(run);
+        } else {
+            const FilterData* forward_filter = filter ? filter + off : filter;
+            RETURN_IF_ERROR(this->next_batch(run, content_type, dst, forward_filter));
+        }
+        off += run;
+    }
+    return Status::OK();
+}
+
 using TypeEncodingPair = std::pair<tparquet::Type::type, tparquet::Encoding::type>;
 
 struct EncodingMapHash {
@@ -77,7 +100,7 @@ struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_BINARY_PACKED> {
 template <tparquet::Type::type type>
 struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY> {
     static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
-        *decoder = std::make_unique<DeltaLengthByteArrayDecoder>();
+        *decoder = std::make_unique<DeltaLengthByteArrayDecoder<type>>();
         return Status::OK();
     }
     static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
@@ -190,6 +213,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     // FIXED_LEN_BYTE_ARRAY encoding
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::RLE_DICTIONARY>();
+    _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::DELTA_BYTE_ARRAY>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::BYTE_STREAM_SPLIT>();
 }

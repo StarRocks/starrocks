@@ -168,6 +168,14 @@ public class MysqlProto {
             AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
                     authPacket.getAuthResponse());
         } catch (AuthenticationException e) {
+            if (e.getErrorCode() == null) {
+                context.getState().setErrorCode(ErrorCode.ERR_AUTHENTICATION_FAIL);
+                context.getState().setError(e.getMessage());
+            } else {
+                context.getState().setErrorCode(e.getErrorCode());
+                context.getState().setError(e.getMessage());
+            }
+
             sendResponsePacket(context);
             return new NegotiateResult(authPacket, NegotiateState.AUTHENTICATION_FAILED);
         }

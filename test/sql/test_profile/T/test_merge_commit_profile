@@ -1,0 +1,26 @@
+-- name: test_merge_commit_profile
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t0`
+(
+    `id` int(11) NOT NULL COMMENT "用户 ID",
+    `name` varchar(65533) NULL COMMENT "用户姓名",
+    `score` int(11) NOT NULL COMMENT "用户得分"
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+alter table t0 set('enable_load_profile'='true');
+ADMIN SET FRONTEND CONFIG ("stream_load_profile_collect_threshold_second" = "1");
+
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -d '{"id":1,"name":"n1","score":1}' ${url}/api/db_${uuid0}/t0/_stream_load
+
+sync;
+select * from t0 order by id;
+
+ADMIN SET FRONTEND CONFIG ("stream_load_profile_collect_threshold_second" = "0");

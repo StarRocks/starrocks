@@ -16,7 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/test_cache_utils.h"
+#include "cache/starcache_engine.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
@@ -26,16 +27,16 @@ protected:
     void SetUp() override {
         ASSERT_OK(fs::create_directories(cache_dir));
 
-        _init_block_cache();
-        _cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
+        _init_local_cache();
+        _cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
     }
     void TearDown() override {
-        ASSERT_OK(_block_cache->shutdown());
+        ASSERT_OK(_local_cache->shutdown());
         ASSERT_OK(fs::remove_all(cache_dir));
     }
 
     static void Deleter(const CacheKey& k, void* v) { free(v); }
-    void _init_block_cache();
+    void _init_local_cache();
 
     static std::string int_to_string(size_t length, int num) {
         std::ostringstream oss;
@@ -61,25 +62,19 @@ protected:
     void insert_value(int i);
 
     std::string cache_dir = "./starcache_module_test";
-    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<StarCacheEngine> _local_cache;
     std::shared_ptr<ObjectCache> _cache;
     ObjectCacheWriteOptions _write_opt;
     size_t _value_size = 256 * 1024;
     int64_t _mem_quota = 64 * 1024 * 1024;
 };
 
-void StarCacheModuleTest::_init_block_cache() {
-    _block_cache = std::make_shared<BlockCache>();
+void StarCacheModuleTest::_init_local_cache() {
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
+    options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
 
-    CacheOptions options;
-    options.mem_space_size = _mem_quota;
-    size_t quota = 50 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
-    options.block_size = 256 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.max_flying_memory_mb = 100;
-    options.engine = "starcache";
-    ASSERT_OK(_block_cache->init(options));
+    _local_cache = std::make_shared<StarCacheEngine>();
+    ASSERT_OK(_local_cache->init(options));
 }
 
 void StarCacheModuleTest::insert_value(int i) {
@@ -87,7 +82,7 @@ void StarCacheModuleTest::insert_value(int i) {
     int* ptr = (int*)malloc(_value_size);
     *ptr = i;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, _value_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
     _cache->release(handle);
 }
 
@@ -103,37 +98,36 @@ TEST_F(StarCacheModuleTest, insert_success) {
 
 TEST_F(StarCacheModuleTest, test_charge_size) {
     size_t mem_size = 4096;
-    size_t value_size = sizeof(int);
     void* ptr = malloc(mem_size);
     int* value = new (ptr) int;
     *value = 10;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert("1", (void*)ptr, value_size, mem_size, &Deleter, &handle, nullptr));
+    ObjectCacheWriteOptions opts;
+    ASSERT_OK(_cache->insert("1", (void*)ptr, mem_size, &Deleter, &handle, opts));
     _cache->release(handle);
 
     ObjectCacheHandlePtr lookup_handle = nullptr;
     ASSERT_OK(_cache->lookup("1", &lookup_handle, nullptr));
     auto value_slice = _cache->value_slice(lookup_handle);
-    ASSERT_EQ(value_slice.size, value_size);
-    ASSERT_EQ(*(int*)(value_slice.data + value_slice.size - value_size), 10);
+    ASSERT_EQ(value_slice.size, mem_size);
+    ASSERT_EQ(*(int*)(value_slice.data), 10);
     _cache->release(lookup_handle);
 }
 
 TEST_F(StarCacheModuleTest, test_charge_size_with_write_option) {
     size_t mem_size = 4096;
-    size_t value_size = sizeof(int);
     void* ptr = malloc(mem_size);
     int* value = new (ptr) int;
     *value = 10;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert("1", (void*)ptr, value_size, mem_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert("1", (void*)ptr, mem_size, &Deleter, &handle, _write_opt));
     _cache->release(handle);
 
     ObjectCacheHandlePtr lookup_handle = nullptr;
     ASSERT_OK(_cache->lookup("1", &lookup_handle, nullptr));
     auto value_slice = _cache->value_slice(lookup_handle);
-    ASSERT_EQ(value_slice.size, value_size);
-    ASSERT_EQ(*(int*)(value_slice.data + value_slice.size - value_size), 10);
+    ASSERT_EQ(value_slice.size, mem_size);
+    ASSERT_EQ(*(int*)(value_slice.data), 10);
     _cache->release(lookup_handle);
 }
 
@@ -142,7 +136,8 @@ TEST_F(StarCacheModuleTest, insert_with_null_options) {
     int* ptr = (int*)malloc(_value_size);
     *ptr = 0;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, _value_size, &Deleter, &handle, nullptr));
+    ObjectCacheWriteOptions opts;
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, opts));
     _cache->release(handle);
 }
 
@@ -151,12 +146,12 @@ TEST_F(StarCacheModuleTest, insert_and_release_old_handle) {
     int* ptr = (int*)malloc(_value_size);
     *ptr = 0;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, _value_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
 
     key = int_to_string(6, 1);
     ptr = (int*)malloc(_value_size);
     *ptr = 1;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, _value_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
     _cache->release(handle);
 }
 

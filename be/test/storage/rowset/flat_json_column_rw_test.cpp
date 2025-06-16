@@ -52,9 +52,13 @@ public:
     ~FlatJsonColumnRWTest() override = default;
 
 protected:
-    void SetUp() override { _meta.reset(new ColumnMetaPB()); }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        _meta.reset(new ColumnMetaPB());
+    }
 
     void TearDown() override {
+        config::enable_json_flat_complex_type = false;
         config::json_flat_sparsity_factor = 0.9;
         config::json_flat_null_factor = 0.3;
     }
@@ -871,6 +875,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
+
+    index = 0;
+    EXPECT_EQ(EncodingTypePB::PLAIN_ENCODING, writer_opts.meta->encoding());
+    EXPECT_EQ(EncodingTypePB::BIT_SHUFFLE, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::BIT_SHUFFLE, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::PLAIN_ENCODING, writer_opts.meta->children_columns(index++).encoding());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());

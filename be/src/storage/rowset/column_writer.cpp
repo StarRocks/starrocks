@@ -60,6 +60,7 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
+#include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
@@ -492,7 +493,8 @@ Status ScalarColumnWriter::write_data() {
         PageFooterPB footer;
         footer.set_type(DICTIONARY_PAGE);
         footer.set_uncompressed_size(dict_body->size());
-        if (_encoding_info->type() == TYPE_CHAR || _encoding_info->type() == TYPE_VARCHAR) {
+        if (_encoding_info->type() == TYPE_CHAR || _encoding_info->type() == TYPE_VARCHAR ||
+            _encoding_info->type() == TYPE_JSON) {
             footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
         } else {
             footer.mutable_dict_page_footer()->set_encoding(BIT_SHUFFLE);
@@ -681,7 +683,6 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
-
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
             is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;

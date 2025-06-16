@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Text-based Query Profile Visualized Analysis
 
-This topic introduces how to obtain and analyze text-based Query Profiles through a MySQL client.
+How to obtain and analyze text-based Query Profiles through a MySQL client.
 
 ## Analyze Profiles of Existing Queries Using ANALYZE PROFILE
 

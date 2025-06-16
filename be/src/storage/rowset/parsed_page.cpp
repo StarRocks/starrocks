@@ -98,7 +98,10 @@ public:
                 _null_decoder = RleDecoder<bool>((const uint8_t*)_null_bitmap.data, _null_bitmap.size, 1);
             }
 
-            auto skip_nulls = _null_decoder.Skip(skips);
+            size_t skip_nulls = 0;
+            if (UNLIKELY(!_null_decoder.Skip(skips, &skip_nulls))) {
+                return Status::InternalError("ParsedPage V1 seek error");
+            }
             pos_in_data = offset_in_data + skips - skip_nulls;
         }
 

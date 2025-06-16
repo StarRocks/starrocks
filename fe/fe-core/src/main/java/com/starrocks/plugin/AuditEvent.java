@@ -151,6 +151,9 @@ public class AuditEvent {
     @AuditField(value = "QueryFEAllocatedMemory")
     public long queryFeMemory = 0;
 
+    @AuditField(value = "SessionId")
+    public String sessionId = "";
+
     @AuditField(value = "SentBytes")
     public long sentBytes = -1;
 
@@ -392,6 +395,11 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setSessionId(String sessionId) {
+            auditEvent.sessionId = sessionId;
+            return this;
+        }
+      
         public AuditEventBuilder addSentBytes(long sentBytes) {
             if (auditEvent.sentBytes == -1) {
                 auditEvent.sentBytes = sentBytes;

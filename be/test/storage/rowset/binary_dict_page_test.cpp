@@ -93,7 +93,7 @@ public:
         footer.set_type(DATA_PAGE);
         DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
@@ -205,7 +205,7 @@ public:
             footer.set_type(DATA_PAGE);
             DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
             data_page_footer->set_nullmap_size(0);
-            std::unique_ptr<char[]> page = nullptr;
+            std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
             Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
             ASSERT_TRUE(st.ok());

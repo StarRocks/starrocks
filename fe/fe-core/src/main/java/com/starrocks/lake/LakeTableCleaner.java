@@ -20,7 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,11 +42,11 @@ class LakeTableCleaner {
     public boolean cleanTable() {
         boolean allRemoved = true;
         Set<String> removedPaths = new HashSet<>();
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        ComputeResource computeResource = manager.getBackgroundComputeResource();
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
             try {
-                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Warehouse warehouse = manager.getBackgroundWarehouse();
-                ShardInfo shardInfo = LakeTableHelper.getAssociatedShardInfo(partition, warehouse.getId()).orElse(null);
+                ShardInfo shardInfo = LakeTableHelper.getAssociatedShardInfo(partition, computeResource).orElse(null);
                 if (shardInfo == null || removedPaths.contains(shardInfo.getFilePath().getFullPath())) {
                     continue;
                 }

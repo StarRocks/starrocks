@@ -60,7 +60,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -76,6 +75,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -84,6 +84,7 @@ import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
@@ -93,7 +94,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -107,6 +107,8 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.failpoint.FailPoint;
+import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
@@ -146,8 +148,6 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
-import com.starrocks.qe.ShowExecutor;
-import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
@@ -170,6 +170,7 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -299,7 +300,6 @@ import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
-import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -353,6 +353,8 @@ import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
+import com.starrocks.thrift.TUpdateFailPointRequest;
+import com.starrocks.thrift.TUpdateFailPointResponse;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
@@ -367,6 +369,8 @@ import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -631,23 +635,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TListMaterializedViewStatusResult listMaterializedViewStatus(TGetTablesParams params) throws TException {
         LOG.debug("get list table request: {}", params);
-
-        PatternMatcher matcher = null;
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        if (params.isSetPattern()) {
-            matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
-        }
-
-        // database privs should be checked in analysis phrase
-        long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-        Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
-        return listMaterializedViewStatus(limit, matcher, currentUser, params);
+        ConnectContext context = new ConnectContext();
+        return MaterializedViewsSystemTable.query(params, context);
     }
 
     @Override
@@ -761,6 +750,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 ConnectContext context = new ConnectContext();
                 context.setCurrentUserIdentity(currentUser);
                 context.setCurrentRoleIds(currentUser);
+                if (item.getTable_database() == null || item.getTable_name() == null) {
+                    return true;
+                }
                 Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
@@ -790,114 +782,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         });
 
         return res;
-    }
-
-    // list MaterializedView table match pattern
-    private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
-                                                                         UserIdentity currentUser, TGetTablesParams params) {
-        TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
-        List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
-        result.setMaterialized_views(tablesResult);
-        String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        if (db == null) {
-            LOG.warn("database not exists: {}", dbName);
-            return result;
-        }
-
-        listMaterializedViews(limit, matcher, currentUser, params).stream()
-                .map(s -> s.toThrift())
-                .forEach(t -> tablesResult.add(t));
-        return result;
-    }
-
-    private void filterAsynchronousMaterializedView(PatternMatcher matcher,
-                                                    UserIdentity currentUser,
-                                                    String dbName,
-                                                    MaterializedView mv,
-                                                    TGetTablesParams params,
-                                                    List<MaterializedView> result) {
-        // check table name
-        String mvName = params.table_name;
-        if (mvName != null && !mvName.equalsIgnoreCase(mv.getName())) {
-            return;
-        }
-
-        try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
-            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, mv);
-        } catch (AccessDeniedException e) {
-            return;
-        }
-
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        if (!PatternMatcher.matchPattern(params.getPattern(), mv.getName(), matcher, caseSensitive)) {
-            return;
-        }
-        result.add(mv);
-    }
-
-    private void filterSynchronousMaterializedView(OlapTable olapTable, PatternMatcher matcher,
-                                                   TGetTablesParams params,
-                                                   List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
-        // synchronized materialized view metadata size should be greater than 1.
-        if (olapTable.getVisibleIndexMetas().size() <= 1) {
-            return;
-        }
-
-        // check table name
-        String mvName = params.table_name;
-        if (mvName != null && !mvName.equalsIgnoreCase(olapTable.getName())) {
-            return;
-        }
-
-        List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-        long baseIdx = olapTable.getBaseIndexId();
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-            if (baseIdx == mvMeta.getIndexId()) {
-                continue;
-            }
-
-            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
-                    matcher, caseSensitive)) {
-                continue;
-            }
-            singleTableMVs.add(Pair.create(olapTable, mvMeta));
-        }
-    }
-
-    private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
-                                                                   UserIdentity currentUser, TGetTablesParams params) {
-        String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        List<MaterializedView> materializedViews = Lists.newArrayList();
-        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                if (table.isMaterializedView()) {
-                    filterAsynchronousMaterializedView(matcher, currentUser, dbName,
-                            (MaterializedView) table, params, materializedViews);
-                } else if (table.getType() == Table.TableType.OLAP) {
-                    filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
-                } else {
-                    // continue
-                }
-
-                // check limit
-                int mvSize = materializedViews.size() + singleTableMVs.size();
-                if (limit > 0 && mvSize >= limit) {
-                    break;
-                }
-            }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
-        return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
 
     @Override
@@ -1253,6 +1137,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
+        if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
+            return;
+        }
         UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
                 passwd.getBytes(StandardCharsets.UTF_8));
         // check INSERT action on table
@@ -1265,6 +1152,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
         }
+    }
+
+    private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
+                                        String clientIp) {
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends()) {
+            if (fe.getHost().equals(clientIp) && fe.isAlive() && fe.getHost().equals(user) &&
+                    fe.getNodeName().equals(passwd) && StatsConstants.STATISTICS_DB_NAME.equals(db) &&
+                    StatsConstants.QUERY_HISTORY_TABLE_NAME.equals(tbl)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -1316,7 +1215,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws StarRocksException {
+    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws Exception {
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
@@ -1364,10 +1263,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
-                request.getUser(), request.getUser_ip(), timeoutSecond * 1000, resp, false, warehouseId);
+                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
-            throw new StarRocksException(resp.msg);
+            throw resp.getException();
         }
 
         StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
@@ -1773,8 +1672,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
             streamLoadTask.setCoordinator(coord);
-
-            QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            } catch (AlreadyExistsException e) {
+                LOG.info("receive duplicate stream load put request: {}", request.getLoadId());
+            }
 
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state
@@ -2093,6 +1995,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
                     .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         }
+        // TODO(ComputeResource): support more better compute resource acquiring.
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
@@ -2120,7 +2026,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             if (mutablePartitions.size() <= 0) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addSubPartitions(db, olapTable, partition, 1, warehouseId);
+                        .addSubPartitions(db, olapTable, partition, 1, computeResource);
             }
         }
 
@@ -2147,7 +2053,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     buildPartitions(olapTable, physicalPartition, partitions, tPartition);
-                    buildTablets(physicalPartition, tablets, olapTable, warehouseId);
+                    buildTablets(physicalPartition, tablets, olapTable, computeResource);
                 }
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
@@ -2157,7 +2063,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+        // TODO(ComputeResource): support more better compute resource acquiring.
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
@@ -2214,15 +2121,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
+            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
-                                     OlapTable olapTable, long warehouseId) throws StarRocksException {
+                                     OlapTable olapTable, ComputeResource computeResource) throws StarRocksException {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                 MaterializedIndex.IndexExtState.ALL)) {
@@ -2230,8 +2138,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 for (Tablet tablet : index.getTablets()) {
                     try {
                         // use default warehouse nodes
-                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
+                                (LakeTablet) tablet);
                         tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
                     } catch (Exception exception) {
                         throw new StarRocksException("Check if any backend is down or not. tablet_id: " + tablet.getId());
@@ -2480,6 +2388,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                                                        boolean isTemp) {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final ComputeResource computeResource = txnState.getComputeResource();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "No available worker group for warehouse " + computeResource));
+            result.setStatus(errorStatus);
+            return result;
+        }
         for (String partitionName : partitionColNames) {
             // get partition info from snapshot
             TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition().get(partitionName);
@@ -2509,8 +2425,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
                         try {
                             // use default warehouse nodes
-                            long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeId(
-                                    txnState.getWarehouseId(), cloudNativeTablet);
+                            long computeNodeId = warehouseManager.getComputeNodeId(computeResource, cloudNativeTablet);
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
                                     Collections.singletonList(computeNodeId));
                             tablets.add(tabletLocation);
@@ -2555,7 +2470,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(txnState.getWarehouseId(),
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(txnState.getComputeResource(),
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
@@ -2618,9 +2533,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
+            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
         txnState.getPartitionNameToTPartition().put(partition.getName(), tPartition);
@@ -2991,7 +2906,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     dictTable.getAutomaticBucketSize(), allPartitions);
             response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
-            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+            // TODO(ComputeResource): support more better compute resource acquiring.
+            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
         } catch (StarRocksException e) {
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
@@ -3101,7 +3017,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            if (request.isIs_success()) {
+                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            } else {
+                controller.cancelCheckpoint(request.getNode_name(), request.getMessage());
+            }
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3270,6 +3190,27 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return response;
     }
 
+    @Override
+    public TUpdateFailPointResponse updateFailPointStatus(TUpdateFailPointRequest request) {
+        TStatus status = new TStatus();
+        if (FailPoint.isEnabled()) {
+            if (request.isIs_enable()) {
+                FailPoint.setTriggerPolicy(request.getName(), TriggerPolicy.fromThrift(request));
+            } else {
+                FailPoint.removeTriggerPolicy(request.getName());
+            }
+            status.setStatus_code(OK);
+        } else {
+            status.setStatus_code(SERVICE_UNAVAILABLE);
+            status.setError_msgs(
+                    Lists.newArrayList("fail point is not enabled, please start fe with --failpoint option"));
+        }
+
+        TUpdateFailPointResponse response = new TUpdateFailPointResponse();
+        response.setStatus(status);
+        return response;
+    }
+
     @NotNull
     private static TConnectionInfo getTConnectionInfo(List<String> row) {
         TConnectionInfo tConnectionInfo = new TConnectionInfo();
@@ -3283,6 +3224,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         tConnectionInfo.setState(row.get(7));
         tConnectionInfo.setInfo(row.get(8));
         tConnectionInfo.setIsPending(row.get(9));
+        tConnectionInfo.setWarehouse(row.get(10));
         return tConnectionInfo;
     }
 }

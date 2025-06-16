@@ -234,12 +234,14 @@ struct TCloneReq {
     10: optional i32 timeout_s
 
     30: optional bool is_local
+    31: optional bool need_rebuild_pk_index
 }
 
 struct TStorageMediumMigrateReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TStorageMedium storage_medium
+    4: optional bool need_rebuild_pk_index
 }
 
 struct TCancelDeleteDataReq {
@@ -435,7 +437,8 @@ enum TTabletMetaType {
     MUTABLE_BUCKET_NUM,
     ENABLE_LOAD_PROFILE,
     BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
-    FLAT_JSON_CONFIG
+    FLAT_JSON_CONFIG,
+    ENABLE_FILE_BUNDLING
 }
 
 struct TTabletMetaInfo {
@@ -452,6 +455,7 @@ struct TTabletMetaInfo {
     10: optional bool create_schema_file;
     11: optional TPersistentIndexType persistent_index_type;
     12: optional TFlatJsonConfig flat_json_config;
+    13: optional bool aggregate_tablet_metadata;
 }
 
 struct TUpdateTabletMetaInfoReq {

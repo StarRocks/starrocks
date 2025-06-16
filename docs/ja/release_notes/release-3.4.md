@@ -4,6 +4,48 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.4
+
+リリース日：2025 年 6 月 10 日
+
+### 改善点
+
+- Storage Volume が Managed Identity 認証を用いた ADLS2 をサポートしました。[#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- [混合式に基づくパーティション](https://docs.starrocks.io/ja/docs/table_design/data_distribution/expression_partitioning/#混合式に基づくパーティション化v34以降) において、大部分の DATETIME 関連関数で効果的なパーティションプルーニングが可能になりました。
+- `FILES` テーブル関数を使用して、Azure から Avro データファイルのインポートをサポートしました。 [#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- Routine Load で不正な JSON 形式のデータを読み込んだ際、現在処理中のパーティションおよび Offset 情報をエラーログに出力するように改善しました。問題の特定が容易になります。 [#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- パーティションテーブルの同一パーティションへの同時クエリが Hive Metastore をハングさせる問題。 [#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- `INSERT` タスクが異常終了した場合、対応するジョブが `QUEUEING` 状態のままになる問題。 [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- v3.4.0 から v3.4.2 にアップグレードした後、多数のタブレットレプリカが異常状態になる問題。 [#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- 不正な `UNION` 実行プランが FE のメモリ不足 (OOM) を引き起こす問題。 [#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- パーティション回収時に無効なデータベース ID があると FE の起動に失敗する問題。 [#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- CheckPoint 処理の失敗後に FE が正常に終了できず、処理がブロックされる問題。 [#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
+## 3.4.3
+
+リリース日： 2025 年 4 月 30 日
+
+### 改善点
+
+- Routine Load および Stream Load は、`columns` パラメータで Lambda 式を使用して、複雑な列データの抽出をサポートします。ユーザーは、`array_filter` / `map_filter` を使用して ARRAY / MAP データをフィルタリングおよび抽出できます。`cast` 関数を組み合わせて JSON Array / JSON Object を ARRAY および MAP 型に変換することで、JSON データの複雑なフィルタリングと抽出が可能になります。例えば、`COLUMNS (js, col=array_filter(i -> json_query(i, '$.type')=='t1', cast(js as Array<JSON>))[1])` を使用すると、`js` という JSON Array から `type` が `t1` の最初の JSON Object を抽出できます。 [#58149](https://github.com/StarRocks/starrocks/pull/58149)
+- `cast` 関数を使用して JSON Object を MAP 型に変換し、`map_filter` と組み合わせて、特定の条件を満たす JSON Object 内の項目を抽出することができます。例えば、`map_filter((k, v) -> json_query(v, '$.type') == 't1', cast(js AS MAP<String, JSON>))` を使用すると、`js` という JSON Object から `type` が `t1` の JSON Object を抽出できます。 [#58045](https://github.com/StarRocks/starrocks/pull/58045)
+- `information_schema.task_runs` ビューのクエリ時に LIMIT がサポートされるようになりました。 [#57404](https://github.com/StarRocks/starrocks/pull/57404)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- ORC フォーマットの Hive テーブルをクエリする際に、エラー `OrcChunkReader::lazy_seek_to failed. reason = bad read in RleDecoderV2: :readByte` が発生する問題。 [#57454](https://github.com/StarRocks/starrocks/pull/57454)
+- Equality Delete ファイルを含む Iceberg テーブルをクエリする際に、上位の RuntimeFilter がプッシュダウンできない問題。 [#57651](https://github.com/StarRocks/starrocks/pull/57651)
+- ディスクスピルの事前集計戦略を有効にすると、クエリがクラッシュする問題。 [#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- クエリがエラー `ConstantRef-cmp-ConstantRef not supported here, null != 111 should be eliminated earlier` で返される。 [#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- クエリキュー機能が有効でない状態で、`query_queue_pending_timeout_second` パラメータでタイムアウトが発生する問題。 [#57719](https://github.com/StarRocks/starrocks/pull/57719)
+
 ## 3.4.2
 
 リリース日： 2025 年 4 月 10 日
@@ -31,9 +73,22 @@ displayed_sidebar: docs
 - セッション変数 `big_query_profile_threshold` のデフォルト値が 0 から 30（秒）に変更されました。[#57177](https://github.com/StarRocks/starrocks/pull/57177)
 - 新しい FE 設定項目 `enable_mv_refresh_collect_profile` が追加され、マテリアライズドビューのリフレッシュ中に Profile 情報を収集するかどうかを制御できるようになりました。デフォルト値は `false`（以前はシステムで Profile がデフォルトで収集されていました）。[#56971](https://github.com/StarRocks/starrocks/pull/56971)
 
-## 3.4.1
+## 3.4.1（廃止予定）
 
 リリース日: 2025年3月12日
+
+:::tip
+
+
+このバージョンは、共有データクラスタにおけるメタデータ損失の問題によりオフラインになりました。
+
+- **問題**：共有データクラスタ内のリーダー FE ノードのシフト中に、まだ Publish されていないコミット済みコンパクショントランザクションがある場合、シフト後にメタデータ損失が発生することがある。
+
+- **影響範囲**：この問題は共有データクラスタにのみ影響します。共有なしクラスタは影響を受けません。
+
+- **一時的な回避策**：Publish タスクがエラーで返された場合、`SHOW PROC 'compactions'` を実行して、空の `FinishTime` を持つ 2 つのコンパクショントランザクションを持つパーティションがあるかどうかを確認できます。`ALTER TABLE DROP PARTITION FORCE`を実行してパーティションを削除すると、Publish タスクがハングアップするのを防ぐことができます。
+
+:::
 
 ### 新機能と改善点
 

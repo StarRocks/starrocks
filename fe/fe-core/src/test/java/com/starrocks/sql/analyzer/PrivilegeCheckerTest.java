@@ -69,6 +69,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -92,7 +93,13 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -108,6 +115,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -2074,23 +2082,7 @@ public class PrivilegeCheckerTest {
                 "Access denied;");
     }
 
-    @Test
-    public void testSetStmt() throws Exception {
-        String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
-        String expectError =
-                "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
-        verifyNODEAndGRANT(sql, expectError);
 
-        ctxToTestUser();
-        // user 'test' not has GRANT/NODE privilege
-        sql = "set password = PASSWORD('123456')";
-        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Authorizer.check(statement, starRocksAssert.getCtx());
-
-        sql = "set password for test = PASSWORD('123456')";
-        statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Authorizer.check(statement, starRocksAssert.getCtx());
-    }
 
     @Test
     public void testRoutineLoadStmt() throws Exception {
@@ -2192,7 +2184,7 @@ public class PrivilegeCheckerTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       long warehouseId) {
+                                                       ComputeResource computeResource) {
                 return Lists.newArrayList(0, 1, 2);
             }
         };
@@ -3897,9 +3889,10 @@ public class PrivilegeCheckerTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
         UserIdentity testNonNativeUser = createUserStmt.getUserIdentity();
-        SetPassVar setPassVar = new SetPassVar(testNonNativeUser, "01234");
+        UserAuthOption userAuthOption = new UserAuthOption(null, "01234", true, NodePosition.ZERO);
+        SetPassVar setPassVar = new SetPassVar(testNonNativeUser, userAuthOption, NodePosition.ZERO);
         SetStmt setStmt = new SetStmt(Arrays.asList(setPassVar));
-        SetExecutor executor = new SetExecutor(null, setStmt);
+        SetExecutor executor = new SetExecutor(starRocksAssert.getCtx(), setStmt);
         try {
             executor.execute();
         } catch (DdlException e) {
@@ -3911,5 +3904,77 @@ public class PrivilegeCheckerTest {
         DropUserStmt dropUserStmt =
                 (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropUserSql, starRocksAssert.getCtx());
         authenticationManager.dropUser(dropUserStmt);
+    }
+
+    @Test
+    public void testCNGroupStatementPrivilege() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public void createCnGroup(CreateCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void dropCnGroup(DropCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void enableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void disableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void alterCnGroup(AlterCnGroupStmt stmt) throws DdlException {
+                // do thing
+            }
+        };
+
+        ctxToTestUser();
+        // create cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse ADD CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // drop cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse DROP CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // enable cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse ENABLE CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // disable cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse DISABLE CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // modify cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse MODIFY CNGROUP cngroup1 SET ('label1' = 'value1')",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
     }
 }

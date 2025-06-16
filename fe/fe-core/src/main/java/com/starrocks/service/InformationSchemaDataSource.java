@@ -254,13 +254,16 @@ public class InformationSchemaDataSource {
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
 
-                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        if (table.isNativeTableOrMaterializedView() || table.isOlapExternalTable()) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
                             // LAKE_MATERIALIZED_VIEW (done)
                             genNormalTableConfigInfo(table, tableConfigInfo);
+                        } else if (table.isView()) {
+                            // VIEW (done)
+                            tableConfigInfo.setTable_engine(table.getType().toString());
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
@@ -487,11 +490,15 @@ public class InformationSchemaDataSource {
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+            // METADATA_SWITCH_VERSION
+            partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
         partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
         partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
+        // STORAGE_SIZE
+        partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
     }
 
     // tables

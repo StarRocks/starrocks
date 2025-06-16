@@ -26,11 +26,13 @@ displayed_sidebar: docs
 
 **バージョン要件:**
 
-| コネクタ | Flink                    | StarRocks     | Java | Scala     |
-| --------- | ------------------------ | ------------- | ---- | --------- |
-| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 以降| 8 | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 以降 | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 以降 | 8    | 2.11,2.12 |
+| コネクタ   | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降       | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 以降       | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 以降       | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 以降       | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 以降       | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -39,6 +41,25 @@ displayed_sidebar: docs
 ## リリースノート
 
 ### 1.2
+
+## バージョン 1.2.11
+
+リリース日：2025年6月3日
+
+**新機能**
+
+- CSV 形式での LZ4 圧縮をサポート。[#408](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/408)
+- Flink 1.20 をサポート。[#409](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/409)
+
+**改善点**
+
+- JSON を JSON ARRAY にラップする動作を無効化するオプションを追加。[#344](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/344)
+- FastJSON を更新し、CVE-2022-25845 の脆弱性を修正。[#394](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/394)
+- ログにペイロードが出力されるのを避けるため、警告ログからデータ行メトリクスを削除。[#420](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/420)
+
+**バグ修正**
+
+- StarRocksDynamicTableSource のシャドウクローンにより誤ったプッシュダウン結果が返される問題を修正（修正後はディープコピーを使用）。[#421](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/421)
 
 #### 1.2.10
 

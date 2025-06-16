@@ -133,8 +133,8 @@ Status HdfsScanner::_build_scanner_context() {
             column.slot_desc = slot;
             column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
             column.decode_needed =
-                    slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
-                                                        _scanner_params.slots_of_mutli_slot_conjunct.end();
+                    slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
+                                                        _scanner_params.slots_of_multi_field_conjunct.end();
             ctx.materialized_columns.emplace_back(std::move(column));
         }
     }
@@ -166,6 +166,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
+    ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
     ctx.lake_schema = _scanner_params.lake_schema;
     ctx.stats = &_app_stats;

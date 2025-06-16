@@ -321,6 +321,25 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void expireTableAndColumnStatistics(Long dbId, Long tableId, List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
+    }
+
+    public void expireConnectorTableAndColumnStatistics(String catalogName, String dbName,
+                                                        String tableName, List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+    }
+
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
@@ -332,8 +351,8 @@ public class AnalyzeMgr implements Writable {
                 .refreshConnectorTableColumnStatistics(table, columns, !async);
     }
 
-    public void refreshMultiColumnStatisticsCache(long tableId) {
-        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshMultiColumnStatistics(tableId);
+    public void refreshMultiColumnStatisticsCache(long tableId, boolean isSync) {
+        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshMultiColumnStatistics(tableId, isSync);
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -436,6 +455,16 @@ public class AnalyzeMgr implements Writable {
         } else {
             GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
         }
+    }
+
+    public void expireConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
+                                                              List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
     }
 
     public void clearStatisticFromDroppedTable() {

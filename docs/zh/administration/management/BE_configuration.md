@@ -1236,7 +1236,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Bytes
 - 是否动态：否
-- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_mem_limit` 参数的值。
+- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_memory_limit_per_worker` 参数的值。
 - 引入版本：-
 
 ##### memory_maintenance_sleep_time_s
@@ -1614,11 +1614,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- 默认值：16
+- 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：用于 Stream Load 的线程数。自 v3.1.7 起变为动态参数。
+- 描述：导入用的 tablet writer 线程数, 用于 Stream Load、Broker Load、Insert 等。当参数设置为小于等于 0 时，系统使用 CPU 核数的二分之一，最小为 16。当参数设置为大于 0 时，系统使用该值。自 v3.1.7 起变为动态参数。
 - 引入版本：-
 
 <!--
@@ -2043,15 +2043,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE 进程中文件描述符的最小数量。
 - 引入版本：-
 
-##### index_stream_cache_capacity
-
-- 默认值：10737418240
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：BloomFilter/Min/Max 等统计信息缓存的容量。
-- 引入版本：-
-
 ##### storage_page_cache_limit
 
 - 默认值：20%
@@ -2074,49 +2065,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - 自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。
 - 引入版本：-
 
-<!--
 ##### enable_bitmap_index_memory_page_cache
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
 - 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
 - 引入版本：v3.1
--->
 
-<!--
 ##### enable_zonemap_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### disable_column_pool
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
 - 引入版本：-
--->
+
+##### enable_ordinal_index_memory_page_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
+- 引入版本：-
 
 ##### fragment_pool_thread_num_min
 
@@ -2823,6 +2797,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：是否使用 Parquet Pageindex 信息优化读性能。
 - 引入版本：v3.3
+
+##### parquet_page_index_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Parquet 文件的 Bloom Filter 以提高性能。`true` 表示启用 Bloom Filter，`false` 表示禁用。还可以使用系统变量 `enable_parquet_reader_bloom_filter` 在 Session 级别上控制这一行为。Parquet 中的 Bloom Filter 是在**每个行组的列级维护的**。如果 Parquet 文件包含某些列的 Bloom Filter，查询就可以使用这些列上的谓词来有效地跳过行组。
+- 引入版本：v3.5
 
 <!--
 ##### io_coalesce_read_max_buffer_size
@@ -3551,6 +3534,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 配置项描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
 - 引入版本: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 配置项描述: starlet filesystem 实例的缓存容量。
+- 引入版本: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- 默认值：86400
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 配置项描述: starlet filesystem 实例缓存的过期时间。
+- 引入版本: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
@@ -3754,6 +3755,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE/CN 退出时需要等待正在执行的查询完成的轮次，一轮次固定 10 秒。设置为 `0` 表示禁用轮询等待，立即退出。自 v3.4 起，该参数变为动态参数，且默认值由 `0` 变为 `2`。
 - 引入版本：v2.5
 
+##### graceful_exit_wait_for_frontend_heartbeat
+
+- 默认值：false
+- 类型： Boolean
+- 单位：-
+- 是否动态：是
+- 描述： 确定是否在完成优雅退出前等待至少一个指示SHUTDOWN状态的FE心跳响应。启用后，优雅关闭进程将持续运行直至通过心跳RPC返回给FE SHUTDOWN状态变化，确保FE在两次常规心跳探测间隔期间有足够时间感知终止状态。
+- 引入版本：v3.4.5
+
 ### 数据湖
 
 ##### jdbc_connection_pool_size
@@ -3904,11 +3914,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_mem_size
 
-- 默认值：10%
+- 默认值：0
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。默认值为 `10%`。推荐将该参数值最低设置成 10 GB。
+- 描述：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。
 - 引入版本：-
 
 ##### datacache_disk_size
@@ -4038,6 +4048,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：Query Pool 能够使用的最大内存上限。以 Process 内存上限的百分比来表示。
 - 引入版本：v3.1.0
+
+##### rocksdb_write_buffer_memory_percent
+
+- 默认值：5
+- 类型：Int64
+- 单位：-
+- 是否动态：否
+- 描述：rocksdb中write buffer可以使用的内存占比。默认值是百分之5，最终取值不会小于64MB，也不会大于1GB。
+- 引入版本：v3.5.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- 默认值：1073741824
+- 类型：Int64
+- 单位：-
+- 是否动态：否
+- 描述：rocksdb中write buffer内存的最大上限。
+- 引入版本：v3.5.0
 
 <!--
 ##### datacache_block_size
@@ -4578,11 +4606,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### lake_enable_vertical_compaction_fill_data_cache
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
+- 描述：存算分离集群下，是否允许 Vertical Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v3.1.7, v3.2.3
 
 <!--
@@ -5250,3 +5278,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：bitmap 函数输入值的最大长度。
 - 引入版本：-
+
+##### report_exec_rpc_request_retry_num
+
+- 默认值：10
+- 类型: Int
+- 单位：-
+- 是否动态：是
+- 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
+-引入版本：-

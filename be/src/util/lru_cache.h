@@ -132,7 +132,7 @@ public:
     //
     // When the inserted entry is no longer needed, the key and
     // value will be passed to "deleter".
-    virtual Handle* insert(const CacheKey& key, void* value, size_t value_size, size_t charge,
+    virtual Handle* insert(const CacheKey& key, void* value, size_t value_size,
                            void (*deleter)(const CacheKey& key, void* value),
                            CachePriority priority = CachePriority::NORMAL) = 0;
 
@@ -268,7 +268,7 @@ public:
     void set_capacity(size_t capacity);
 
     // Like Cache methods, but with an extra "hash" parameter.
-    Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size, size_t charge,
+    Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                           void (*deleter)(const CacheKey& key, void* value),
                           CachePriority priority = CachePriority::NORMAL);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
@@ -314,7 +314,7 @@ class ShardedLRUCache : public Cache {
 public:
     explicit ShardedLRUCache(size_t capacity);
     ~ShardedLRUCache() override = default;
-    Handle* insert(const CacheKey& key, void* value, size_t value_size, size_t charge,
+    Handle* insert(const CacheKey& key, void* value, size_t value_size,
                    void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;
@@ -339,7 +339,7 @@ private:
     size_t _get_stat(size_t (LRUCache::*mem_fun)() const) const;
 
     LRUCache _shards[kNumShards];
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     uint64_t _last_id;
     size_t _capacity;
 };

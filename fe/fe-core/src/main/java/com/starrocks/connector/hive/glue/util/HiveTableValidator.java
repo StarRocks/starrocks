@@ -15,9 +15,14 @@
 
 package com.starrocks.connector.hive.glue.util;
 
+import com.starrocks.connector.hive.glue.metastore.AWSGlueMetastore;
 import org.apache.hadoop.hive.metastore.TableType;
+import org.apache.thrift.TException;
 import software.amazon.awssdk.services.glue.model.InvalidInputException;
 import software.amazon.awssdk.services.glue.model.Table;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE;
@@ -28,7 +33,7 @@ import static org.apache.iceberg.BaseMetastoreTableOperations.TABLE_TYPE_PROP;
 public enum HiveTableValidator {
 
     REQUIRED_PROPERTIES_VALIDATOR {
-        public void validate(Table table) {
+        public void validate(Table table, AWSGlueMetastore metastore) {
             String missingProperty = null;
 
             if (notApplicableTableType(table)) {
@@ -54,6 +59,26 @@ public enum HiveTableValidator {
                         .message(String.format("%s cannot be null for table: %s", missingProperty, table.name()))
                         .build();
             }
+
+            for (Map.Entry<String, String> entry : table.parameters().entrySet()) {
+                String key = entry.getKey();
+                String value = entry.getValue();
+                if (key.equalsIgnoreCase("projection.enable") && "true".equalsIgnoreCase(value)) {
+                    // With partition projection enabled, the metadata may not store in glue.
+                    // Thus we can not get the partition meta
+                    // So read these tables may return no data
+                    // Just throw some exception to remind user
+                    List<software.amazon.awssdk.services.glue.model.Partition> partitions = null;
+                    try {
+                        partitions = metastore.getPartitions(table.databaseName(), table.name(), null, 1);
+                    } catch (TException e) {
+                        throw new RuntimeException("Get partitions failed", e);
+                    }
+                    if (partitions.isEmpty()) {
+                        throw new IllegalArgumentException("Partition projection table may not readable");
+                    }
+                }
+            }
         }
     };
 
@@ -63,7 +88,7 @@ public enum HiveTableValidator {
                 table.parameters().get(TABLE_TYPE_PROP).equalsIgnoreCase(ICEBERG_TABLE_TYPE_VALUE);
     }
 
-    public abstract void validate(Table table);
+    public abstract void validate(Table table, AWSGlueMetastore metastore);
 
     private static boolean notApplicableTableType(Table table) {
         if (isNotManagedOrExternalTable(table) ||

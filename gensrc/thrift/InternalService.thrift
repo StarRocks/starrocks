@@ -319,6 +319,7 @@ struct TQueryOptions {
   135: optional i64 datacache_ttl_seconds;
   136: optional bool enable_cache_select;
   137: optional i64 datacache_sharing_work_period;
+  138: optional bool enable_file_pagecache;
 
   140: optional string catalog;
 
@@ -337,6 +338,9 @@ struct TQueryOptions {
   171: optional bool enable_parquet_reader_page_index;
   
   180: optional bool lower_upper_support_utf8;
+
+  190: optional i64 column_view_concat_rows_limit;
+  191: optional i64 column_view_concat_bytes_limit;
 }
 
 // A scan range plus the parameters needed to execute that scan.

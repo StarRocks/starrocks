@@ -7,7 +7,7 @@ USE db_${uuid0};
 -- !result
 desc information_schema.warehouse_metrics;
 -- result:
-WAREHOUSE_ID	varchar(512)	YES	false	None	
+WAREHOUSE_ID	bigint	YES	false	None	
 WAREHOUSE_NAME	varchar(2048)	YES	false	None	
 QUEUE_PENDING_LENGTH	varchar(2048)	YES	false	None	
 QUEUE_RUNNING_LENGTH	varchar(2048)	YES	false	None	
@@ -18,6 +18,7 @@ MAX_REQUIRED_SLOTS	varchar(2048)	YES	false	None
 SUM_REQUIRED_SLOTS	varchar(2048)	YES	false	None	
 REMAIN_SLOTS	varchar(2048)	YES	false	None	
 MAX_SLOTS	varchar(2048)	YES	false	None	
+EXTRA_MESSAGE	varchar(2048)	YES	false	None	
 -- !result
 SELECT * FROM information_schema.warehouse_metrics;
 -- result:

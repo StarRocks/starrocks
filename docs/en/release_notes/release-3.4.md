@@ -4,6 +4,48 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.4
+
+Release Date: June 10, 2025
+
+### Improvements
+
+- Storage Volume now supports ADLS2 using Managed Identity as the credential. [#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- For [partitions based on complex time function expressions](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/#partitioning-based-on-a-complex-time-function-expression-since-v34), partition pruning works well for partitions based on most DATETIME-related functions
+- Supports loading Avro data files from Azure using the `FILES` function. [#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- When Routine Load encounters invalid JSON data, the consumed partition and offset information is logged in the error log to facilitate troubleshooting. [#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Concurrent queries accessing the same partition in a partitioned table caused Hive Metastore to hang. [#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- Abnormal termination of `INSERT` tasks caused the job to remain in the `QUEUEING` state. [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- After upgrading the cluster from v3.4.0 to v3.4.2, a large number of tablet replicas encounter exceptions. [#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- FE OOM caused by incorrect `UNION` execution plans. [#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- Invalid database IDs during partition recycling could cause FE startup to fail. [#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- After a failed FE CheckPoint operation, the process could not exit properly, resulting in blocking. [#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
+## 3.4.3
+
+Release Date: April 30, 2025
+
+### Improvements
+
+- Routine Load and Stream Load support the use of Lambda expressions in the `columns` parameter for complex column data extraction. `array_filter`/`map_filter` can be used to filter and extract ARRAY/MAP data. Complex filtering and extraction of JSON data can be achieved by combining the `cast` function to convert JSON array/JSON object to ARRAY and MAP types. For example, `COLUMNS (js, col=array_filter(i -> json_query(i, '$.type')=='t1', cast(js as Array<JSON>))[1])` can extract the first JSON object from the JSON array `js` where `type` is `t1`. [#58149](https://github.com/StarRocks/starrocks/pull/58149)
+- Supports converting JSON objects to MAP type using the `cast` function, combined with `map_filter` to extract items from the JSON object that meet specific conditions. For example, `map_filter((k, v) -> json_query(v, '$.type') == 't1', cast(js AS MAP<String, JSON>))` can extract the JSON object from `js` where `type` is `t1`. [#58045](https://github.com/StarRocks/starrocks/pull/58045)
+- LIMIT is now supported when querying the `information_schema.task_runs` view. [#57404](https://github.com/StarRocks/starrocks/pull/57404)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Queries against ORC format Hive tables are returned with an error `OrcChunkReader::lazy_seek_to failed. reason = bad read in RleDecoderV2: :readByte`. [#57454](https://github.com/StarRocks/starrocks/pull/57454)
+- RuntimeFilter from the upper layer could not be pushed down when querying Iceberg tables that contain Equality Delete files. [#57651](https://github.com/StarRocks/starrocks/pull/57651)
+- Enabling the spill-to-disk pre-aggregation strategy causes queries to fail. [#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- Queries are returned with an error `ConstantRef-cmp-ConstantRef not supported here, null != 111 should be eliminated earlier`. [#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- Query timeout with the `query_queue_pending_timeout_second` parameter while the Query Queue feature is not enabled. [#57719](https://github.com/StarRocks/starrocks/pull/57719)
+
 ## 3.4.2
 
 Release Date: April 10, 2025
@@ -31,9 +73,21 @@ The following issues have been fixed:
 - The default value of the session variable `big_query_profile_threshold` has been changed from 0 to 30 (seconds). [#57177](https://github.com/StarRocks/starrocks/pull/57177)
 - A new FE configuration item `enable_mv_refresh_collect_profile` has been added to control whether to collect Profile information during materialized view refresh. The default value is `false` (previously, the system collected Profile by default). [#56971](https://github.com/StarRocks/starrocks/pull/56971)
 
-## 3.4.1
+## 3.4.1 (Yanked)
 
 Release Date: March 12, 2025
+
+:::tip
+
+This version has been taken offline due to metadata loss issues in **shared-data clusters**.
+
+- **Problem**: When there are committed compaction transactions that are not yet been published during a shift of Leader FE node in a shared-data cluster, metadata loss may occur after the shift.
+
+- **Impact scope**: This problem only affects shared-data clusters. Shared-nothing clusters are unaffected.
+
+- **Temporary workaround**: When the Publish task is returned with an error, you can execute `SHOW PROC 'compactions'` to check if there are any partitions that have two compaction transactions with empty `FinishTime`. You can execute `ALTER TABLE DROP PARTITION FORCE` to drop the partitions to avoid Publish tasks getting hang.
+
+:::
 
 ### New Features and Enhancements
 

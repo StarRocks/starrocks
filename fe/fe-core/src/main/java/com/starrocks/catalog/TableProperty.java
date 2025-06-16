@@ -210,6 +210,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
 
     // This property only applies to materialized views
+    // It represents the mode selected to determine the number of partitions to refresh
+    private String partitionRefreshStrategy = Config.default_mv_partition_refresh_strategy;
+
+    // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
     // By default, all partitions will be refreshed.
     private int autoRefreshPartitionsLimit = INVALID;
@@ -317,7 +321,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Multimap<String, String> location;
 
-    private boolean enablePartitionAggregation = false;
+    private boolean fileBundling = false;
 
     public TableProperty() {
         this(Maps.newLinkedHashMap());
@@ -419,6 +423,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
+        buildMVPartitionRefreshStrategy();
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
@@ -528,6 +533,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         partitionRefreshNumber =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
                         String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildMVPartitionRefreshStrategy() {
+        partitionRefreshStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY,
+                Config.default_mv_partition_refresh_strategy);
         return this;
     }
 
@@ -807,10 +818,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildEnablePartitionAggregation() {
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            enablePartitionAggregation = Boolean.parseBoolean(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, "false"));
+    public TableProperty buildFileBundling() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
         }
         return this;
     }
@@ -918,8 +929,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionRefreshNumber;
     }
 
+    public String getPartitionRefreshStrategy() {
+        return partitionRefreshStrategy;
+    }
+
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
         this.partitionRefreshNumber = partitionRefreshNumber;
+    }
+
+    public void setPartitionRefreshStrategy(String partitionRefreshStrategy) {
+        this.partitionRefreshStrategy = partitionRefreshStrategy;
     }
 
     public void setResourceGroup(String resourceGroup) {
@@ -994,8 +1013,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
-    public boolean enablePartitionAggregation() {
-        return enablePartitionAggregation;
+    public boolean isFileBundling() {
+        return fileBundling;
     }
 
     public int primaryIndexCacheExpireSec() {
@@ -1171,7 +1190,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
-        buildEnablePartitionAggregation();
+        buildFileBundling();
         buildMutableBucketNum();
     }
 }

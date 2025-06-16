@@ -14,17 +14,17 @@
 
 #pragma once
 
-#include <cctz/time_zone.h>
-
 #include <avrocpp/DataFile.hh>
 #include <avrocpp/Generic.hh>
 #include <avrocpp/Stream.hh>
 
 #include "column/chunk.h"
+#include "formats/avro/cpp/column_reader.h"
 
 namespace starrocks {
 
 struct ScannerCounter;
+class AdaptiveNullableColumn;
 class RandomAccessFile;
 class RuntimeState;
 class SlotDescriptor;
@@ -65,12 +65,36 @@ public:
     AvroReader() = default;
     ~AvroReader();
 
-    Status init(std::unique_ptr<avro::InputStream> input_stream);
+    Status init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename, RuntimeState* state,
+                ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
+                const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);
+
+    void TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
+                   const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);
+
+    Status read_chunk(ChunkPtr& chunk, int rows_to_read);
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
-    std::unique_ptr<avro::DataFileReader<avro::GenericDatum>> _reader = nullptr;
+    Status read_row(const avro::GenericRecord& record, const std::vector<AdaptiveNullableColumn*>& column_raw_ptrs);
+
+    std::unique_ptr<avro::DataFileReader<avro::GenericDatum>> _file_reader = nullptr;
+    bool _is_inited = false;
+
+    // all belows are only used in read data
+    std::string _filename = "";
+    const std::vector<SlotDescriptor*>* _slot_descs = nullptr;
+    const std::vector<avrocpp::ColumnReaderUniquePtr>* _column_readers = nullptr;
+    size_t _num_of_columns_from_file = 0;
+    bool _col_not_found_as_null = false;
+
+    // reuse generic datum and field indexes for better performance
+    std::unique_ptr<avro::GenericDatum> _datum = nullptr;
+    std::vector<int64_t> _field_indexes;
+
+    RuntimeState* _state = nullptr;
+    ScannerCounter* _counter = nullptr;
 };
 
 using AvroReaderUniquePtr = std::unique_ptr<AvroReader>;

@@ -97,6 +97,7 @@ Following are StarRocks reserved keywords arranged in alphabetical order. You mu
 
 - ELSE
 - EXCEPT
+- EXCLUDE
 - EXISTS
 - EXPLAIN
 

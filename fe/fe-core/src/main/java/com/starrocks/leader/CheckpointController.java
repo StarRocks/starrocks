@@ -63,12 +63,9 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -89,7 +86,6 @@ public class CheckpointController extends FrontendDaemon {
     private static final int READ_TIMEOUT_SECOND = 1;
     private static final ReentrantReadWriteLock RW_LOCK = new ReentrantReadWriteLock();
 
-    private String imageDir;
     private final Journal journal;
     // subDir comes after base imageDir, to distinguish different module's image dir
     private final String subDir;
@@ -129,8 +125,6 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     protected void runCheckpointController() {
-        init();
-
         // ignore return value in normal checkpoint controller
         runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalId());
     }
@@ -142,7 +136,7 @@ public class CheckpointController extends FrontendDaemon {
     public long getImageJournalId() {
         long imageJournalId = 0;
         try {
-            Storage storage = new Storage(imageDir);
+            Storage storage = new Storage(MetaHelper.getImageFileDir(belongToGlobalStateMgr));
             // get max image version
             imageJournalId = storage.getImageJournalId();
         } catch (IOException e) {
@@ -191,10 +185,6 @@ public class CheckpointController extends FrontendDaemon {
         return createImageRet;
     }
 
-    private void init() {
-        this.imageDir = GlobalStateMgr.getServingState().getImageDir() + subDir;
-    }
-
     private Pair<Boolean, String> createImage() {
         result = new ArrayBlockingQueue<>(1);
         workerNodeName = selectWorker();
@@ -212,7 +202,12 @@ public class CheckpointController extends FrontendDaemon {
         }
 
         try {
-            Pair<Boolean, String> ret = result.poll(Config.checkpoint_timeout_seconds, TimeUnit.SECONDS);
+            long startNs = System.nanoTime();
+            Pair<Boolean, String> ret = null;
+            while (ret == null
+                    && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
+                ret = result.poll(1, TimeUnit.SECONDS);
+            }
             if (ret == null) {
                 LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
                 return Pair.create(false, workerNodeName);
@@ -239,19 +234,11 @@ public class CheckpointController extends FrontendDaemon {
             return;
         }
 
-        try {
-            downloadImage(ImageFormatVersion.v1, imageDir);
-        } catch (IOException e) {
-            if (belongToGlobalStateMgr && e instanceof FileNotFoundException) {
-                LOG.warn("download image of v1 version failed, ignore", e);
-            } else {
-                throw e;
-            }
-        }
-
         if (belongToGlobalStateMgr) {
-            downloadImage(ImageFormatVersion.v2, imageDir + "/v2");
+            downloadImage(ImageFormatVersion.v2, MetaHelper.getImageFileDir(true));
             GlobalStateMgr.getCurrentState().setImageJournalId(journalId);
+        } else {
+            downloadImage(ImageFormatVersion.v1, MetaHelper.getImageFileDir(false));
         }
     }
 
@@ -384,27 +371,26 @@ public class CheckpointController extends FrontendDaemon {
                 continue;
             }
 
-            boolean allFormatSuccess = true;
-            for (ImageFormatVersion formatVersion : getImageFormatVersionToPush(imageVersion)) {
-                String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
-                        + "/put?version=" + imageVersion
-                        + "&port=" + Config.http_port
-                        + "&subdir=" + subDir
-                        + "&for_global_state=" + belongToGlobalStateMgr
-                        + "&image_format_version=" + formatVersion.toString();
-                try {
-                    MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
+            boolean pushSuccess = true;
+            ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+                    + "/put?version=" + imageVersion
+                    + "&port=" + Config.http_port
+                    + "&subdir=" + subDir
+                    + "&for_global_state=" + belongToGlobalStateMgr
+                    + "&image_format_version=" + formatVersion.toString();
+            try {
+                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
 
-                    LOG.info("push image successfully, url = {}", url);
-                    if (MetricRepo.hasInit) {
-                        MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
-                    }
-                } catch (IOException e) {
-                    allFormatSuccess = false;
-                    LOG.error("Exception when pushing image file. url = {}", url, e);
+                LOG.info("push image successfully, url = {}", url);
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
                 }
+            } catch (IOException e) {
+                pushSuccess = false;
+                LOG.error("Exception when pushing image file. url = {}", url, e);
             }
-            if (allFormatSuccess) {
+            if (pushSuccess) {
                 iterator.remove();
                 successPushedCnt++;
             }
@@ -412,21 +398,6 @@ public class CheckpointController extends FrontendDaemon {
 
         LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
                 imageVersion, subDir, needToPushCnt, successPushedCnt);
-    }
-
-    private List<ImageFormatVersion> getImageFormatVersionToPush(long imageVersion) {
-        List<ImageFormatVersion> result = new ArrayList<>();
-        if (belongToGlobalStateMgr) {
-            // for global state mgr, the creation of v1 format image may fail, so check the existence of image file
-            if (Files.exists(Path.of(imageDir + "/image." + imageVersion))) {
-                result.add(ImageFormatVersion.v1);
-            }
-            result.add(ImageFormatVersion.v2);
-        } else {
-            // for staros mgr, there is only v1 format image.
-            result.add(ImageFormatVersion.v1);
-        }
-        return result;
     }
 
     private long getMinReplayedJournalId() {

@@ -70,6 +70,7 @@ namespace starrocks {
 template <class T>
 class ColumnValueRange {
 public:
+    using RangeValueType = T;
     using ValuesContainer = boost::container::flat_set<T>;
     using iterator_type = typename ValuesContainer::iterator;
 
@@ -214,6 +215,7 @@ using ColumnValueRangeType =  std::variant<
         ColumnValueRange<int32_t>,
         ColumnValueRange<int64_t>,
         ColumnValueRange<__int128>,
+        ColumnValueRange<int256_t>,
         ColumnValueRange<Slice>,
         ColumnValueRange<DecimalV2Value>,
         ColumnValueRange<bool>,

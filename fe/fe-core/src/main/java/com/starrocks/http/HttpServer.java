@@ -59,7 +59,7 @@ import com.starrocks.http.meta.MetaService.PutAction;
 import com.starrocks.http.meta.MetaService.RoleAction;
 import com.starrocks.http.meta.MetaService.VersionAction;
 import com.starrocks.http.rest.BootstrapFinishAction;
-import com.starrocks.http.rest.CancelStreamLoad;
+import com.starrocks.http.rest.CancelStreamLoadAction;
 import com.starrocks.http.rest.CheckDecommissionAction;
 import com.starrocks.http.rest.ConnectionAction;
 import com.starrocks.http.rest.ExecuteSqlAction;
@@ -80,6 +80,7 @@ import com.starrocks.http.rest.OAuth2Action;
 import com.starrocks.http.rest.ProfileAction;
 import com.starrocks.http.rest.QueryDetailAction;
 import com.starrocks.http.rest.QueryDumpAction;
+import com.starrocks.http.rest.QueryProgressAction;
 import com.starrocks.http.rest.RowCountAction;
 import com.starrocks.http.rest.SetConfigAction;
 import com.starrocks.http.rest.ShowDataAction;
@@ -96,7 +97,6 @@ import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.http.rest.v2.TablePartitionAction;
-import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
@@ -119,7 +119,6 @@ import io.netty.util.concurrent.EventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -160,7 +159,7 @@ public class HttpServer {
         GetDdlStmtAction.registerAction(controller);
         MigrationAction.registerAction(controller);
         StorageTypeCheckAction.registerAction(controller);
-        CancelStreamLoad.registerAction(controller);
+        CancelStreamLoadAction.registerAction(controller);
         GetStreamLoadState.registerAction(controller);
 
         // add web action
@@ -196,6 +195,7 @@ public class HttpServer {
         ColocateMetaService.UpdateGroupAction.registerAction(controller);
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
+        QueryProgressAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
@@ -207,16 +207,15 @@ public class HttpServer {
         ExecuteSqlAction.registerAction(controller);
 
         // meta service action
-        File imageDir = MetaHelper.getLeaderImageDir();
-        ImageAction.registerAction(controller, imageDir);
-        InfoAction.registerAction(controller, imageDir);
-        VersionAction.registerAction(controller, imageDir);
-        PutAction.registerAction(controller, imageDir);
-        JournalIdAction.registerAction(controller, imageDir);
-        CheckAction.registerAction(controller, imageDir);
-        DumpAction.registerAction(controller, imageDir);
-        DumpStarMgrAction.registerAction(controller, imageDir);
-        RoleAction.registerAction(controller, imageDir);
+        ImageAction.registerAction(controller);
+        InfoAction.registerAction(controller);
+        VersionAction.registerAction(controller);
+        PutAction.registerAction(controller);
+        JournalIdAction.registerAction(controller);
+        CheckAction.registerAction(controller);
+        DumpAction.registerAction(controller);
+        DumpStarMgrAction.registerAction(controller);
+        RoleAction.registerAction(controller);
 
         // external usage
         TableRowCountAction.registerAction(controller);

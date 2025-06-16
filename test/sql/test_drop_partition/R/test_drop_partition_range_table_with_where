@@ -33,7 +33,7 @@ select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uu
 -- !result
 ALTER TABLE t1 DROP PARTITIONS WHERE province like '%a%';
 -- result:
-[REGEX].*Column is not a partition column which can not be used in where clause for drop partition.*
+E: (1064, "Getting analyzing error. Detail message: Column `province` in the partition condition is not a table's partition expression, please use table's partition expressions: `dt`.")
 -- !result
 select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
 -- result:

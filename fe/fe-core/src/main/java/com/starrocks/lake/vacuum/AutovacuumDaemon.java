@@ -30,6 +30,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.TabletInfoPB;
 import com.starrocks.proto.VacuumRequest;
@@ -41,6 +42,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,6 +70,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
     private final BlockingThreadPoolExecutorService executorService = BlockingThreadPoolExecutorService.newInstance(
             Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
 
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+
     public AutovacuumDaemon() {
         super("autovacuum", 2000);
     }
@@ -77,6 +81,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (FeConstants.runningUnitTest) {
             return;
         }
+
+        // acquire background resource
+        acquireBackgroundComputeResource();
+
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -101,7 +109,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long current = System.currentTimeMillis();
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
-        if (partition.getVisibleVersionTime() <= staleTime) {
+        if (partition.getVisibleVersionTime() <= staleTime && partition.getMetadataSwitchVersion() == 0) {
             return false;
         }
         // empty parition
@@ -112,6 +120,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
         }
+
         if (Config.lake_autovacuum_detect_vaccumed_version) {
             long minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
@@ -162,10 +171,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
+        long preExtraFileSize = 0;
+        // if enable file bundling, there will be only one node (Aggregator).
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
-
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        boolean fileBundling = table.isFileBundling();
         try {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
@@ -175,23 +186,39 @@ public class AutovacuumDaemon extends FrontendDaemon {
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
+            preExtraFileSize = partition.getExtraFileSize();
+            if (partition.getMetadataSwitchVersion() != 0) {
+                // If metadataSwitchVersion is not 0, it means that for versions prior to this, the value of 
+                // fileBundling should be the ​​opposite​​ of the current value.
+                fileBundling = !fileBundling;
+            }
+
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+        ComputeNode pickNode = null;
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
-            ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(warehouse.getId(), lakeTablet);
 
-            if (node == null) {
+            if (fileBundling) {
+                // if enable file bundling, there will be only one node.
+                if (pickNode == null) {
+                    pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
+                }
+            } else {
+                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet);
+            }
+
+            if (pickNode == null) {
                 return;
             }
             TabletInfoPB tabletInfo = new TabletInfoPB();
             tabletInfo.setTabletId(tablet.getId());
             tabletInfo.setMinVersion(lakeTablet.getMinVersion());
-            nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
+            nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
         }
 
         boolean hasError = false;
@@ -214,6 +241,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
+            vacuumRequest.enableFileBundling = fileBundling;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
@@ -227,6 +255,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
         }
 
+        long extraFileSize = 0;
         for (Future<VacuumResponse> responseFuture : responseFutures) {
             try {
                 VacuumResponse response = responseFuture.get();
@@ -238,6 +267,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
                     vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
+                    extraFileSize += response.extraFileSize;
 
                     if (response.tabletInfos != null) {
                         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -269,15 +299,26 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         partition.setLastVacuumTime(startTime);
         if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
-            // hasError is false means that the vacuum operation on all tablets was successful.
-            // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
-            // means that all the garbage files before the vacuumVersion have been deleted.
-            partition.setLastSuccVacuumVersion(vacuumedVersion);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            try {
+                // hasError is false means that the vacuum operation on all tablets was successful.
+                // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
+                // means that all the garbage files before the vacuumVersion have been deleted.
+                partition.setLastSuccVacuumVersion(vacuumedVersion);
+                if (partition.getMetadataSwitchVersion() != 0 && vacuumedVersion >= partition.getMetadataSwitchVersion()) {
+                    partition.setMetadataSwitchVersion(0);
+                }
+                long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
+                partition.setExtraFileSize(extraFileSize + incrementExtraFileSize);
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            }
         }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} cost={}ms",
+                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, System.currentTimeMillis() - startTime);
+                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, extraFileSize, 
+                System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {

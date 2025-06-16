@@ -1,8 +1,10 @@
+---
+displayed_sidebar: docs
+---
+
 # RETRY FILE
 
-## Description
-
-Retries to load all data files or a specific data file in a pipe. This command is supported from v3.2 onwards.
+RETRY FILE retries to load all data files or a specific data file in a pipe. This command is supported from v3.2 onwards.
 
 ## Syntax
 

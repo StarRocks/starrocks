@@ -157,7 +157,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
                                       int64_t* flush_data_size) {
     if (eos && _block_manager->block_container()->empty()) {
         // If there is only one flush, flush it to segment directly
-        RETURN_IF_ERROR(_writer->write(chunk, segment));
+        RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
         return _writer->flush(segment);
     }
     if (chunk.num_rows() == 0) return Status::OK();
@@ -180,7 +180,7 @@ Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const C
     if (eos && _block_manager->block_container()->empty()) {
         // If there is only one flush, flush it to segment directly
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
-        RETURN_IF_ERROR(_writer->write(upserts, segment));
+        RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
     // 1. flush upsert
@@ -311,6 +311,14 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
     ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS)->update(duration_ms * 1000000);
     return Status::OK();
+}
+
+int64_t SpillMemTableSink::txn_id() {
+    return _writer->txn_id();
+}
+
+int64_t SpillMemTableSink::tablet_id() {
+    return _writer->tablet_id();
 }
 
 } // namespace starrocks::lake

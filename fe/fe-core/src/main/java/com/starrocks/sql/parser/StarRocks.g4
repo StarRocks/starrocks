@@ -353,6 +353,8 @@ statement
     | createBaselinePlanStatement
     | dropBaselinePlanStatement
     | showBaselinePlanStatement
+    | disableBaselinePlanStatement
+    | enableBaselinePlanStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -442,7 +444,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')')
     ;
 
 generatedColumnDesc
@@ -866,9 +868,9 @@ setDefaultStorageVolumeStatement
 // ------------------------------------------- FailPoint Statement -----------------------------------------------------
 
 updateFailPointStatusStatement
-    : ADMIN DISABLE FAILPOINT string (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH INTEGER_VALUE TIMES)? (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH DECIMAL_VALUE PROBABILITY)? (ON BACKEND string)?
+    : ADMIN (DISABLE | ENABLE) FAILPOINT string
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (ON (BACKEND string | FRONTEND))?
     ;
 
 showFailPointStatement
@@ -938,6 +940,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
@@ -1090,6 +1093,10 @@ dropColumnClause
 
 modifyColumnClause
     : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnCommentClause
+    : MODIFY COLUMN identifier comment
     ;
 
 columnRenameClause
@@ -1412,11 +1419,20 @@ createBaselinePlanStatement
     ;
 
 dropBaselinePlanStatement
-    : DROP BASELINE INTEGER_VALUE
+    : DROP BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 showBaselinePlanStatement
-    : SHOW BASELINE
+    : SHOW BASELINE (WHERE expression)?
+    | SHOW BASELINE ON queryRelation
+    ;
+
+disableBaselinePlanStatement
+    : DISABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+enableBaselinePlanStatement
+    : ENABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -1427,7 +1443,7 @@ createResourceGroupStatement
     ;
 
 dropResourceGroupStatement
-    : DROP RESOURCE GROUP identifier
+    : DROP RESOURCE GROUP (IF EXISTS)? identifier
     ;
 
 alterResourceGroupStatement
@@ -2320,8 +2336,12 @@ setQuantifier
 
 selectItem
     : expression (AS? (identifier | string))?                                            #selectSingle
-    | qualifiedName '.' ASTERISK_SYMBOL                                                  #selectAll
-    | ASTERISK_SYMBOL                                                                    #selectAll
+    | qualifiedName '.' ASTERISK_SYMBOL excludeClause?                                   #selectAll
+    | ASTERISK_SYMBOL excludeClause?                                                     #selectAll
+    ;
+
+excludeClause
+    : ( EXCEPT | EXCLUDE ) '(' identifier (',' identifier)* ')'
     ;
 
 relations
@@ -2338,7 +2358,7 @@ relationPrimary
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
-    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
+    | ASSERT_ROWS? subquery (AS? alias=identifier columnAliases?)?                      #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' argumentList ')' ')'
@@ -2397,6 +2417,7 @@ outerAndSemiJoinType
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
+    | NULL AWARE LEFT ANTI JOIN
     ;
 
 bracketHint
@@ -2597,7 +2618,7 @@ functionCall
     | informationFunctionExpression                                                       #informationFunction
     | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
-    | aggregationFunction over?                                                           #aggregationFunctionCall
+    | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
@@ -2685,6 +2706,10 @@ windowFunction
 
 whenClause
     : WHEN condition=expression THEN result=expression
+    ;
+
+filter
+    : FILTER '(' WHERE booleanExpression ')'
     ;
 
 over
@@ -3069,7 +3094,7 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
-    | ARRAY_AGG | ARRAY_AGG_DISTINCT
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
@@ -3108,4 +3133,5 @@ nonReserved
     | FIELD
     | ARRAY_ELEMENT
     | PERSISTENT
+    | EXCLUDE | EXCEPT
     ;

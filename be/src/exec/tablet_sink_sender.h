@@ -33,7 +33,7 @@ public:
 
 public:
     virtual Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,
-                              const std::vector<uint32_t>& tablet_indexes,
+                              const std::vector<uint32_t>& record_hashes,
                               const std::vector<uint16_t>& validate_select_idx,
                               std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunk);
 

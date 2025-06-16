@@ -25,8 +25,8 @@ public:
     StarCacheModule(std::shared_ptr<starcache::StarCache> star_cache);
     virtual ~StarCacheModule() = default;
 
-    Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
-                  ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) override;
+    Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
+                  ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) override;
 
     Status lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) override;
 
@@ -59,7 +59,6 @@ public:
 private:
     bool _try_release_obj_handle(ObjectCacheHandlePtr handle);
 
-    ObjectCacheOptions _options;
     std::shared_ptr<starcache::StarCache> _cache;
 };
 

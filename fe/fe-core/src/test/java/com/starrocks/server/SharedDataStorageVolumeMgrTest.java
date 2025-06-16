@@ -45,7 +45,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -515,6 +514,14 @@ public class SharedDataStorageVolumeMgrTest {
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSharedKey());
         Assert.assertEquals("sas_token",
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSasToken());
+
+        Config.cloud_native_storage_type = "GS";
+        Config.gcp_gcs_use_compute_engine_service_account = "true";
+        Config.gcp_gcs_path = "gs://gs_path";
+        sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertEquals(true, sv.getCloudConfiguration().toFileStoreInfo().getGsFsInfo().getUseComputeEngineServiceAccount());
     }
 
     @Test
@@ -802,7 +809,7 @@ public class SharedDataStorageVolumeMgrTest {
         // v4
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         imageWriter.setOutputStream(dos);
         svm.save(imageWriter);
 
@@ -985,7 +992,7 @@ public class SharedDataStorageVolumeMgrTest {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         imageWriter.setOutputStream(dos);
         svm.save(imageWriter);
 

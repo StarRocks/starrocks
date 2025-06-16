@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE STORAGE VOLUME
 
-## Description
-
-Creates a storage volume for a remote storage system. This feature is supported from v3.1.
+CREATE STORAGE VOLUME creates a storage volume for a remote storage system. This feature is supported from v3.1.
 
 A storage volume consists of the properties and credential information of the remote data storage. You can reference a storage volume when you create databases and cloud-native tables in a shared-data StarRocks cluster.
 
@@ -18,7 +16,7 @@ A storage volume consists of the properties and credential information of the re
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | HDFS | AZBLOB }
+TYPE = { S3 | HDFS | AZBLOB | ADLS2 }
 LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
@@ -39,11 +37,13 @@ PROPERTIES
 
 The table below lists all available properties of storage volumes. Following the table are the usage instructions of these properties, categorized by different scenarios from the perspectives of [Credential information](#credential-information) and [Features](#features).
 
+import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
+
 | **Property**                        | **Description**                                              |
 | ----------------------------------- | ------------------------------------------------------------ |
 | enabled                             | Whether to enable this storage volume. Default: `false`. Disabled storage volume cannot be referenced. |
 | aws.s3.region                       | The region in which your S3 bucket resides, for example, `us-west-2`. |
-| aws.s3.endpoint                     | The endpoint URL used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. [Preview] From v3.3.0 onwards, the Amazon S3 Express One Zone storage class is supported, for example, `https://s3express.us-west-2.amazonaws.com`.   |
+| aws.s3.endpoint                     | The endpoint URL used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. [Preview] From v3.3.0 onwards, the Amazon S3 Express One Zone storage class is supported, for example, `https://s3express.us-west-2.amazonaws.com`.  <Beta /> |
 | aws.s3.use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
 | aws.s3.use_instance_profile         | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default).<ul><li>If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws.s3.access_key` and `aws.s3.secret_key`.</li><li>If you use Instance Profile to access S3, you must specify this item as `true`.</li><li>If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws.s3.iam_role_arn`.</li><li>And if you use an external AWS account, you must specify this item as `true`, and specify `aws.s3.iam_role_arn` and `aws.s3.external_id`.</li></ul> |
 | aws.s3.access_key                   | The Access Key ID used to access your S3 bucket.             |
@@ -56,6 +56,9 @@ The table below lists all available properties of storage volumes. Following the
 | azure.adls2.endpoint                | The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`. |
 | azure.adls2.shared_key              | The Shared Key used to authorize requests for your Azure Data Lake Storage Gen2e. |
 | azure.adls2.sas_token               | The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2. |
+| azure.adls2.oauth2_use_managed_identity | Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2. Default: `false`. |
+| azure.adls2.oauth2_tenant_id        | The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
+| azure.adls2.oauth2_client_id        | The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
 | hadoop.security.authentication      | The authentication method. Valid values: `simple`(Default) and `kerberos`. `simple` indicates simple authentication, that is, username. `kerberos` indicates Kerberos authentication. |
 | username                            | Username used to access the NameNode in the HDFS cluster.                      |
 | hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache.                   |
@@ -205,6 +208,16 @@ Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
   "azure.adls2.sas_token" = "<sas_token>"
+  ```
+
+- If you use Managed Identity to access Azure Data Lake Storage Gen2, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
 :::note

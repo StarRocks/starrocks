@@ -23,6 +23,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -114,17 +115,18 @@ public class LakeTablet extends Tablet {
 
     @Override
     public Set<Long> getBackendIds() {
-        return getBackendIds(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        return getBackendIds(WarehouseManager.DEFAULT_RESOURCE);
     }
 
-    public Set<Long> getBackendIds(long warehouseId) {
+    public Set<Long> getBackendIds(ComputeResource computeResource) {
         if (GlobalStateMgr.isCheckpointThread()) {
             // NOTE: defensive code: don't touch any backend RPC if in checkpoint thread
             return Collections.emptySet();
         }
+
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try {
-            List<Long> ids = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+            List<Long> ids = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, this);
             if (ids == null) {
                 return Sets.newHashSet();
             } else {
@@ -140,7 +142,7 @@ public class LakeTablet extends Tablet {
     public List<Replica> getAllReplicas() {
         List<Replica> replicas = Lists.newArrayList();
         getQueryableReplicas(replicas, null, 0, -1, 0,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         return replicas;
     }
 
@@ -149,14 +151,15 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         getQueryableReplicas(allQuerableReplicas, localReplicas, visibleVersion, localBeId,
-                schemaHash, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                schemaHash, WarehouseManager.DEFAULT_RESOURCE);
     }
 
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
-                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
-        List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+                                     long visibleVersion, long localBeId, int schemaHash,
+                                     ComputeResource computeResource) {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, this);
         if (computeNodeIds == null) {
             return;
         }
@@ -169,8 +172,6 @@ public class LakeTablet extends Tablet {
             }
         }
     }
-
-
 
     public static LakeTablet read(DataInput in) throws IOException {
         String json = Text.readString(in);

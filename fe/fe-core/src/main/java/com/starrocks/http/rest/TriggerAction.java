@@ -106,6 +106,7 @@ public class TriggerAction extends RestBaseAction {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
             dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), table.getId());
+            dynamicPartitionScheduler.executePartitionTTLForTable(db.getId(), table.getId());
             response.appendContent("Success");
             writeResponse(request, response, HttpResponseStatus.OK);
         } else {

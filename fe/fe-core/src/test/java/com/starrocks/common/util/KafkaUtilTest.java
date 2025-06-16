@@ -17,6 +17,7 @@ package com.starrocks.common.util;
 import com.google.common.collect.Lists;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.StatusPB;
@@ -53,7 +54,7 @@ public class KafkaUtilTest {
     BackendServiceClient client;
 
     @Before
-    public void before() {
+    public void before() throws StarRocksException {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -66,6 +67,14 @@ public class KafkaUtilTest {
                 BackendServiceClient.getInstance();
                 minTimes = 0;
                 result = client;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 0;
+                result = Lists.newArrayList(1L);
             }
         };
 
@@ -84,7 +93,8 @@ public class KafkaUtilTest {
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
         Assert.assertEquals(
-                "Failed to send get kafka partition info request. err: No alive backends or compute nodes", e.getMessage());
+                "Failed to send get kafka partition info request. err: Warehouse default_warehouse is not available.",
+                e.getMessage());
     }
 
     @Test
@@ -214,6 +224,7 @@ public class KafkaUtilTest {
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
-        Assert.assertEquals("Failed to send get kafka partition info request. err: Warehouse id: 1 not exist.", e.getMessage());
+        Assert.assertEquals("Failed to send get kafka partition info request. err: " +
+                "Warehouse default_warehouse is not available.", e.getMessage());
     }
 }

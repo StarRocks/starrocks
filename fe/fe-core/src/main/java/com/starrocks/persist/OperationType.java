@@ -543,6 +543,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_COLUMN_COMMENT = 13080;
+
     // storage volume
 
     @IgnorableOnReplayFailed
@@ -621,6 +624,15 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_SPM_BASELINE_LOG = 13541;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_VIEW_SECURITY_LOG = 13542;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ENABLE_SPM_BASELINE_LOG = 13543;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DISABLE_SPM_BASELINE_LOG = 13544;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
@@ -630,6 +642,8 @@ public class OperationType {
     public static final short OP_CREATE_WAREHOUSE = 20101;
     public static final short OP_DROP_WAREHOUSE = 20102;
     public static final short OP_ALTER_WAREHOUSE = 20103;
+    // warehouse internal op
+    public static final short OP_WAREHOUSE_INTERNAL_OP = 20111;
 
     // security integration and role mapping
     public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;
@@ -658,6 +672,7 @@ public class OperationType {
                     opType != OP_CREATE_WAREHOUSE &&
                     opType != OP_DROP_WAREHOUSE &&
                     opType != OP_ALTER_WAREHOUSE &&
+                    opType != OP_WAREHOUSE_INTERNAL_OP &&
                     opType != OP_CREATE_SECURITY_INTEGRATION &&
                     opType != OP_DROP_SECURITY_INTEGRATION &&
                     opType != OP_ALTER_SECURITY_INTEGRATION) {

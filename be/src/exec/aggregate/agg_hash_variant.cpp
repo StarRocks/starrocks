@@ -14,6 +14,7 @@
 //
 #include "exec/aggregate/agg_hash_variant.h"
 
+#include <tuple>
 #include <type_traits>
 #include <variant>
 
@@ -346,5 +347,41 @@ size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
                pool->total_allocated_bytes();
     });
 }
+
+// HashVariantResolver
+template <typename HashVariantType>
+HashVariantResolver<HashVariantType>::HashVariantResolver() {
+#define VARIANT_EMPLACE(...) CHECK(_types.emplace(__VA_ARGS__).second)
+
+#define VARIANT_TYPE(value) HashVariantType::Type::value
+#define ADD_VARIANT_PHASE1_TYPE(LOGICAL_TYPE, VALUE)                                                     \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase1, LOGICAL_TYPE, true), VARIANT_TYPE(phase1_null_##VALUE)); \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase1, LOGICAL_TYPE, false), VARIANT_TYPE(phase1_##VALUE));     \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase2, LOGICAL_TYPE, true), VARIANT_TYPE(phase2_null_##VALUE)); \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase2, LOGICAL_TYPE, false), VARIANT_TYPE(phase2_##VALUE));
+
+    ADD_VARIANT_PHASE1_TYPE(TYPE_BOOLEAN, uint8);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_TINYINT, int8);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_SMALLINT, int16);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_INT, int32);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DECIMAL32, decimal32);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_BIGINT, int64);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DECIMAL64, decimal64);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DATE, date);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DATETIME, timestamp);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DECIMAL128, decimal128);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_LARGEINT, int128);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_CHAR, string);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_VARCHAR, string);
+}
+
+template <typename HashVariantType>
+auto HashVariantResolver<HashVariantType>::instance() -> HashVariantResolver<HashVariantType>& {
+    static HashVariantResolver resolver;
+    return resolver;
+}
+
+template class HashVariantResolver<AggHashSetVariant>;
+template class HashVariantResolver<AggHashMapVariant>;
 
 } // namespace starrocks

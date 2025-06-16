@@ -199,18 +199,18 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> ColumnConverter::convert_null_bitm
     return null_bitmap;
 }
 
-ColumnPtr ColumnConverter::get_data_column(const ColumnPtr& column) {
-    if (column->is_nullable()) {
-        auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+ColumnPtr ColumnConverter::get_data_column(const Column* column_ptr) {
+    if (column_ptr->is_nullable()) {
+        auto* nullable_column = down_cast<const NullableColumn*>(column_ptr);
         return nullable_column->data_column();
     }
 
-    if (column->is_constant()) {
-        auto* const_column = down_cast<const ConstColumn*>(column.get());
+    if (column_ptr->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(column_ptr);
         return const_column->data_column();
     }
 
-    return column;
+    return column_ptr->get_ptr();
 }
 
 } // namespace starrocks::lake::format

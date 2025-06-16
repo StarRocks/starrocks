@@ -115,10 +115,18 @@ public class BinaryPredicateStatisticCalculator {
             Histogram columnHist = columnStatistic.getHistogram();
             Optional<Histogram> hist = updateHistWithEqual(columnStatistic, constant);
             if (hist.isPresent()) {
+                estimatedColumnStatisticBuilder.setHistogram(hist.get());
                 double rowCountInHistogram = hist.get().getTotalRows();
-                double predicateFactor = rowCountInHistogram / (double) columnHist.getTotalRows();
-                rows = Math.min(rowCountInHistogram, statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
-                        * predicateFactor);
+                double nonNullFraction = 1.0 - columnStatistic.getNullsFraction();
+                double outputRows = statistics.getOutputRowCount();
+
+                double factor = rowCountInHistogram <= 1
+                        ? 1.0 / Math.max(1.0, columnStatistic.getDistinctValuesCount())
+                        : rowCountInHistogram / (double) columnHist.getTotalRows();
+
+                rows = rowCountInHistogram <= 1
+                        ? Math.max(1.0, outputRows * nonNullFraction * factor)
+                        : Math.min(rowCountInHistogram, outputRows * nonNullFraction * factor);
             } else {
                 // The constant was not found in the column histogram.
                 Long mostCommonValuesCount = columnHist.getMCV().values().stream().reduce(Long::sum).orElse(0L);
@@ -224,7 +232,7 @@ public class BinaryPredicateStatisticCalculator {
                                                              BinaryType binaryType) {
         Optional<Histogram> hist = updateHistWithLessThan(columnStatistic, constant,
                 binaryType.equals(BinaryType.LE));
-        if (!hist.isPresent()) {
+        if (hist.isEmpty()) {
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
                 Optional<Double> d = StatisticUtils.convertStatisticsToDouble(
@@ -247,8 +255,12 @@ public class BinaryPredicateStatisticCalculator {
 
             ColumnStatistic newEstimateColumnStatistics =
                     estimateColumnStatisticsWithHistogram(columnStatistic, estimatedHistogram);
+
+            ColumnStatistic finalNewEstimateColumnStatistics = adjustColumnStatisticsMinMax(
+                    newEstimateColumnStatistics, constant, statistics, columnRefOperator, true);
+
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                            addColumnStatistic(operator, newEstimateColumnStatistics).build()).
+                            addColumnStatistic(operator, finalNewEstimateColumnStatistics).build()).
                     orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
         }
     }
@@ -284,10 +296,47 @@ public class BinaryPredicateStatisticCalculator {
             ColumnStatistic newEstimateColumnStatistics =
                     estimateColumnStatisticsWithHistogram(columnStatistic, estimatedHistogram);
 
-            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                            addColumnStatistic(operator, newEstimateColumnStatistics).build()).
-                    orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+            ColumnStatistic finalNewEstimateColumnStatistics = adjustColumnStatisticsMinMax(
+                    newEstimateColumnStatistics, constant, statistics, columnRefOperator, false);
+            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount)
+                                    .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
+                    .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
         }
+    }
+
+    private static ColumnStatistic adjustColumnStatisticsMinMax(
+            ColumnStatistic newEstimateColumnStatistics,
+            Optional<ConstantOperator> constant,
+            Statistics statistics,
+            Optional<ColumnRefOperator> columnRefOperator,
+            boolean isLessThan) {
+
+        ColumnStatistic.Builder builder = ColumnStatistic.buildFrom(newEstimateColumnStatistics);
+
+        if (constant.isPresent()) {
+            double constValue = StatisticUtils.convertStatisticsToDouble(
+                            constant.get().getType(), constant.get().toString())
+                    .orElse(isLessThan ? POSITIVE_INFINITY : NEGATIVE_INFINITY);
+
+            if (isLessThan && Double.isNaN(newEstimateColumnStatistics.getMaxValue())) {
+                builder.setMaxValue(constValue);
+            } else if (!isLessThan && Double.isNaN(newEstimateColumnStatistics.getMinValue())) {
+                builder.setMinValue(constValue);
+            }
+        }
+
+        if (columnRefOperator.isPresent()) {
+            ColumnStatistic stats = statistics.getColumnStatistics().get(columnRefOperator.get());
+            if (stats != null) {
+                if (isLessThan && Double.isNaN(newEstimateColumnStatistics.getMinValue())) {
+                    builder.setMinValue(stats.getMinValue());
+                } else if (!isLessThan && Double.isNaN(newEstimateColumnStatistics.getMaxValue())) {
+                    builder.setMaxValue(stats.getMaxValue());
+                }
+            }
+        }
+
+        return builder.build();
     }
 
     public static Statistics estimateColumnToColumnComparison(ScalarOperator leftColumn,
@@ -325,10 +374,10 @@ public class BinaryPredicateStatisticCalculator {
                                                          boolean isEqualForNull) {
         StatisticRangeValues intersect = StatisticRangeValues.from(leftColumnStatistic)
                 .intersect(StatisticRangeValues.from(rightColumnStatistic));
-        ColumnStatistic.Builder newEstimateColumnStatistics = ColumnStatistic.builder().
-                setMaxValue(intersect.getHigh()).
-                setMinValue(intersect.getLow()).
-                setDistinctValuesCount(intersect.getDistinctValues());
+        ColumnStatistic.Builder newEstimateColumnStatistics = ColumnStatistic.builder()
+                .setMaxValue(intersect.getHigh())
+                .setMinValue(intersect.getLow())
+                .setDistinctValuesCount(intersect.getDistinctValues());
 
         boolean enableJoinHistogram =
                 ConnectContext.get() != null &&
@@ -351,37 +400,34 @@ public class BinaryPredicateStatisticCalculator {
             rowCount = statistics.getOutputRowCount() * selectivity;
         }
 
-        ColumnStatistic newLeftStatistic;
-        ColumnStatistic newRightStatistic;
+        ColumnStatistic.Builder newLeftStatisticBuilder = ColumnStatistic.buildFrom(newEstimateColumnStatistics.build());
+        ColumnStatistic.Builder newRightStatisticBuilder = ColumnStatistic.buildFrom(newEstimateColumnStatistics.build());
         if (!isEqualForNull) {
-            newEstimateColumnStatistics.setNullsFraction(0);
-            newLeftStatistic = newEstimateColumnStatistics
-                    .setAverageRowSize(leftColumnStatistic.getAverageRowSize())
-                    .setHistogram(leftColumnStatistic.getHistogram())
-                    .build();
-            newRightStatistic = newEstimateColumnStatistics
-                    .setAverageRowSize(rightColumnStatistic.getAverageRowSize())
-                    .setHistogram(rightColumnStatistic.getHistogram())
-                    .build();
+            newLeftStatisticBuilder.setNullsFraction(0).setAverageRowSize(leftColumnStatistic.getAverageRowSize());
+            newRightStatisticBuilder.setNullsFraction(0).setAverageRowSize(rightColumnStatistic.getAverageRowSize());
         } else {
-            newLeftStatistic = newEstimateColumnStatistics
+            newLeftStatisticBuilder
                     .setAverageRowSize(leftColumnStatistic.getAverageRowSize())
-                    .setNullsFraction(leftColumnStatistic.getNullsFraction())
-                    .setHistogram(leftColumnStatistic.getHistogram())
-                    .build();
-            newRightStatistic = newEstimateColumnStatistics
+                    .setNullsFraction(leftColumnStatistic.getNullsFraction());
+            newRightStatisticBuilder
                     .setAverageRowSize(rightColumnStatistic.getAverageRowSize())
-                    .setNullsFraction(rightColumnStatistic.getNullsFraction())
-                    .setHistogram(rightColumnStatistic.getHistogram())
-                    .build();
+                    .setNullsFraction(rightColumnStatistic.getNullsFraction());
+        }
+
+        if (hist.isEmpty()) {
+            newLeftStatisticBuilder.setHistogram(leftColumnStatistic.getHistogram());
+            newRightStatisticBuilder.setHistogram(rightColumnStatistic.getHistogram());
+        } else {
+            newLeftStatisticBuilder.setHistogram(hist.get());
+            newRightStatisticBuilder.setHistogram(hist.get());
         }
 
         Statistics.Builder builder = Statistics.buildFrom(statistics);
-        if (leftColumn instanceof ColumnRefOperator) {
-            builder.addColumnStatistic((ColumnRefOperator) leftColumn, newLeftStatistic);
+        if (leftColumn instanceof ColumnRefOperator column) {
+            builder.addColumnStatistic(column, newLeftStatisticBuilder.build());
         }
-        if (rightColumn instanceof ColumnRefOperator) {
-            builder.addColumnStatistic((ColumnRefOperator) rightColumn, newRightStatistic);
+        if (rightColumn instanceof ColumnRefOperator column) {
+            builder.addColumnStatistic(column, newRightStatisticBuilder.build());
         }
         builder.setOutputRowCount(rowCount);
         return builder.build();

@@ -26,6 +26,7 @@ class Message;
 namespace starrocks {
 
 class FileSystem;
+class Slice;
 
 class ProtobufFile {
 public:

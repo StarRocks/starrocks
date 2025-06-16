@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW PROPERTY
 
-## Description
-
-Views the properties of a user. Currently, only the maximum number of connections can be viewed using this command.
+SHOW PROPERTY displays properties of a user. Currently, only the maximum number of connections can be viewed using this command.
 
 :::tip
 The current user can view its own property. Only users with the `user_admin` role can view the property of other users.

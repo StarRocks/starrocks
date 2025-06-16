@@ -20,8 +20,10 @@
 #include <avrocpp/Types.hh>
 #include <avrocpp/ValidSchema.hh>
 
+#include "column/adaptive_nullable_column.h"
 #include "exec/file_scanner.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
+#include "formats/avro/cpp/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 
@@ -90,30 +92,173 @@ bool AvroBufferInputStream::fill() {
 }
 
 AvroReader::~AvroReader() {
-    if (_reader != nullptr) {
-        _reader->close();
-        _reader.reset();
+    if (_datum != nullptr) {
+        _datum.reset();
+    }
+    if (_file_reader != nullptr) {
+        _file_reader->close();
+        _file_reader.reset();
     }
 }
 
-Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream) {
-    try {
-        _reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(input_stream));
+Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename,
+                        RuntimeState* state, ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
+                        const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null) {
+    if (_is_inited) {
         return Status::OK();
+    }
+
+    _filename = filename;
+    _slot_descs = slot_descs;
+    _column_readers = column_readers;
+    _num_of_columns_from_file = _column_readers->size();
+    _col_not_found_as_null = col_not_found_as_null;
+
+    _state = state;
+    _counter = counter;
+
+    try {
+        _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(input_stream));
+
+        const auto& schema = _file_reader->dataSchema();
+        _datum = std::make_unique<avro::GenericDatum>(schema);
+
+        _field_indexes.resize(_num_of_columns_from_file, -1);
+        for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
+            const auto& desc = (*_slot_descs)[i];
+            if (desc == nullptr) {
+                continue;
+            }
+
+            size_t index = 0;
+            if (schema.root()->nameIndex(desc->col_name(), index)) {
+                _field_indexes[i] = index;
+            }
+        }
     } catch (const avro::Exception& ex) {
         auto err_msg = fmt::format("Avro reader init throws exception: {}", ex.what());
         LOG(WARNING) << err_msg;
         return Status::InternalError(err_msg);
     }
+
+    _is_inited = true;
+    return Status::OK();
+}
+
+void AvroReader::TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
+                           const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers,
+                           bool col_not_found_as_null) {
+    _slot_descs = slot_descs;
+    _column_readers = column_readers;
+    _num_of_columns_from_file = _column_readers->size();
+    _col_not_found_as_null = col_not_found_as_null;
+
+    const auto& schema = _file_reader->dataSchema();
+    _datum = std::make_unique<avro::GenericDatum>(schema);
+
+    _field_indexes.resize(_num_of_columns_from_file, -1);
+    for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
+        const auto& desc = (*_slot_descs)[i];
+        if (desc == nullptr) {
+            continue;
+        }
+
+        size_t index = 0;
+        if (schema.root()->nameIndex(desc->col_name(), index)) {
+            _field_indexes[i] = index;
+        }
+    }
+
+    _is_inited = true;
+}
+
+Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
+    if (!_is_inited) {
+        return Status::Uninitialized("Avro reader is not initialized");
+    }
+
+    // get column raw ptrs before reading chunk
+    std::vector<AdaptiveNullableColumn*> column_raw_ptrs;
+    column_raw_ptrs.resize(_num_of_columns_from_file, nullptr);
+    for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
+        const auto& desc = (*_slot_descs)[i];
+        if (desc == nullptr) {
+            continue;
+        }
+
+        column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_slot_id(desc->id()).get());
+    }
+
+    try {
+        while (rows_to_read > 0 && _file_reader->read(*_datum)) {
+            auto num_rows = chunk->num_rows();
+
+            DCHECK(_datum->type() == avro::AVRO_RECORD);
+            const auto& record = _datum->value<avro::GenericRecord>();
+
+            auto st = read_row(record, column_raw_ptrs);
+            if (st.is_data_quality_error()) {
+                if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
+                    std::string json_str;
+                    (void)AvroUtils::datum_to_json(*_datum, &json_str);
+                    _state->append_error_msg_to_file(json_str, std::string(st.message()));
+                    LOG(WARNING) << "Failed to read row. error: " << st;
+                }
+
+                // before continuing to process other rows, we need to first clean the fail parsed row.
+                chunk->set_num_rows(num_rows);
+            } else if (!st.ok()) {
+                return st;
+            } else {
+                --rows_to_read;
+            }
+        }
+
+        if (chunk->is_empty()) {
+            return Status::EndOfFile("No more data to read");
+        } else {
+            return Status::OK();
+        }
+    } catch (const avro::Exception& ex) {
+        auto err_msg = fmt::format("Avro reader read chunk throws exception: {}", ex.what());
+        LOG(WARNING) << err_msg;
+        return Status::InternalError(err_msg);
+    }
+}
+
+Status AvroReader::read_row(const avro::GenericRecord& record,
+                            const std::vector<AdaptiveNullableColumn*>& column_raw_ptrs) {
+    for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
+        const auto& desc = (*_slot_descs)[i];
+        if (desc == nullptr) {
+            continue;
+        }
+
+        DCHECK(column_raw_ptrs[i] != nullptr);
+
+        if (_field_indexes[i] >= 0) {
+            DCHECK((*_column_readers)[i] != nullptr);
+            const auto& field = record.fieldAt(_field_indexes[i]);
+            RETURN_IF_ERROR((*_column_readers)[i]->read_datum_for_adaptive_column(field, column_raw_ptrs[i]));
+        } else if (!_col_not_found_as_null) {
+            return Status::NotFound(
+                    fmt::format("Column: {} is not found in file: {}. Consider setting "
+                                "'fill_mismatch_column_with' = 'null' property",
+                                desc->col_name(), _filename));
+        } else {
+            column_raw_ptrs[i]->append_nulls(1);
+        }
+    }
+    return Status::OK();
 }
 
 Status AvroReader::get_schema(std::vector<SlotDescriptor>* schema) {
-    if (_reader == nullptr) {
+    if (!_is_inited) {
         return Status::Uninitialized("Avro reader is not initialized");
     }
 
     try {
-        const auto& avro_schema = _reader->dataSchema();
+        const auto& avro_schema = _file_reader->dataSchema();
         VLOG(2) << "avro data schema: " << avro_schema.toJson(false);
 
         const auto& node = avro_schema.root();

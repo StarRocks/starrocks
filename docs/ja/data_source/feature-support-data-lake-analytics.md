@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: Feature Support
+sidebar_label: 機能サポート
 ---
 
 # 機能サポート: データレイク分析
@@ -189,12 +189,6 @@ Iceberg Catalog は、HMS、Glue、および Tabular をメタストアとして
 
 StarRocks は v3.3.2 以降、Iceberg ビューのクエリをサポートしています。現在、StarRocks を通じて作成された Iceberg ビューのみがサポートされています。
 
-:::note
-
-StarRocks が Iceberg ビューに対してクエリを実行する際、StarRocks および Trino の構文を使用してビューの定義を解析しようとします。StarRocks がビューの定義を解析できない場合、エラーが返されます。StarRocks が Iceberg または Spark に特有の関数で作成された Iceberg ビューの解析に失敗する可能性があります。
-
-:::
-
 ### クエリ統計インターフェース
 
 | 機能                                                       | サポートバージョン |
@@ -217,6 +211,8 @@ StarRocks が Iceberg ビューに対してクエリを実行する際、StarRoc
 | 機能                                                      | サポートバージョン |
 | :----------------------------------------------------------- | :------------------- |
 | TIMESTAMP 型のパーティションフォーマット `yyyy-MM-ddTHH:mm` および `yyyy-MM-dd HH:mm` の読み取りをサポートします。 | v2.5.19+<br />v3.1.9+<br />v3.2.3+ |
+| アイスバーグのメタデータテーブルをサポートします。                   | v3.4.1+              |
+| アイスバーグタイムトラベルをサポートします。                        | v3.4.0+              |
 
 ## Hudi Catalog
 
