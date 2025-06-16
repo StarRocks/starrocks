@@ -105,7 +105,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, computeResource.getWorkerGroupId());
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (StarRocksException ignored1) {
-                // ignore error
+                // ignore error 
             }
         }
 
@@ -189,24 +189,36 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 .collect(Collectors.toMap(ShardGroupInfo::getGroupId, val -> val, (key1, key2) -> key1));
         LOG.debug("diff.size is {}, diff: {}", diffGroupInfoMap.size(), diffGroupInfoMap.keySet());
 
-        // Only extract TableId for those groups to be cleaned
-        Map<Long, Long> groupIdToTableId = new HashMap<>();
-        for (ShardGroupInfo shardInfo : diffGroupInfoMap.values()) {
-            String tableIdString = shardInfo.getLabels().get("tableId");
-            if (tableIdString != null) {
-                groupIdToTableId.put(shardInfo.getGroupId(), Long.parseLong(tableIdString));
-            }
-        }
-
         // 1.4.collect redundant shard groups and delete
         List<Long> emptyShardGroup = new ArrayList<>();
         for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
             long shardGroupId = entry.getKey();
-            Long tableId = groupIdToTableId.get(shardGroupId);
-            if (tableId != null &&
-                    !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
+            ShardGroupInfo shardInfo = entry.getValue();
+
+            long dbId = 0;
+            long tableId = 0;
+            long partitionId = 0;
+            long indexId = 0;
+            try {
+                dbId = Long.parseLong(shardInfo.getLabels().get("dbId"));
+                tableId = Long.parseLong(shardInfo.getLabels().get("tableId"));
+                partitionId =  Long.parseLong(shardInfo.getLabels().get("partitionId"));
+                indexId = Long.parseLong(shardInfo.getLabels().get("indexId"));
+            } catch (Exception e) {
+                LOG.debug("shardGroup:{} labels is not valid, ignore it for now. {}", shardGroupId, e.getMessage());
+                continue;
+            }
+
+            if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId)) {
                 LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
-                          tableId.longValue());
+                          tableId);
+                continue;
+            }
+
+            if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
+                    dbId, tableId, partitionId, indexId)) {
+                LOG.debug("shard group {} can not be delete shard for now, because it exists in cluster snapshot info",
+                          shardGroupId);
                 continue;
             }
 
@@ -394,6 +406,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         starmgrShardIdsSet.remove(tablet.getId());
+                    }
+
+                    if (GlobalStateMgr.getCurrentState()
+                                      .getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
+                                            db.getId(), table.getId(), physicalPartition.getParentId(),
+                                                physicalPartition.getId(), materializedIndex.getId())) {
+                        continue;
                     }
                     // collect shard in starmgr but not in fe
                     redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
