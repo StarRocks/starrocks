@@ -91,7 +91,6 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.alter.AlterJobMgr.MANUAL_INACTIVE_MV_REASON;
-import static com.starrocks.catalog.TableProperty.INVALID;
 import static com.starrocks.common.util.PropertyAnalyzer.analyzeLocation;
 import static com.starrocks.common.util.PropertyAnalyzer.getExcludeString;
 
@@ -122,29 +121,34 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         final Map<String, String> properties = modifyTablePropertiesClause.getProperties();
         final Map<String, String> propClone = Maps.newHashMap(properties);
         final Map<String, String> curProp = mv.getTableProperty().getProperties();
-        boolean isChanged = false;
+        // NOTE: multi properties can be changed once so only trigger to actions if all properties have been parsed successfully.
+        final List<Runnable> actions = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             int partitionTTL = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
             if (mv.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
                 if (!mv.getPartitionInfo().isRangePartition()) {
                     throw new SemanticException("partition_ttl_number is only supported for range partitioned materialized view");
                 }
-                curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
-                mv.getTableProperty().setPartitionTTLNumber(partitionTTL);
-                isChanged = true;
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
-                if (ttlDuration != null &&
-                        !mv.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
-                    if (!mv.getPartitionInfo().isRangePartition()) {
-                        throw new SemanticException("partition_ttl is only supported for range partitioned materialized view");
-                    }
+                actions.add(() -> {
+                    curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
+                    mv.getTableProperty().setPartitionTTLNumber(partitionTTL);
+                });
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+            if (ttlDuration != null &&
+                    !mv.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
+                if (!mv.getPartitionInfo().isRangePartition()) {
+                    throw new SemanticException("partition_ttl is only supported for range partitioned materialized view");
+                }
+                actions.add(() -> {
                     curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
                     mv.getTableProperty().setPartitionTTL(ttlDuration.second);
-                    isChanged = true;
-                }
+                });
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
             TableName mvTableName = new TableName(db.getFullName(), mv.getName());
             Map<Expr, Expr> mvPartitionByExprToAdjustMap =
@@ -153,34 +157,42 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     mv, properties, true, mvPartitionByExprToAdjustMap);
             if (ttlRetentionCondition != null &&
                     !ttlRetentionCondition.equalsIgnoreCase(mv.getTableProperty().getPartitionRetentionCondition())) {
-                curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
-                mv.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
-                // re-analyze mv retention condition
-                mv.analyzeMVRetentionCondition(context);
-                isChanged = true;
+                actions.add(() -> {
+                    curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+                    mv.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
+                    // re-analyze mv retention condition
+                    mv.analyzeMVRetentionCondition(context);
+                });
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
             String timeDriftConstraintSpec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
             PropertyAnalyzer.analyzeTimeDriftConstraint(timeDriftConstraintSpec, mv, properties);
             if (timeDriftConstraintSpec != null && !timeDriftConstraintSpec.equalsIgnoreCase(
                     mv.getTableProperty().getTimeDriftConstraintSpec())) {
-                curProp.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
-                mv.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
-                isChanged = true;
+                actions.add(() -> {
+                    curProp.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+                    mv.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
+                });
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             int partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
-            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(partitionRefreshNumber));
-            mv.getTableProperty().setPartitionRefreshNumber(partitionRefreshNumber);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+            actions.add(() -> {
+                curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(partitionRefreshNumber));
+                mv.getTableProperty().setPartitionRefreshNumber(partitionRefreshNumber);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
             String partitionRefreshStrategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
             if (!mv.getTableProperty().getPartitionRefreshStrategy().equals(partitionRefreshStrategy)) {
-                curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, String.valueOf(partitionRefreshStrategy));
-                mv.getTableProperty().setPartitionRefreshStrategy(partitionRefreshStrategy);
-                isChanged = true;
+                actions.add(() -> {
+                    curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, String.valueOf(partitionRefreshStrategy));
+                    mv.getTableProperty().setPartitionRefreshStrategy(partitionRefreshStrategy);
+                });
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
             String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
             properties.remove(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP);
             if (!StringUtils.equals(mv.getTableProperty().getResourceGroup(), resourceGroup)) {
@@ -189,109 +201,133 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     throw new SemanticException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
                             + " " + resourceGroup + " does not exist.");
                 }
-                curProp.put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
-                mv.getTableProperty().setResourceGroup(resourceGroup);
-                isChanged = true;
+                actions.add(() -> {
+                    curProp.put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                    mv.getTableProperty().setResourceGroup(resourceGroup);
+                });
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
             int autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, mv);
             if (mv.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {
-                curProp.put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
-                        String.valueOf(autoRefreshPartitionsLimit));
-                mv.getTableProperty().setAutoRefreshPartitionsLimit(autoRefreshPartitionsLimit);
-                isChanged = true;
+                actions.add(() -> {
+                    curProp.put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
+                            String.valueOf(autoRefreshPartitionsLimit));
+                    mv.getTableProperty().setAutoRefreshPartitionsLimit(autoRefreshPartitionsLimit);
+                });
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             List<TableName> excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTables(properties,
                     PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, mv);
-            curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
-                    propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES));
-            mv.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+            actions.add(() -> {
+                curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
+                        propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES));
+                mv.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
             List<TableName> excludedRefreshBaseTables = PropertyAnalyzer.analyzeExcludedTables(properties,
                     PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, mv);
-            curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
-                    propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES));
-            mv.getTableProperty().setExcludedRefreshTables(excludedRefreshBaseTables);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            actions.add(() -> {
+                curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
+                        propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES));
+                mv.getTableProperty().setExcludedRefreshTables(excludedRefreshBaseTables);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             int maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
-            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
-                    propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
-            mv.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            actions.add(() -> {
+                curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                        propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+                mv.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, mv);
             properties.remove(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
-            mv.setUniqueConstraints(uniqueConstraints);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-            List<ForeignKeyConstraint> foreignKeyConstraints =
+            actions.add(() -> {
+                mv.setUniqueConstraints(uniqueConstraints);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            final List<ForeignKeyConstraint> foreignKeyConstraints =
                     PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, mv);
+            actions.add(() -> {
+                mv.setForeignKeyConstraints(foreignKeyConstraints);
+                // get the updated foreign key constraint from table property.
+                // for external table, create time is added into FOREIGN_KEY_CONSTRAINT
+                Map<String, String> mvProperties = mv.getTableProperty().getProperties();
+                String foreignKeys = mvProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+                propClone.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, foreignKeys);
+            });
             properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
-            mv.setForeignKeyConstraints(foreignKeyConstraints);
-            // get the updated foreign key constraint from table property.
-            // for external table, create time is added into FOREIGN_KEY_CONSTRAINT
-            Map<String, String> mvProperties = mv.getTableProperty().getProperties();
-            String foreignKeys = mvProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
-            propClone.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, foreignKeys);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
             String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
-            TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
-                    TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
             properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
-            mv.getTableProperty().getProperties().
-                    put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
-                            String.valueOf(oldExternalQueryRewriteConsistencyMode));
-            mv.getTableProperty().setForceExternalTableQueryRewrite(oldExternalQueryRewriteConsistencyMode);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+            actions.add(() -> {
+                TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
+                        TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+                mv.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
+                                String.valueOf(oldExternalQueryRewriteConsistencyMode));
+                mv.getTableProperty().setForceExternalTableQueryRewrite(oldExternalQueryRewriteConsistencyMode);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
             String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
             TableProperty.QueryRewriteConsistencyMode oldQueryRewriteConsistencyMode =
                     TableProperty.analyzeQueryRewriteMode(propertyValue);
             properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
-            mv.getTableProperty().getProperties().
-                    put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY,
-                            String.valueOf(oldQueryRewriteConsistencyMode));
-            mv.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+            actions.add(() -> {
+                mv.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY,
+                                String.valueOf(oldQueryRewriteConsistencyMode));
+                mv.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
             String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
             TableProperty.MVQueryRewriteSwitch queryRewriteSwitch = TableProperty.analyzeQueryRewriteSwitch(value);
             properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
-            mv.getTableProperty().getProperties()
-                    .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
-            mv.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
-            if (!mv.isEnableRewrite()) {
-                // invalidate caches for mv rewrite when disable mv rewrite.
-                CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(mv, false);
-            } else {
-                CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(mv);
-            }
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+            actions.add(() -> {
+                mv.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
+                mv.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
+                if (!mv.isEnableRewrite()) {
+                    // invalidate caches for mv rewrite when disable mv rewrite.
+                    CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(mv, false);
+                } else {
+                    CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(mv);
+                }
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
             String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             TableProperty.MVTransparentRewriteMode mvTransparentRewriteMode = TableProperty.analyzeMVTransparentRewrite(value);
             properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
-            mv.getTableProperty().getProperties()
-                    .put(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, String.valueOf(mvTransparentRewriteMode));
-            mv.getTableProperty().setMvTransparentRewriteMode(mvTransparentRewriteMode);
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            actions.add(() -> {
+                mv.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, String.valueOf(mvTransparentRewriteMode));
+                mv.getTableProperty().setMvTransparentRewriteMode(mvTransparentRewriteMode);
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             // warehouse
             String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-            mv.setWarehouseId(warehouse.getId());
-            isChanged = true;
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            actions.add(() -> {
+                mv.setWarehouseId(warehouse.getId());
+            });
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
             // labels.location
             if (!mv.isCloudNativeMaterializedView()) {
                 analyzeLocation(mv, properties);
-                isChanged = true;
             }
-        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
             List<Column> baseSchema = mv.getColumns();
 
             // analyze bloom filter columns
@@ -319,20 +355,24 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 bfFpp = 0;
             }
 
-            Set<ColumnId> bfColumnIds = null;
+            Set<ColumnId> bfColumnIds;
             if (bfColumns != null && !bfColumns.isEmpty()) {
                 bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
                 for (String colName : bfColumns) {
                     bfColumnIds.add(mv.getColumn(colName).getColumnId());
                 }
+            } else {
+                bfColumnIds = null;
             }
             Set<ColumnId> oldBfColumnIds = mv.getBfColumnIds();
             if (bfColumnIds != null && oldBfColumnIds != null &&
                     bfColumnIds.equals(oldBfColumnIds) && mv.getBfFpp() == bfFpp) {
                 // do nothing
             } else {
-                isChanged = true;
-                mv.setBloomFilterInfo(bfColumnIds, bfFpp);
+                double finalBfFpp = bfFpp;
+                actions.add(() -> {
+                    mv.setBloomFilterInfo(bfColumnIds, finalBfFpp);
+                });
             }
             properties.remove(PropertyAnalyzer.PROPERTIES_BF_COLUMNS);
         }
@@ -362,7 +402,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
         }
 
-        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(mv.getDbId(), mv);
+        boolean isChanged = !actions.isEmpty();
         if (!properties.isEmpty()) {
             // set properties if there are no exceptions
             for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -371,6 +411,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             isChanged = true;
         }
 
+        // if all properties are analyzed successfully, run actions
+        actions.forEach(Runnable::run);
+
+        // register or remove partition ttl table again after partition ttl has changed
+        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(mv.getDbId(), mv);
         if (isChanged) {
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(mv.getDbId(),
                     mv.getId(), propClone);
