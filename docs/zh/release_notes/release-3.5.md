@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # StarRocks version 3.5
 
-## v3.5.0-RC01
+## v3.5.0
 
 发布日期：2025 年 6 月 13 日
 
