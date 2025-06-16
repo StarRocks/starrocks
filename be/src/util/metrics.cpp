@@ -110,16 +110,18 @@ bool MetricCollector::add_metric(const MetricLabels& labels, Metric* metric) {
         return false;
     }
     auto it = _metrics.emplace(labels, metric);
+    if (it.second) {
+        _metric_labels.emplace(metric, labels);
+    }
     return it.second;
 }
 
 void MetricCollector::remove_metric(Metric* metric) {
-    for (auto& it : _metrics) {
-        if (it.second == metric) {
-            _metrics.erase(it.first);
-            break;
-        }
+    auto it = _metric_labels.find(metric);
+    if (it == _metric_labels.end()) {
+        return;
     }
+    _metrics.erase(it->second);
 }
 
 Metric* MetricCollector::get_metric(const MetricLabels& labels) const {
