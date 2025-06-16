@@ -44,6 +44,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -332,6 +333,11 @@ public class ColocateMetaService {
                 for (Long beId : backendIds) {
                     if (!clusterBackendIds.contains(beId)) {
                         throw new DdlException("The backend " + beId + " does not exist or not available");
+                    }
+                    // check be label matching group location label or not
+                    if (!TabletChecker.isLocationMatch(beId, groupSchema.getLocationMap())) {
+                        throw new DdlException("The backend " + beId + " not matching schema location label "
+                                + groupSchema.getLocationMap());
                     }
                 }
             }
