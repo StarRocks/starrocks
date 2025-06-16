@@ -65,6 +65,12 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+>>>>>>> 4e1d1a01cd ([BugFix] Make it compatible with Trino dialect when dropping a hive table (#38829))
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
@@ -109,6 +115,7 @@ import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
 import io.trino.sql.tree.DoubleLiteral;
+import io.trino.sql.tree.DropTable;
 import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
 import io.trino.sql.tree.Explain;
@@ -1225,6 +1232,55 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    protected ParseNode visitInsert(Insert node, ParseTreeContext context) {
+        List<String> parts  = node.getTarget().getParts();
+        String tableName = parts.get(parts.size() - 1);
+        List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
+                map(Identifier::getValue).collect(Collectors.toList()) : null;
+        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+                tableName.concat(UUID.randomUUID().toString()), columnAliases,
+        (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
+    }
+
+    @Override
+    protected ParseNode visitCreateTableAsSelect(CreateTableAsSelect node, ParseTreeContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (node.getProperties() != null) {
+            List<Property> propertyList = visit(node.getProperties(), context, Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        CreateTableStmt createTableStmt = new CreateTableStmt(node.isNotExists(),
+                false,
+                qualifiedNameToTableName(convertQualifiedName(node.getName())),
+                null,
+                "",
+                null,
+                null,
+                null,
+                properties,
+                null,
+                node.getComment().isPresent() ? node.getComment().get() : null);
+
+        return new CreateTableAsSelectStmt(
+                createTableStmt,
+                null,
+                (QueryStatement) visit(node.getQuery(), context));
+    }
+
+    @Override
+    protected ParseNode visitDropTable(DropTable node, ParseTreeContext context) {
+        boolean ifExists = node.isExists();
+        TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getTableName()));
+        return new DropTableStmt(ifExists, tableName, false, true);
+    }
+
+>>>>>>> 4e1d1a01cd ([BugFix] Make it compatible with Trino dialect when dropping a hive table (#38829))
     public Type getType(DataType dataType) {
         if (dataType instanceof GenericDataType) {
             GenericDataType genericDataType = (GenericDataType) dataType;

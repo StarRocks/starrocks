@@ -23,6 +23,11 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
+=======
+import io.trino.sql.tree.CreateTableAsSelect;
+import io.trino.sql.tree.DropTable;
+>>>>>>> 4e1d1a01cd ([BugFix] Make it compatible with Trino dialect when dropping a hive table (#38829))
 import io.trino.sql.tree.Explain;
 import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.Query;
@@ -38,7 +43,13 @@ public class TrinoParserUtils {
     public static StatementBase toStatement(String query, long sqlMode) {
         String trimmedQuery = query.trim();
         Statement statement = TrinoParser.parse(trimmedQuery);
+<<<<<<< HEAD
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze) {
+=======
+        if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
+                || statement instanceof CreateTableAsSelect || statement instanceof Insert
+                || statement instanceof DropTable) {
+>>>>>>> 4e1d1a01cd ([BugFix] Make it compatible with Trino dialect when dropping a hive table (#38829))
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
             throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
