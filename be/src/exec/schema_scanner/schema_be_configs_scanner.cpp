@@ -25,9 +25,12 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeConfigsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VALUE", TYPE_VARCHAR, sizeof(StringValue), false},   {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT", TYPE_VARCHAR, sizeof(StringValue), false}, {"MUTABLE", TYPE_BOOLEAN, sizeof(bool), false},
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFAULT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"MUTABLE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
 };
 
 SchemaBeConfigsScanner::SchemaBeConfigsScanner()

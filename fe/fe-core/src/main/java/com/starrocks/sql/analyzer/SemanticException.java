@@ -49,6 +49,12 @@ public class SemanticException extends StarRocksPlannerException {
         this.canAppend = canAppend;
     }
 
+    public SemanticException(String detailMsg, Exception cause) {
+        super(detailMsg, ErrorType.USER_ERROR, cause);
+        this.detailMsg = detailMsg;
+        this.pos = NodePosition.ZERO;
+    }
+
     public SemanticException(String formatString, Object... args) {
         this(format(formatString, args), NodePosition.ZERO);
     }

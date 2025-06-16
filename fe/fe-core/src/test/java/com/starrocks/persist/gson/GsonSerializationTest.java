@@ -28,6 +28,7 @@ import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -493,7 +494,7 @@ public class GsonSerializationTest {
 
     @Test
     public void testMaterializedIndexMetaGsonProcess() throws Exception {
-        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(1, Lists.newArrayList(new Column()), 1, 1,
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(1, Lists.newArrayList(new Column("k1", Type.INT)), 1, 1,
                 (short) 1, COLUMN, PRIMARY_KEYS, null);
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {

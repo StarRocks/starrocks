@@ -57,6 +57,7 @@ Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const
 }
 
 Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() { _chunks_sorter->spill_channel()->set_finishing(); });
     if (state->is_cancelled()) {
         _is_finished = true;
@@ -64,15 +65,16 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
         return Status::Cancelled("runtime state is cancelled");
     }
 
-    // channnel:
-    //
     // if has spill task. we should wait all spill task finished then to call finished
-    // TODO: test cancel case
-    auto io_executor = _chunks_sorter->spill_channel()->io_executor();
+
+    // This callback function is delayed executed, and in some cases the source operator will be is_finished
+    // earlier, at which point the sink operator will call set_finished and close, at which point
+    // this->chunks_sorter will become null. That's why we need to catch the chunks here.
+    // So we need to capture the shared_ptr of chunks_sorter here.
     auto chunk_sorter = _chunks_sorter.get();
     _sort_context->ref();
-    auto set_call_back_function = [this, chunk_sorter](RuntimeState* state, auto io_executor) {
-        return _chunks_sorter->spiller()->set_flush_all_call_back(
+    auto set_call_back_function = [this, chunk_sorter](RuntimeState* state) {
+        return chunk_sorter->spiller()->set_flush_all_call_back(
                 [this, chunk_sorter]() {
                     // Current partition sort is ended, and
                     // the last call will drive LocalMergeSortSourceOperator to work.
@@ -82,12 +84,12 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _chunks_sorter->spiller()));
+                state, TRACKER_WITH_SPILLER_GUARD(state, chunk_sorter->spiller()));
     };
 
     Status ret_status;
     auto defer = DeferOp([&]() {
-        SpillProcessTasksBuilder task_builder(state, io_executor);
+        SpillProcessTasksBuilder task_builder(state);
         task_builder.finally(set_call_back_function);
         Status st = _chunks_sorter->spill_channel()->execute(task_builder);
         ret_status = ret_status.ok() ? st : ret_status;
@@ -138,8 +140,13 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "local-sort-spill";
+    _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+
     return Status::OK();
 }
 

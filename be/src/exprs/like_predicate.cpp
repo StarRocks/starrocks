@@ -20,6 +20,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/Volnitsky.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -48,7 +49,9 @@ bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, Lik
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
-        error << "Invalid hyperscan expression: " << std::string(slice.data, slice.size) << ": "
+        auto chopped_size = std::min<size_t>(slice.size, 64);
+        auto ellipsis = (chopped_size < slice.size) ? "..." : "";
+        error << "Invalid hyperscan expression: " << std::string(slice.data, chopped_size) << ellipsis << ": "
               << state->compile_err->message << PROMPT_INFO;
         LOG(WARNING) << error.str().c_str();
         hs_free_compile_error(state->compile_err);
@@ -328,7 +331,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         } else {
             res->append(true);
         }
-        return ConstColumn::create(res, columns[0]->size());
+        return ConstColumn::create(std::move(res), columns[0]->size());
     }
 
     BinaryColumn* haystack = nullptr;
@@ -348,7 +351,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         size_t type_size = res->type_size();
         memset(res->mutable_raw_data(), 1, res->size() * type_size);
     } else {
-        const std::vector<uint32_t>& offsets = haystack->get_offset();
+        const Buffer<uint32_t>& offsets = haystack->get_offset();
         res->resize(haystack->size());
 
         const char* begin = haystack->get_slice(0).data;
@@ -383,7 +386,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     }
 
     if (columns[0]->has_null()) {
-        return NullableColumn::create(res, res_null);
+        return NullableColumn::create(std::move(res), std::move(res_null));
     }
     return res;
 }
@@ -408,9 +411,17 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
     hs_scratch_t* scratch = nullptr;
     hs_error_t status;
     if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
-        CHECK(false) << "ERROR: Unable to clone scratch space."
-                     << " status: " << status;
+        return Status::InternalError(fmt::format("unable to clone scratch space, status: {}", status));
     }
+
+    DeferOp op([&] {
+        if (scratch != nullptr) {
+            hs_error_t st;
+            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+                LOG(ERROR) << "free scratch space failure. status: " << st;
+            }
+        }
+    });
 
     for (int row = 0; row < value_viewer.size(); ++row) {
         if (value_viewer.is_null(row)) {
@@ -435,11 +446,49 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
         result->append(v);
     }
 
-    if ((status = hs_free_scratch(scratch)) != HS_SUCCESS) {
-        CHECK(false) << "ERROR: free scratch space failure"
-                     << " status: " << status;
-    }
     return result->build(value_column->is_constant());
+}
+
+enum class FastPathType {
+    EQUALS = 0,
+    START_WITH = 1,
+    END_WITH = 2,
+    SUBSTRING = 3,
+    REGEX = 4,
+};
+
+FastPathType extract_fast_path(const Slice& pattern) {
+    if (pattern.empty() || pattern.size < 2) {
+        return FastPathType::REGEX;
+    }
+
+    if (pattern.data[0] == '_' || pattern.data[pattern.size - 1] == '_') {
+        return FastPathType::REGEX;
+    }
+
+    bool is_end_with = pattern.data[0] == '%';
+    bool is_start_with = pattern.data[pattern.size - 1] == '%';
+
+    for (size_t i = 1; i < pattern.size - 1;) {
+        if (pattern.data[i] == '\\') {
+            i += 2;
+        } else {
+            if (pattern.data[i] == '%' || pattern.data[i] == '_') {
+                return FastPathType::REGEX;
+            }
+            i++;
+        }
+    }
+
+    if (is_end_with && is_start_with) {
+        return FastPathType::SUBSTRING;
+    } else if (is_end_with) {
+        return FastPathType::END_WITH;
+    } else if (is_start_with) {
+        return FastPathType::START_WITH;
+    } else {
+        return FastPathType::EQUALS;
+    }
 }
 
 StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context, const starrocks::Columns& columns) {
@@ -473,18 +522,56 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context, co
             continue;
         }
 
-        auto re_pattern = LikePredicate::template convert_like_pattern<false>(context, pattern_viewer.value(row));
-
-        re2::RE2 re(re_pattern, opts);
-
-        if (!re.ok()) {
-            context->set_error(strings::Substitute("Invalid regex: $0", re_pattern).c_str());
-            result.append_null();
-            continue;
+        Slice pattern = pattern_viewer.value(row);
+        FastPathType val = extract_fast_path(pattern);
+        switch (val) {
+        case FastPathType::EQUALS: {
+            std::string str_pattern = pattern.to_string();
+            remove_escape_character(&str_pattern);
+            result.append(value_viewer.value(row) == str_pattern);
+            break;
         }
+        case FastPathType::START_WITH: {
+            std::string str_pattern = pattern.to_string();
+            remove_escape_character(&str_pattern);
+            auto pattern_slice = Slice(str_pattern);
+            pattern_slice.remove_suffix(1);
+            result.append(ConstantStartsImpl::apply<Slice, Slice, bool>(value_viewer.value(row), pattern_slice));
+            break;
+        }
+        case FastPathType::END_WITH: {
+            std::string str_pattern = pattern.to_string();
+            remove_escape_character(&str_pattern);
+            auto pattern_slice = Slice(str_pattern);
+            pattern_slice.remove_prefix(1);
+            result.append(ConstantEndsImpl::apply<Slice, Slice, bool>(value_viewer.value(row), pattern_slice));
+            break;
+        }
+        case FastPathType::SUBSTRING: {
+            std::string str_pattern = pattern.to_string();
+            remove_escape_character(&str_pattern);
+            auto pattern_slice = Slice(str_pattern);
+            pattern_slice.remove_prefix(1);
+            pattern_slice.remove_suffix(1);
+            auto searcher = LibcASCIICaseSensitiveStringSearcher(pattern_slice.get_data(), pattern_slice.get_size());
+            /// searcher returns a pointer to the found substring or to the end of `haystack`.
+            const Slice& value = value_viewer.value(row);
+            const char* res_pointer = searcher.search(value.data, value.size);
+            result.append(!!res_pointer);
+            break;
+        }
+        case FastPathType::REGEX: {
+            auto re_pattern = LikePredicate::template convert_like_pattern<false>(context, pattern);
 
-        auto v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size), re);
-        result.append(v);
+            re2::RE2 re(re_pattern, opts);
+            if (!re.ok()) {
+                return Status::InvalidArgument(strings::Substitute("Invalid regex: $0", re_pattern));
+            }
+            auto v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size), re);
+            result.append(v);
+            break;
+        }
+        }
     }
 
     return result.build(all_const);

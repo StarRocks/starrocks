@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # to_binary
 
-## Description
+
 
 Converts a VARCHAR string to a binary value based on the specified binary format (`binary_type`) of the input string. The following binary formats are supported: `hex`, `encode64`, and `utf8`. If no `binary_type` is specified, `hex` is the default.
 
@@ -70,4 +70,4 @@ mysql> select to_binary('U1RBUlJPQ0tT', 'hex');
 ## References
 
 - [from_binary](from_binary.md)
-- [BINARY/VARBINARY data type](../../sql-statements/data-types/BINARY.md)
+- [BINARY/VARBINARY data type](../../data-types/string-type/BINARY.md)

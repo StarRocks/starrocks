@@ -45,12 +45,7 @@ StatusOr<ColumnPtr> DebugFunctions::chunk_check_valid(ExprContext* context, Chun
     size_t num_rows = ptr->num_rows();
     for (const auto& column : ptr->columns()) {
         // check column size capacity
-        std::string msg;
-        column->capacity_limit_reached(&msg);
-        if (!msg.empty()) {
-            DCHECK(false) << "not expected";
-            throw std::runtime_error(msg);
-        }
+        RETURN_IF_ERROR(column->capacity_limit_reached());
         // check column size matched
         if (column->size() != num_rows) {
             DCHECK(false) << "not expected";

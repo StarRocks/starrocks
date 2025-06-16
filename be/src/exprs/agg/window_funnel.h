@@ -24,6 +24,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -452,17 +453,31 @@ public:
 
         // get event
         uint8_t event_level = 0;
-        const auto* event_column = down_cast<const ArrayColumn*>(columns[3]);
+        const ArrayColumn* event_column = nullptr;
+        size_t offset = 0;
+        size_t array_size = 0;
 
-        const UInt32Column& offsets = event_column->offsets();
-        auto offsets_ptr = offsets.get_data().data();
-        size_t offset = offsets_ptr[row_num];
-        size_t array_size = offsets_ptr[row_num + 1] - offsets_ptr[row_num];
+        DCHECK(!columns[3]->only_null());
+        if (columns[3]->is_constant()) {
+            event_column =
+                    down_cast<const ArrayColumn*>(down_cast<const ConstColumn*>(columns[3])->data_column().get());
+            const UInt32Column& offsets = event_column->offsets();
+            auto offsets_ptr = offsets.get_data().data();
+            offset = offsets_ptr[0];
+            array_size = offsets_ptr[1] - offsets_ptr[0];
+        } else {
+            DCHECK(columns[3]->is_array());
+            event_column = down_cast<const ArrayColumn*>(columns[3]);
+            const UInt32Column& offsets = event_column->offsets();
+            auto offsets_ptr = offsets.get_data().data();
+            offset = offsets_ptr[row_num];
+            array_size = offsets_ptr[row_num + 1] - offsets_ptr[row_num];
+        }
 
         const Column& elements = event_column->elements();
         if (elements.is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(elements);
-            auto data_column = down_cast<BooleanColumn*>(null_column.data_column().get());
+            auto data_column = down_cast<const BooleanColumn*>(null_column.data_column().get());
             const auto& null_vector = null_column.null_column()->get_data();
             for (int i = 0; i < array_size; ++i) {
                 auto ele_offset = offset + i;

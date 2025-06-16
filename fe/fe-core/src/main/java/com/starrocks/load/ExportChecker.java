@@ -36,7 +36,7 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
@@ -172,7 +172,7 @@ public final class ExportChecker extends FrontendDaemon {
         boolean beHasErr = false;
         String errMsg = "";
         for (Long nodeId : job.getBeStartTimeMap().keySet()) {
-            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
             if (null == node) {
                 // The current implementation, if the be in the job is not found, 
                 // the job will be cancelled
@@ -197,7 +197,7 @@ public final class ExportChecker extends FrontendDaemon {
         if (beHasErr) {
             try {
                 job.cancel(ExportFailMsg.CancelType.BE_STATUS_ERR, errMsg);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("try to cancel a completed job. job: {}", job);
             }
             return true;

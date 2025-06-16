@@ -66,6 +66,7 @@ public:
             : SourceOperatorFactory(id, "union_const_source", plan_node_id),
               _dst_slots(dst_slots),
               _const_expr_lists(const_expr_lists) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         // Divide _const_expr_lists into *degree_of_parallelism* parts,
@@ -83,7 +84,7 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     const std::vector<SlotDescriptor*>& _dst_slots;

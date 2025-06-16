@@ -1,0 +1,1341 @@
+-- name: test_index_and_filter_on_or_predicate @sequential
+set scan_or_to_union_limit = 1;
+-- result:
+-- !result
+set enable_show_predicate_tree_in_profile = true;
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile=false;
+-- result:
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_page_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c_int_1_seq bigint NULL,
+  c_int_2_seq bigint NULL,
+
+  c_str_1_seq String NULL,
+  c_str_2_seq String NULL,
+
+  c_str_3_low1 String NULL,
+  c_str_4_low2 String NULL,
+
+  c_str_5_low_non_null1 String NOT NULL,
+  c_str_6_low_non_null2 String NOT NULL,
+
+  c_str_7_seq_non_null1 String NOT NULL,
+  c_str_8_seq_non_null2 String NOT NULL,
+
+  c_date_1_seq date NULL,
+  c_date_2_seq date NULL,
+  c_datetime_1_seq datetime NULL,
+  c_datetime_2_seq datetime NULL,
+
+  INDEX c_int_1_seq_bitmap_index (c_int_1_seq) USING BITMAP,
+  INDEX c_str_1_seq_bitmap_index (c_str_1_seq) USING BITMAP,
+  INDEX c_str_3_low1_bitmap_index (c_str_3_low1) USING BITMAP,
+  INDEX c_str_5_low_non_null1_bitmap_index (c_str_5_low_non_null1) USING BITMAP,
+  INDEX c_str_7_seq_non_null1_bitmap_index (c_str_7_seq_non_null1) USING BITMAP,
+  INDEX c_date_1_seq_bitmap_index (c_date_1_seq) USING BITMAP,
+  INDEX c_datetime_1_seq_bitmap_index (c_datetime_1_seq) USING BITMAP
+
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1",
+    "bloom_filter_columns" = "c_int_1_seq,c_str_1_seq,c_str_3_low1,c_str_5_low_non_null1,c_str_7_seq_non_null1,c_date_1_seq,c_datetime_1_seq"
+);
+-- result:
+-- !result
+insert into t1
+select 
+    idx,
+    idx + 1280000,
+    idx + 1280000*2,
+
+    concat('abc1-', idx),
+    concat('abc2-', idx),
+    case when idx % 3 = 0 then 'a1' when idx % 3 = 1 then 'b1' else 'c1' end,
+    case when idx < 1280000/4 then 'a2' when idx < 1280000/4*2 then 'b2' when idx < 1280000/4*3 then 'c2' else 'd2' end,
+
+    case when idx % 3 = 0 then 'a1' when idx % 3 = 1 then 'b1' else 'c1' end,
+    case when idx < 1280000/4 then 'a2' when idx < 1280000/4*2 then 'b2' when idx < 1280000/4*3 then 'c2' else 'd2' end,
+    concat('abc1-', idx),
+    concat('abc2-', idx),
+
+    cast(date_sub('2023-11-02', interval cast(idx % 100 as int) day) as date),
+    cast(date_sub('2023-11-02', interval cast(idx % 1000 as int) day) as date),
+    
+    date_sub('2023-11-02', interval cast(idx % 100 as int) second),
+    date_sub('2023-11-02', interval cast(idx % 1000 as int) second)
+from __row_util ;
+-- result:
+-- !result
+insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
+-- result:
+-- !result
+insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
+-- result:
+-- !result
+ALTER TABLE t1 COMPACT;
+-- result:
+-- !result
+function: wait_compaction_finish("t1", 32)
+-- result:
+None
+-- !result
+create view __profile(idx, k, v) as 
+select 1, 2, 3;
+-- result:
+-- !result
+    
+    
+    
+    
+
+
+
+update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
+select count(1) from t1 where c_int_1_seq < 1;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1 and c_int_1_seq * 10 < 100;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+select count(1) from t1 where c_int_2_seq < 10;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+select count(1) from t1 where c_int_2_seq < 10 and c_int_2_seq * 10 < 1000;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+
+select count(1) from t1 where c_int_1_seq < 1 and c_int_2_seq < 1280000 * 10;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+
+select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1 * 10;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+select count(1) from t1 where (c_int_1_seq < 1 and c_int_1_seq * 10 < 100) 
+    or (c_int_2_seq < 10 and c_int_2_seq * 10 < 1000);
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
+-- result:
+1280000
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
+select count(1) from t1 where c_int_1_seq = 1280002;
+-- result:
+1
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1';
+-- result:
+426666
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+select count(1) from t1 where c_date_1_seq = '2023-11-01';
+-- result:
+12800
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+select count(1) from t1 where c_int_1_seq * 2 = 10;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1290000;
+-- result:
+9999
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_date_1_seq > '2023-10-01';
+-- result:
+409600
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_2_seq = 1280000*2+2;
+-- result:
+1
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq = 10 and c_int_1_seq * 2 = 10;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+
+select count(1) from t1 where c_int_1_seq = 1280002 and c_str_1_seq = 'abc1-128';
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq = 1280002 and c_str_1_seq = 'abc1-2';
+-- result:
+1
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq = 10 or c_int_1_seq * 2 = 10;
+-- result:
+0
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+
+select count(1) from t1 where c_int_1_seq = 1280002 or c_str_1_seq = 'abc1-128';
+-- result:
+2
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq = 1280002 or c_str_1_seq = 'abc1-2';
+-- result:
+1
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+select count(1) from t1 
+  where
+  (
+    (
+      c_str_3_low1 = 'b1'
+      and c_str_3_low1 < 'zzz'
+      and (
+        c_int_1_seq = 1280000*2+2
+        or c_int_1_seq = 1280010
+      )
+    )
+    or c_int_1_seq = 1280004 or c_str_1_seq = 'abc1-128'
+  )
+  and (
+    (c_str_1_seq = 'abc1-4' and c_str_3_low1 = 'b1') or c_int_1_seq= 1280005
+  );
+-- result:
+1
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result
+select count(1) from t1 where c_int_1_seq = 1280001;
+-- result:
+1
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq in (1280001, 1280010);
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq is null;
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1280010;
+-- result:
+9
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq <= 1280010;
+-- result:
+10
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq > 1280000*2-100;
+-- result:
+100
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq >= 1280000*2-100;
+-- result:
+101
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq != 1280001;
+-- result:
+1279999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq not in (1280001, 1280010);
+-- result:
+1279998
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq is not null;
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq = 1280001;
+-- result:
+1
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq in (1280001, 1280010);
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq is null;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq < 1280010;
+-- result:
+6
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq <= 1280010;
+-- result:
+7
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq > 1280000*2-100;
+-- result:
+67
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq >= 1280000*2-100;
+-- result:
+68
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq = 1280001;
+-- result:
+1
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq in (1280001, 1280010);
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq is null;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq < 1280010;
+-- result:
+9
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq <= 1280010;
+-- result:
+10
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq > 1280000*2-100;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq >= 1280000*2-100;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq = 1280001;
+-- result:
+853334
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq in (1280001, 1280010);
+-- result:
+853334
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq is null;
+-- result:
+853336
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq < 1280010;
+-- result:
+853337
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq <= 1280010;
+-- result:
+853337
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq > 1280000*2-100;
+-- result:
+853367
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq >= 1280000*2-100;
+-- result:
+853367
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq = 1280001;
+-- result:
+319999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq in (1280001, 1280010);
+-- result:
+319999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq is null;
+-- result:
+320001
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq < 1280010;
+-- result:
+319999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq <= 1280010;
+-- result:
+319999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq > 1280000*2-100;
+-- result:
+320099
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq >= 1280000*2-100;
+-- result:
+320100
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq = 1280001;
+-- result:
+426667
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq in (1280001, 1280010);
+-- result:
+426668
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq is null;
+-- result:
+426668
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq < 1280010;
+-- result:
+426672
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq <= 1280010;
+-- result:
+426673
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq > 1280000*2-100;
+-- result:
+426733
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq >= 1280000*2-100;
+-- result:
+426734
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1');
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1') and c_str_1_seq = 'abc1-12';
+-- result:
+1
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1') or c_str_1_seq = 'abc1-12';
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1 and c_str_7_seq_non_null1 < 'abc1-1';
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+ 
+select count(1) from t1 where c_int_1_seq < 1 or c_str_7_seq_non_null1 < 'abc1-1';
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where (c_int_1_seq < 1 and c_str_7_seq_non_null1 < 'abc1-1') or c_str_1_seq = 'abc1-12';
+-- result:
+1
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1 or c_str_5_low_non_null1 < ';';
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz';
+-- result:
+1280002
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz' and c_int_1_seq < 1280010;
+-- result:
+9
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz' or c_int_1_seq < 1280010;
+-- result:
+1280002
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where (c_str_5_low_non_null1 < 'zzzz' or c_int_1_seq < 1280010) and c_int_1_seq < 1280020;
+-- result:
+19
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_7_seq_non_null1 > ';' and c_str_5_low_non_null1 > ';';
+-- result:
+1280002
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    (
+      (
+        c_int_1_seq = 1280001
+        or
+        c_date_1_seq < '1900-01-01' -- always false
+      )
+      and
+      c_datetime_1_seq < '2040-01-01' -- always true
+    )
+    or 
+    (
+      c_str_1_seq = 'abc1-2'
+      and c_str_3_low1 = 'a1'
+    )
+  )
+  and 
+  (
+    c_str_1_seq = 'abc1-1'
+    or
+    c_date_1_seq = '2020-01-01'
+  );
+-- result:
+1
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq = 1280001
+    and c_str_1_seq = 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq = 1280002
+    and c_str_1_seq = 'abc1-2'
+  );
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_1_seq like '%abc%'
+    and c_str_1_seq != 'abc1-4'
+  );
+-- result:
+1279999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1', 'c1');
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1');
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1', 'c1')
+    and c_str_5_low_non_null1 in ('a1', 'b1', 'c1')
+  );
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1')
+    and c_int_1_seq != 1280004
+  );
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  or c_str_5_low_non_null1 in ('a1');
+-- result:
+426666
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  and c_str_5_low_non_null1 in ('a1');
+-- result:
+426666
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result
+select count(k1) from t1 where c_int_1_seq < 1280000 + 128000/3 or c_int_2_seq > 1280000*3 - 1000;
+-- result:
+43666
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+
+select count(k1) from t1 where 
+  (c_int_1_seq < 1280000 + 128000/3 or c_int_2_seq > 1280000*3 - 1000
+    and c_str_3_low1 = 'a1' and c_str_4_low2='a2')
+    or 
+  (c_int_2_seq < 1280000*2 + 128000/3 or c_int_1_seq > 1280000*2 - 1000
+    and c_str_3_low1 = 'b1' and c_str_4_low2='b2');
+-- result:
+42666
+-- !result
+  select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+  
+
+select count(1) from t1 
+where
+  c_int_1_seq * 2 = 1280000+10 *2 and -- ExprPredicate
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000) and -- non_vec
+  c_int_1_seq > 1280001; -- vec
+  select * from __profile order by idx, k, v;
+-- result:
+0
+-- !result
+select count(1) from t1 
+where
+  c_int_2_seq * 2 = 1280000*2*10 *2 and -- ExprPredicate
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000) and -- non_vec
+  c_int_2_seq > 1280001*2; -- vec
+  select * from __profile order by idx, k, v;
+-- result:
+0
+-- !result
+select count(1) from t1 
+where
+  c_int_1_seq * 2 = 1280000+10 *2 or -- ExprPredicate
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000) or -- non_vec
+  c_int_1_seq > 1280001; -- vec
+  select * from __profile order by idx, k, v;
+-- result:
+1279999
+-- !result
+select count(1) from t1 
+where
+  (c_int_1_seq * 2 > 1280000+10 *2 and c_int_1_seq = 1280000+10) or -- ExprPredicate
+  c_int_1_seq in (1280000+10, 1280000+100, 1280000+1000, 180000+10000) or -- non_vec
+  c_int_1_seq > 1280000*2-1000; -- vec
+  select * from __profile order by idx, k, v;
+-- result:
+1003
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_page_level_zonemap_filter";
+-- result:
+-- !result
+select count(1) from t1 where c_int_1_seq < 1;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1 and c_int_1_seq * 10 < 100;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_2_seq < 10;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_2_seq < 10 and c_int_2_seq * 10 < 1000;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1 and c_int_2_seq < 1280000 * 10;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1 * 10;
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where (c_int_1_seq < 1 and c_int_1_seq * 10 < 100) 
+    or (c_int_2_seq < 10 and c_int_2_seq * 10 < 1000);
+-- result:
+0
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq > 1280010 and c_int_1_seq < 1281000;
+-- result:
+989
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_1_seq > 'abc1-1280010' and c_str_1_seq < 'abc1-1281000';
+-- result:
+110
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_1_seq > 'abc1-1280010'  and c_int_1_seq > 1280010 and c_int_1_seq < 1281000;
+-- result:
+958
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq > 1280010 or c_int_1_seq < 1281000;
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq = 1280010 or c_int_1_seq = 1280000 * 2 - 1000;
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_1_seq < 1280010 or c_int_1_seq > 1280000 * 2 - 1000;
+-- result:
+1009
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_2_seq = 1280000*2+20 or c_int_2_seq = 1280000*2+1000 or c_int_2_seq > 1280000*3-2000;
+-- result:
+2002
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 = (1280000*2+1000)*2 or c_int_2_seq > 1280000*3-2000;
+-- result:
+2002
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 
+where 
+  (
+    c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 = (1280000*2+1000)*2 or c_int_2_seq > 1280000*3-2000
+    and c_int_1_seq > 1280000*2-3000
+  ) 
+  and (
+    c_int_1_seq > 1280010 and c_int_1_seq < 1281000 
+    or (
+      c_int_2_seq*3=(1280000*2+20)*3
+    )
+  );
+-- result:
+1
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+delete from t1 where c_int_2_seq<2561000;
+-- result:
+-- !result
+select count(1) from t1 where c_int_1_seq < 1280010 or c_int_1_seq > 1280000 * 2 - 1000;
+-- result:
+1000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_2_seq = 1280000*2+20 or c_int_2_seq = 1280000*2+1000 or c_int_2_seq > 1280000*3-2000;
+-- result:
+2001
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 = (1280000*2+1000)*2 or c_int_2_seq > 1280000*3-2000;
+-- result:
+2001
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_page_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_page_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result

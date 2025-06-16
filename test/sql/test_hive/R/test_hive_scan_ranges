@@ -1,0 +1,65 @@
+-- name: testHiveScanRanges
+set enable_connector_incremental_scan_ranges = true;
+-- result:
+-- !result
+set connector_incremental_scan_ranges_size = 1;
+-- result:
+-- !result
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy order by col_int, col_date;
+-- result:
+1	hello world	2021-01-01	1
+1	hello world	2022-01-01	1
+2	hello wrold	2021-01-01	1
+2	hello wrold	2022-01-01	1
+-- !result
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc order by id;
+-- result:
+1	Alice	bj
+2	Bob	bj
+3	David	None
+-- !result
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet order by id;
+-- result:
+1	Alice	bj
+2	Bob	bj
+3	David	None
+-- !result
+create table t00 as select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy order by col_int, col_date;
+-- result:
+-- !result
+select * from t00 order by col_int, col_date;
+-- result:
+1	hello world	2021-01-01	1
+1	hello world	2022-01-01	1
+2	hello wrold	2021-01-01	1
+2	hello wrold	2022-01-01	1
+-- !result
+create table t01 as select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc order by id;
+-- result:
+-- !result
+select * from t01 order by id;
+-- result:
+1	Alice	bj
+2	Bob	bj
+3	David	None
+-- !result
+create table t02 as select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet order by id;
+-- result:
+-- !result
+select * from t02 order by id;
+-- result:
+1	Alice	bj
+2	Bob	bj
+3	David	None
+-- !result
+drop catalog hive_sql_test_${uuid0}
+-- result:
+-- !result

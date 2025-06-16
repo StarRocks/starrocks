@@ -14,9 +14,11 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -26,20 +28,29 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        if (ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        if (sv.isEnableQueryCache()) {
             return root;
         }
-        if (ConnectContext.get().getSessionVariable().isEnableSortAggregate()) {
+        if (sv.isEnableSortAggregate()) {
             root.getOp().accept(new UseSortAGGRule(), root, null);
             return root;
         }
-        if (ConnectContext.get().getSessionVariable().isEnablePerBucketComputeOptimize()) {
-            root.getOp().accept(new UsePerBucketOptimizeRule(), root, null);
+
+        if (sv.isEnableSpill() && sv.getSpillMode().equals("force")) {
+            return root;
+        }
+
+        // per bucket optimize will be replaced with group execution.
+        // remove me in 4.0
+        if (sv.isEnablePerBucketComputeOptimize()) {
+            root.getOp().accept(new UsePerBucketOptimizeRule(sv.isEnablePartitionBucketOptimize()), root, null);
             return root;
         }
         return root;
@@ -56,6 +67,19 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
     }
 
     private static class UsePerBucketOptimizeRule extends NoopVisitor {
+        private final boolean enablePartitionBucketOptimize;
+        private boolean hasColocateRequirement = false;
+
+        UsePerBucketOptimizeRule(boolean enablePartitionBucketOptimize) {
+            this.enablePartitionBucketOptimize = enablePartitionBucketOptimize;
+        }
+
+        @Override
+        public Void visitPhysicalHashJoin(OptExpression optExpression, Void context) {
+            hasColocateRequirement = true;
+            return visit(optExpression, context);
+        }
+
         @Override
         public Void visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
             if (optExpression.getInputs().get(0).getOp().getOpType() != OperatorType.PHYSICAL_OLAP_SCAN) {
@@ -69,9 +93,26 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             if (!agg.getType().isGlobal() || agg.getGroupBys().isEmpty()) {
                 return null;
             }
-
             agg.setUsePerBucketOptmize(true);
             scan.setNeedOutputChunkByBucket(true);
+
+            if (!hasColocateRequirement && enablePartitionBucketOptimize) {
+                OlapTable olapTable = ((OlapTable) scan.getTable());
+                Set<Column> partitionColumns = Sets.newHashSet(olapTable.getPartitionInfo()
+                        .getPartitionColumns(olapTable.getIdToColumn()));
+                List<ColumnRefOperator> groupBys = agg.getGroupBys();
+                for (ColumnRefOperator groupBy : groupBys) {
+                    Column column = scan.getColRefToColumnMetaMap().get(groupBy);
+                    if (column != null) {
+                        partitionColumns.remove(column);
+                    }
+                }
+                if (partitionColumns.isEmpty()) {
+                    agg.setWithoutColocateRequirement(true);
+                    scan.setWithoutColocateRequirement(true);
+                }
+            }
+
             return null;
         }
     }

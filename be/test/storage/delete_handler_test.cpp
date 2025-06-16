@@ -63,7 +63,6 @@ static std::string k_default_storage_root_path = "";
 
 static void set_up(const std::string& sub_path) {
     config::mem_limit = "10g";
-    CHECK(GlobalEnv::GetInstance()->init().ok());
     k_default_storage_root_path = config::storage_root_path;
     config::storage_root_path = std::filesystem::current_path().string() + "/" + sub_path;
     fs::remove_all(config::storage_root_path);
@@ -196,6 +195,19 @@ void set_key_columns(TCreateTabletReq* request) {
     k13.__set_is_key(true);
     set_varchar_type(&k13, TPrimitiveType::CHAR, 64);
     request->tablet_schema.columns.push_back(k13);
+
+    TColumn k14;
+    k14.column_name = "k14";
+    k14.__set_is_key(true);
+    set_varchar_type(&k14, TPrimitiveType::VARCHAR, 64);
+    request->tablet_schema.columns.push_back(k14);
+
+    // column name length: 90
+    TColumn k15;
+    k15.column_name = "k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    k15.__set_is_key(true);
+    set_varchar_type(&k15, TPrimitiveType::VARCHAR, 64);
+    request->tablet_schema.columns.push_back(k15);
 }
 
 void set_default_create_tablet_request(TCreateTabletReq* request) {
@@ -330,24 +342,90 @@ TEST_F(TestDeleteConditionHandler, StoreCondSucceed) {
     condition.condition_values.emplace_back("3");
     conditions.push_back(condition);
 
+    condition.column_name = "k14";
+    condition.condition_op = "=";
+    condition.condition_values.clear();
+    condition.condition_values.emplace_back(" a");
+    conditions.push_back(condition);
+
+    condition.column_name =
+            "k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    condition.condition_op = "=";
+    condition.condition_values.clear();
+    condition.condition_values.emplace_back(" a");
+    conditions.push_back(condition);
+
     DeletePredicatePB del_pred;
     success_res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
                                                                       &del_pred);
     ASSERT_EQ(true, success_res.ok());
 
     // Verify that the filter criteria stored in the header are correct
-    ASSERT_EQ(size_t(6), del_pred.sub_predicates_size());
+    ASSERT_EQ(size_t(8), del_pred.sub_predicates_size());
     EXPECT_STREQ("k1=1", del_pred.sub_predicates(0).c_str());
     EXPECT_STREQ("k2>>3", del_pred.sub_predicates(1).c_str());
     EXPECT_STREQ("k3<=5", del_pred.sub_predicates(2).c_str());
     EXPECT_STREQ("k4 IS NULL", del_pred.sub_predicates(3).c_str());
     EXPECT_STREQ("k5=7", del_pred.sub_predicates(4).c_str());
     EXPECT_STREQ("k12!=9", del_pred.sub_predicates(5).c_str());
+    EXPECT_STREQ("k14= a", del_pred.sub_predicates(6).c_str());
+    EXPECT_STREQ("k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa= a",
+                 del_pred.sub_predicates(7).c_str());
 
     ASSERT_EQ(size_t(1), del_pred.in_predicates_size());
     ASSERT_FALSE(del_pred.in_predicates(0).is_not_in());
     EXPECT_STREQ("k13", del_pred.in_predicates(0).column_name().c_str());
     ASSERT_EQ(std::size_t(2), del_pred.in_predicates(0).values().size());
+
+    // Test parse_condition
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(0), &condition));
+    EXPECT_STREQ("k1", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ("1", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(1), &condition));
+    EXPECT_STREQ("k2", condition.column_name.c_str());
+    EXPECT_STREQ(">>", condition.condition_op.c_str());
+    EXPECT_STREQ("3", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(2), &condition));
+    EXPECT_STREQ("k3", condition.column_name.c_str());
+    EXPECT_STREQ("<=", condition.condition_op.c_str());
+    EXPECT_STREQ("5", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(3), &condition));
+    EXPECT_STREQ("k4", condition.column_name.c_str());
+    EXPECT_STREQ("IS", condition.condition_op.c_str());
+    EXPECT_STREQ("NULL", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(4), &condition));
+    EXPECT_STREQ("k5", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ("7", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(5), &condition));
+    EXPECT_STREQ("k12", condition.column_name.c_str());
+    EXPECT_STREQ("!=", condition.condition_op.c_str());
+    EXPECT_STREQ("9", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(6), &condition));
+    EXPECT_STREQ("k14", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ(" a", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(7), &condition));
+    EXPECT_STREQ("k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                 condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ(" a", condition.condition_values[0].c_str());
 }
 
 // empty string

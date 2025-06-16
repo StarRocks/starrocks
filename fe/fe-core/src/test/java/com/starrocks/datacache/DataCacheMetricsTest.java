@@ -33,7 +33,7 @@ public class DataCacheMetricsTest {
         tDataCacheMetrics.setMem_quota_bytes(1024 * 1024 * 1024);
         metrics = DataCacheMetrics.buildFromThrift(tDataCacheMetrics);
         Assert.assertEquals(DataCacheMetrics.Status.NORMAL, metrics.getStatus());
-        Assert.assertEquals("0.00GB/1.00GB", metrics.getDiskUsage());
-        Assert.assertEquals("0.00GB/1.00GB", metrics.getMemUsage());
+        Assert.assertEquals("0B/1GB", metrics.getDiskUsageStr());
+        Assert.assertEquals("0B/1GB", metrics.getMemUsageStr());
     }
 }

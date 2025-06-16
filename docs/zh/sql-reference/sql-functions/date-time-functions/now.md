@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # now, current_timestamp, localtime, localtimestamp
 
-## 功能
+
 
 获取当前的时间，以 DATETIME 类型返回。
 
@@ -24,7 +24,7 @@ now(5): 2023-12-08 13:46:45.115840
 now(6): 2023-12-08 13:46:45.115843
 ```
 
-该函数受时区影响，具体参见 [设置时区](../../../administration/timezone.md)。
+该函数受时区影响，具体参见 [设置时区](../../../administration/management/timezone.md)。
 
 ## 语法
 

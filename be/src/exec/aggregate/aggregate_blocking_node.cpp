@@ -85,12 +85,11 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         size_t chunk_size = chunk->num_rows();
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
+            TRY_CATCH_ALLOC_SCOPE_START()
             if (!_aggregator->is_none_group_by_exprs()) {
-                TRY_CATCH_ALLOC_SCOPE_START()
                 _aggregator->build_hash_map(chunk_size, agg_group_by_with_limit);
 
                 _aggregator->try_convert_to_two_level_map();
-                TRY_CATCH_ALLOC_SCOPE_END()
             }
             if (_aggregator->is_none_group_by_exprs()) {
                 RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
@@ -108,6 +107,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                     RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
                 }
             }
+            TRY_CATCH_ALLOC_SCOPE_END()
 
             _aggregator->update_num_input_rows(chunk_size);
         }
@@ -180,10 +180,8 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     using namespace pipeline;
 
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
-    auto spill_channel_factory =
-            std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
+    auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
     if (std::is_same_v<SinkFactory, SpillableAggregateBlockingSinkOperatorFactory>) {
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
@@ -198,7 +196,7 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
         auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory,
-                                                           spill_channel_factory);
+                                                           _build_runtime_filters, spill_channel_factory);
         auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
 
         context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
@@ -256,7 +254,7 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
             std::vector<ExprContext*> group_by_expr_ctxs;
             WARN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
-                                                  runtime_state()),
+                                                  runtime_state(), true),
                           "create grouping expr failed");
             return group_by_expr_ctxs;
         });
@@ -293,10 +291,15 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false);
     } else {
-        if (runtime_state()->enable_spill() && runtime_state()->enable_agg_spill() && has_group_by_keys) {
+        // disable spill when group by with a small limit
+        bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
+        if (limit() != -1 && limit() < runtime_state()->chunk_size()) {
+            enable_agg_spill = false;
+        }
+        if (enable_agg_spill && has_group_by_keys) {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
-                                                     SpillableAggregateBlockingSinkOperatorFactory>(
-                    ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys);
+                                                     SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink,
+                                                                                                    context, false);
         } else {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
                                                      AggregateBlockingSinkOperatorFactory>(
@@ -317,6 +320,8 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
+
+    ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
 
     return ops_with_source;
 }

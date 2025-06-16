@@ -14,11 +14,18 @@
 
 #pragma once
 
+#include <atomic>
+#include <memory>
+#include <set>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
@@ -28,11 +35,18 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
+#include "storage/range.h"
+
 namespace starrocks {
 class RandomAccessFile;
-
 struct HdfsScanStats;
+class ExprContext;
+class TIcebergSchemaField;
+
+namespace parquet {
+class FileMetaData;
+} // namespace parquet
+struct TypeDescriptor;
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -40,24 +54,21 @@ namespace starrocks::parquet {
 struct GroupReaderParam {
     struct Column {
         // parquet field index in root node's children
-        int32_t field_idx_in_parquet;
-
-        // column index in chunk
-        int32_t col_idx_in_chunk;
+        int32_t idx_in_parquet;
 
         // column type in parquet file
-        tparquet::Type::type col_type_in_parquet;
+        tparquet::Type::type type_in_parquet;
 
-        // column type in chunk
-        TypeDescriptor col_type_in_chunk;
+        SlotDescriptor* slot_desc = nullptr;
 
-        const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
+        const TIcebergSchemaField* t_lake_schema_field = nullptr;
 
-        SlotId slot_id;
         bool decode_needed;
+
+        const TypeDescriptor& slot_type() const { return slot_desc->type(); }
+        const SlotId slot_id() const { return slot_desc->id(); }
     };
 
-    const TupleDescriptor* tuple_desc = nullptr;
     // conjunct_ctxs that column is materialized in group reader
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
@@ -74,53 +85,73 @@ struct GroupReaderParam {
 
     RandomAccessFile* file = nullptr;
 
-    FileMetaData* file_metadata = nullptr;
+    const FileMetaData* file_metadata = nullptr;
 
     bool case_sensitive = false;
+
+    bool use_file_pagecache = false;
+    int64_t modification_time = 0;
+    uint64_t file_size = 0;
+    const DataCacheOptions* datacache_options;
 
     // used to identify io coalesce
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
 
     // used for pageIndex
     std::vector<ExprContext*> min_max_conjunct_ctxs;
+    const PredicateTree* predicate_tree = nullptr;
+
+    // partition column
+    const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
+    // partition column value which read from hdfs file path
+    const Columns* partition_values = nullptr;
+    // not existed column
+    const std::vector<SlotDescriptor*>* not_existed_slots = nullptr;
+    // used for global low cardinality optimization
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
-class PageIndexReader;
-
 class GroupReader {
-    friend class PageIndexReader;
-
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
+    GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row);
-    ~GroupReader() = default;
+    ~GroupReader();
 
-    // init used to init column reader, init dict_filter_ctx and devide active/lazy
+    // init used to init column reader, and devide active/lazy
+    // then we can use inited column collect io range.
     Status init();
-    // we need load dict for dict_filter, so prepare should be after collec_io_range
     Status prepare();
-    Status get_next(ChunkPtr* chunk, size_t* row_count) {
-        // TODO: new late materialization with read_range only deal with case enable late materialization
-        if (config::parquet_late_materialization_enable && config::parquet_late_materialization_v2_enable) {
-            return _do_get_next_new(chunk, row_count);
-        } else {
-            return _do_get_next(chunk, row_count);
-        }
-    }
-    void close();
+    const tparquet::ColumnChunk* get_chunk_metadata(SlotId slot_id);
+    const ParquetField* get_column_parquet_field(SlotId slot_id);
+    ColumnReader* get_column_reader(SlotId slot_id);
+    uint64_t get_row_group_first_row() const { return _row_group_first_row; }
+    const tparquet::RowGroup* get_row_group_metadata() const;
+    Status get_next(ChunkPtr* chunk, size_t* row_count);
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                           ColumnIOType type = ColumnIOType::PAGES);
-    void set_end_offset(int64_t value) { _end_offset = value; }
+                           ColumnIOTypeFlags types = ColumnIOType::PAGES);
+
+    SparseRange<uint64_t> get_range() const { return _range; }
+    SparseRange<uint64_t>& get_range() { return _range; }
+    const bool get_is_group_filtered() const { return _is_group_filtered; }
+    bool& get_is_group_filtered() { return _is_group_filtered; }
+
+private:
+    void _set_end_offset(int64_t value) { _end_offset = value; }
+
+    // deal_with_pageindex need collect pageindex io range first, it will collect all row groups' io together,
+    // so it should be done in file reader. when reading the current row group, we need first deal_with_pageindex,
+    // and then we can collect io range based on pageindex.
+    Status _deal_with_pageindex();
 
     void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
     Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
 
-    void _init_chunk_dict_column(ChunkPtr* chunk);
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
-    Status _fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk);
+    Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
 
-    Status _init_column_readers();
-    Status _create_column_reader(const GroupReaderParam::Column& column);
+    Status _create_column_readers();
+    StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
+    Status _prepare_column_readers() const;
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
@@ -130,21 +161,15 @@ public:
 
     void _init_read_chunk();
 
-    Status _do_get_next(ChunkPtr* chunk, size_t* row_count);
-    Status _do_get_next_new(ChunkPtr* chunk, size_t* row_count);
     Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
                        ChunkPtr* chunk);
 
     StatusOr<size_t> _read_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
 
-    Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
-    Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
-    const std::set<int64_t>* _need_skip_rowids;
-    int64_t _raw_rows_read = 0;
+    SkipRowsContextPtr _skip_rows_ctx;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
@@ -183,6 +208,11 @@ public:
 
     // round by round ctx
     std::unique_ptr<ColumnReadOrderCtx> _column_read_order_ctx;
+
+    // a flag to reflect prepare() is called
+    bool _has_prepared = false;
 };
+
+using GroupReaderPtr = std::shared_ptr<GroupReader>;
 
 } // namespace starrocks::parquet

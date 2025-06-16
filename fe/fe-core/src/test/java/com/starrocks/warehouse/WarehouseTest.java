@@ -12,15 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.warehouse;
 
+import com.staros.proto.ShardInfo;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -28,6 +34,7 @@ import org.junit.Test;
 public class WarehouseTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
@@ -37,7 +44,37 @@ public class WarehouseTest {
 
     @Test
     public void testNormal() throws DdlException {
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Assert.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
+        Assert.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_ID));
+    }
+
+    @Test
+    public void testGetComputeNodeAssignedToTablet(@Mocked ShardInfo shardInfo) {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+                return null;
+            }
+        };
+        try {
+            warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, new LakeTablet(0));
+            Assert.fail();
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage().contains("No alive backend or compute node in warehouse"));
+        }
+    }
+
+    @Test
+    public void testGetWarehouse() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+        Assert.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
+        Assert.assertNull(warehouseManager.getWarehouseAllowNull("w"));
+        Assert.assertNull(warehouseManager.getWarehouseAllowNull(-1));
     }
 }

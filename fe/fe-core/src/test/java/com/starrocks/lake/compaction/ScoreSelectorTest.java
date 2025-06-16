@@ -22,6 +22,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 public class ScoreSelectorTest {
@@ -52,9 +53,38 @@ public class ScoreSelectorTest {
         statistics.setCompactionScore(Quantiles.compute(Collections.singleton(1.1)));
         statisticsList.add(statistics);
 
-        List<PartitionStatistics> targetList = selector.select(statisticsList);
+        List<PartitionStatisticsSnapshot> targetList = selector.select(statisticsList, new HashSet<Long>());
         Assert.assertEquals(2, targetList.size());
         Assert.assertEquals(5, targetList.get(0).getPartition().getPartitionId());
         Assert.assertEquals(6, targetList.get(1).getPartition().getPartitionId());
+    }
+
+    @Test
+    public void testPriority() {
+        List<PartitionStatistics> statisticsList = new ArrayList<>();
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+        statistics.setCompactionScore(Quantiles.compute(Collections.singleton(0.0)));
+        statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+        statisticsList.add(statistics);
+
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+        statistics.setCompactionScore(Quantiles.compute(Collections.singleton(0.99)));
+        statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+        statisticsList.add(statistics);
+
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 5));
+        statistics.setCompactionScore(Quantiles.compute(Collections.singleton(1.0)));
+        statisticsList.add(statistics);
+
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 6));
+        statistics.setCompactionScore(Quantiles.compute(Collections.singleton(1.1)));
+        statisticsList.add(statistics);
+
+        List<PartitionStatisticsSnapshot> targetList = selector.select(statisticsList, new HashSet<Long>());
+        Assert.assertEquals(4, targetList.size());
+        Assert.assertEquals(3, targetList.get(0).getPartition().getPartitionId());
+        Assert.assertEquals(4, targetList.get(1).getPartition().getPartitionId());
+        Assert.assertEquals(5, targetList.get(2).getPartition().getPartitionId());
+        Assert.assertEquals(6, targetList.get(3).getPartition().getPartitionId());
     }
 }

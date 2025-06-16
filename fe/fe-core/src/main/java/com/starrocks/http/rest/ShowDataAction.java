@@ -37,12 +37,12 @@ package com.starrocks.http.rest;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -66,10 +66,10 @@ public class ShowDataAction extends RestBaseAction {
     public long getDataSizeOfDatabase(Database db) {
         long totalSize = 0;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             // sort by table name
-            List<Table> tables = db.getTables();
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table table : tables) {
                 if (!table.isNativeTableOrMaterializedView()) {
                     continue;
@@ -78,7 +78,7 @@ public class ShowDataAction extends RestBaseAction {
                 totalSize += tableSize;
             } // end for tables
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return totalSize;
     }
@@ -86,7 +86,7 @@ public class ShowDataAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String dbName = request.getSingleParameter("db");
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
         long totalSize = 0;
         if (dbName != null) {
             Database db = fullNameToDb.get(dbName);
@@ -98,7 +98,6 @@ public class ShowDataAction extends RestBaseAction {
             totalSize = getDataSizeOfDatabase(db);
         } else {
             for (Database db : fullNameToDb.values()) {
-                LOG.info("database name: {}", db.getOriginName());
                 totalSize += getDataSizeOfDatabase(db);
             }
         }

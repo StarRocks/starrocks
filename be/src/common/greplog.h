@@ -48,6 +48,7 @@ Status grep_log(int64_t start_ts, int64_t end_ts, char level, const std::string&
  * Grep log file and return all line as whole string, parameters are same as grep_log
  * @return log string
  */
-std::string grep_log_as_string(int64_t start_ts, int64_t end_ts, char level, const std::string& pattern, size_t limit);
+std::string grep_log_as_string(int64_t start_ts, int64_t end_ts, const std::string& level, const std::string& pattern,
+                               size_t limit);
 
 } // namespace starrocks

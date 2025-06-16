@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
 
+#include "event.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/utils.h"
 #include "exec/pipeline/pipeline.h"
@@ -58,7 +59,9 @@ Status CollectStatsSourceOperator::set_finished(RuntimeState* state) {
 /// CollectStatsSourceOperatorFactory.
 CollectStatsSourceOperatorFactory::CollectStatsSourceOperatorFactory(int32_t id, int32_t plan_node_id,
                                                                      CollectStatsContextPtr ctx)
-        : SourceOperatorFactory(id, "collect_stats_source", plan_node_id), _ctx(std::move(ctx)) {}
+        : SourceOperatorFactory(id, "collect_stats_source", plan_node_id), _ctx(std::move(ctx)) {
+    set_adaptive_blocking_event(_ctx->blocking_event());
+}
 
 Status CollectStatsSourceOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
@@ -76,10 +79,7 @@ OperatorPtr CollectStatsSourceOperatorFactory::create(int32_t degree_of_parallel
     return std::make_shared<CollectStatsSourceOperator>(this, _id, _plan_node_id, driver_sequence, _ctx.get());
 }
 
-SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive_state() const {
-    if (_ctx->is_downstream_ready()) {
-        return SourceOperatorFactory::AdaptiveState::ACTIVE;
-    }
+SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive_initial_state() const {
     return SourceOperatorFactory::AdaptiveState::INACTIVE;
 }
 
@@ -89,10 +89,6 @@ SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive
 ///   - DOP >= DOP of dependent pipelines.
 ///   - DOP <= CollectStatsSinkOperatorFactory::degree_of_parallelism.
 void CollectStatsSourceOperatorFactory::adjust_dop() {
-    if (!is_adaptive_group_active()) {
-        return;
-    }
-
     if (_has_adjusted_dop) {
         return;
     }
@@ -128,6 +124,9 @@ void CollectStatsSourceOperatorFactory::adjust_dop() {
     size_t max_amp_factor = std::max<size_t>(1, upstream_dop / _degree_of_parallelism);
     if (max_output_amplification_factor > 0 && max_output_amplification_factor < max_amp_factor) {
         max_amp_factor = max_output_amplification_factor;
+    }
+    if (_state->is_cancelled()) {
+        max_amp_factor = 1;
     }
     size_t amp_factor = 1;
     if (max_amp_factor != 1) {

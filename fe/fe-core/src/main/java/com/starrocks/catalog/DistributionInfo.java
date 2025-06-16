@@ -40,9 +40,10 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.DistributionDesc;
 import org.apache.commons.lang.NotImplementedException;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 
 public abstract class DistributionInfo implements Writable {
 
@@ -66,6 +67,10 @@ public abstract class DistributionInfo implements Writable {
         this.typeStr = this.type.name();
     }
 
+    public String getTypeStr() {
+        return typeStr;
+    }
+
     public DistributionInfoType getType() {
         return type;
     }
@@ -77,7 +82,9 @@ public abstract class DistributionInfo implements Writable {
 
     public abstract boolean supportColocate();
 
-    public String getDistributionKey() {
+    public abstract List<ColumnId> getDistributionColumns();
+
+    public String getDistributionKey(Map<ColumnId, Column> schema) {
         return "";
     }
 
@@ -85,7 +92,7 @@ public abstract class DistributionInfo implements Writable {
         throw new NotImplementedException("not implemented");
     }
 
-    public DistributionDesc toDistributionDesc() {
+    public DistributionDesc toDistributionDesc(Map<ColumnId, Column> schema) {
         throw new NotImplementedException();
     }
 
@@ -98,11 +105,7 @@ public abstract class DistributionInfo implements Writable {
         Text.writeString(out, type.name());
     }
 
-    public void readFields(DataInput in) throws IOException {
-        type = DistributionInfoType.valueOf(Text.readString(in));
-    }
-
-    public String toSql() {
+    public String toSql(Map<ColumnId, Column> idToColumn) {
         return "";
     }
 }

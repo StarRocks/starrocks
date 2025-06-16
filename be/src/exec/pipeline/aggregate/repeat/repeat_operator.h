@@ -60,7 +60,25 @@ private:
     static ColumnPtr generate_repeat_column(int64_t value, int64_t num_rows) {
         auto column = RunTimeColumnType<TYPE_BIGINT>::create();
         column->append_datum(Datum(value));
-        return ConstColumn::create(column, num_rows);
+        return ConstColumn::create(std::move(column), num_rows);
+    }
+
+    /**
+     * @brief Generate const null column with the input column's type.
+     * @param cur_column : input associated column.
+     * @param num_rows : const column's rows number.
+     * @return ColumnPtr : a constant column with the input column's type.
+     */
+    static ColumnPtr generate_null_column(ColumnPtr& cur_column, int64_t num_rows) {
+        auto clone_column = cur_column->clone_empty();
+        if (clone_column->is_nullable()) {
+            clone_column->append_nulls(1);
+            return ConstColumn::create(std::move(clone_column), num_rows);
+        } else {
+            auto nullable_column = NullableColumn::create(std::move(clone_column), NullColumn::create());
+            nullable_column->append_nulls(1);
+            return ConstColumn::create(std::move(nullable_column), num_rows);
+        }
     }
 
     void extend_and_update_columns(ChunkPtr* curr_chunk);
@@ -105,8 +123,7 @@ public:
     RepeatOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<std::set<SlotId>>&& slot_id_set_list,
                           std::set<SlotId>&& all_slot_ids, std::vector<std::vector<SlotId>>&& null_slot_ids,
                           std::vector<int64_t>&& repeat_id_list, uint64_t repeat_times_required,
-                          uint64_t repeat_times_last, ColumnPtr&& column_null,
-                          std::vector<std::vector<ColumnPtr>>&& grouping_columns,
+                          uint64_t repeat_times_last, ColumnPtr&& column_null, std::vector<Columns>&& grouping_columns,
                           std::vector<std::vector<int64_t>>&& grouping_list, TupleId output_tuple_id,
                           const TupleDescriptor* tuple_desc, std::vector<ExprContext*>&& conjunct_ctxs)
             : OperatorFactory(id, "repeat", plan_node_id),
@@ -141,7 +158,7 @@ private:
     const uint64_t _repeat_times_required;
     uint64_t _repeat_times_last;
     ColumnPtr _column_null;
-    std::vector<std::vector<ColumnPtr>> _grouping_columns;
+    std::vector<Columns> _grouping_columns;
     std::vector<std::vector<int64_t>> _grouping_list;
     const TupleDescriptor* _tuple_desc;
     std::vector<ExprContext*> _conjunct_ctxs;

@@ -47,10 +47,10 @@ std::string EpochInfo::debug_string() const {
     return ss.str();
 }
 
-StreamChunkPtr StreamChunkConverter::make_stream_chunk(ChunkPtr chunk, const Int8ColumnPtr& ops) {
+StreamChunkPtr StreamChunkConverter::make_stream_chunk(ChunkPtr chunk, Int8Column::MutablePtr&& ops) {
     std::vector<ChunkExtraColumnsMeta> stream_extra_data_meta = {
             ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_TINYINT), .is_null = false, .is_const = false}};
-    std::vector<ColumnPtr> stream_extra_data = {ops};
+    Columns stream_extra_data{std::move(ops)};
     auto extra_data =
             std::make_shared<ChunkExtraColumnsData>(std::move(stream_extra_data_meta), std::move(stream_extra_data));
     chunk->set_extra_data(std::move(extra_data));
@@ -78,23 +78,23 @@ bool StreamChunkConverter::has_ops_column(const StreamChunk* chunk_ptr) {
     return has_ops_column(*chunk_ptr);
 }
 
-Int8Column* StreamChunkConverter::ops_col(const StreamChunk& stream_chunk) {
+const Int8Column* StreamChunkConverter::ops_col(const StreamChunk& stream_chunk) {
     DCHECK(has_ops_column(stream_chunk));
     auto extra_column_data = down_cast<ChunkExtraColumnsData*>(stream_chunk.get_extra_data().get());
     DCHECK(extra_column_data);
     DCHECK_EQ(extra_column_data->columns().size(), 1);
-    auto* op_col = ColumnHelper::as_raw_column<Int8Column>(extra_column_data->columns()[0]);
+    auto* op_col = ColumnHelper::as_raw_column<Int8Column>(extra_column_data->columns()[0].get());
     DCHECK(op_col);
     DCHECK_EQ(stream_chunk.num_rows(), op_col->size());
     return op_col;
 }
 
-Int8Column* StreamChunkConverter::ops_col(const StreamChunkPtr& stream_chunk_ptr) {
+const Int8Column* StreamChunkConverter::ops_col(const StreamChunkPtr& stream_chunk_ptr) {
     DCHECK(stream_chunk_ptr);
     return ops_col(*stream_chunk_ptr);
 }
 
-Int8Column* StreamChunkConverter::ops_col(const StreamChunk* stream_chunk_ptr) {
+const Int8Column* StreamChunkConverter::ops_col(const StreamChunk* stream_chunk_ptr) {
     DCHECK(stream_chunk_ptr);
     return ops_col(*stream_chunk_ptr);
 }
@@ -120,7 +120,7 @@ ChunkPtr StreamChunkConverter::to_chunk(const StreamChunkPtr& stream_chunk) {
         DCHECK(extra_column_data);
         auto mock_slot_id = stream_chunk->num_columns();
         for (auto& extra_column : extra_column_data->columns()) {
-            stream_chunk->append_column(extra_column, mock_slot_id++);
+            stream_chunk->append_column(extra_column->get_ptr(), mock_slot_id++);
         }
         stream_chunk->set_extra_data(nullptr);
     }

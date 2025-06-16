@@ -16,6 +16,12 @@
 package com.starrocks.scheduler;
 
 public interface TaskRunProcessor {
+    /**
+     * Before task run, prepare the context.
+     * @param context: task run context
+     */
+    void prepare(TaskRunContext context) throws Exception;
+
     void processTaskRun(TaskRunContext context) throws Exception;
 
     void postTaskRun(TaskRunContext context) throws Exception;

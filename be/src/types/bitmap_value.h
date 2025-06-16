@@ -47,6 +47,7 @@
 #include <string>
 #include <utility>
 
+#include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "types/bitmap_value_detail.h"
@@ -59,8 +60,8 @@ namespace starrocks {
 
 namespace detail {
 class Roaring64Map;
-class BitmapValueIter;
 } // namespace detail
+
 // Represent the in-memory and on-disk structure of StarRocks's BITMAP data type.
 // Optimize for the case where the bitmap contains 0 or 1 element which is common
 // for streaming load scenario.
@@ -68,15 +69,10 @@ class BitmapValue {
 public:
     friend class BitmapValueIter;
 
-    enum BitmapDataType {
-        EMPTY = 0,
-        SINGLE = 1, // single element
-        BITMAP = 2, // more than one elements
-        SET = 3
-    };
+    enum BitmapDataType { EMPTY = 0, SINGLE = 1, BITMAP = 2, SET = 3 };
 
     // Construct an empty bitmap.
-    BitmapValue();
+    BitmapValue() = default;
 
     BitmapValue(const BitmapValue& other);
     BitmapValue& operator=(const BitmapValue& other);
@@ -98,6 +94,7 @@ public:
 
     // It is recommended to use batch writing to improve performance, such as add_many.
     void add(uint64_t value) {
+        _mem_usage = 0;
         switch (_type) {
         case EMPTY:
             _sv = value;
@@ -163,7 +160,7 @@ public:
 
     // Return how many bytes are required to serialize this bitmap.
     // See BitmapTypeCode for the serialized format.
-    size_t getSizeInBytes() const;
+    size_t get_size_in_bytes() const;
 
     // Serialize the bitmap value to dst, which should be large enough.
     // Client should call `getSizeInBytes` first to get the serialized size.
@@ -179,15 +176,15 @@ public:
     std::string to_string() const;
 
     // Append values to array
-    void to_array(std::vector<int64_t>* array) const;
+    void to_array(Buffer<int64_t>* array) const;
 
     size_t serialize(uint8_t* dst) const;
 
-    uint64_t serialize_size() const { return getSizeInBytes(); }
+    uint64_t serialize_size() const { return get_size_in_bytes(); }
 
     // When you persist bitmap value to disk, you could call this method.
     // This method should be called before `serialize_size`.
-    void compress() const;
+    void compress();
 
     void clear();
     void reset();
@@ -200,10 +197,16 @@ public:
     int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
                                             BitmapValue* ret_bitmap) const;
 
-    std::vector<BitmapValue> split_bitmap(size_t batch_size);
+    std::vector<BitmapValue> split_bitmap(size_t batch_size) const;
 
     BitmapDataType type() const { return _type; }
     bool is_shared() const { return _bitmap.use_count() > 1; }
+    int64_t mem_usage() const {
+        if (_mem_usage == 0) {
+            _mem_usage = get_size_in_bytes();
+        }
+        return _mem_usage;
+    }
 
 private:
     void _from_bitmap_to_smaller_type();
@@ -226,6 +229,7 @@ private:
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
     std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
+    mutable int64_t _mem_usage = 0;
     BitmapDataType _type{EMPTY};
 };
 

@@ -36,6 +36,11 @@ public:
 
     Status flush() override;
 
+    Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
+                                    SegmentPB* seg_info = nullptr) override {
+        return Status::NotSupported("Mixed upsert/delete transactions not supported in column mode partial updates");
+    }
+
 private:
     StatusOr<std::unique_ptr<SegmentWriter>> _create_update_file_writer();
 

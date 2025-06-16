@@ -95,6 +95,12 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
+        for (int i = 0; i < size; i++) {
+            CppType index_value;
+            page_decoder.at_index(i, &index_value);
+            ASSERT_EQ(src[i], index_value);
+        }
+
         ASSERT_EQ(0, page_decoder.current_index());
 
         auto column = ChunkHelper::column_from_field_type(Type, false);
@@ -283,7 +289,7 @@ TEST_F(PlainPageTest, TestPlainFloatBlockEncoderRandom) {
 
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = random() + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_FLOAT, PlainPageBuilder<TYPE_FLOAT>, PlainPageDecoder<TYPE_FLOAT>>(
@@ -294,7 +300,7 @@ TEST_F(PlainPageTest, TestDoublePageEncoderRandom) {
     const uint32_t size = 10000;
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = random() + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
     test_encode_decode_page_template<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>, PlainPageDecoder<TYPE_DOUBLE>>(
             doubles.get(), size);
@@ -407,7 +413,7 @@ TEST_F(PlainPageTest, TestFloatMultiplePages) {
     std::unique_ptr<float[]> floats = std::make_unique<float[]>(size);
 
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / INT_MAX;
+        floats.get()[i] = random() + random() / static_cast<float>(INT_MAX);
     }
 
     test_multi_pages<TYPE_FLOAT, PlainPageBuilder<TYPE_FLOAT>>(floats.get(), size);
@@ -418,7 +424,7 @@ TEST_F(PlainPageTest, TestDoubleMultiplePages) {
     std::unique_ptr<double[]> doubles = std::make_unique<double[]>(size);
 
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / INT_MAX;
+        doubles.get()[i] = random() + random() / static_cast<double>(INT_MAX);
     }
 
     test_multi_pages<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>>(doubles.get(), size);

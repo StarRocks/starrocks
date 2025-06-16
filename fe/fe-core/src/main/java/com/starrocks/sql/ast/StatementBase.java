@@ -35,11 +35,18 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.List;
 
 public abstract class StatementBase implements ParseNode {
 
@@ -56,10 +63,26 @@ public abstract class StatementBase implements ParseNode {
         // True if the describe_stmt print verbose information, if `isVerbose` is true, `isExplain` must be set to true.
         VERBOSE,
         // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
-        COST,
+        COSTS,
         OPTIMIZER,
         REWRITE,
-        SCHEDULER
+        SCHEDULER,
+        PLAN_ADVISOR;
+
+        public static ExplainLevel defaultValue() {
+            return NORMAL;
+        }
+
+        public static ExplainLevel parse(String value) {
+            if (StringUtils.isEmpty(value)) {
+                return defaultValue();
+            }
+            ExplainLevel result = EnumUtils.getEnumIgnoreCase(ExplainLevel.class, value);
+            if (result == null) {
+                return defaultValue();
+            }
+            return result;
+        }
     }
 
     private ExplainLevel explainLevel;
@@ -73,6 +96,12 @@ public abstract class StatementBase implements ParseNode {
 
     // Original statement to further usage, eg: enable_sql_blacklist.
     protected OriginStatement origStmt;
+
+    // hint in each part of ast. used to ast to sql
+    protected List<HintNode> hintNodes;
+
+    // all query scope hints for the whole ast. used to initialize the hint context for a query
+    protected List<HintNode> allQueryScopeHints;
 
     public void setIsExplain(boolean isExplain, ExplainLevel explainLevel) {
         this.isExplain = isExplain;
@@ -99,7 +128,7 @@ public abstract class StatementBase implements ParseNode {
 
     public ExplainLevel getExplainLevel() {
         if (explainLevel == null) {
-            return ExplainLevel.NORMAL;
+            return ExplainLevel.defaultValue();
         } else {
             return explainLevel;
         }
@@ -116,14 +145,33 @@ public abstract class StatementBase implements ParseNode {
         return origStmt;
     }
 
-    // Override this method and return true
-    // if the stmt contains some information which need to be encrypted in audit log
-    public boolean needAuditEncryption() {
-        return false;
-    }
-
     @Override
     public NodePosition getPos() {
         return pos;
+    }
+
+
+    public List<HintNode> getHintNodes() {
+        return hintNodes;
+    }
+
+    public void setHintNodes(List<HintNode> hintNodes) {
+        this.hintNodes = hintNodes;
+    }
+
+    public List<HintNode> getAllQueryScopeHints() {
+        return allQueryScopeHints;
+    }
+
+    public void setAllQueryScopeHints(List<HintNode> hintNodes) {
+        this.allQueryScopeHints = hintNodes;
+    }
+
+    public boolean isExistQueryScopeHint() {
+        return CollectionUtils.isNotEmpty(allQueryScopeHints);
+    }
+
+    public int getTimeout() {
+        return ConnectContext.get().getSessionVariable().getQueryTimeoutS();
     }
 }

@@ -1,0 +1,6 @@
+position: 80 # float position is supported
+label: '表，分区，分桶，索引'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

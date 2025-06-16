@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # SSB Flat-table Benchmarking
 
 Star schema benchmark (SSB) is designed to test basic performance metrics of OLAP database products. SSB uses a star schema test set that is widely applied in academia and industry. For more information, see the paper [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF).
-ClickHouse flattens the star schema into a wide flat table and rewrites the SSB into a single-table benchmark. For more information, see [Star schema benchmark of ClickHouse](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/).
+ClickHouse flattens the star schema into a wide flat table and rewrites the SSB into a single-table benchmark. For more information, see [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema)
 This test compares the performance of StarRocks, Apache Druid, and ClickHouse against SSB single-table datasets.
 
 ## Test conclusion
@@ -13,13 +13,13 @@ This test compares the performance of StarRocks, Apache Druid, and ClickHouse ag
 - Among the 13 queries performed on SSB standard datasets, StarRocks has an overall query performance **2.1x that of ClickHouse and 8.7x that of Apache Druid**.
 - After Bitmap Indexing of StarRocks is enabled, the performance is 1.3x compared to when this feature is disabled. The overall performance of StarRocks is **2.8x that of ClickHouse and 11.4x that of Apache Druid**.
 
-![overall comparison](../assets/7.1-1.png)
+![overall comparison](../_assets/7.1-1.png)
 
 ## Test preparation
 
 ### Hardware
 
-| Machine           | 3 cloud hosts                                                |
+| Machine           | 4 cloud hosts                                                |
 | ----------------- | ------------------------------------------------------------ |
 | CPU               | 16-Core Intel (R) Xeon (R) Platinum 8269CY CPU @2.50GHz <br />Cache size: 36608 KB |
 | Memory            | 64 GB                                                        |
@@ -55,7 +55,7 @@ Software version: StarRocks Community Version 3.0, ClickHouse 23.3, Apache Druid
 
 ### Test results
 
-The following table shows the performance test results on thirteen queries. The unit of query latency is ms. `ClickHouse vs StarRocks` in the table header means using the query response time of ClickHouse to divide the query response time of StarRocks. A larger value indicates better performance of StarRocks.
+The following table shows the performance test results on thirteen queries. The unit of query latency is ms. All queries are warmed up 1 time and then executed 3 times to take the average value as the result. `ClickHouse vs StarRocks` in the table header means using the query response time of ClickHouse to divide the query response time of StarRocks. A larger value indicates better performance of StarRocks.
 
 |      | StarRocks-3.0 | StarRocks-3.0-index | ClickHouse-23.3 | ClickHouse vs StarRocks | Druid-25.0.0 | Druid vs StarRocks |
 | ---- | ------------- | ------------------- | ------------------- | ----------------------- | ---------------- | ------------------ |
@@ -76,7 +76,7 @@ The following table shows the performance test results on thirteen queries. The 
 
 ## Test procedure
 
-For more information about how to create a ClickHouse table and load data to the table, see [ClickHouse official doc](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/). The following sections describe data generation and data loading of StarRocks.
+For more information about how to create a ClickHouse table and load data to the table, see [ClickHouse official doc](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema). The following sections describe data generation and data loading of StarRocks.
 
 ### Generate data
 

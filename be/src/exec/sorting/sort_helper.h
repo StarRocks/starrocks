@@ -96,8 +96,7 @@ struct SorterComparator<T> {
 
 // TODO: reduce duplicate code
 template <class NullPred>
-static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel,
-                                                           const std::vector<ColumnPtr>& data_columns,
+static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel, const Columns& data_columns,
                                                            NullPred null_pred, const SortDesc& sort_desc,
                                                            Permutation& permutation, Tie& tie,
                                                            std::pair<int, int> range, bool build_tie, size_t limit,
@@ -149,13 +148,22 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
     return Status::OK();
 }
 
-// 1. Partition null and notnull values
-// 2. Sort by not-null values
+/// Partition null and notnull values, and will update `permutation` and `tie`.
+///
+/// The sorting of nullable column is divided into two steps: at first partition the null elements and non-null element,
+/// then sort them individually.
+///
+/// A prerequisite for sorting null element is that the datum of null element should be the same. Because when sorting
+/// the next column, we need to ensure that the entire null part is still in the same `tie` range (that is, only the
+/// beginning or end is 0, and the rest are 1). If the datum values of these nulls are different, then the `tie` of the
+/// null part may have non-1 values, causing the next column to be sorted incorrectly.
+/// For example, given two columns `(null(3), null(2), null(1)), (1, 2, 3)`, if the datum values of null elements are
+/// not set to the same, the sorting result is `(null(1), null(2), null(3)), (3, 2, 1)`, but the expected result
+/// should be (null(3), null(2), null(1)), (1, 2, 3).
 template <class NullPred>
-static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
-                                                  const ColumnPtr& data_column, NullPred null_pred,
-                                                  const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
-                                                  std::pair<int, int> range, bool build_tie) {
+static inline Status partition_null_and_nonnull_helper(const std::atomic<bool>& cancel, NullPred null_pred,
+                                                       const SortDesc& sort_desc, SmallPermutation& permutation,
+                                                       Tie& tie, std::pair<int, int> range) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
@@ -186,6 +194,18 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
             }
         }
     }
+
+    return Status::OK();
+}
+
+// 1. Partition null and notnull values
+// 2. Sort by not-null values
+template <class NullPred>
+static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
+                                                  const ColumnPtr& data_column, NullPred null_pred,
+                                                  const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
+                                                  std::pair<int, int> range, bool build_tie) {
+    RETURN_IF_ERROR(partition_null_and_nonnull_helper(cancel, null_pred, sort_desc, permutation, tie, range));
 
     // TODO(Murphy): avoid sort the null datums in the column, eliminate the extra overhead
     // Some benchmark numbers:

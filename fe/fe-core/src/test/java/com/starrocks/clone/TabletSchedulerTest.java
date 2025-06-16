@@ -12,26 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.clone;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.RecyclePartitionInfo;
+import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.persist.EditLog;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.CreateReplicaTask;
@@ -42,7 +52,9 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
@@ -60,7 +72,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.starrocks.catalog.KeysType.DUP_KEYS;
 
@@ -68,10 +79,18 @@ public class TabletSchedulerTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
 
+    @Mocked
+    private NodeMgr nodeMgr;
+
+    @Mocked
+    private EditLog editLog;
+
     SystemInfoService systemInfoService;
     TabletInvertedIndex tabletInvertedIndex;
     TabletSchedulerStat tabletSchedulerStat;
     FakeEditLog fakeEditLog;
+    LockManager lockManager;
+    VariableMgr variableMgr;
 
     @Before
     public void setup() throws Exception {
@@ -79,6 +98,9 @@ public class TabletSchedulerTest {
         tabletInvertedIndex = new TabletInvertedIndex();
         tabletSchedulerStat = new TabletSchedulerStat();
         fakeEditLog = new FakeEditLog();
+        lockManager = new LockManager();
+        variableMgr = new VariableMgr();
+
 
         new Expectations() {
             {
@@ -86,15 +108,52 @@ public class TabletSchedulerTest {
                 result = globalStateMgr;
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentSystemInfo();
-                result = systemInfoService;
+                GlobalStateMgr.isCheckpointThread();
                 minTimes = 0;
-
-                GlobalStateMgr.getCurrentInvertedIndex();
-                result = tabletInvertedIndex;
-                minTimes = 0;
+                result = false;
             }
         };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = new ClusterSnapshotMgr();
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
     }
 
     @Test
@@ -103,15 +162,16 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table badTable = new Table(3, "mal", Table.TableType.OLAP, new ArrayList<>());
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition badPartition = new Partition(5, "mal", null, null);
-        Partition goodPartition = new Partition(6, "bueno", null, null);
+        Partition badPartition = new Partition(5, 55, "mal", null, null);
+        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
 
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(badDb, new HashSet<>());
-        recycleBin.recycleTable(goodDB.getId(), badTable);
-        recycleBin.recyclePartition(goodDB.getId(), goodTable.getId(), badPartition,
-                null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
+        recycleBin.recycleDatabase(badDb, new HashSet<>(), true);
+        recycleBin.recycleTable(goodDB.getId(), badTable, true);
+        RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(goodDB.getId(), goodTable.getId(),
+                badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
+        recycleBin.recyclePartition(recyclePartitionInfo);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();
         List<Triple<Database, Table, Partition>> arguments = Arrays.asList(
@@ -125,7 +185,7 @@ public class TabletSchedulerTest {
                     TabletSchedCtx.Type.REPAIR,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
-                    triple.getRight().getId(),
+                    triple.getRight().getDefaultPhysicalPartition().getId(),
                     1,
                     1,
                     System.currentTimeMillis(),
@@ -154,8 +214,8 @@ public class TabletSchedulerTest {
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition goodPartition = new Partition(6, "bueno", null, null);
-        Locker locker = new Locker();
+        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
+
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
@@ -173,12 +233,13 @@ public class TabletSchedulerTest {
 
         new Thread(() -> {
             for (int i = 0; i < 10; i++) {
+                Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
-                    goodDB.readLock();
+                    locker.lockDatabase(goodDB.getId(), LockType.READ);
                     tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
                 } finally {
-                    goodDB.readUnlock();
+                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
                 }
             }
         }, "testAddCtx").start();
@@ -223,7 +284,7 @@ public class TabletSchedulerTest {
         backendDisks1.put("/path11", td11);
         backendDisks1.put("/path12", td12);
         Backend be1 = new Backend(1, "192.168.0.1", 9030);
-        be1.setIsAlive(new AtomicBoolean(true));
+        be1.setAlive(true);
         be1.updateDisks(backendDisks1);
         systemInfoService.addBackend(be1);
 
@@ -236,7 +297,7 @@ public class TabletSchedulerTest {
         backendDisks2.put("/path22", td22);
         Backend be2 = new Backend(2, "192.168.0.2", 9030);
         be2.updateDisks(backendDisks2);
-        be2.setIsAlive(new AtomicBoolean(true));
+        be2.setAlive(true);
         systemInfoService.addBackend(be2);
 
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
@@ -314,7 +375,7 @@ public class TabletSchedulerTest {
             ctx.setColocateGroupId(v);
             ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
             if (k == 104L) {
-                ctx.setTabletStatus(LocalTablet.TabletStatus.VERSION_INCOMPLETE);
+                ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
             }
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
         });
@@ -335,11 +396,12 @@ public class TabletSchedulerTest {
         replicas.add(new Replica(4, 3003, -3, Replica.ReplicaState.NORMAL));
 
         LocalTablet localTablet = new LocalTablet(5001, replicas);
-        Pair<LocalTablet.TabletStatus, TabletSchedCtx.Priority> result = localTablet.getHealthStatusWithPriority(
-                systemInfoService, 1, 3, Arrays.asList(1001L, 1002L, 1003L));
+        Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> result = TabletChecker.getTabletHealthStatusWithPriority(
+                localTablet, systemInfoService, 1, 3,
+                Arrays.asList(1001L, 1002L, 1003L), null);
         System.out.println(result);
 
-        Assert.assertEquals(LocalTablet.TabletStatus.FORCE_REDUNDANT, result.first);
+        Assert.assertEquals(LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, result.first);
 
         Config.recover_with_empty_tablet = false;
     }
@@ -353,19 +415,32 @@ public class TabletSchedulerTest {
         long indexId = 10005L;
         long tabletId = 10006L;
         long replicaId = 10007L;
-        short count = 1;
+        long schemaId = indexId;
+
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder().setId(schemaId)
+                .setKeysType(DUP_KEYS)
+                .setShortKeyColumnCount((short) 1)
+                .setSchemaHash(-1)
+                .setStorageType(TStorageType.COLUMN)
+                .addColumn(new Column("k1", Type.INT))
+                .build().toTabletSchema();
+
+        CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()
+                .setNodeId(beId)
+                .setDbId(dbId)
+                .setTableId(tblId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId)
+                .setVersion(1)
+                .setTabletId(tabletId)
+                .setStorageMedium(TStorageMedium.HDD)
+                .setPrimaryIndexCacheExpireSec(1)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .build();
+
         TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1, TStorageMedium.HDD);
-        CreateReplicaTask createReplicaTask = new CreateReplicaTask(beId, dbId, tblId, partitionId, indexId, tabletId, count,
-                -1, -1L,
-                DUP_KEYS,
-                TStorageType.COLUMN,
-                TStorageMedium.HDD, null, null, 0.0, null,
-                null,
-                false,
-                false,
-                1,
-                TTabletType.TABLET_TYPE_DISK,
-                TCompressionType.LZ4_FRAME);
 
         Replica replica = new Replica(replicaId, beId, -1, Replica.ReplicaState.RECOVER);
 

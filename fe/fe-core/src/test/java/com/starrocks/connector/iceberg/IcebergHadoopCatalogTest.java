@@ -18,12 +18,16 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopCatalog;
+import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -35,6 +39,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IcebergHadoopCatalogTest {
+    public static ConnectContext connectContext;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
+
     @Test
     public void testNewIcebergHadoopCatalog(@Mocked HadoopCatalog hadoopCatalog) {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> new IcebergHadoopCatalog("catalog",
@@ -58,7 +69,7 @@ public class IcebergHadoopCatalogTest {
 
         IcebergHadoopCatalog icebergHadoopCatalog = new IcebergHadoopCatalog(
                 "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
-        List<String> dbs = icebergHadoopCatalog.listAllDatabases();
+        List<String> dbs = icebergHadoopCatalog.listAllDatabases(connectContext);
         assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
@@ -72,6 +83,21 @@ public class IcebergHadoopCatalogTest {
         };
         IcebergHadoopCatalog icebergHadoopCatalog = new IcebergHadoopCatalog(
                 "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
-        assertTrue(icebergHadoopCatalog.tableExists("db1", "tbl1"));
+        assertTrue(icebergHadoopCatalog.tableExists(connectContext, "db1", "tbl1"));
+    }
+
+    @Test
+    public void testRenameTable(@Mocked HadoopCatalog hadoopCatalog) {
+        new Expectations() {
+            {
+                hadoopCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergHadoopCatalog icebergHadoopCatalog = new IcebergHadoopCatalog(
+                "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
+        icebergHadoopCatalog.renameTable(connectContext, "db", "tb1", "tb2");
+        boolean exists = icebergHadoopCatalog.tableExists(connectContext, "db", "tbl2");
+        Assert.assertTrue(exists);
     }
 }

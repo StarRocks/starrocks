@@ -46,7 +46,7 @@ Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool, Runtime
 Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::vector<TExpr>* sort_tuple_slot_exprs,
                            ObjectPool* pool, RuntimeState* state) {
     _pool = pool;
-    RETURN_IF_ERROR(Expr::create_expr_trees(pool, ordering_exprs, &_lhs_ordering_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::create_expr_trees(pool, ordering_exprs, &_lhs_ordering_expr_ctxs, state, true));
     for (auto& expr : _lhs_ordering_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_orderby()) {
@@ -56,7 +56,8 @@ Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::
 
     if (sort_tuple_slot_exprs != nullptr) {
         _materialize_tuple = true;
-        RETURN_IF_ERROR(Expr::create_expr_trees(pool, *sort_tuple_slot_exprs, &_sort_tuple_slot_expr_ctxs, state));
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(pool, *sort_tuple_slot_exprs, &_sort_tuple_slot_expr_ctxs, state, true));
     } else {
         _materialize_tuple = false;
     }

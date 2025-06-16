@@ -105,6 +105,7 @@ public class ReplicaPersistInfo implements Writable {
     private long dbId;
     @SerializedName("tb")
     private long tableId;
+    // physical partition id
     @SerializedName("pt")
     private long partitionId;
     @SerializedName("idx")
@@ -119,6 +120,7 @@ public class ReplicaPersistInfo implements Writable {
 
     @SerializedName("vs")
     private long version;
+    @SerializedName("minReadableVersion")
     private long minReadableVersion = 0;
     @SerializedName("sh")
     private int schemaHash = -1;

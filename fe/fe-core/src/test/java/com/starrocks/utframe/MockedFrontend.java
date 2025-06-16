@@ -34,6 +34,7 @@
 
 package com.starrocks.utframe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
@@ -44,13 +45,18 @@ import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
+import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.staros.StarMgrServer;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
+import org.junit.Assert;
 
 import java.io.File;
 import java.io.IOException;
@@ -109,7 +115,9 @@ public class MockedFrontend {
         MIN_FE_CONF.put("query_port", "9030");
         MIN_FE_CONF.put("edit_log_port", "9010");
         MIN_FE_CONF.put("priority_networks", "127.0.0.1/24");
+        MIN_FE_CONF.put("frontend_address", "127.0.0.1");
         MIN_FE_CONF.put("sys_log_verbose_modules", "org");
+        MIN_FE_CONF.put("cloud_native_meta_port", "6090");
 
         // UT don't need log
         LoggerContext context = (LoggerContext) LogManager.getContext(false);
@@ -205,11 +213,18 @@ public class MockedFrontend {
         private final MockedFrontend frontend;
         private final String[] args;
         private final boolean startBDB;
+        private final RunMode runMode;
+        private volatile boolean isReady = false;
 
-        public FERunnable(MockedFrontend frontend, boolean startBDB, String[] args) {
+        public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, String[] args) {
             this.frontend = frontend;
             this.startBDB = startBDB;
+            this.runMode = runMode;
             this.args = args;
+        }
+
+        public boolean isReady() {
+            return isReady;
         }
 
         @Override
@@ -226,7 +241,7 @@ public class MockedFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init(null);
                 ExecuteEnv.setup();
 
                 if (!startBDB) {
@@ -248,15 +263,26 @@ public class MockedFrontend {
                     }
                 };
 
-                GlobalStateMgr.getCurrentState().initialize(args);
-                StateChangeExecutor.getInstance().setMetaContext(
-                        GlobalStateMgr.getCurrentState().getMetaContext());
+                GlobalStateMgr.getCurrentState().initialize(null);
+
+                if (RunMode.isSharedDataMode()) {
+                    // setup and start StarManager service
+                    Journal journal = GlobalStateMgr.getCurrentState().getJournal();
+                    // TODO: support MockJournal in StarMgrServer
+                    Preconditions.checkState(journal instanceof BDBJEJournal);
+                    BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
+                    StateChangeExecutor.getInstance().registerStateChangeExecution(
+                            StarMgrServer.getCurrentState().getStateChangeExecution());
+                }
+
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());
                 StateChangeExecutor.getInstance().start();
                 StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
 
                 GlobalStateMgr.getCurrentState().waitForReady();
+                isReady = true;
 
                 while (true) {
                     Thread.sleep(2000);
@@ -268,21 +294,24 @@ public class MockedFrontend {
     }
 
     // must call init() before start.
-    public void start(boolean startBDB, String[] args) throws FeStartException, NotInitException, InterruptedException {
+    public void start(boolean startBDB, RunMode runMode, String[] args)
+            throws FeStartException, NotInitException, InterruptedException {
         initLock.lock();
         if (!isInit) {
             throw new NotInitException("fe process is not initialized");
         }
         initLock.unlock();
-        Thread feThread = new Thread(new FERunnable(this, startBDB, args), FE_PROCESS);
+        FERunnable fe = new FERunnable(this, startBDB, runMode, args);
+        Thread feThread = new Thread(fe, FE_PROCESS);
         feThread.start();
-        waitForCatalogReady();
-        System.out.println("Fe process is started");
+        waitForCatalogReady(fe);
+        Assert.assertEquals(runMode, RunMode.getCurrentRunMode());
+        System.out.println("Fe process is started with runMode:" + runMode);
     }
 
-    private void waitForCatalogReady() throws FeStartException {
+    private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
-        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 600) {
+        while (!fe.isReady() && tryCount < 600) {
             try {
                 tryCount++;
                 Thread.sleep(1000);

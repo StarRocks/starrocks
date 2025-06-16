@@ -36,8 +36,9 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 REFRESH MATERIALIZED VIEW test_mv1 PARTITION START ("2023-12-01") END ("2023-12-03") WITH SYNC MODE;
 function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-01' GROUP BY dt", "test_mv1")
 function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt", "test_mv1")
+set enable_materialized_view_transparent_union_rewrite=false;
 function: check_no_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt", "test_mv1")
-
+set enable_materialized_view_transparent_union_rewrite=true;
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt;
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt;
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt>='2023-12-03' GROUP BY dt order by dt;
@@ -92,5 +93,25 @@ REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
 select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
 
 
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+
+-- create unpartitoned mv 
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+);
+
+CREATE MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1
+REFRESH DEFERRED MANUAL AS SELECT dt,col_int 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+
+select state from information_schema.task_runs
+  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv1%" ORDER BY CREATE_TIME DESC LIMIT 1;
+
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
 drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;

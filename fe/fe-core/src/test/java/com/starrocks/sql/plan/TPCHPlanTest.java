@@ -43,7 +43,7 @@ public class TPCHPlanTest extends PlanTestBase {
     @Test
     public void testJoin() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable table1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
         runFileUnitTest("optimized-plan/join");
         setTableStatistics(table1, 0);
@@ -107,7 +107,13 @@ public class TPCHPlanTest extends PlanTestBase {
     @ParameterizedTest(name = "Tpch.{0}")
     @MethodSource("tpchSource")
     public void testTPCH(String name, String sql, String resultFile) {
-        runFileUnitTest(sql, resultFile);
+        if ("q16".equals(name)) {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+            runFileUnitTest(sql, resultFile);
+            connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        } else {
+            runFileUnitTest(sql, resultFile);
+        }
     }
 
     private static Stream<Arguments> tpchSource() {

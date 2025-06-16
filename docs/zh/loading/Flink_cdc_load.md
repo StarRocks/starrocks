@@ -1,10 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 从 MySQL 实时同步
 
-本文介绍如何将 MySQL 的数据实时（秒级）同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。
+StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支撑实时分析和处理海量数据的需求。
+
+本文介绍如何将 MySQL 的数据通过 Apache Flink® 实时（秒级）同步至 StarRocks。
 
 > **注意**
 >
@@ -12,12 +14,22 @@ displayed_sidebar: "Chinese"
 
 ## 基本原理
 
-![MySQL 同步](../assets/4.9.2.png)
+:::info
 
-实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
+从 MySQL 同步至 Flink 需要使用 Flink CDC，本文使用 Flink CDC 的版本小于 3.0，因此需要借助 SMT 同步表结构。
+然而如果使用 Flink CDC 3.0，则无需借助 SMT，即可将表结构同步至 StarRocks，甚至可以同步整个 MySQL 数据库、分库分表的结构，同时也支持同步 schema change。具体的使用方式，参见[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
 
-> 说明：
-> MySQL 实时同步至 StarRocks 能够保证端到端的 exactly-once 的语义一致性。
+:::
+
+![flink](../_assets/4.9.2.png)
+
+将 MySQL 的数据通过 Flink 同步至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
+
+:::info
+
+该同步流程能够保证端到端的 exactly-once 的语义一致性。
+
+:::
 
 1. **同步库表结构**
 
@@ -25,21 +37,23 @@ displayed_sidebar: "Chinese"
 
 2. **同步数据**
 
-   Flink SQL 客户端执行导入数据的 SQL 语句（`INSERT INTO SELECT`语句），向 Flink 集群提交一个或者多个长时间运行的 Flink job。Flink集群运行 Flink job ，[Flink cdc connector](https://ververica.github.io/flink-cdc-connectors/master/content/快速上手/build-real-time-data-lake-tutorial-zh.html) 先读取数据库的历史全量数据，然后无缝切换到增量读取，并且发给 flink-starrocks-connector，最后  flink-starrocks-connector  攒微批数据同步至 StarRocks。
+   Flink SQL 客户端执行导入数据的 SQL 语句（`INSERT INTO SELECT`语句），向 Flink 集群提交一个或者多个长时间运行的 Flink job。Flink集群运行 Flink job ，Flink cdc connector 先读取数据库的历史全量数据，然后无缝切换到增量读取，并且发给 flink-connector-starrocks，最后  flink-connector-starrocks  攒微批数据同步至 StarRocks。
 
-   > **注意**
-   >
-   > 仅支持同步 DML，不支持同步 DDL。
+   :::info
+
+   仅支持同步 DML，不支持同步 DDL。
+
+   :::
 
 ## 业务场景
 
-以商品累计销量实时榜单为例，存储在 MySQL 中的原始订单表，通过 Flink 处理计算出产品销量的实时排行，并实时同步至 StarRocks 的主键模型表中。最终用户可以通过可视化工具连接StarRocks查看到实时刷新的榜单。
+以商品累计销量实时榜单为例，存储在 MySQL 中的原始订单表，通过 Flink 处理计算出产品销量的实时排行，并实时同步至 StarRocks 的主键表中。最终用户可以通过可视化工具连接StarRocks查看到实时刷新的榜单。
 
 ## 准备工作
 
 ### 下载并安装同步工具
 
-同步时需要使用 SMT、 Flink、Flink CDC connector、flink-starrocks-connector，下载和安装步骤如下：
+同步时需要使用 SMT、 Flink、Flink CDC connector、flink-connector-starrocks，下载和安装步骤如下：
 
 1. **下载、安装并启动 Flink 集群**。
    > 说明：下载和安装方式也可以参考 [Flink 官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/)。
@@ -80,7 +94,7 @@ displayed_sidebar: "Chinese"
       Starting taskexecutor daemon on host.
       ```
 
-2. **下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)**。本示例的数据源为 MySQL，因此下载 flink-sql-connector-**mysql**-cdc-x.x.x.jar。并且版本需支持对应的 Flink 版本，两者版本支持度，请参见 [Supported Flink Versions](https://ververica.github.io/flink-cdc-connectors/release-2.2/content/about.html#supported-flink-versions)。由于本文使用 Flink  1.14.5，因此可以使用 flink-sql-connector-mysql-cdc-2.2.0.jar。
+2. **下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)**。本示例的数据源为 MySQL，因此下载 flink-sql-connector-**mysql**-cdc-x.x.x.jar。并且版本需支持对应的 Flink 版本。由于本文使用 Flink  1.14.5，因此可以使用 flink-sql-connector-mysql-cdc-2.2.0.jar。
 
       ```Bash
       wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.2.0/flink-sql-connector-mysql-cdc-2.2.0.jar
@@ -169,7 +183,7 @@ displayed_sidebar: "Chinese"
 ## 同步库表结构
 
 1. 配置 SMT 配置文件。
-   进入 SMT 的 **conf** 目录，编辑配置文件 **config_prod.conf**。例如源 MySQL 连接信息、待同步库表的匹配规则，flink-starrocks-connector 配置信息等。
+   进入 SMT 的 **conf** 目录，编辑配置文件 **config_prod.conf**。例如源 MySQL 连接信息、待同步库表的匹配规则，flink-connector-starrocks 配置信息等。
 
     ```Bash
     [db]
@@ -225,17 +239,17 @@ displayed_sidebar: "Chinese"
 
     - `[other]` ：其他信息
         - `be_num`： StarRocks 集群的 BE 节点数（后续生成的 StarRocks 建表 SQL 文件会参考该参数，设置合理的分桶数量）。
-        - `use_decimal_v3`：是否开启 [decimalV3](../sql-reference/sql-statements/data-types/DECIMAL.md)。开启后，MySQL 小数类型的数据同步至 StarRocks 时会转换为 decimalV3。
+        - `use_decimal_v3`：是否开启 [decimalV3](../sql-reference/data-types/numeric/DECIMAL.md)。开启后，MySQL 小数类型的数据同步至 StarRocks 时会转换为 decimalV3。
         - `output_dir` ：待生成的 SQL 文件的路径。SQL 文件会用于在 StarRocks 集群创建库表， 向 Flink 集群提交 Flink job。默认为 `./result`，不建议修改。
 
 2. 执行如下命令，SMT 会读取 MySQL 中同步对象的库表结构，并且结合配置文件信息，在 **result** 目录生成 SQL 文件，用于  StarRocks 集群创建库表（**starrocks-create.all.sql**）， 用于向 Flink 集群提交同步数据的 flink job（**flink-create.all.sql**）。
-   并且源表不同，则 **starrocks-create.all.sql** 中建表语句默认创建的数据模型不同。
+   并且源表不同，则 **starrocks-create.all.sql** 中建表语句默认创建的表类型不同。
 
-   - 如果源表没有 Primary Key、 Unique Key，则默认创建明细模型。
+   - 如果源表没有 Primary Key、 Unique Key，则默认创建明细表。
    - 如果源表有 Primary Key、 Unique Key，则区分以下几种情况：
-      - 源表是 Hive 表、ClickHouse MergeTree 表，则默认创建明细模型。
-      - 源表是 ClickHouse SummingMergeTree表，则默认创建聚合模型。
-      - 源表为其他类型，则默认创建主键模型。
+      - 源表是 Hive 表、ClickHouse MergeTree 表，则默认创建明细表。
+      - 源表是 ClickHouse SummingMergeTree表，则默认创建聚合表。
+      - 源表为其他类型，则默认创建主键表。
 
     ```Bash
     # 运行 SMT
@@ -248,12 +262,12 @@ displayed_sidebar: "Chinese"
     flink-create.all.sql  starrocks-create.1.sql
     ```
 
-3. 执行如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，本示例中建表语句默认创建的数据模型为[主键模型](../table_design/table_types/primary_key_table.md)。
+3. 执行如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，本示例中建表语句默认创建[主键表](../table_design/table_types/primary_key_table.md)。
 
     > **注意**
     >
-    > - 您也可以根据业务需要，修改 SQL 文件中的建表语句，基于其他模型创建目标表。
-    > - 如果您选择基于非主键模型创建目标表，StarRocks 不支持将源表中 DELETE 操作同步至非主键模型的表，请谨慎使用。
+    > - 您也可以根据业务需要，修改 SQL 文件中的建表语句，创建目标表为其他类型的表。
+    > - 如果您选择创建目标表为非主键表，StarRocks 不支持将源表中 DELETE 操作同步至非主键表，请谨慎使用。
 
     ```Bash
     mysql -h <fe_host> -P <fe_query_port> -u user2 -pxxxxxx < starrocks-create.all.sql
@@ -278,7 +292,7 @@ displayed_sidebar: "Chinese"
 
    > **注意**
    >
-   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 同步数据
 
@@ -385,7 +399,7 @@ displayed_sidebar: "Chinese"
 
 2. 可以通过 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) 或者在 Flink 命令行执行命令`bin/flink list -running`，查看 Flink 集群中正在运行的 Flink job，以及 Flink job ID。
       1. Flink WebUI 界面
-         ![task 拓扑](../assets/4.9.3.png)
+         ![task 拓扑](../_assets/4.9.3.png)
 
       2. 在 Flink 命令行执行命令`bin/flink list -running`
 
@@ -403,7 +417,7 @@ displayed_sidebar: "Chinese"
 
 ## 常见问题
 
-### **如何为不同的表设置不同的 flink-connector-starrocks 配置**
+### 如何为不同的表设置不同的 flink-connector-starrocks 配置
 
 例如数据源某些表更新频繁，需要提高 flink connector sr 的导入速度等，则需要在 SMT 配置文件 **config_prod.conf** 中为这些表设置单独的 flink-connector-starrocks 配置。
 
@@ -447,7 +461,7 @@ flink.starrocks.sink.properties.row_delimiter=\x02
 flink.starrocks.sink.buffer-flush.interval-ms=10000
 ```
 
-### **同步 MySQL 分库分表后的多张表至 StarRocks 的一张表**
+### 同步 MySQL 分库分表后的多张表至 StarRocks 的一张表
 
 如果数据源 MySQL 进行分库分表，数据拆分成多张表甚至分布在多个库中，并且所有表的结构都是相同的，则您可以设置`[table-rule]`，将这些表同步至 StarRocks 的一张表中。比如 MySQL 有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有两张表 course_1，course_2，并且所有表的结构都是相同的，则通过设置如下`[table-rule]`可以将其同步至 StarRocks的一张表中。
 
@@ -476,7 +490,7 @@ flink.starrocks.sink.properties.row_delimiter =\x02
 flink.starrocks.sink.buffer-flush.interval-ms = 5000
 ```
 
-### **数据以** **JSON** **格式导入**
+### 数据以 JSON 格式导入
 
 以上示例数据以 CSV 格式导入，如果数据无法选出合适的分隔符，则您需要替换 `[table-rule]` 中`flink.starrocks.*`的如下参数。
 

@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "boost/algorithm/string.hpp"
+#include "common/config.h"
 #include "common/logging.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
@@ -139,9 +140,16 @@ TEST_F(HttpClientTest, download_to_memory) {
     auto st = client.init(hostname + "/simple_get");
     ASSERT_TRUE(st.ok());
     client.set_basic_auth("test1", "");
-    auto st_or = client.download();
-    ASSERT_TRUE(st_or.ok());
-    ASSERT_EQ("test1", st_or.value());
+    std::string value;
+    st = client.download(
+            [&](const void* data, size_t length) {
+                value.append((const char*)data, length);
+                return Status::OK();
+            },
+            config::replication_min_speed_limit_kbps, config::replication_min_speed_time_seconds,
+            config::replication_max_speed_limit_kbps);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("test1", value);
 }
 
 TEST_F(HttpClientTest, get_failed) {

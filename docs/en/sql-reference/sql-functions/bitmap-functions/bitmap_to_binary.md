@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitmap_to_binary
 
-## Description
+
 
 Converts Bitmap values to a Binary string.
 
@@ -109,4 +109,3 @@ Example 2: Convert each value in a BITMAP column into a binary string.
        +---------+------------------------------------------------------------+
        3 rows in set (0.01 sec)
     ```
-    

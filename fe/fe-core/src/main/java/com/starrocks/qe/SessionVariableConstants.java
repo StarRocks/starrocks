@@ -14,6 +14,8 @@
 
 package com.starrocks.qe;
 
+import org.apache.commons.lang3.EnumUtils;
+
 public class SessionVariableConstants {
 
     private SessionVariableConstants() {}
@@ -34,11 +36,60 @@ public class SessionVariableConstants {
 
     public static final String VARCHAR = "varchar";
 
+    public static final String ALWAYS = "always";
+
+    public static final String NEVER = "never";
+
+    public enum ChooseInstancesMode {
+
+        // the number of chosen instances is the same as the max number of instances from its children fragments
+        LOCALITY,
+
+        // auto increase or decrease the instances based on the processed data size
+        AUTO,
+
+        // choose more instances than the max number of instances from its children fragments
+        // if the remote fragment needs process too much data
+        ADAPTIVE_INCREASE,
+
+        // choose fewer instances than the max number of instances from its children fragments
+        // if the remote fragment doesn't need process too much data
+        ADAPTIVE_DECREASE;
+
+        public boolean enableIncreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_INCREASE;
+        }
+
+        public boolean enableDecreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_DECREASE;
+        }
+    }
+
+    public enum ComputationFragmentSchedulingPolicy {
+        
+        // only select compute node in scheduler policy (default)
+        COMPUTE_NODES_ONLY,
+
+        // both select compute node and backend in scheduler policy
+        ALL_NODES
+    }
+
     public enum AggregationStage {
         AUTO,
         ONE_STAGE,
         TWO_STAGE,
         THREE_STAGE,
         FOUR_STAGE
+    }
+
+    // default, ndv, rewrite_by_hll_bitmap
+    public enum CountDistinctImplMode {
+        DEFAULT,                // default, keeps the original count distinct implementation
+        NDV,                    // ndv, uses HyperLogLog to estimate the count distinct
+        MULTI_COUNT_DISTINCT;
+        public static String MODE_DEFAULT = DEFAULT.toString();
+        public static CountDistinctImplMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(CountDistinctImplMode.class, str);
+        }
     }
 }

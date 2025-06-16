@@ -46,6 +46,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class TypeTest {
@@ -226,7 +227,7 @@ public class TypeTest {
         Object[][] testCases = new Object[][] {
                 {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
                 {ScalarType.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
-                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal64(18, 4)"},
+                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
                 {new ArrayType(Type.INT), "array<int(11)>"},
                 {new MapType(Type.INT, Type.INT), "map<int(11),int(11)>"},
                 {new StructType(Lists.newArrayList(Type.INT)), "struct<col1 int(11)>"},
@@ -386,5 +387,32 @@ public class TypeTest {
         pTypeDesc = buildStructType(fieldNames, fieldTypes);
         tp = Type.fromProtobuf(pTypeDesc);
         Assert.assertTrue(tp.isStructType());
+    }
+
+    @Test
+    public void testExtendedPrecision() {
+        ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 4);
+        Assert.assertTrue(type == AggregateType.extendedPrecision(type, true));
+        Assert.assertTrue(type != AggregateType.extendedPrecision(type, false));
+    }
+
+    @Test
+    public void testCastJsonToMap() {
+        Type jsonType = Type.JSON;
+        List<Type> mapTypes = Lists.newArrayList(
+                new MapType(Type.VARCHAR, Type.JSON),
+                new MapType(Type.INT, Type.VARCHAR),
+                new MapType(Type.VARCHAR, new ArrayType(Type.INT)),
+                new MapType(Type.VARCHAR, new ArrayType(Type.JSON)),
+                new MapType(Type.VARCHAR, new ArrayType(Type.JSON)),
+                new MapType(Type.VARCHAR, new MapType(Type.VARCHAR, Type.BOOLEAN)),
+                new MapType(Type.VARCHAR, new MapType(Type.INT, Type.JSON)),
+                new MapType(Type.VARCHAR, new MapType(Type.INT, new ArrayType(Type.VARCHAR))),
+                new MapType(Type.VARCHAR, new StructType(
+                        Arrays.asList(Type.INT, new ArrayType(Type.VARCHAR), new MapType(Type.INT, Type.JSON))))
+        );
+        for (Type mapType : mapTypes) {
+            Assert.assertTrue(Type.canCastTo(jsonType, mapType));
+        }
     }
 }

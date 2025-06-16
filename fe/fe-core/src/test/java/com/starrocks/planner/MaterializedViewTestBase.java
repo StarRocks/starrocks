@@ -16,11 +16,10 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -33,8 +32,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -43,7 +40,7 @@ import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -51,6 +48,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
+    protected static final String MATERIALIZED_VIEW_NAME = "mv0";
 
     // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
     private  String traceLogModule = "";
@@ -67,43 +65,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
 
-        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
-        connectContext.getSessionVariable().setEnableShortCircuit(false);
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
-
-        FeConstants.runningUnitTest = true;
-
-        new MockUp<MaterializedView>() {
-            @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
-
-        new MockUp<PlanTestBase>() {
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
@@ -112,7 +79,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
     }
 
     @AfterClass
@@ -125,9 +91,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected class MVRewriteChecker {
-        private String mv;
         private final String query;
+        private String mvDBName;
         private String rewritePlan;
+        private String mv;
         private Exception exception;
         private String properties;
         private String traceLog;
@@ -143,10 +110,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker(String mv, String query) {
-            this(mv, query, null);
+            this(null, mv, query, null);
         }
 
-        public MVRewriteChecker(String mv, String query, String properties) {
+        public MVRewriteChecker(String mvDBName, String mv, String query, String properties) {
+            this.mvDBName = mvDBName;
             this.mv = mv;
             this.query = query;
             this.properties = properties;
@@ -161,14 +129,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 // create mv if needed
                 if (mv != null && !mv.isEmpty()) {
                     LOG.info("start to create mv:" + mv);
-                    ExecPlan mvPlan = getExecPlan(mv);
-                    List<String> outputNames = mvPlan.getColNames();
-                    String properties = this.properties != null ? "PROPERTIES (\n" +
-                            this.properties + ")" : "";
-                    String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                            "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
-                            properties + " AS " +
-                            mv;
+                    String properties = Strings.isNullOrEmpty(this.properties) ? "" : "PROPERTIES (\n" +
+                            this.properties + ")";
+                    String mvName = getMVName();
+                    String mvSQL = String.format("CREATE MATERIALIZED VIEW %s \n" +
+                            " REFRESH MANUAL \n%s AS %s", mvName, properties, mv);
+                    System.out.println(mvSQL);
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
@@ -192,13 +158,18 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
                 if (mv != null && !mv.isEmpty()) {
                     try {
-                        starRocksAssert.dropMaterializedView("mv0");
+                        starRocksAssert.dropMaterializedView(getMVName());
                     } catch (Exception e) {
                         LOG.warn("drop materialized view failed:", e);
                     }
                 }
             }
             return this;
+        }
+
+        private String getMVName() {
+            return Strings.isNullOrEmpty(mvDBName) ? MATERIALIZED_VIEW_NAME
+                    : String.format("%s.%s", mvDBName, MATERIALIZED_VIEW_NAME);
         }
 
         public String getTraceLog() {
@@ -276,6 +247,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
             return this;
         }
+
+        public String getExecPlan() {
+            return this.rewritePlan;
+        }
     }
 
     protected MVRewriteChecker sql(String query) {
@@ -293,7 +268,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) throws RuntimeException {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        return testRewriteOK(null, mv, query, properties);
+    }
+
+    protected MVRewriteChecker testRewriteOK(String mvDBName, String mv, String query, String properties) throws RuntimeException {
+        MVRewriteChecker fixture = new MVRewriteChecker(mvDBName, mv, query, properties);
         MVRewriteChecker checker = fixture.rewrite();
         if (checker.getException() != null) {
             throw new RuntimeException(checker.getException());
@@ -302,7 +281,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, properties);
         return fixture.rewrite().failed();
     }
 
@@ -311,12 +290,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected MVRewriteChecker testRewriteNonmatch(String mv, String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, null);
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, null);
         return fixture.rewrite().nonMatch();
     }
 
     protected MVRewriteChecker rewrite(String mv, String query, String properties) throws Exception {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, properties);
         MVRewriteChecker checker = fixture.rewrite();
         if (checker.getException() != null) {
             throw checker.getException();
@@ -325,8 +304,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected static Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }
@@ -361,4 +340,28 @@ public class MaterializedViewTestBase extends PlanTestBase {
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
     }
+
+    public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
+        Map<Table, List<Column>> result = mv.getRefBaseTablePartitionColumns();
+        Assert.assertTrue(result.size() == 1);
+        Map.Entry<Table, List<Column>> e = result.entrySet().iterator().next();
+        Assert.assertEquals(1, e.getValue().size());
+        return Pair.create(e.getKey(), e.getValue().get(0));
+    }
+
+    public String getQueryPlan(String query) {
+        return getQueryPlan(query, TExplainLevel.NORMAL);
+    }
+
+    public String getQueryPlan(String query, TExplainLevel level) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(level);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
+    }
 }
+

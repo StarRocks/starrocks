@@ -48,27 +48,32 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -79,13 +84,12 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import org.apache.hadoop.util.ThreadUtil;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * There are 3 steps in BrokerLoadJob: BrokerPendingTask, LoadLoadingTask, CommitAndPublishTxn.
@@ -99,6 +103,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     private ConnectContext context;
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
     private long writeDurationMs = 0;
+    private LoadStmt stmt;
 
     // only for log replay
     public BrokerLoadJob() {
@@ -111,24 +116,28 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.context = context;
     }
 
-    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
+    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, LoadStmt stmt, ConnectContext context)
             throws MetaNotFoundException {
-        super(dbId, label, originStmt);
+        super(dbId, label, stmt != null ? stmt.getOrigStmt() : null);
         this.timeoutSecond = Config.broker_load_default_timeout_second;
         this.brokerDesc = brokerDesc;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
+        this.stmt = stmt;
+        if (context != null) {
+            this.warehouseId = context.getCurrentWarehouseId();
+        }
     }
 
     @Override
     public void beginTxn()
             throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond);
+                        timeoutSecond, computeResource);
     }
 
     @Override
@@ -233,17 +242,17 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
-    private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws UserException {
+    private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws StarRocksException {
         // divide job into broker loading task by table
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (Map.Entry<FileGroupAggKey, List<BrokerFileGroup>> entry : fileGroupAggInfo.getAggKeyToFileGroups()
                     .entrySet()) {
                 FileGroupAggKey aggKey = entry.getKey();
                 List<BrokerFileGroup> brokerFileGroups = entry.getValue();
                 long tableId = aggKey.getTableId();
-                OlapTable table = (OlapTable) db.getTable(tableId);
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 if (table == null) {
                     LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                             .add("database_id", dbId)
@@ -274,8 +283,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 } else if (partialUpdateMode.equals("row")) {
                     mode = TPartialUpdateMode.ROW_MODE;
                 }
-                UUID uuid = UUID.randomUUID();
-                TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                TUniqueId loadId = UUIDUtil.genTUniqueId();
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
@@ -296,17 +304,20 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setLoadJobType(TLoadJobType.BROKER)
                         .setPriority(priority)
                         .setOriginStmt(originStmt)
+                        .setLoadStmt(stmt)
                         .setPartialUpdateMode(mode)
                         .setFileStatusList(attachment.getFileStatusByTable(aggKey))
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
+                        .setComputeResource(computeResource)
                         .build();
 
                 task.prepare();
 
                 // update total loading task scan range num
                 idToTasks.put(task.getSignature(), task);
+                loadIds.add(DebugUtil.printId(loadId));
                 // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
                 // use newLoadingTasks to save new created loading tasks and submit them later.
                 newLoadingTasks.add(task);
@@ -314,20 +325,123 @@ public class BrokerLoadJob extends BulkLoadJob {
 
                 // save all related tables and rollups in transaction state
                 TransactionState txnState =
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(dbId, transactionId);
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
                 if (txnState == null) {
-                    throw new UserException("txn does not exist: " + transactionId);
+                    throw new StarRocksException("txn does not exist: " + transactionId);
                 }
                 txnState.addTableIndexes(table);
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
             submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
+        }
+    }
+
+    @Override
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+        if (!txnOperated) {
+            return;
+        }
+        writeLock();
+        try {
+            // check if job has been completed
+            if (isTxnDone()) {
+                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
+                        .add("state", state)
+                        .add("error_msg", "this task will be ignored when job is: " + state)
+                        .build());
+                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, System.currentTimeMillis());
+                return;
+            }
+
+            FailMsg failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason);
+            boolean needRetry = isRetryable(failMsg);
+            if (!needRetry) {
+                // record attachment in load job
+                unprotectUpdateLoadingStatus(txnState);
+                // cancel load job
+                unprotectedExecuteCancel(failMsg, true);
+                return;
+            }
+
+            failMsg.setMsg(txnStatusChangeReason + ". Retry again");
+            LOG.warn("broker load job {} with txn id {} failed. start retry, remaining retry time: {}",
+                    id, txnState.getTransactionId(), retryTime);
+            retryTime--;
+            unprotectedClearTasksBeforeRetry(failMsg);
+            try {
+                state = JobState.PENDING;
+                unprotectedExecute();
+            } catch (Exception e) {
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    @Override
+    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+        super.afterVisible(txnState, txnOperated);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    }
+
+    /**
+     * This method is used to replay the cancelled state of load job
+     *
+     * @param txnState
+     */
+    @Override
+    public void replayOnAborted(TransactionState txnState) {
+        writeLock();
+        try {
+            replayTxnAttachment(txnState);
+            failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
+            finishTimestamp = txnState.getFinishTime();
+            state = JobState.CANCELLED;
+            if (!isRetryable(failMsg)) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+                return;
+            }
+            retryTime--;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    @Override
+    protected void reset() {
+        super.reset();
+        if (context != null) {
+            context.setStartTime();
+            createTimestamp = context.getStartTime();
+        }
+    }
+
+    protected void unprotectedClearTasksBeforeRetry(FailMsg failMsg) {
+        // get load ids of all loading tasks, we will cancel their coordinator process later
+        List<TUniqueId> loadIds = Lists.newArrayList();
+        for (PriorityLeaderTask loadTask : idToTasks.values()) {
+            if (loadTask instanceof LoadLoadingTask) {
+                loadIds.add(((LoadLoadingTask) loadTask).getLoadId());
+            }
+        }
+        newLoadingTasks.clear();
+        reset();
+
+        this.failMsg = null; // when retry, user should not see previous fail msg
+        this.progress = 0; // reset progress
+        // cancel all running coordinators, so that the scheduler's worker thread will be released
+        for (TUniqueId loadId : loadIds) {
+            Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
+            if (coordinator != null) {
+                coordinator.cancel(failMsg.getMsg());
+            }
         }
     }
 
@@ -396,32 +510,29 @@ public class BrokerLoadJob extends BulkLoadJob {
             } catch (CommitRateExceededException e) {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
-            } catch (UserException e) {
-                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
-                        .add("database_id", dbId)
-                        .add("error_msg", "Failed to commit txn with error:" + e.getMessage())
-                        .build(), e);
+            } catch (StarRocksException e) {
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                 break;
             }
         }
     }
 
-    private void commitTransactionUnderDatabaseLock(Database db) throws UserException {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
-                    .add("txn_id", transactionId)
-                    .add("msg", "Load job try to commit txn")
-                    .build());
-            // Update the write duration before committing the transaction.
-            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-            TransactionState transactionState = transactionMgr.getTransactionState(dbId, transactionId);
-            if (transactionState != null) {
-                transactionState.setWriteDurationMs(writeDurationMs);
-            }
+    private void commitTransactionUnderDatabaseLock(Database db) throws StarRocksException {
+        LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
+                .add("txn_id", transactionId)
+                .add("msg", "Load job try to commit txn")
+                .build());
+        // Update the write duration before committing the transaction.
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState transactionState = transactionMgr.getTransactionState(dbId, transactionId);
+        if (transactionState != null) {
+            transactionState.setWriteDurationMs(writeDurationMs);
+        }
 
+        List<Long> tableIdList = transactionState.getTableIdList();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        try {
             transactionMgr.commitTransaction(dbId, transactionId, commitInfos, failInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp, finishTimestamp, state,
                             failMsg));
@@ -444,7 +555,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
             });
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
     }
 

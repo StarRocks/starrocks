@@ -23,10 +23,11 @@ import javax.validation.constraints.NotNull;
 public class ScoreSorter implements Sorter {
     @Override
     @NotNull
-    public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
+    public List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics) {
         return partitionStatistics.stream()
                 .filter(p -> p.getCompactionScore() != null)
-                .sorted(Comparator.comparing(PartitionStatistics::getCompactionScore).reversed())
+                .sorted(Comparator.comparingInt((PartitionStatisticsSnapshot stats) -> stats.getPriority().getValue()).reversed()
+                        .thenComparing(Comparator.comparing(PartitionStatisticsSnapshot::getCompactionScore).reversed()))
                 .collect(Collectors.toList());
     }
 }

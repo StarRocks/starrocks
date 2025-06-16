@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # element_at
 
-## Description
+
 
 Returns the value for the specified key from a key-value pair of a map. If any input parameter is NULL or if the key does not exist in the map, the result is NULL.
 
@@ -31,18 +31,18 @@ If `any_key` exists in `any_map`, the value corresponding to the key will be ret
 
 ```plain text
 mysql> select element_at(map{1:3,2:4},1);
-+-------------------------+
-| element_at({1:3,2:4},1) |
-+-------------------------+
-|                     3   |
-+-------------------------+
++-----------------+
+| map{1:3,2:4}[1] |
++-----------------+
+|               3 |
++-----------------+
 
 mysql> select element_at(map{1:3,2:4},3);
-+-------------------------+
-| element_at({1:3,2:4},3) |
-+-------------------------+
-|                    NULL |
-+-------------------------+
++-----------------+
+| map{1:3,2:4}[3] |
++-----------------+
+|            NULL |
++-----------------+
 
 mysql> select element_at(map{'a':1,'b':2},'a');
 +-----------------------+

@@ -72,7 +72,7 @@ public class SimpleQueryAnalyzer {
         new Visitor().process(node);
     }
 
-    private static class Visitor extends AstVisitor<Void, Void> {
+    private static class Visitor implements AstVisitor<Void, Void> {
         public Void process(ParseNode node) {
             return node.accept(this, null);
         }
@@ -194,7 +194,7 @@ public class SimpleQueryAnalyzer {
 
 
         @Override
-        public Void visitSubquery(SubqueryRelation subquery, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation subquery, Void context) {
             if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }

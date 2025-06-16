@@ -15,6 +15,7 @@
 #include "storage/lake/lake_local_persistent_index_tablet_loader.h"
 
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/storage_engine.h"
@@ -42,12 +43,7 @@ StatusOr<EditVersion> LakeLocalPersistentIndexTabletLoader::applied_version() {
     return EditVersion(_base_version, 0);
 }
 
-void LakeLocalPersistentIndexTabletLoader::setting() {
-    // persistent index' minor compaction is a new strategy to decrease the IO amplification.
-    // More detail: https://github.com/StarRocks/starrocks/issues/27581.
-    // disable minor_compaction in cloud native table for now, will enable it later
-    config::enable_pindex_minor_compaction = false;
-}
+void LakeLocalPersistentIndexTabletLoader::setting() {}
 
 Status LakeLocalPersistentIndexTabletLoader::rowset_iterator(
         const Schema& pkey_schema,
@@ -68,11 +64,15 @@ Status LakeLocalPersistentIndexTabletLoader::rowset_iterator(
             return res.status();
         }
         auto& itrs = res.value();
-        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
         RETURN_IF_ERROR(handler(itrs, rowset->id()));
     }
 
     return Status::OK();
+}
+
+void LakeLocalPersistentIndexTabletLoader::set_write_amp_score(double score) {
+    _index->set_write_amp_score(score);
 }
 
 } // namespace starrocks::lake

@@ -18,13 +18,13 @@
 #include <queue>
 
 #include "exec/tablet_info.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "serde/protobuf_serde.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "util/brpc_stub_cache.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
 
 namespace starrocks {
@@ -61,7 +61,7 @@ Status TableReader::init(const TableReaderParams& params) {
     RETURN_IF_ERROR(_partition_param->init(nullptr));
     _location_param = std::make_unique<OlapTableLocationParam>(params.location_param);
     _nodes_info = std::make_unique<StarRocksNodesInfo>(params.nodes_info);
-    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc(), false);
+    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc());
     return Status::OK();
 }
 
@@ -107,11 +107,11 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     size_t num_rows = keys.num_rows();
     found.assign(num_rows, false);
     std::vector<OlapTablePartition*> partitions;
-    std::vector<uint32_t> tablet_indexes;
+    std::vector<uint32_t> record_hashes;
     std::vector<uint8_t> validate_selection;
     std::vector<uint32_t> validate_select_idx;
     validate_selection.assign(num_rows, 1);
-    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &tablet_indexes, &validate_selection, nullptr, 0,
+    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &record_hashes, &validate_selection, nullptr, 0,
                                                    nullptr));
     // Arrange selection_idx by merging _validate_selection
     // If chunk num_rows is 6
@@ -130,14 +130,16 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     std::unordered_map<uint64_t, std::unique_ptr<TabletMultiGet>> multi_gets_by_tablet;
     for (size_t i = 0; i < selected_size; ++i) {
         size_t key_index = validate_select_idx[i];
-        int64_t tablet_id = partitions[key_index]->indexes[0].tablets[tablet_indexes[key_index]];
+        const auto* partition = partitions[key_index];
+        const auto& virtual_buckets = partition->indexes[0].virtual_buckets;
+        int64_t tablet_id = virtual_buckets[record_hashes[key_index] % virtual_buckets.size()];
         auto iter = multi_gets_by_tablet.find(tablet_id);
         TabletMultiGet* multi_get = nullptr;
         if (iter == multi_gets_by_tablet.end()) {
             multi_gets_by_tablet[tablet_id] = std::make_unique<TabletMultiGet>();
             multi_get = multi_gets_by_tablet[tablet_id].get();
             multi_get->tablet_id = tablet_id;
-            auto partition_id = partitions[key_index]->id;
+            auto partition_id = partition->id;
             auto itr = _params->partition_versions.find(partition_id);
             if (itr == _params->partition_versions.end()) {
                 return Status::InternalError(strings::Substitute(
@@ -220,8 +222,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
             LOG(WARNING) << msg;
             st = Status::InternalError(msg);
         } else {
-            PInternalService_Stub* stub =
-                    ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+            auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
             if (stub == nullptr) {
                 string msg = strings::Substitute("multi_get fail to get brpc stub for $0:$1 tablet:$2", node_info->host,
                                                  node_info->brpc_port, tablet_id);
@@ -238,7 +239,8 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
     return st;
 }
 
-Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
+Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService_RecoverableStub>& stub,
+                                          int64_t tablet_id, int64_t version, Chunk& keys,
                                           const std::vector<std::string>& value_columns, std::vector<bool>& found,
                                           Chunk& values, SchemaPtr& value_schema) {
     PTabletReaderMultiGetRequest request;
@@ -259,9 +261,12 @@ Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t t
             closure = nullptr;
         }
     });
+    // ref count for next rpc call
+    closure->ref();
     if (_params->timeout_ms > 0) {
         closure->cntl.set_timeout_ms(_params->timeout_ms);
     }
+    closure->ref();
     stub->local_tablet_reader_multi_get(&closure->cntl, &request, &closure->result, closure);
     closure->join();
     if (closure->cntl.Failed()) {

@@ -114,6 +114,8 @@ public:
 
 private:
     void add(InternalRef ptr) {
+        // Use explicit producer token to avoid the overhead of too many sub-queues
+        static thread_local ::moodycamel::ProducerToken producer_token(_ctx_resources);
         DCHECK(ptr);
         Status status = _resetter(ptr.get());
         // if reset fail, then delete this context
@@ -121,7 +123,7 @@ private:
             return;
         }
 
-        _ctx_resources.enqueue(std::move(ptr));
+        _ctx_resources.enqueue(producer_token, std::move(ptr));
     }
 
     Creator _creator;

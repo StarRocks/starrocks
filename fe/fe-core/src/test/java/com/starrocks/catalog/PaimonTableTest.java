@@ -19,7 +19,7 @@ import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.thrift.TTableDescriptor;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypes;
@@ -30,11 +30,12 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class PaimonTableTest {
 
     @Test
-    public void testPartitionKeys(@Mocked AbstractFileStoreTable paimonNativeTable) {
+    public void testPartitionKeys(@Mocked FileStoreTable paimonNativeTable) {
         RowType rowType =
                 RowType.builder().field("a", DataTypes.INT()).field("b", DataTypes.INT()).field("c", DataTypes.INT())
                         .build();
@@ -61,14 +62,15 @@ public class PaimonTableTest {
                 result = partitions;
             }
         };
-        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema,
-                paimonNativeTable, 100L);
+        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema, paimonNativeTable);
+        Map<String, String> properties = paimonTable.getProperties();
+        Assert.assertEquals(0, properties.size());
         List<Column> partitionColumns = paimonTable.getPartitionColumns();
         Assertions.assertThat(partitionColumns).hasSameElementsAs(partitionSchema);
     }
 
     @Test
-    public void testToThrift(@Mocked AbstractFileStoreTable paimonNativeTable) {
+    public void testToThrift(@Mocked FileStoreTable paimonNativeTable) {
         RowType rowType =
                 RowType.builder().field("a", DataTypes.INT()).field("b", DataTypes.INT()).field("c", DataTypes.INT())
                         .build();
@@ -85,8 +87,7 @@ public class PaimonTableTest {
         };
         String dbName = "testDB";
         String tableName = "testTable";
-        PaimonTable paimonTable = new PaimonTable("testCatalog", dbName, tableName, fullSchema,
-                paimonNativeTable, 100L);
+        PaimonTable paimonTable = new PaimonTable("testCatalog", dbName, tableName, fullSchema, paimonNativeTable);
 
         TTableDescriptor tTableDescriptor = paimonTable.toThrift(null);
         Assert.assertEquals(tTableDescriptor.getDbName(), dbName);
@@ -94,13 +95,11 @@ public class PaimonTableTest {
     }
 
     @Test
-    public void testEquals(@Mocked AbstractFileStoreTable paimonNativeTable) {
+    public void testEquals(@Mocked FileStoreTable paimonNativeTable) {
         String dbName = "testDB";
         String tableName = "testTable";
-        PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null,
-                paimonNativeTable, 100L);
-        PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null,
-                paimonNativeTable, 100L);
+        PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
+        PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
         Assert.assertEquals(table, table2);
         Assert.assertEquals(table, table);
         Assert.assertNotEquals(table, null);

@@ -43,6 +43,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -55,11 +56,13 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -81,11 +84,13 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -125,7 +130,6 @@ public class ScalarOperatorToExpr {
             this.colRefToExpr = variableToSlotRef;
             this.projectOperatorMap = projectOperatorMap;
         }
-
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {
@@ -198,7 +202,7 @@ public class ScalarOperatorToExpr {
         public Expr visitCollectionElement(CollectionElementOperator node, FormatterContext context) {
             CollectionElementExpr expr =
                     new CollectionElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
-                            buildExpr.build(node.getChild(1), context));
+                            buildExpr.build(node.getChild(1), context), node.isCheckOutOfBounds());
             hackTypeNull(expr);
             return expr;
         }
@@ -255,7 +259,8 @@ public class ScalarOperatorToExpr {
                     d.uncheckedCastTo(type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
-                    return new StringLiteral(literal.getVarchar());
+                    String str = literal.getVarchar();
+                    return StringLiteral.create(str);
                 } else if (type.isBinaryType()) {
                     return new VarBinaryLiteral(literal.getBinary());
                 } else {
@@ -288,6 +293,7 @@ public class ScalarOperatorToExpr {
                         buildExpr.build(predicate.getChild(0), context), null);
             }
             callExpr.setType(Type.BOOLEAN);
+            callExpr.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return callExpr;
         }
 
@@ -296,6 +302,7 @@ public class ScalarOperatorToExpr {
                     buildExpr.build(predicate.getChildren().get(0), context),
                     buildExpr.build(predicate.getChildren().get(1), context));
             call.setType(Type.BOOLEAN);
+            call.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return call;
         }
 
@@ -377,9 +384,19 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
+        public Expr visitMatchExprOperator(MatchExprOperator operator, FormatterContext context) {
+            Expr child1 = buildExpr.build(operator.getChild(0), context);
+            Expr child2 = buildExpr.build(operator.getChild(1), context);
+            return new MatchExpr(child1, child2);
+        }
+
+        @Override
         public Expr visitCall(CallOperator call, FormatterContext context) {
             String fnName = call.getFnName();
             Expr callExpr;
+            if (!FeConstants.runningUnitTest && SPMFunctions.isSPMFunctions(call)) {
+                throw UnsupportedException.unsupportedException("spm function only used in create baseline stmt");
+            }
             switch (fnName.toLowerCase()) {
                 /*
                  * Arithmetic
@@ -468,6 +485,8 @@ public class ScalarOperatorToExpr {
                 case "user":
                 case "current_user":
                 case "current_role":
+                case "current_group":
+                case "session_id":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
@@ -476,6 +495,19 @@ public class ScalarOperatorToExpr {
                     callExpr = new InformationFunction(fnName,
                             "",
                             ((ConstantOperator) call.getChild(0)).getBigint());
+                    break;
+                case "rand":
+                case "random":
+                case "uuid":
+                case "sleep":
+                    List<Expr> arguments = Lists.newArrayList();
+                    if (call.getChildren().size() == 2) {
+                        arguments.add(buildExpr.build(call.getChild(0), context));
+                    }
+                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
+                    Preconditions.checkNotNull(call.getFunction());
+                    callExpr.setFn(call.getFunction());
+                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
                     List<Expr> arg = call.getChildren().stream()
@@ -636,6 +668,7 @@ public class ScalarOperatorToExpr {
             dictionaryGetExpr.setDictionaryId(operator.getDictionaryId());
             dictionaryGetExpr.setDictionaryTxnId(operator.getDictionaryTxnId());
             dictionaryGetExpr.setKeySize(operator.getKeySize());
+            dictionaryGetExpr.setNullIfNotExist(operator.getNullIfNotExist());
             return dictionaryGetExpr;
         }
     }

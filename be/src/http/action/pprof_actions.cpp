@@ -58,7 +58,9 @@ static const std::string SECOND_KEY = "seconds";
 static const int kPprofDefaultSampleSecs = 30;
 
 // Protect, only one thread can work
+#if !(defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER))
 static std::mutex kPprofActionMutex;
+#endif
 
 void HeapAction::handle(HttpRequest* req) {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
@@ -160,7 +162,7 @@ void CmdlineAction::handle(HttpRequest* req) {
         return;
     }
     char buf[1024];
-    if (fscanf(fp, "%s ", buf) != 1) {
+    if (fscanf(fp, "%1023s ", buf) != 1) {
         strcpy(buf, "read cmdline failed");
     }
     fclose(fp);

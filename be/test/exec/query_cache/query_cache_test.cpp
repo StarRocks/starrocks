@@ -22,6 +22,8 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/query_cache/cache_manager.h"
@@ -35,9 +37,13 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
 struct QueryCacheTest : public ::testing::Test {
     RuntimeState state;
+    std::unique_ptr<pipeline::QueryContext> query_ctx = std::make_unique<pipeline::QueryContext>();
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
+
+    void SetUp() override { state.set_query_ctx(query_ctx.get()); }
 };
 
 TEST_F(QueryCacheTest, testLaneArbiter) {
@@ -101,27 +107,31 @@ TEST_F(QueryCacheTest, testCacheManager) {
         auto col = Int8Column::create();
         auto payload = byte_size - sizeof(query_cache::CacheValue);
         col->resize(payload);
-        chk->append_column(col, 0);
+        chk->append_column(std::move(col), 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
+    size_t total_key_size = 0;
     for (auto i = 0; i < 10; ++i) {
+        std::string key = strings::Substitute("key_$0", i);
+        size_t key_size = sizeof(LRUHandle) - 1 + key.size();
+        total_key_size += key_size;
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
 
     for (auto i = 20; i < 30; ++i) {
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
@@ -167,7 +177,7 @@ ChunkPtr create_test_chunk(query_cache::LaneOwnerType owner, long from, long to,
     for (auto i = from; i < to; ++i) {
         data[i - from] = double(i);
     }
-    chunk->append_column(column, SlotId(1));
+    chunk->append_column(std::move(column), SlotId(1));
     return chunk;
 }
 struct Task {
@@ -231,7 +241,7 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     Tasks tasks;
     tasks.resize(dop);
     for (auto i = 0; i < dop; ++i) {
-        pipeline::Pipeline pipeline(0, opFactories);
+        pipeline::Pipeline pipeline(0, opFactories, nullptr);
         auto upstream_operators = pipeline.create_operators(dop, i);
         auto downstream_operator = reduce_source->create(dop, i);
         tasks[i].upstream = std::move(upstream_operators);

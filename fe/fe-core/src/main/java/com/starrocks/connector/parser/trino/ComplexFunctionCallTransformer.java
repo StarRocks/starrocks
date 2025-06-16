@@ -83,7 +83,7 @@ public class ComplexFunctionCallTransformer {
             if (args.length != 2) {
                 throw new SemanticException("element_at function must have 2 arguments");
             }
-            return new CollectionElementExpr(args[0], args[1]);
+            return new CollectionElementExpr(args[0], args[1], false);
         } else if (functionName.equalsIgnoreCase("regexp_extract")) {
             // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
             FunctionCallExpr regexpExtractFunc = new FunctionCallExpr("regexp_extract",
@@ -115,6 +115,13 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("isnotnull function must have 1 argument");
             }
             return new IsNullPredicate(args[0], true);
+        } else if (functionName.equalsIgnoreCase("parse_datetime") && args.length == 2
+                   && args[1] instanceof StringLiteral) {
+            // parse_datetime -> str_to_jodatime
+            String formatString = ((StringLiteral) args[1]).getStringValue();
+            // "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" -> "yyyy-MM-ddTHH:mm:ss.SSS"
+            formatString = formatString.replace("'", "").replace("Z", "");
+            return new FunctionCallExpr("str_to_jodatime", java.util.List.of(args[0], new StringLiteral(formatString)));
         }
         return null;
     }

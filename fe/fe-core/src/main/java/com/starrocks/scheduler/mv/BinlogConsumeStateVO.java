@@ -51,7 +51,7 @@ public class BinlogConsumeStateVO implements Writable {
             TabletMeta meta = tabletIndex.getTabletMeta(key.getTabletId());
             scan.setTable_id(meta.getTableId());
             scan.setTablet_id(key.getTabletId());
-            scan.setPartition_id(meta.getPartitionId());
+            scan.setPartition_id(meta.getPhysicalPartitionId());
             scan.setOffset(value.toThrift());
             res.add(scan);
         });
@@ -66,10 +66,7 @@ public class BinlogConsumeStateVO implements Writable {
         return GsonUtils.GSON.fromJson(Text.readString(input), BinlogConsumeStateVO.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Override
     public boolean equals(Object o) {

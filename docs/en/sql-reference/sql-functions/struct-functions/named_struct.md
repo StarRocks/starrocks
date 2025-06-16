@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # named_struct
 
-## Description
+
 
 Creates a struct with the specified field names and values.
 
@@ -48,5 +48,5 @@ SELECT named_struct('a', null, 'b', 2, 'c', 3);
 
 ## References
 
-- [STRUCT data type](../../sql-statements/data-types/STRUCT.md)
+- [STRUCT data type](../../data-types/semi_structured/STRUCT.md)
 - [row/struct](row.md)

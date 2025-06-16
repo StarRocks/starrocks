@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_union_count
 
-## 功能
+
 
 计算输入的一组 bitmap 值的并集，并返回并集的基数。该函数从 2.3 版本开始支持。
 

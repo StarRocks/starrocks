@@ -56,4 +56,12 @@ bool TicketChecker::are_all_left(TicketIdType id) {
     return is_all_enter && (enter_count == leave_count);
 }
 
+void TicketChecker::more_tickets(TicketIdType id) {
+    std::lock_guard<SpinLock> require_lock(_lock);
+    auto it = _tickets.find(id);
+    DCHECK(it != _tickets.end());
+    Ticket& ticket = it->second;
+    ticket.data &= ~ALL_READY_BIT;
+}
+
 } // namespace starrocks::query_cache

@@ -23,15 +23,15 @@
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
+#include "exec/spill/data_stream.h"
+#include "exec/spill/spill_fwd.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
-class SpillInputStream;
-class Spiller;
-
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
 // depending on the requirements of the upper layer
 
@@ -41,8 +41,9 @@ class Spiller;
 // while (!mem_table->is_full()) {
 //     mem_table->append(next_chunk());
 // }
-// mem_table->done();
-// mem_table->flush();
+// mem_table->finalize();
+// auto serialized_data = mem_table->get_serialized_data();
+// ...
 
 class SpillableMemTable {
 public:
@@ -59,26 +60,43 @@ public:
     virtual bool is_empty() = 0;
     size_t mem_usage() { return _tracker->consumption(); }
     // append data to mem table
-    [[nodiscard]] virtual Status append(ChunkPtr chunk) = 0;
-    [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                                  uint32_t size) = 0;
-    // all of data has been added
-    // done will be called in pipeline executor threads
-    virtual Status done() = 0;
-    // flush all data to callback, then release the memory in memory table
-    // flush will be called in IO threads
-    // flush needs to be designed to be reentrant. Because callbacks can return Status::Yield.
-    virtual Status flush(FlushCallBack callback) = 0;
+    virtual Status append(ChunkPtr chunk) = 0;
+    virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
+
+    // Theoretically, the implementation of done and finalize interfaces only have calculation logic, and there is no need to do them separately.
+    // However, there are some limitations at this stage:
+    // 1. The pipeline scheduling mechanism does not support reentrancy. It is difficult to implement the yield mechanism in the computing thread. we can only rely on the yield mechanism of the scan task.
+    // 2. Some long-time operations do not support yield (such as sorting). If they are placed in the io thread, they may have a greater impact on other tasks.
+    // In order to make a compromise, we can only adopt this approach now, and we can consider unifying it after our yield mechanism is perfected.
+
+    // call `done` to do something after all data has been added
+    // this function is called in the pipeline execution thread
+    virtual Status done() {
+        _is_done = true;
+        return Status::OK();
+    }
+    // call `finalize` to serialize data after `done` is called
+    // NOTE: The implementation of `finalize` needs to ensure reentrancy in order to implement io task yield mechanism
+    virtual Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& block) = 0;
 
     virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
         return Status::NotSupported("unsupport to call as_input_stream");
     }
+
+    virtual void reset();
+
+    size_t num_rows() const { return _num_rows; }
+
+    // mem table is done. we can't append data any more
+    bool is_done() const { return _is_done; }
 
 protected:
     RuntimeState* _runtime_state;
     const size_t _max_buffer_size;
     std::unique_ptr<MemTracker> _tracker;
     Spiller* _spiller = nullptr;
+    size_t _num_rows = 0;
+    bool _is_done = false;
 };
 
 using MemTablePtr = std::shared_ptr<SpillableMemTable>;
@@ -90,16 +108,16 @@ public:
     ~UnorderedMemTable() override = default;
 
     bool is_empty() override;
-    [[nodiscard]] Status append(ChunkPtr chunk) override;
-    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                          uint32_t size) override;
-    Status done() override { return Status::OK(); };
-    Status flush(FlushCallBack callback) override;
+    Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+
+    Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
+    void reset() override;
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
 private:
-    size_t _processed_index{};
+    size_t _processed_index = 0;
     std::vector<ChunkPtr> _chunks;
 };
 
@@ -111,11 +129,12 @@ public:
     ~OrderedMemTable() override = default;
 
     bool is_empty() override;
-    [[nodiscard]] Status append(ChunkPtr chunk) override;
-    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                          uint32_t size) override;
+    Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+
     Status done() override;
-    Status flush(FlushCallBack callback) override;
+    Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
+    void reset() override;
 
 private:
     StatusOr<ChunkPtr> _do_sort(const ChunkPtr& chunk);

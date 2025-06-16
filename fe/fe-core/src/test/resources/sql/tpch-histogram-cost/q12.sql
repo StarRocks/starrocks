@@ -9,8 +9,8 @@ distribution type: GATHER
 cardinality: 2
 column statistics:
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-* sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
-* sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+* sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+* sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 
 PLAN FRAGMENT 1(F03)
 
@@ -24,8 +24,8 @@ OutPut Exchange Id: 10
 |  cardinality: 2
 |  column statistics:
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |
 8:AGGREGATE (merge finalize)
 |  aggregate: sum[([30: sum, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: true], sum[([31: sum, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: true]
@@ -33,8 +33,8 @@ OutPut Exchange Id: 10
 |  cardinality: 2
 |  column statistics:
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |
 7:EXCHANGE
 distribution type: SHUFFLE
@@ -54,8 +54,8 @@ OutPut Exchange Id: 07
 |  cardinality: 2
 |  column statistics:
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |
 5:Project
 |  output columns:
@@ -65,8 +65,8 @@ OutPut Exchange Id: 07
 |  cardinality: 6508504
 |  column statistics:
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -80,8 +80,8 @@ OutPut Exchange Id: 07
 |  * O_ORDERPRIORITY-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6508504.027934344] ESTIMATE
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |
 |----3:EXCHANGE
 |       distribution type: SHUFFLE
@@ -124,9 +124,9 @@ actualRows=0, avgRowSize=30.0
 cardinality: 6508504
 column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6508504.027934344] ESTIMATE
-* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE
+* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] MCV: [[1997-06-01:270700][1998-01-17:269100][1995-09-18:267300][1996-11-29:266400][1995-09-26:265700]] ESTIMATE
 * L_COMMITDATE-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
-* L_RECEIPTDATE-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] ESTIMATE
+* L_RECEIPTDATE-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] MCV: [[1997-08-08:266100][1997-06-05:266000][1997-01-01:263800][1997-07-31:261800][1997-07-09:261400]] ESTIMATE
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]
 

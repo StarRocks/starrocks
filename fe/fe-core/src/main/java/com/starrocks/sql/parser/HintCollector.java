@@ -16,6 +16,7 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
+import com.starrocks.qe.SessionVariable;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -33,21 +34,19 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     private CommonTokenStream tokenStream;
 
+    private SessionVariable sessionVariable;
+
     private IdentityHashMap<ParserRuleContext, List<Token>> contextWithTokenMap = new IdentityHashMap<>();
 
     private List<Token> tokenList = Lists.newArrayList();
 
-    public HintCollector(CommonTokenStream tokenStream) {
+    public HintCollector(CommonTokenStream tokenStream, SessionVariable sessionVariable) {
         this.tokenStream = tokenStream;
+        this.sessionVariable = sessionVariable;
     }
 
     public void collect(StarRocksParser.SingleStatementContext context) {
         visit(context);
-    }
-
-
-    public IdentityHashMap<ParserRuleContext, List<Token>> getContextWithTokenMap() {
-        return contextWithTokenMap;
     }
 
     public IdentityHashMap<ParserRuleContext, List<HintNode>> getContextWithHintMap() {
@@ -55,7 +54,8 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         for (Map.Entry<ParserRuleContext, List<Token>> entry : contextWithTokenMap.entrySet()) {
             ParserRuleContext key = entry.getKey();
             List<HintNode> hintNodes = entry.getValue().stream()
-                    .map(HintFactory::buildHintNode).filter(e -> e != null)
+                    .map(e -> HintFactory.buildHintNode(e, sessionVariable))
+                    .filter(e -> e != null)
                     .collect(Collectors.toList());
             if (CollectionUtils.isNotEmpty(hintNodes)) {
                 map.put(key, hintNodes);
@@ -69,6 +69,12 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         if (context.statement() != null) {
             return visit(context.statement());
         }
+        return null;
+    }
+
+    @Override
+    public Void visitDataCacheSelectStatement(StarRocksParser.DataCacheSelectStatementContext context) {
+        extractHintToRight(context, context.SELECT().getSymbol().getTokenIndex());
         return null;
     }
 
@@ -101,7 +107,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     @Override
     public Void visitUpdateStatement(StarRocksParser.UpdateStatementContext context) {
-        extractHintToRight(context);
+        extractHintToRight(context, context.UPDATE().getSymbol().getTokenIndex());
         if (!(context.fromClause() instanceof StarRocksParser.DualContext)) {
             StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
             if (fromContext.relations() != null) {
@@ -113,7 +119,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     @Override
     public Void visitDeleteStatement(StarRocksParser.DeleteStatementContext context) {
-        extractHintToRight(context);
+        extractHintToRight(context, context.DELETE().getSymbol().getTokenIndex());
         if (context.using != null) {
             context.using.relation().stream().forEach(this::visit);
         }
@@ -179,11 +185,37 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
+    public Void visitCreateBaselinePlanStatement(StarRocksParser.CreateBaselinePlanStatementContext ctx) {
+        // only collect plan hints
+        if (ctx.queryRelation().size() == 1) {
+            visit(ctx.queryRelation(0));
+        } else {
+            visit(ctx.queryRelation(1));
+        }
+        return null;
+    }
+
+    private void extractHintToLeft(ParserRuleContext ctx) {
+        Token semi = ctx.start;
+        int i = semi.getTokenIndex();
+        List<Token> hintTokens = tokenStream.getHiddenTokensToLeft(i, HINT_CHANNEL);
+        if (hintTokens != null) {
+            contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
+        }
+    }
 
     private void extractHintToRight(ParserRuleContext ctx) {
         Token semi = ctx.start;
         int i = semi.getTokenIndex();
         List<Token> hintTokens = tokenStream.getHiddenTokensToRight(i, HINT_CHANNEL);
+        if (hintTokens != null) {
+            contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
+        }
+    }
+
+    private void extractHintToRight(ParserRuleContext ctx, int fromIndex) {
+        List<Token> hintTokens = tokenStream.getHiddenTokensToRight(fromIndex, HINT_CHANNEL);
         if (hintTokens != null) {
             contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
         }

@@ -1,0 +1,40 @@
+-- name: test_periodical_task
+create database test_task_${uuid0};
+-- result:
+-- !result
+use test_task_${uuid0};
+-- result:
+-- !result
+create table t1(c1 int, c2 int);
+-- result:
+-- !result
+insert into t1 values(1, 1);
+-- result:
+-- !result
+submit task t1 schedule start('2024-01-01 00:00:00') every(interval 10 second) as insert into t1 select * from t1;
+-- result:
+t1	SUBMITTED
+-- !result
+select TASK_NAME, `SCHEDULE`, DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name ='t1';
+-- result:
+t1	PERIODICAL START(2024-01-01T00:00) EVERY(10 SECONDS)	insert into t1 select * from t1;
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 15, "interval": 3, "desc": "make sure the task got refreshed"}
+  result=select count(*) from information_schema.task_runs where `DATABASE` = 'test_task_${uuid0}' and task_name='t1';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+
+drop task t1;
+-- result:
+-- !result
+select TASK_NAME, `SCHEDULE`, DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name ='t1';
+-- result:
+-- !result
+select sleep(mod(second(now()), 10) + 1);
+-- result:
+1
+-- !result
+drop table t1;
+-- result:
+-- !result

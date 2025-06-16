@@ -64,9 +64,9 @@ public class MetricsActionTest {
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
             Assert.assertNotNull(params);
             Assert.assertFalse(params.isCollectMVMetrics());
-            Assert.assertTrue(params.isMinifyMVMetrics());
+            Assert.assertFalse(params.isMinifyMVMetrics());
             Assert.assertFalse(params.isCollectTableMetrics());
-            Assert.assertTrue(params.isMinifyTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
         }
 
         // All default, want table_metrics, but no auth
@@ -81,11 +81,12 @@ public class MetricsActionTest {
             };
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
             Assert.assertNotNull(params);
+            // no auth should not access mv metrics
             Assert.assertFalse(params.isCollectMVMetrics());
-            Assert.assertTrue(params.isMinifyMVMetrics());
-            // still minified way collecting table metrics
+            Assert.assertFalse(params.isMinifyMVMetrics());
+            // no auth should not access table metrics
             Assert.assertFalse(params.isCollectTableMetrics());
-            Assert.assertTrue(params.isMinifyTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
         }
 
         // All default, has query parameter, has auth, only with_table_metrics
@@ -102,7 +103,7 @@ public class MetricsActionTest {
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
             Assert.assertNotNull(params);
             Assert.assertFalse(params.isCollectMVMetrics());
-            Assert.assertTrue(params.isMinifyMVMetrics());
+            Assert.assertFalse(params.isMinifyMVMetrics());
             Assert.assertTrue(params.isCollectTableMetrics());
             Assert.assertFalse(params.isMinifyTableMetrics());
         }
@@ -124,6 +125,83 @@ public class MetricsActionTest {
             Assert.assertFalse(params.isMinifyMVMetrics());
             Assert.assertTrue(params.isCollectTableMetrics());
             Assert.assertFalse(params.isMinifyTableMetrics());
+        }
+
+        // All default, want table_metrics, but no auth
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_materialized_view_metrics=all", false);
+            // expect check auth
+            new Expectations(request) {
+                {
+                    request.getAuthorizationHeader();
+                    minTimes = 1;
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assert.assertNotNull(params);
+            // no auth should not access mv metrics
+            Assert.assertFalse(params.isCollectMVMetrics());
+            Assert.assertFalse(params.isMinifyMVMetrics());
+            // no auth should not access table metrics
+            Assert.assertFalse(params.isCollectTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
+        }
+
+        // All default, has query parameter, has auth, only with_materialized_view_metrics
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_materialized_view_metrics=all", true);
+            // expect check auth
+            new Expectations(request) {
+                {
+                    // auth passed, retrieve the remote host from the request context
+                    request.getHostString();
+                    result = "127.0.0.1";
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assert.assertNotNull(params);
+            Assert.assertTrue(params.isCollectMVMetrics());
+            Assert.assertFalse(params.isMinifyMVMetrics());
+            Assert.assertFalse(params.isCollectTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
+        }
+
+        // All default, has query parameter, has auth, only with_materialized_view_metrics
+        {
+            BaseRequest request = buildBaseRequest("/metrics?with_materialized_view_metrics=minified", true);
+            // expect check auth
+            new Expectations(request) {
+                {
+                    // auth passed, retrieve the remote host from the request context
+                    request.getHostString();
+                    result = "127.0.0.1";
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assert.assertNotNull(params);
+            Assert.assertTrue(params.isCollectMVMetrics());
+            Assert.assertTrue(params.isMinifyMVMetrics());
+            Assert.assertFalse(params.isCollectTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
+        }
+
+        // All default, has query parameter, has auth, both with_table_metrics and with_materialized_view_metrics
+        {
+            BaseRequest request =
+                    buildBaseRequest("/metrics?with_table_metrics=minified&with_materialized_view_metrics=minified", true);
+            new Expectations(request) {
+                {
+                    // auth passed, retrieve the remote host from the request context
+                    request.getHostString();
+                    result = "127.0.0.1";
+                }
+            };
+            MetricsAction.RequestParams params = action.callParseRequestParams(request);
+            Assert.assertNotNull(params);
+            Assert.assertTrue(params.isCollectMVMetrics());
+            Assert.assertTrue(params.isMinifyMVMetrics());
+            Assert.assertTrue(params.isCollectTableMetrics());
+            Assert.assertTrue(params.isMinifyTableMetrics());
         }
     }
 }

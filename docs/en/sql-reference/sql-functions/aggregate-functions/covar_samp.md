@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # covar_samp
 
-## Description
+
 
 Returns the sample covariance of two expressions. This function is supported from v2.5.10. It can also be used as a window function.
 
@@ -24,7 +24,7 @@ If `expr1` and `expr2` are table columns, this function calculates the sample co
 
 Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
 
-![covar_samp formula](../../../assets/covar_samp_formula.png)
+![covar_samp formula](../../../_assets/covar_samp_formula.png)
 
 <!--$$
 \frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{n-1}

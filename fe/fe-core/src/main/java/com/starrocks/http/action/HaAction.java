@@ -34,12 +34,12 @@
 
 package com.starrocks.http.action;
 
-import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
@@ -138,7 +138,7 @@ public class HaAction extends WebBaseAction {
 
     private void appendImageInfo(StringBuilder buffer) {
         try {
-            Storage storage = new Storage(Config.meta_dir + "/image");
+            Storage storage = new Storage(MetaHelper.getImageFileDir(true));
             buffer.append("<h2>Checkpoint Info</h2>");
             buffer.append("<pre>");
             buffer.append("<p>last checkpoint version:" + storage.getImageJournalId() + "</p>");
@@ -147,7 +147,7 @@ public class HaAction extends WebBaseAction {
             buffer.append("<p>last checkpoint time: " + date + "</p>");
             buffer.append("</pre>");
         } catch (IOException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute appendImageInfo", e);
         }
     }
 
@@ -168,7 +168,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendFe(StringBuilder buffer) {
-        List<Frontend> fes = GlobalStateMgr.getCurrentState().getFrontends(null /* all */);
+        List<Frontend> fes = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */);
         if (fes == null) {
             return;
         }
@@ -182,7 +182,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendRemovedFe(StringBuilder buffer) {
-        List<String> feNames = GlobalStateMgr.getCurrentState().getRemovedFrontendNames();
+        List<String> feNames = GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames();
         buffer.append("<h2>Removed Frontends</h2>");
         buffer.append("<pre>");
         for (String feName : feNames) {

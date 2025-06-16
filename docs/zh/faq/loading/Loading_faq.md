@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 导入通用问题
@@ -10,13 +10,17 @@ displayed_sidebar: "Chinese"
 
 - 增大单次导入的数据量，降低导入频率。
 
-- 在 BE 的配置文件 **be.conf** 中修改以下配置，通过调整合并策略实现加快合并的目的：
+- 修改 BE 配置文件 **be.conf** 中相关参数的配置，以加快 Compaction：
+  
+  - 对于明细表、聚合表和更新表，可以适当调大 `cumulative_compaction_num_threads_per_disk`、`base_compaction_num_threads_per_disk` 和 `cumulative_compaction_check_interval_seconds` 的值。例如：
 
-    ```Plain
-    cumulative_compaction_num_threads_per_disk = 4
-    base_compaction_num_threads_per_disk = 2
-    cumulative_compaction_check_interval_seconds = 2
-    ```
+      ```Plain
+      cumulative_compaction_num_threads_per_disk = 4
+      base_compaction_num_threads_per_disk = 2
+      cumulative_compaction_check_interval_seconds = 2
+      ```
+
+  - 对于主键表，可以适当调大 `update_compaction_num_threads_per_disk` 的值。适当调小 `update_compaction_per_tablet_min_interval_seconds` 的值。
 
   修改完成后，需要观察内存和 I/O，确保内存和 I/O 正常。
 
@@ -44,7 +48,7 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 ## 3. 发生数据质量错误 "ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel" 应该如何处理？
 
-运行 [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句。在语句返回的信息中，找到 URL，然后查看错误数据。
+运行 [SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) 语句。在语句返回的信息中，找到 URL，然后查看错误数据。
 
 常见的数据质量错误有：
 
@@ -78,7 +82,7 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 ## 4. 导入过程中，发生 RPC 超时应该如何处理？
 
-检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](../../loading/Loading_intro.md#be-配置)。
+检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](../../loading/loading_introduction/loading_considerations.md#be-配置)。
 
 ## 5. 导入作业报错 "Value count does not match column count" 应该怎么处理？
 

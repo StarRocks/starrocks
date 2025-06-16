@@ -1,0 +1,48 @@
+-- name: test_datacache_select
+
+create external catalog hive_datacache_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+
+set catalog hive_datacache_test_${uuid0};
+create database cache_select_db_${uuid0};
+use cache_select_db_${uuid0};
+
+create table t1 (c1 string, c2 string);
+insert into t1 values ("hello", "world"), ("smith", "blossom");
+
+create table t1_orc properties("file_format"="orc") as select * from t1;
+create table t1_textfile properties("file_format"="textfile") as select * from t1;
+
+submit task cache_select as cache select * from t1;
+submit task cache_select_where as cache select c1 from t1 where c1="hello";
+
+-- two task created
+select TASK_NAME, `SCHEDULE`, DEFINITION from default_catalog.information_schema.tasks where CATALOG='hive_datacache_test_${uuid0}' and `DATABASE`='cache_select_db_${uuid0}' order by TASK_NAME;
+
+-- make sure the task got refreshed
+select sleep(mod(second(now()), 5) + 1);
+
+-- two task run executed
+select TASK_NAME, DEFINITION from default_catalog.information_schema.task_runs where CATALOG='hive_datacache_test_${uuid0}' and `DATABASE`='cache_select_db_${uuid0}' order by TASK_NAME;
+
+drop task cache_select;
+drop task cache_select_where;
+
+-- no tasks any more
+select * from default_catalog.information_schema.tasks where catalog='hive_datacache_test_${uuid0}' and `DATABASE`='cache_select_db_${uuid0}';
+
+function: assert_cache_select_is_success("cache select * from t1;")
+function: assert_cache_select_is_success("cache select c2 from t1;")
+function: assert_cache_select_is_success("cache select * from t1_orc;")
+function: assert_cache_select_is_success("cache select c2 from t1_orc;")
+function: assert_cache_select_is_success("cache select * from t1_textfile;")
+function: assert_cache_select_is_success("cache select c2 from t1_textfile;")
+
+-- clean tables
+drop table t1 force;
+drop table t1_orc force;
+drop table t1_textfile force;
+drop database cache_select_db_${uuid0};
+set catalog default_catalog;
+drop catalog hive_datacache_test_${uuid0};
+
+

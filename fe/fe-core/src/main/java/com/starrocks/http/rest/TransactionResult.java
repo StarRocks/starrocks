@@ -14,22 +14,38 @@
 
 package com.starrocks.http.rest;
 
-import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.apache.commons.lang3.StringUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class TransactionResult extends RestBaseResult {
-    private Map<String, Object> resultMap = Maps.newHashMap();
+
+    public static final String STATUS_KEY = "Status";
+    public static final String MESSAGE_KEY = "Message";
+
+    public static final String TXN_ID_KEY = "TxnId";
+    public static final String LABEL_KEY = "Label";
+
+    private final Map<String, Object> resultMap;
+    private Exception exception = null;
 
     public TransactionResult() {
         status = ActionStatus.OK;
         msg = "";
+        resultMap = new HashMap<>(0);
     }
 
     public void addResultEntry(String key, Object value) {
         resultMap.put(key, value);
+    }
+
+    public void setError(ActionStatus status, String errMsg, Exception e) {
+        this.status = status;
+        this.exception = e;
+        this.msg = errMsg;
     }
 
     public void setErrorMsg(String errMsg) {
@@ -42,18 +58,21 @@ public class TransactionResult extends RestBaseResult {
     }
 
     public boolean containMsg() {
-        return msg.length() > 0;
+        return StringUtils.isNotEmpty(msg);
     }
 
     public boolean stateOK() {
         return status == ActionStatus.OK;
     }
-    
+
+    public Exception getException() {
+        return exception;
+    }
 
     public String toJson() {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        addResultEntry("Status", status);
-        addResultEntry("Message", msg);
+        addResultEntry(STATUS_KEY, status);
+        addResultEntry(MESSAGE_KEY, msg);
         return gson.toJson(resultMap);
     }
 }

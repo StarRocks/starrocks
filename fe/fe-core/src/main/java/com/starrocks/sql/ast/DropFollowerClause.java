@@ -27,4 +27,9 @@ public class DropFollowerClause extends FrontendClause {
     public DropFollowerClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.FOLLOWER, pos);
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropFollowerClause(this, context);
+    }
 }

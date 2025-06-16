@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Read data from StarRocks using Spark connector
@@ -25,6 +25,7 @@ You can also map the StarRocks table to a Spark DataFrame or a Spark RDD, and th
 
 | Spark connector | Spark         | StarRocks       | Java | Scala |
 |---------------- | ------------- | --------------- | ---- | ----- |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later   | 8    | 2.12  |
 | 1.1.1           | 3.2, 3.3, 3.4 | 2.5 and later   | 8    | 2.12  |
 | 1.1.0           | 3.2, 3.3, 3.4 | 2.5 and later   | 8    | 2.12  |
 | 1.0.0           | 3.x           | 1.18 and later  | 8    | 2.12  |
@@ -32,7 +33,7 @@ You can also map the StarRocks table to a Spark DataFrame or a Spark RDD, and th
 
 > **NOTICE**
 >
-> - Please see [Upgrade Spark connector](#upgrade-spark-connector) for behaviour changes among different connector versions.
+> - Please see [Upgrade Spark connector](#upgrade-spark-connector) for behavior changes among different connector versions.
 > - The connector does not provide MySQL JDBC driver since version 1.1.1, and you need import the driver to the Spark classpath manually. You can find the driver on [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/).
 > - In version 1.0.0, the Spark connector only supports reading data from StarRocks. From version 1.1.0 onwards, the Spark connector supports both reading data from and writing data to StarRocks.
 > - Version 1.0.0 differs from version 1.1.0 in terms of parameters and data type mappings. See [Upgrade Spark connector](#upgrade-spark-connector).
@@ -218,6 +219,7 @@ The following parameters apply only to the Spark RDD reading method.
 | STRING              | DataTypes.StringType      |
 | DATE                | DataTypes.DateType        |
 | DATETIME            | DataTypes.TimestampType   |
+| JSON | DataTypes.StringType <br /> **NOTE:** <br /> This data type mapping is supported since Spark connector v1.1.2, and requires a StarRocks version of at least 2.5.13, 3.0.3, 3.1.0 or later. |
 | ARRAY               | Unsupported datatype      |
 | HLL                 | Unsupported datatype      |
 | BITMAP              | Unsupported datatype      |
@@ -267,6 +269,10 @@ The processing logic of the underlying storage engine used by StarRocks cannot c
 ## Examples
 
 The following examples assume you have created a database named `test` in your StarRocks cluster and you have the permissions of user `root`. The parameter settings in the examples are based on Spark Connector 1.1.0.
+
+### Network configuration
+
+Ensure that the machine where Spark is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
 
 ### Data example
 
@@ -819,14 +825,11 @@ In this example, both partition pruning and bucket pruning are performed. Theref
    | k    | b    | dt                  | v    |
    +------+------+---------------------+------+
    |    1 |   11 | 2022-01-02 08:00:00 |  111 |
-   |    1 |   11 | 2022-01-02 08:00:00 |  111 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
-   |    2 |   22 | 2022-02-02 08:00:00 |  222 |
-   |    3 |   33 | 2022-03-02 08:00:00 |  333 |
    +------+------+---------------------+------+
-   7 rows in set (0.01 sec)
+   4 rows in set (0.01 sec)
    ```
 
 3. Run the following command, in which you use the `starrocks.filter.query` parameter to specify a filter condition `k=1` for prefix index filtering, in the Spark directory to create a DataFrame named `df` on the `mytable` table which belongs to the `test` database:

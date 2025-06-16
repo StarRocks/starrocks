@@ -23,7 +23,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -77,13 +77,17 @@ public class ScalarOperatorUtil {
         return newFn;
     }
 
-    public static CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
-        Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
-                oldFunctionCall.getFunction(), oldFunctionCall.getChild(0).getType());
-        ScalarOperatorRewriter scalarOpRewriter = new ScalarOperatorRewriter();
-        return (CallOperator) scalarOpRewriter.rewrite(
-                new CallOperator(
-                        FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
-                        oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
+    public static boolean isSimpleLike(ScalarOperator op) {
+        return Utils.downcast(op, LikePredicateOperator.class)
+                .map(likeOp -> !likeOp.isRegexp() &&
+                        likeOp.getChild(0).isColumnRef() &&
+                        likeOp.getChild(1).isConstantRef())
+                .orElse(false);
+    }
+
+    public static boolean isSimpleNotLike(ScalarOperator op) {
+        return Utils.downcast(op, CompoundPredicateOperator.class)
+                .map(compOp -> compOp.isNot() && isSimpleLike(compOp.getChild(0)))
+                .orElse(false);
     }
 }

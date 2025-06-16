@@ -40,7 +40,6 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -171,15 +170,5 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         out.writeLong(receivedBytes);
         out.writeLong(taskExecutionTimeMs);
         progress.write(out);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        filteredRows = in.readLong();
-        loadedRows = in.readLong();
-        unselectedRows = in.readLong();
-        receivedBytes = in.readLong();
-        taskExecutionTimeMs = in.readLong();
-        progress = RoutineLoadProgress.read(in);
     }
 }

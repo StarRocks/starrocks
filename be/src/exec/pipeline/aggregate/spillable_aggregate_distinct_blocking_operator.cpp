@@ -18,6 +18,7 @@
 
 #include "exec/sorted_streaming_aggregator.h"
 #include "exec/spill/spiller.hpp"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {
@@ -29,6 +30,8 @@ bool SpillableAggregateDistinctBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing_if_not_reuseable();
         _is_finished = true;
@@ -43,24 +46,23 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
         return Status::OK();
     }
 
-    auto io_executor = _aggregator->spill_channel()->io_executor();
-    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+    auto flush_function = [this](RuntimeState* state) {
         auto spiller = _aggregator->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+    auto set_call_back_function = [this](RuntimeState* state) {
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
     };
 
-    SpillProcessTasksBuilder task_builder(state, io_executor);
+    SpillProcessTasksBuilder task_builder(state);
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
@@ -90,6 +92,8 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
         return Status::OK();
     }
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::push_chunk(state, chunk));
+    // direct return if is_finished. (hash set reach limit)
+    if (_is_finished) return Status::OK();
     set_revocable_mem_bytes(_aggregator->hash_set_memory_usage());
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
@@ -102,10 +106,12 @@ Status SpillableAggregateDistinctBlockingSinkOperator::reset_state(RuntimeState*
     _is_finished = false;
     RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::reset_state(state, refill_chunks));
+    ONCE_RESET(_set_finishing_once);
     return Status::OK();
 }
 
 Status SpillableAggregateDistinctBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
+    RETURN_IF(_aggregator->hash_set_variant().size() == 0, Status::OK());
     _aggregator->hash_set_variant().visit(
             [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
     CHECK(!_aggregator->spill_channel()->has_task());
@@ -147,6 +153,9 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     _spill_options->name = "agg-distinct-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
     return Status::OK();
 }
@@ -155,8 +164,8 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
                                                                           int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
 
-    auto op = std::make_shared<SpillableAggregateDistinctBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
-                                                                               driver_sequence);
+    auto op = std::make_shared<SpillableAggregateDistinctBlockingSinkOperator>(
+            aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());
     // create spiller
     auto spiller = _spill_factory->create(*_spill_options);
     // create spill process channel
@@ -173,6 +182,7 @@ Status SpillableAggregateDistinctBlockingSourceOperator::prepare(RuntimeState* s
     RETURN_IF_ERROR(AggregateDistinctBlockingSourceOperator::prepare(state));
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
+    _accumulator.set_max_size(state->chunk_size());
     return Status::OK();
 }
 
@@ -190,6 +200,7 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (_aggregator->spiller()->has_output_data()) {
         return true;
     }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_aggregator->spiller());
     if (_aggregator->spiller()->is_cancel()) {
         return true;
     }
@@ -223,6 +234,7 @@ Status SpillableAggregateDistinctBlockingSourceOperator::set_finished(RuntimeSta
 }
 
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->spiller()->task_status());
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::pull_chunk(state);
     }
@@ -256,10 +268,8 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
 
     if (!_aggregator->is_spilled_eos()) {
         DCHECK(_accumulator.need_input());
-        auto executor = _aggregator->spill_channel()->io_executor();
         auto& spiller = _aggregator->spiller();
-        ASSIGN_OR_RETURN(auto chunk,
-                         spiller->restore(state, *executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }

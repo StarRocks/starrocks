@@ -17,7 +17,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
@@ -93,7 +93,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
         TransactionState.LoadJobSourceType loadSource = TransactionState.LoadJobSourceType.MV_REFRESH;
         try {
-            long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
             epoch.setTxnId(txnId);
 
@@ -129,12 +129,12 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     private void commitEpoch(MVEpoch epoch) {
         LOG.info("commitEpoch: {}", epoch);
         long dbId = mvMaintenanceJob.getView().getDbId();
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
         try {
             epoch.onCommitting();
 
-            boolean published = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
+            boolean published = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(database,
                     epoch.getTxnId(), epoch.getCommitInfos(), epoch.getFailedInfos(), TXN_VISIBLE_TIMEOUT_MILLIS);
             Preconditions.checkState(published, "must be published");
 
@@ -146,7 +146,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
 
             epoch.onCommitted(binlogState);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             epoch.onFailed();
             // TODO(murphy) handle error
             LOG.warn("Failed to commit transaction for epoch {}", epoch);
@@ -160,9 +160,10 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         long txnId = epoch.getTxnId();
         String failReason = "";
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason,
+                    epoch.getCommitInfos(), epoch.getFailedInfos(), null);
             epoch.onFailed();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Abort transaction failed: {}", txnId);
         }
     }

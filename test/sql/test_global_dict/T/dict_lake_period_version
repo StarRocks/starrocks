@@ -1,0 +1,44 @@
+-- name: test_dict_lake_period_version
+
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+
+use hive_sql_test_${uuid0}.hive_oss_db;
+drop table if exists dict_version_test_${uuid0} force;
+create table dict_version_test_${uuid0} (
+c1 int,
+c2 string
+);
+
+insert into dict_version_test_${uuid0} values (1, '1');
+insert into dict_version_test_${uuid0} values (2, '2');
+insert into dict_version_test_${uuid0} values (3, '3');
+insert into dict_version_test_${uuid0} values (4, '4');
+insert into dict_version_test_${uuid0} values (5, '5');
+insert into dict_version_test_${uuid0} values (6, '6');
+
+select count(c2) from dict_version_test_${uuid0};
+function: wait_global_dict_ready('c2', 'dict_version_test_${uuid0}')
+select count(c2) from dict_version_test_${uuid0};
+function: wait_global_dict_ready('c2', 'dict_version_test_${uuid0}')
+insert into dict_version_test_${uuid0} values (7, '7');
+select count(c2) from dict_version_test_${uuid0};
+function: wait_global_dict_ready('c2', 'dict_version_test_${uuid0}')
+insert into dict_version_test_${uuid0} values (8, '8');
+select count(c2) from dict_version_test_${uuid0};
+function: wait_global_dict_ready('c2', 'dict_version_test_${uuid0}')
+insert into dict_version_test_${uuid0} values (9, '9');
+select count(c2) from dict_version_test_${uuid0};
+function: wait_global_dict_ready('c2', 'dict_version_test_${uuid0}')
+insert into dict_version_test_${uuid0} values (10, '10');
+select count(c2) from dict_version_test_${uuid0};
+function: wait_global_dict_ready('c2', 'dict_version_test_${uuid0}')
+insert into dict_version_test_${uuid0} values (11, '11');
+select count(c2) from dict_version_test_${uuid0};
+function: try_collect_dict_N_times('c2', 'dict_version_test_${uuid0}', 5)
+function: assert_no_global_dict('c2', 'dict_version_test_${uuid0}')
+
+drop table dict_version_test_${uuid0} force;
+
+drop catalog hive_sql_test_${uuid0};
+
+set catalog default_catalog;

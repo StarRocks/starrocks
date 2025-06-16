@@ -102,6 +102,12 @@ public class SystemId {
 
     public static final long FE_METRICS_ID = 42L;
 
+    public static final long TEMP_TABLES_ID = 43L;
+
+    public static final long KEYWORDS_ID = 44L;
+
+    public static final long APPLICABLE_ROLES_ID = 45L;
+
     public static final long SYS_DB_ID = 100L;
 
     public static final long ROLE_EDGES_ID = 101L;
@@ -109,8 +115,21 @@ public class SystemId {
     public static final long GRANTS_TO_USERS_ID = 103L;
     public static final long OBJECT_DEPENDENCIES = 104L;
     public static final long FE_LOCKS_ID = 105L;
+    public static final long MEMORY_USAGE_ID = 106L;
     public static final long PIPE_FILES_ID = 120L;
     public static final long PIPES_ID = 121L;
+    public static final long WAREHOUSE_METRICS_ID = 122L;
+    public static final long WAREHOUSE_QUERIES_METRICS_ID = 123L;
     public static final long BE_DATACACHE_METRICS = 130L;
     // Remain for other datacache manage table
+
+    public static final long PARTITIONS_META_ID = 140L;
+
+    // ====================  Statistics  =========================== //
+    public static final long COLUMN_STATS_USAGE = 150L;
+    public static final long ANALYZE_STATUS = 151L;
+
+    // ==================  Cluster Snapshot  ======================= //
+    public static final long CLUSTER_SNAPSHOTS_ID = 160L;
+    public static final long CLUSTER_SNAPSHOT_JOBS_ID = 161L;
 }

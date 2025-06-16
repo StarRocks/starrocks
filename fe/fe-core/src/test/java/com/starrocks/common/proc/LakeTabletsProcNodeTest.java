@@ -1,8 +1,7 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// you may not use this file except in compliance with the License. // You may obtain a copy of the License at
 //
 //     https://www.apache.org/licenses/LICENSE-2.0
 //
@@ -15,7 +14,6 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -31,15 +29,17 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -49,25 +49,24 @@ import java.util.List;
 
 public class LakeTabletsProcNodeTest {
 
+    @Mocked
+    private ConnectContext connectContext;
+
+    public LakeTabletsProcNodeTest() {
+        connectContext = new ConnectContext(null);
+        connectContext.setThreadLocalInfo();
+    }
+
     @Test
-    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked StarOSAgent agent) throws UserException {
+    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws
+            StarRocksException {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+        long physicalPartitionId = 6L;
         long tablet1Id = 10L;
         long tablet2Id = 11L;
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentStarOSAgent();
-                result = agent;
-                agent.getBackendIdsByShard(tablet1Id, 0);
-                result = Sets.newHashSet(10000, 10001);
-                agent.getBackendIdsByShard(tablet2Id, 0);
-                result = Sets.newHashSet(10001, 10002);
-            }
-        };
 
         // Schema
         List<Column> columns = Lists.newArrayList();
@@ -80,6 +79,19 @@ public class LakeTabletsProcNodeTest {
         Tablet tablet1 = new LakeTablet(tablet1Id);
         Tablet tablet2 = new LakeTablet(tablet2Id);
 
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = agent;
+
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet1);
+                result = Lists.newArrayList(10000, 10001);
+
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet2);
+                result = Lists.newArrayList(10001, 10002);
+            }
+        };
+
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
@@ -90,7 +102,7 @@ public class LakeTabletsProcNodeTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Lake table
         LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);

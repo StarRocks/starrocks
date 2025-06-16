@@ -17,20 +17,21 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
-import com.starrocks.sql.ast.TableRenameClause;
-import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -41,18 +42,17 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
-public class AlterMaterializedViewTest {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-
+public class AlterMaterializedViewTest extends MVTestBase  {
     private static GlobalStateMgr currentState;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
         starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         currentState = GlobalStateMgr.getCurrentState();
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
@@ -66,19 +66,24 @@ public class AlterMaterializedViewTest {
 
     @Before
     public void before() {
+        super.before();
         connectContext.setThreadLocalInfo();
     }
 
     @Test
     public void testRename() throws Exception {
-        String alterMvSql = "alter materialized view mv1 rename mv2;";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        TableName oldMvName = alterMvStmt.getMvName();
-        String newMvName = ((TableRenameClause) alterMvStmt.getAlterTableClause()).getNewTableName();
-        Assert.assertEquals("test", oldMvName.getDb());
-        Assert.assertEquals("mv1", oldMvName.getTbl());
-        Assert.assertEquals("mv2", newMvName);
+        MaterializedView mv1 = starRocksAssert.getMv("test", "mv1");
+        String taskDefinition = mv1.getTaskDefinition();
+        starRocksAssert.ddl("alter materialized view mv1 rename mv2;");
+        MaterializedView mv2 = starRocksAssert.getMv("test", "mv2");
+        Assert.assertEquals("insert overwrite `mv2` " +
+                "SELECT `test`.`t0`.`v1`, count(`test`.`t0`.`v2`) AS `count_c2`, sum(`test`.`t0`.`v3`) AS `sum_c3`\n" +
+                "FROM `test`.`t0`\n" +
+                "GROUP BY `test`.`t0`.`v1`", mv2.getTaskDefinition());
+
+        starRocksAssert.ddl("alter materialized view mv2 rename mv1;");
+        mv1 = starRocksAssert.getMv("test", "mv1");
+        Assert.assertEquals(taskDefinition, mv1.getTaskDefinition());
     }
 
     @Test(expected = AnalysisException.class)
@@ -111,16 +116,19 @@ public class AlterMaterializedViewTest {
         );
 
         String mvName = "mv1";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        String taskDefinition = mv.getTaskDefinition();
         for (String refresh : refreshSchemes) {
             // alter
             String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
             starRocksAssert.ddl(sql);
 
             // verify
-            MaterializedView mv = starRocksAssert.getMv("test", mvName);
+            mv = starRocksAssert.getMv("test", mvName);
             String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
             Assert.assertTrue(String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt),
                     showCreateStmt.contains(refresh));
+            Assert.assertEquals(taskDefinition, mv.getTaskDefinition());
         }
     }
 
@@ -130,14 +138,24 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.alterMaterializedView(stmt);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+        }
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"session.not_exists\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Exception e = Assert.assertThrows(SemanticException.class,
+                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "Unknown system variable 'not_exists', the most similar variables are " +
+                    "{'init_connect', 'connector_max_split_size', 'tx_isolation'}.", e.getMessage());
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
     }
 
@@ -147,7 +165,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
         AlterMaterializedViewStmt stmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+        Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
     }
 
     @Test
@@ -156,15 +174,119 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.alterMaterializedView(stmt);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
+    }
+
+
+    @Test
+    public void testInactiveMV() throws Exception {
+
+        starRocksAssert
+                .withTable("CREATE TABLE IF NOT EXISTS par_tbl1\n" +
+                        "(\n" +
+                        "    datekey DATETIME,\n" +
+                        "    item_id STRING,\n" +
+                        "    v1      INT\n" +
+                        ")PRIMARY KEY (`datekey`,`item_id`)\n" +
+                        "    PARTITION BY date_trunc('day', `datekey`);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl1 values ('2025-01-01', '1', 1);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl1 values ('2025-01-02', '1', 1);");
+
+        starRocksAssert
+                .withTable("CREATE TABLE IF NOT EXISTS par_tbl2\n" +
+                        "(\n" +
+                        "    datekey DATETIME,\n" +
+                        "    item_id STRING,\n" +
+                        "    v1      INT\n" +
+                        ")PRIMARY KEY (`datekey`,`item_id`)\n" +
+                        "    PARTITION BY date_trunc('day', `datekey`);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl2 values ('2025-01-01', '1', 2);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl2 values ('2025-01-02', '1', 1);");
+
+        starRocksAssert
+                .withTable("CREATE TABLE IF NOT EXISTS dim_data\n" +
+                        "(\n" +
+                        "    item_id STRING,\n" +
+                        "    v1 INT\n" +
+                        ")PRIMARY KEY (`item_id`);");
+        executeInsertSql(connectContext, "INSERT INTO dim_data values ('1', 4);");
+
+        starRocksAssert
+                .withMaterializedView("CREATE\n" +
+                        "MATERIALIZED VIEW mv_dim_data1\n" +
+                        "REFRESH ASYNC EVERY(INTERVAL 60 MINUTE)\n" +
+                        "AS\n" +
+                        "select *\n" +
+                        "from dim_data;");
+
+        starRocksAssert
+                .withMaterializedView("CREATE\n" +
+                        "MATERIALIZED VIEW mv_test1\n" +
+                        "REFRESH ASYNC EVERY(INTERVAL 60 MINUTE)\n" +
+                        "PARTITION BY p_time\n" +
+                        "PROPERTIES (\n" +
+                        "\"excluded_trigger_tables\" = \"mv_dim_data1\",\n" +
+                        "\"excluded_refresh_tables\" = \"mv_dim_data1\",\n" +
+                        "\"partition_refresh_number\" = \"1\"\n" +
+                        ")\n" +
+                        "AS\n" +
+                        "select date_trunc(\"day\", a.datekey) as p_time, sum(a.v1) + sum(b.v1) as v1\n" +
+                        "from par_tbl1 a\n" +
+                        "         left join par_tbl2 b on a.datekey = b.datekey and a.item_id = b.item_id\n" +
+                        "         left join mv_dim_data1 d on a.item_id = d.item_id\n" +
+                        "group by date_trunc(\"day\", a.datekey), a.item_id;");
+
+        starRocksAssert.refreshMV("refresh materialized view mv_test1");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_test1");
+        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+
+        String alterMvSql = "alter materialized view mv_test1 INACTIVE";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertFalse(mv.isActive());
+
+        alterMvSql = "alter materialized view mv_test1 ACTIVE";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+        Assert.assertTrue(mv.isActive());
+        baseTableVisibleVersionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+
+        alterMvSql = "alter materialized view mv_test1 INACTIVE";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertFalse(mv.isActive());
+
+        alterMvSql = "alter materialized view mv_test1 ACTIVE";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+        Assert.assertTrue(mv.isActive());
+        // Don't refresh base table version map
+        baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+
+        // inactive mv when base table's schema changed
+        Database db = starRocksAssert.getDb(connectContext.getDatabase());
+        Table parTbl1 = starRocksAssert.getTable(connectContext.getDatabase(), "par_tbl1");
+        AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) parTbl1, Set.of("item_id"));
+        baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(baseTableVisibleVersionMap.isEmpty());
     }
 
     @Test
@@ -185,15 +307,13 @@ public class AlterMaterializedViewTest {
         // alter the view to a different type, cause MV inactive
         connectContext.executeSql("alter view view1 as select v1, avg(v2) as k2 from t0 group by v1");
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("base view view1 changed", mv.getInactiveReason());
+        Assert.assertEquals("base-view changed: view1", mv.getInactiveReason());
 
         // try to active the mv
         connectContext.executeSql(String.format("alter materialized view %s active", mvName));
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("mv schema changed: " +
-                "[[`k2` bigint(20) NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]] " +
-                "does not match " +
-                "[[`k2` double NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]]", mv.getInactiveReason());
+        Assert.assertEquals("column schema not compatible: (`k2` bigint(20) NULL COMMENT \"\") " +
+                "and (`k2` double NULL COMMENT \"\")", mv.getInactiveReason());
 
         // use a illegal view schema, should active the mv correctly
         connectContext.executeSql("alter view view1 as select v1, max(v2) as k2 from t0 group by v1");
@@ -207,7 +327,6 @@ public class AlterMaterializedViewTest {
      */
     @Test
     public void testMVOnMVReload() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -239,6 +358,8 @@ public class AlterMaterializedViewTest {
         // create the table and refresh
         starRocksAssert.dropTable("treload_1");
         starRocksAssert.withTable(createBaseTable);
+        checker.runForTest(true);
+        checker.runForTest(true);
         starRocksAssert.refreshMV("refresh materialized view mvreload_1");
         starRocksAssert.refreshMV("refresh materialized view mvreload_2");
         starRocksAssert.refreshMV("refresh materialized view mvreload_3");
@@ -282,7 +403,7 @@ public class AlterMaterializedViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ")");
@@ -316,7 +437,6 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveChecker() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -369,7 +489,6 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveGracePeriod() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -402,7 +521,7 @@ public class AlterMaterializedViewTest {
         }
 
         // foreground active
-        starRocksAssert.refreshMV("refresh materialized view " + mvName);
+        starRocksAssert.refreshMV("refresh materialized view " + mvName + " with sync mode");
         Assert.assertTrue(mv.isActive());
 
         // clear the grace period and active it again
@@ -427,5 +546,82 @@ public class AlterMaterializedViewTest {
         Assert.assertTrue(activeInfo.isInGracePeriod());
         Duration d = Duration.between(start, activeInfo.getNextActive());
         Assert.assertEquals(d.toMinutes(), MVActiveChecker.MvActiveInfo.MAX_BACKOFF_MINUTES);
+    }
+
+    @Test
+    public void testAlterBaseTableWithOptimizePartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY date_trunc(\"day\", k2);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " partition by (date_trunc(\"day\", k2))\n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t1 group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertTrue(mv.isActive());
+        String sql = "alter table base_t1 partition by date_trunc(\"month\", k2);";
+        starRocksAssert.ddl(sql);
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertFalse(mv.isActive());
+        Assert.assertTrue(mv.getInactiveReason().contains("base-table optimized:"));
+    }
+
+    @Test
+    public void testMaterializedViewRename() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY date_trunc(\"day\", k2);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " partition by (date_trunc(\"day\", k2))\n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t1 group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertTrue(mv.isActive());
+        executeInsertSql(connectContext, "INSERT INTO base_t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2," +
+                "'2020-07-02','SH');");
+        String sql = "ALTER MATERIALIZED VIEW test_mv1 rename test_mv2;";
+        starRocksAssert.ddl(sql);
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv2");
+        Assert.assertTrue(mv.isActive());
+        starRocksAssert.query("select * from test_mv2");
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW test_mv2 with sync mode;");
+    }
+
+    @Test
+    public void testMultiPartitionColumnsMaterializedVieSwap() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "                    k1 int,\n" +
+                "                    k2 date,\n" +
+                "                    k3 string\n" +
+                "                )\n" +
+                "                DUPLICATE KEY(k1)\n" +
+                "                PARTITION BY date_trunc(\"day\", k2), k3;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "                partition by (date_trunc(\"day\", k2), k3)\n" +
+                "                REFRESH MANUAL\n" +
+                "                AS select sum(k1), k2, k3 from base_t1 group by k2, k3;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "                partition by (date_trunc(\"day\", k2), k3)\n" +
+                "                REFRESH MANUAL\n" +
+                "                AS select avg(k1), k2, k3 from base_t1 group by k2, k3;");
+        executeInsertSql(connectContext, "INSERT INTO base_t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2," +
+                "'2020-07-02','SH');");
+        String sql = "ALTER MATERIALIZED VIEW test_mv1 SWAP WITH test_mv2;";
+        starRocksAssert.ddl(sql);
+        MaterializedView mv1 = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertTrue(mv1.isActive());
+
+        MaterializedView mv2 = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv2");
+        Assert.assertTrue(mv2.isActive());
+        starRocksAssert.query("select * from test_mv2");
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW test_mv2 with sync mode;");
     }
 }

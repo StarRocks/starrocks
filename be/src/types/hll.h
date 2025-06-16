@@ -141,6 +141,8 @@ public:
 
     uint64_t serialize_size() const { return max_serialized_size(); }
 
+    int64_t mem_usage() const { return max_serialized_size(); }
+
     // common interface
     void clear();
 
@@ -160,9 +162,6 @@ private:
 
 private:
     void _convert_explicit_to_register();
-
-    // absorb other registers into this registers
-    void _merge_registers(uint8_t* other_registers);
 
     // update one hash value into this registers
     void _update_registers(uint64_t hash_value) {

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <future>
 #include <iterator>
 #include <memory>
 #include <thread>
@@ -52,6 +53,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "storage/olap_define.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -133,10 +135,10 @@ public:
         ChunkPtr chunk = std::make_shared<Chunk>();
         for (size_t i = 0; i < ctxs.size(); ++i) {
             auto ctx = ctxs[i];
-            DCHECK(ctx->root()->is_slotref());
+            CHECK(ctx->root()->is_slotref());
             auto ref = ctx->root()->get_column_ref();
             auto col = ColumnHelper::create_column(ctx->root()->type(), nullable[i]);
-            DCHECK(col->accept_mutable(&filler).ok());
+            CHECK(col->accept_mutable(&filler).ok());
             chunk->append_column(std::move(col), ref->slot_id());
         }
         return chunk;
@@ -144,34 +146,50 @@ public:
 };
 
 struct SyncExecutor {
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        workgroup::YieldContext yield_ctx;
+    static Status submit(workgroup::ScanTask task) {
         do {
-            std::forward<Runnable>(runnable)(yield_ctx);
-        } while (!yield_ctx.is_finished());
+            task.run();
+        } while (!task.is_finished());
         return Status::OK();
     }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
 };
 
 struct ASyncExecutor {
     using ExecFunction = std::function<void(workgroup::YieldContext&)>;
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        ExecFunction func = std::forward<Runnable>(runnable);
-        _ctxs.emplace_back(std::make_unique<workgroup::YieldContext>());
-        _threads.emplace_back(func, std::ref(*_ctxs.back()));
+
+    static std::vector<std::future<void>> _futures;
+    static Status submit(workgroup::ScanTask task) {
+        _futures.emplace_back(std::async([task = std::move(task)]() mutable {
+            do {
+                task.run();
+            } while (!task.is_finished());
+        }));
         return Status::OK();
     }
-    ~ASyncExecutor() {
-        for (auto& thread : _threads) {
-            thread.join();
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+
+    static void join() {
+        for (auto& future : _futures) {
+            future.get();
         }
     }
+};
+std::vector<std::future<void>> ASyncExecutor::_futures;
+
+class BlockHoleOutputStream final : public spill::SpillOutputDataStream {
+public:
+    Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
+                  size_t write_num_rows) override {
+        _write_total_size += total_write_size;
+        return Status::OK();
+    }
+    Status flush() override { return Status::OK(); }
+    bool is_remote() const override { return false; }
+    const size_t total_size() const { return _write_total_size; }
 
 private:
-    std::vector<std::unique_ptr<workgroup::YieldContext>> _ctxs;
-    std::vector<std::thread> _threads;
+    size_t _write_total_size{};
 };
 
 using SpillProcessMetrics = spill::SpillProcessMetrics;
@@ -189,8 +207,7 @@ public:
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
         ASSERT_OK(dummy_dir_mgr->init(path));
 
-        dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
-        dummy_block_mgr->set_dir_manager(dummy_dir_mgr.get());
+        dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, dummy_dir_mgr.get());
 
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
 
@@ -244,55 +261,38 @@ struct SpillerCaller {
     SpillerCaller(spill::Spiller* spiller) : _spiller(spiller) {}
 
     template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
         if (_spiller->_chunk_builder.chunk_schema()->empty()) {
             _spiller->_chunk_builder.chunk_schema()->set_schema(chunk);
+            RETURN_IF_ERROR(_spiller->_serde->prepare());
         }
-        return _spiller->_writer->as<Writer>()->spill(state, chunk, std::forward<TaskExecutor>(executor),
-                                                      std::forward<MemGuard>(guard));
+        auto writer = _spiller->_writer->as<Writer>();
+        return writer->template spill<TaskExecutor>(state, chunk, std::forward<MemGuard>(guard));
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-        return _spiller->_writer->as<Writer>()->flush(state, std::forward<TaskExecutor>(executor),
-                                                      std::forward<MemGuard>(guard));
+    Status flush(RuntimeState* state, MemGuard&& guard) {
+        auto writer = _spiller->_writer->as<Writer>();
+        return writer->template flush<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
     template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-        return _spiller->_reader->restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard));
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard) {
+        return _spiller->_reader->restore<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard) {
         if (!acquire_once) {
             acquire_once = true;
             RETURN_IF_ERROR(_spiller->_acquire_input_stream(state));
         }
-        return _spiller->_reader->trigger_restore(state, std::forward<TaskExecutor>(executor),
-                                                  std::forward<MemGuard>(guard));
+        return _spiller->_reader->trigger_restore<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
     bool acquire_once = false;
     spill::Spiller* _spiller;
 };
-
-bool chunk_equals(const ChunkPtr& l, const ChunkPtr& r) {
-    if (l->columns() != r->columns() || l->num_columns() != r->num_columns() ||
-        l->get_slot_id_to_index_map() != r->get_slot_id_to_index_map()) {
-        return false;
-    }
-    size_t num_rows = l->num_rows();
-    auto& lcolumns = l->columns();
-    auto& rcolumns = r->columns();
-    for (size_t i = 0; i < lcolumns.size(); ++i) {
-        if (!lcolumns[i]->equals(num_rows, *rcolumns[i], num_rows)) {
-            return false;
-        }
-    }
-
-    return true;
-}
 
 TEST_F(SpillTest, unsorted_process) {
     ObjectPool pool;
@@ -343,11 +343,11 @@ TEST_F(SpillTest, unsorted_process) {
     {
         for (size_t i = 0; i < test_loop; ++i) {
             auto chunk = chunk_builder.gen(tuple, nullables);
-            ASSERT_OK(caller.spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-        ASSERT_OK(caller.flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
     }
     size_t input_rows = 0;
     for (const auto& chunk : holder) {
@@ -357,9 +357,9 @@ TEST_F(SpillTest, unsorted_process) {
     // test restore
     {
         std::vector<ChunkPtr> restored;
-        ASSERT_OK(caller.trigger_restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
         for (size_t i = 0; i < test_loop; ++i) {
-            auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+            auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
             ASSERT_OK(chunk_st.status());
             ASSERT_OK(spiller->_spilled_task_status);
             if (chunk_st.value() != nullptr) {
@@ -367,7 +367,7 @@ TEST_F(SpillTest, unsorted_process) {
             }
         }
 
-        auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+        auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
         ASSERT_TRUE(chunk_st.status().is_end_of_file());
 
         size_t output_rows = 0;
@@ -379,14 +379,14 @@ TEST_F(SpillTest, unsorted_process) {
 
     // test 2
     {
-        ASyncExecutor executor;
         for (size_t i = 0; i < test_loop; ++i) {
             if (!spiller->is_full()) {
                 auto chunk = chunk_builder.gen(tuple, nullables);
-                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, executor, EmptyMemGuard{}));
+                ASSERT_OK(caller.spill<ASyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
                 ASSERT_OK(spiller->_spilled_task_status);
             }
         }
+        ASyncExecutor::join();
     }
 
     {
@@ -401,15 +401,77 @@ TEST_F(SpillTest, unsorted_process) {
             input.emplace_back(chunk->clone_unique());
             ASSERT_OK(mem_table->append(std::move(chunk)));
         }
+        ASSERT_OK(mem_table->done());
         //
-        size_t next_index = 0;
-        while (next_index < 500) {
-            auto st = mem_table->flush([&](const auto& chunk) {
-                chunk_equals(input[next_index++], chunk);
-                return Status::Yield();
-            });
-            ASSERT_TRUE(st.is_yield() || st.ok());
+        auto output = std::make_shared<BlockHoleOutputStream>();
+        workgroup::YieldContext yield_ctx;
+        yield_ctx.task_context_data = std::make_shared<spill::SpillIOTaskContext>();
+        do {
+            yield_ctx.time_spent_ns = 0;
+            yield_ctx.need_yield = false;
+            ASSERT_OK(mem_table->finalize(yield_ctx, output));
+        } while (yield_ctx.need_yield);
+    }
+}
+
+struct FailedGuard {
+    bool scoped_begin() const { return false; }
+    void scoped_end() const {}
+};
+
+TEST_F(SpillTest, yield_with_failed_guard) {
+    ObjectPool pool;
+    // order by id_int
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options;
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 4;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
         }
+        ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, FailedGuard{}));
     }
 }
 
@@ -445,6 +507,8 @@ TEST_F(SpillTest, order_by_process) {
     spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    // enable compaction for spill
+    spill_options.enable_block_compaction = true;
 
     spill_options.block_manager = dummy_block_mgr.get();
 
@@ -463,21 +527,21 @@ TEST_F(SpillTest, order_by_process) {
         {
             for (size_t i = 0; i < test_loop; ++i) {
                 auto chunk = chunk_builder.gen(tuple, nullables);
-                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+                ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
                 ASSERT_OK(spiller->_spilled_task_status);
                 holder.push_back(chunk);
                 contain_rows += chunk->num_rows();
             }
-            ASSERT_OK(caller.flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
         }
 
         std::vector<ChunkPtr> restored;
         size_t restored_rows = 0;
         {
-            ASSERT_OK(caller.trigger_restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
             ASSERT_TRUE(caller._spiller->has_output_data());
             for (size_t i = 0; i < test_loop; ++i) {
-                auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+                auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
                 ASSERT_OK(chunk_st.status());
                 ASSERT_OK(spiller->_spilled_task_status);
                 if (chunk_st.value() != nullptr) {
@@ -487,10 +551,11 @@ TEST_F(SpillTest, order_by_process) {
                 }
             }
 
-            auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+            auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
             ASSERT_TRUE(chunk_st.status().is_end_of_file());
         }
         ASSERT_EQ(contain_rows, restored_rows);
+        ASSERT_GT(metrics.compact_count->value(), 0);
     }
 }
 
@@ -544,11 +609,96 @@ TEST_F(SpillTest, partition_process) {
             auto chunk = chunk_builder.gen(tuple, nullables);
             auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
             chunk->append_column(std::move(hash_column), -1);
-            ASSERT_OK(spiller->spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-        ASSERT_OK(spiller->flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    }
+
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, FailedGuard{}));
+    }
+}
+
+struct PredoSyncExecutor {
+    static std::function<void()> predo;
+    static Status submit(workgroup::ScanTask task) {
+        do {
+            predo();
+            task.run();
+        } while (!task.is_finished());
+        return Status::OK();
+    }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+std::function<void()> PredoSyncExecutor::predo;
+
+TEST_F(SpillTest, partition_yield_with_failed) {
+    ObjectPool pool;
+
+    // order by id_int
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    (void)ctx;
+
+    std::vector<ExprContext*> tuple;
+    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options(4);
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 1;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::PartitionedSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+
+        PredoSyncExecutor::predo = [&]() { spiller.reset(); };
+        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
     }
 }
 

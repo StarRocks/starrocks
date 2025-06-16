@@ -34,16 +34,9 @@
 
 package com.starrocks.common.io;
 
-import com.starrocks.common.FeConstants;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.lang.reflect.Method;
 
 /*
  * This class is for deep copying a writable instance.
@@ -51,63 +44,13 @@ import java.lang.reflect.Method;
 public class DeepCopy {
     private static final Logger LOG = LogManager.getLogger(DeepCopy.class);
 
-    public static final String READ_METHOD_NAME = "readFields";
-
-    // deep copy orig to dest.
-    // the param "c" is the implementation class of "dest".
-    // And the "dest" class must has method "readFields(DataInput)"
-    public static boolean copy(Writable orig, Writable dest, Class c) {
-        // Backup the current MetaContext before assigning a new one.
-        MetaContext oldContext = MetaContext.get();
-        MetaContext metaContext = new MetaContext();
-        metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
-        metaContext.setThreadLocalInfo();
-
-        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
-        try {
-            orig.write(out);
-            out.flush();
-            out.close();
-
-            DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream());
-
-            Method readMethod = c.getDeclaredMethod(READ_METHOD_NAME, DataInput.class);
-            readMethod.invoke(dest, in);
-            in.close();
-        } catch (Exception e) {
-            LOG.warn("failed to copy object.", e);
-            return false;
-        } finally {
-            // Restore the old MetaContext.
-            if (oldContext != null) {
-                oldContext.setThreadLocalInfo();
-            } else {
-                MetaContext.remove();
-            }
-        }
-        return true;
-    }
-
     public static <T> T copyWithGson(Object orig, Class<T> c) {
-        // Backup the current MetaContext before assigning a new one.
-        MetaContext oldContext = MetaContext.get();
-        MetaContext metaContext = new MetaContext();
-        metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
-        metaContext.setThreadLocalInfo();
         try {
             String origJsonStr = GsonUtils.GSON.toJson(orig);
             return GsonUtils.GSON.fromJson(origJsonStr, c);
         } catch (Exception e) {
             LOG.warn("failed to copy object.", e);
             return null;
-        } finally {
-            // Restore the old MetaContext.
-            if (oldContext != null) {
-                oldContext.setThreadLocalInfo();
-            } else {
-                MetaContext.remove();
-            }
         }
     }
 }

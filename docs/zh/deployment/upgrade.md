@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+keywords: ['shengji']
 ---
 
 # 升级 StarRocks
@@ -13,6 +14,10 @@ displayed_sidebar: "Chinese"
 ### StarRocks 版本
 
 StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，例如 `2.5.4`。第一个数字代表 StarRocks 的重大版本，第二个数字代表大版本，第三个数字代表小版本。
+
+> **注意**
+>
+> 请注意，已有存算一体集群无法直接升级为存算分离集群，反之亦然。您需要重新部署一套存算分离集群。
 
 ### 升级路径
 
@@ -33,7 +38,7 @@ StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，
 >
 > 如果您需要进行连续的大版本升级，比如从 2.4->2.5->3.0->3.1->3.2，或者在升级之后进行了降级，之后再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免部分 FE 节点元数据升级失败，需要在相邻的两次升级之间或降级后升级前执行如下操作：
 >
-> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 创建新的元数据快照文件。
 > 2. 等待元数据快照文件同步至其他 FE 节点。
 >
 > 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes"。
@@ -52,7 +57,7 @@ StarRocks 支持**滚动升级**，允许您在不停止服务的情况下升级
 
 - **通用兼容性配置**
 
-升级前，请关闭 Tablet Clone。
+升级前，请关闭 Tablet Clone。如果您已经关闭 Balancer，可以跳过该步骤。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");

@@ -17,6 +17,8 @@
 #include <ctime>
 #include <utility>
 
+#include "exec/pipeline/adaptive/adaptive_fwd.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
@@ -31,14 +33,9 @@ namespace pipeline {
 class Pipeline {
 public:
     Pipeline() = delete;
-    Pipeline(uint32_t id, OpFactories op_factories) : _id(id), _op_factories(std::move(op_factories)) {
-        _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
-    }
+    Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group);
 
     uint32_t get_id() const { return _id; }
-
-    OpFactories& get_op_factories() { return _op_factories; }
-    void add_op_factory(const OpFactoryPtr& op) { _op_factories.emplace_back(op); }
 
     Operators create_operators(int32_t degree_of_parallelism, int32_t i) {
         Operators operators;
@@ -83,6 +80,12 @@ public:
         }
     }
 
+    void acquire_runtime_filter(RuntimeState* state) {
+        for (auto& op : _op_factories) {
+            op->acquire_runtime_filter(state);
+        }
+    }
+
     std::string to_readable_string() const {
         std::stringstream ss;
         ss << "operator-chain: [";
@@ -102,6 +105,7 @@ public:
     void count_down_epoch_finished_driver(RuntimeState* state);
 
     size_t output_amplification_factor() const;
+    Event* pipeline_event() const { return _pipeline_event.get(); }
 
 private:
     uint32_t _id = 0;
@@ -110,6 +114,8 @@ private:
     Drivers _drivers;
     std::atomic<size_t> _num_finished_drivers = 0;
 
+    EventPtr _pipeline_event;
+    ExecutionGroupRawPtr _execution_group = nullptr;
     // STREAM MV
     std::atomic<size_t> _num_epoch_finished_drivers = 0;
 };

@@ -16,9 +16,9 @@ package com.starrocks.load.streamload;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.FunctionalExprProvider;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
@@ -181,7 +181,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
         // validate table privilege at the end of a predicateChain in the `stream().filter()`
         try {
             Authorizer.checkTableAction(
-                    cxt.getCurrentUserIdentity(), cxt.getCurrentRoleIds(),
+                    cxt,
                     task.getDBName(),
                     task.getTableName(),
                     PrivilegeType.INSERT);

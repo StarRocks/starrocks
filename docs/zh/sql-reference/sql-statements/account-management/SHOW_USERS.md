@@ -1,8 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # SHOW USERS
+
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
 ## 功能
 
@@ -10,7 +12,7 @@ displayed_sidebar: "Chinese"
 
 您可以通过 `SHOW GRANTS FOR <user_identity>;` 来查看某个用户的权限，参见 [SHOW GRANTS](SHOW_GRANTS.md)。
 
-> 说明：只有 `user_admin` 角色有权限执行该语句。
+<UserManagementPriv />
 
 ## 语法
 

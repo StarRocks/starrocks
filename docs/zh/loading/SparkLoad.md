@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Spark Load 批量导入数据
@@ -11,7 +11,7 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 > **注意**
 >
 > * Spark Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
-> * Spark Load 不支持导入至主键模型表。
+> * Spark Load 不支持导入至主键表。
 
 ## 背景信息
 
@@ -20,11 +20,6 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 > **说明**
 >
 > 使用无 Broker 进程的方式导入在某些场景下会受限。如果您配置了多 HDFS 集群或多 Kerberos 用户时，暂时还不支持使用无 Broker 进程的方式导入。这种情况下，您必须继续通过 Broker 进程执行导入。
-
-## 使用说明
-
-如果您继续通过 Broker 进程执行导入，则必须确保您的 StarRocks 集群中已部署 Broker。
-您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据格式
 
@@ -50,7 +45,7 @@ Spark Load 任务的执行主要分为以下几个阶段：
 
 下图展示了 Spark Load 的主要流程：
 
-![spark load](../assets/4.3.2-1.png)
+![spark load](../_assets/4.3.2-1.png)
 
 ---
 
@@ -130,7 +125,7 @@ PROPERTIES
 `spark0`、`spark1` 和 `spark2` 为 StarRocks 中配置的 Spark 资源的名字。
 
 PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
-> Spark 资源的全部参数和说明，请参见 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE_RESOURCE.md#spark-资源)。
+> Spark 资源的全部参数和说明，请参见 [CREATE RESOURCE](../sql-reference/sql-statements/Resource/CREATE_RESOURCE.md#spark-资源)。
 
 * Spark 集群相关参数
   * `type`：必填，资源类型，取值为 `spark`。
@@ -146,7 +141,7 @@ PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
       * `spark.hadoop.yarn.resourcemanager.address.rm-id`: 对于每个 rm-id，指定 `host:port` 以供客户端提交作业。
 * Broker 相关参数
   * `broker`: Broker 组的名称。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
-  * `broker.property_key`: Broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+  * `broker.property_key`: Broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 * 其他参数
   * `working_dir`: 必填，一个 HDFS 文件路径，用于存放 ETL 作业生成的文件。例如`hdfs://host: port/tmp/starrocks`。
 
@@ -155,7 +150,7 @@ PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
 以上为通过 Broker 进程执行导入时的参数说明，如果使用无 Broker 进程的方式导入，则需要注意如下事项：
 
 * 无需传入 `broker`。
-* 如果您需要配置用户身份认证、NameNode 节点的 HA，则需要在 HDFS 集群中的 **hdfs-site.xml** 文件中配置参数，具体参数和说明，请参见 [broker_properties](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs)。并且将 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
+* 如果您需要配置用户身份认证、NameNode 节点的 HA，则需要在 HDFS 集群中的 **hdfs-site.xml** 文件中配置参数，具体参数和说明，请参见 [broker_properties](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs)。并且将 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
 
     > **说明**
     >
@@ -324,7 +319,7 @@ PROPERTIES
     );
     ~~~
 
-创建导入的详细语法请参考 [SPARK LOAD](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)。这里主要介绍 Spark load 的创建导入语法中参数意义和注意事项。
+创建导入的详细语法请参考 [SPARK LOAD](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)。这里主要介绍 Spark load 的创建导入语法中参数意义和注意事项。
 
 * **Label**
   
@@ -361,7 +356,7 @@ WITH RESOURCE 'spark0'
 
 ### 查看导入任务
 
-Spark Load 导入方式同 Broker Load 一样都是异步的，用户必须将创建导入的 Label 记录下来，并且在 `SHOW LOAD` 命令中使用 Label 来查看导入结果。查看导入的命令在所有导入方式中是通用的，具体语法可参考 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。示例如下：
+Spark Load 导入方式同 Broker Load 一样都是异步的，用户必须将创建导入的 Label 记录下来，并且在 `SHOW LOAD` 命令中使用 Label 来查看导入结果。查看导入的命令在所有导入方式中是通用的，具体语法可参考 [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md)。示例如下：
 
 ~~~sql
 mysql > show load where label="label1"\G
@@ -383,11 +378,11 @@ LoadFinishTime: 2019-07-27 11:50:16
     JobDetails: {"ScannedRows":28133395, "TaskNumber":1, "FileNumber":1,"FileSize":200000}
 ~~~
 
-返回结果集中参数的意义可参考 [查看导入状态](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md#返回结果说明)。
+返回结果集中参数的意义可参考 [查看导入状态](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md#返回结果说明)。
 
 ### 取消导入
 
-当 Spark load 作业状态不为 CANCELLED 或 FINISHED 时，可以被用户手动取消。取消时需要指定待取消导入任务的 Label 。取消导入命令语法可参考 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 。示例如下：
+当 Spark load 作业状态不为 CANCELLED 或 FINISHED 时，可以被用户手动取消。取消时需要指定待取消导入任务的 Label 。取消导入命令语法可参考 [CANCEL LOAD](../sql-reference/sql-statements/loading_unloading/CANCEL_LOAD.md) 。示例如下：
 
 ~~~sql
 CANCEL LOAD FROM db1 WHERE LABEL = "label1";

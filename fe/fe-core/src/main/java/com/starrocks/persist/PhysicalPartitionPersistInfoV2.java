@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class PhysicalPartitionPersistInfoV2 implements Writable {
@@ -35,20 +32,16 @@ public class PhysicalPartitionPersistInfoV2 implements Writable {
     @SerializedName("partitionId")
     private Long partitionId;
     @SerializedName("physicalPartition")
-    private PhysicalPartitionImpl partition;
+    private PhysicalPartition partition;
 
-    public PhysicalPartitionPersistInfoV2(Long dbId, Long tableId, Long partitionId, PhysicalPartitionImpl partition) {
+    public PhysicalPartitionPersistInfoV2(Long dbId, Long tableId, Long partitionId, PhysicalPartition partition) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;
         this.partition = partition;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static PhysicalPartitionPersistInfoV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);

@@ -22,7 +22,6 @@ import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
@@ -42,13 +41,19 @@ public class InsertOverwriteStateChangeInfo implements Writable {
     @SerializedName(value = "tmpPartitionIds")
     private List<Long> tmpPartitionIds;
 
+    @SerializedName(value = "sourcePartitionNames")
+    private List<String> sourcePartitionNames = null;
+
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
                                           InsertOverwriteJobState toState,
-                                          List<Long> sourcePartitionIds, List<Long> tmpPartitionIds) {
+                                          List<Long> sourcePartitionIds, 
+                                          List<String> sourcePartitionNames,
+                                          List<Long> tmpPartitionIds) {
         this.jobId = jobId;
         this.fromState = fromState;
         this.toState = toState;
         this.sourcePartitionIds = sourcePartitionIds;
+        this.sourcePartitionNames = sourcePartitionNames;
         this.tmpPartitionIds = tmpPartitionIds;
     }
 
@@ -72,6 +77,10 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         return tmpPartitionIds;
     }
 
+    public List<String> getSourcePartitionNames() {
+        return sourcePartitionNames;
+    }
+
     @Override
     public String toString() {
         return "InsertOverwriteStateChangeInfo{" +
@@ -83,10 +92,7 @@ public class InsertOverwriteStateChangeInfo implements Writable {
                 '}';
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static InsertOverwriteStateChangeInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);

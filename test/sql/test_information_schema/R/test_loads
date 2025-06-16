@@ -11,7 +11,7 @@ CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION B
 insert into ss values('2020-01-14', 2);
 -- result:
 -- !result
-select state,type,TRACKING_SQL from information_schema.loads where database_name='db_${uuid0}';
+select state,type,TRACKING_SQL from information_schema.loads where db_name='db_${uuid0}';
 -- result:
 FINISHED	INSERT	None
 -- !result
@@ -26,17 +26,17 @@ CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION B
 -- !result
 insert into ss values('2022-01-14', 2);
 -- result:
-[REGEX].*Insert has filtered data in strict mode.*
+[REGEX].*Insert has filtered data.*
 -- !result
-select state,type from information_schema.loads where database_name='db_${uuid1}';
+select state,type from information_schema.loads where db_name='db_${uuid1}';
 -- result:
 CANCELLED	INSERT
 -- !result
-select TRACKING_SQL from information_schema.loads where database_name='db_${uuid1}';
+select TRACKING_SQL from information_schema.loads where db_name='db_${uuid1}';
 -- result:
 [REGEX]select tracking_log from information_schema.load_tracking_logs where job_id=.*
 -- !result
-[UC]id=select job_id from information_schema.loads where database_name='db_${uuid1}';
+[UC]id=select id from information_schema.loads where db_name='db_${uuid1}';
 -- result:
 65080
 -- !result
@@ -45,7 +45,12 @@ select tracking_log from information_schema.load_tracking_logs where job_id=${id
 Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
 
 -- !result
-[UC]label=select label from information_schema.loads where database_name='db_${uuid1}';
+select /*+ SET_VAR(cbo_eq_base_type = "varchar") */ tracking_log from information_schema.load_tracking_logs where job_id='${id}';
+-- result:
+Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
+
+-- !result
+[UC]label=select label from information_schema.loads where db_name='db_${uuid1}';
 -- result:
 insert_1dd7d7e1-c702-11ed-a15b-00163e0dcbfc
 -- !result
@@ -54,7 +59,7 @@ select tracking_log from information_schema.load_tracking_logs where label='${la
 Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
 
 -- !result
-select * from information_schema.loads where database_name='db_${uuid1}';
+select * from information_schema.loads where db_name='db_${uuid1}';
 -- result:
 [REGEX].*Cancelled.*
 -- !result
@@ -67,4 +72,27 @@ select * from information_schema.load_tracking_logs where job_id=0;
 -- !result
 select * from information_schema.load_tracking_logs where label="not exist";
 -- result:
+-- !result
+
+create database db_${uuid2};
+-- result:
+-- !result
+use db_${uuid2};
+-- result:
+-- !result
+CREATE TABLE ss (k1 bigint NOT NULL, k2 bigint NOT NULL, k3 bigint NOT NULL) duplicate key (k1) distributed by hash(k2) buckets 1 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values(null, null, null);
+-- result:
+[REGEX].*Insert has filtered data.*
+-- !result
+[UC]id2=select id from information_schema.loads where db_name='db_${uuid2}';
+-- result:
+65080
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id2};
+-- result:
+Error: NULL value in non-nullable column 'k1'. Row: [NULL, NULL, NULL]
+
 -- !result

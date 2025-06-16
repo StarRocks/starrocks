@@ -25,8 +25,10 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedViewStatus;
 
 import java.util.ArrayList;
@@ -55,6 +57,7 @@ public class ShowMaterializedViewStatus {
     private String partitionType;
     private long lastCheckTime;
     private String inactiveReason;
+    private String queryRewriteStatus;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -63,6 +66,7 @@ public class ShowMaterializedViewStatus {
     public class RefreshJobStatus {
         private long taskId;
         private String taskName;
+        private String taskOwner;
         private Constants.TaskRunState refreshState;
         private long mvRefreshStartTime;
         private long mvRefreshEndTime;
@@ -199,6 +203,36 @@ public class ShowMaterializedViewStatus {
         public void setExtraMessage(ExtraMessage extraMessage) {
             this.extraMessage = extraMessage;
         }
+
+        public String getTaskOwner() {
+            return taskOwner;
+        }
+
+        public void setTaskOwner(String taskOwner) {
+            this.taskOwner = taskOwner;
+        }
+
+        @Override
+        public String toString() {
+            return "RefreshJobStatus{" +
+                    "taskId=" + taskId +
+                    ", taskName='" + taskName + '\'' +
+                    ", taskOwner='" + taskOwner + '\'' +
+                    ", refreshState=" + refreshState +
+                    ", mvRefreshStartTime=" + mvRefreshStartTime +
+                    ", mvRefreshEndTime=" + mvRefreshEndTime +
+                    ", totalProcessDuration=" + totalProcessDuration +
+                    ", isForce=" + isForce +
+                    ", refreshedPartitionStarts=" + refreshedPartitionStarts +
+                    ", refreshedPartitionEnds=" + refreshedPartitionEnds +
+                    ", refreshedBasePartitionsToRefreshMaps=" + refreshedBasePartitionsToRefreshMaps +
+                    ", refreshedMvPartitionsToRefreshs=" + refreshedMvPartitionsToRefreshs +
+                    ", errorCode='" + errorCode + '\'' +
+                    ", errorMsg='" + errorMsg + '\'' +
+                    ", isRefreshFinished=" + isRefreshFinished +
+                    ", extraMessage=" + extraMessage +
+                    '}';
+        }
     }
 
     /**
@@ -215,6 +249,8 @@ public class ShowMaterializedViewStatus {
         private boolean isReplay = false;
         @SerializedName("priority")
         private int priority = Constants.TaskRunPriority.LOWEST.value();
+        @SerializedName("lastTaskRunState")
+        private Constants.TaskRunState lastTaskRunState = Constants.TaskRunState.PENDING;
 
         public boolean isManual() {
             return isManual;
@@ -254,6 +290,14 @@ public class ShowMaterializedViewStatus {
 
         public void setQueryIds(List<String> queryIds) {
             this.queryIds = queryIds;
+        }
+
+        public Constants.TaskRunState getLastTaskRunState() {
+            return lastTaskRunState;
+        }
+
+        public void setLastTaskRunState(Constants.TaskRunState lastTaskRunState) {
+            this.lastTaskRunState = lastTaskRunState;
         }
     }
 
@@ -370,11 +414,22 @@ public class ShowMaterializedViewStatus {
         status.setTaskId(firstTaskRunStatus.getTaskId());
         status.setTaskName(firstTaskRunStatus.getTaskName());
 
+        // Task creator
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(firstTaskRunStatus.getTaskName());
+        if (task != null) {
+            if (task.getUserIdentity() != null) {
+                status.setTaskOwner(task.getUserIdentity().toString());
+            } else {
+                status.setTaskOwner(task.getCreateUser());
+            }
+        }
+
         // extra message
         ExtraMessage extraMessage = new ExtraMessage();
         List<String> queryIds = applyTaskRunStatusWith(x -> x.getQueryId());
         // queryIds
         extraMessage.setQueryIds(queryIds);
+        extraMessage.setLastTaskRunState(lastTaskRunStatus.getState());
         MVTaskRunExtraMessage firstTaskRunExtraMessage = firstTaskRunStatus.getMvTaskRunExtraMessage();
         if (firstTaskRunExtraMessage != null && firstTaskRunExtraMessage.getExecuteOption() != null) {
             ExecuteOption executeOption = firstTaskRunExtraMessage.getExecuteOption();
@@ -428,7 +483,7 @@ public class ShowMaterializedViewStatus {
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
             long totalProcessDuration = lastJobTaskRunStatus.stream()
-                    .map(x -> x.calculateRefreshProcessDuration())
+                    .map(TaskRunStatus::calculateRefreshProcessDuration)
                     .collect(Collectors.summingLong(Long::longValue));
             status.setTotalProcessDuration(totalProcessDuration);
             status.setErrorCode(String.valueOf(lastTaskRunStatus.getErrorCode()));
@@ -437,6 +492,13 @@ public class ShowMaterializedViewStatus {
         return status;
     }
 
+    public String getQueryRewriteStatus() {
+        return queryRewriteStatus;
+    }
+
+    public void setQueryRewriteStatus(String queryRewriteStatus) {
+        this.queryRewriteStatus = queryRewriteStatus;
+    }
 
     /**
      * Return the thrift of show materialized views command from be's request.
@@ -487,6 +549,11 @@ public class ShowMaterializedViewStatus {
         // extra message
         status.setExtra_message(refreshJobStatus.getExtraMessage() == null ? "" :
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
+
+        // query_rewrite_status
+        status.setQuery_rewrite_status(queryRewriteStatus);
+        // creator
+        status.setCreator(refreshJobStatus.getTaskOwner());
 
         return status;
     }
@@ -552,6 +619,10 @@ public class ShowMaterializedViewStatus {
         // extra message
         addField(resultRow, refreshJobStatus.getExtraMessage() == null ? "" :
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
+        // query_rewrite_status
+        addField(resultRow, queryRewriteStatus);
+        // owner
+        addField(resultRow, refreshJobStatus.getTaskOwner());
 
         return resultRow;
     }
@@ -570,8 +641,25 @@ public class ShowMaterializedViewStatus {
         resultRow.addAll(Collections.nCopies(count, ""));
     }
 
-
     private String formatDuration(long duration) {
         return DebugUtil.DECIMAL_FORMAT_SCALE_3.format(duration / 1000D);
+    }
+
+    @Override
+    public String toString() {
+        return "ShowMaterializedViewStatus{" +
+                "id=" + id +
+                ", dbName='" + dbName + '\'' +
+                ", name='" + name + '\'' +
+                ", refreshType='" + refreshType + '\'' +
+                ", isActive=" + isActive +
+                ", text='" + text + '\'' +
+                ", rows=" + rows +
+                ", partitionType='" + partitionType + '\'' +
+                ", lastCheckTime=" + lastCheckTime +
+                ", inactiveReason='" + inactiveReason + '\'' +
+                ", queryRewriteStatus='" + queryRewriteStatus + '\'' +
+                ", lastJobTaskRunStatus=" + lastJobTaskRunStatus +
+                '}';
     }
 }

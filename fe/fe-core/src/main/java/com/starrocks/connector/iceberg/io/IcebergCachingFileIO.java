@@ -52,16 +52,18 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
-import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.exceptions.NotFoundException;
+import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
+import org.apache.iceberg.hadoop.SerializableConfiguration;
 import org.apache.iceberg.hadoop.Util;
+import org.apache.iceberg.io.ByteBufferInputStream;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
@@ -70,9 +72,11 @@ import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.io.SeekableInputStream;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -83,11 +87,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 /**
  * Implementation of FileIO that adds metadata content caching features.
  */
-public class IcebergCachingFileIO implements FileIO, Configurable {
+public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
     private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
     private static final long CACHE_MAX_ENTRY_SIZE = Config.iceberg_metadata_cache_max_entry_size;
@@ -100,14 +105,16 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
     public static final long DISK_CACHE_CAPACITY = Config.iceberg_metadata_disk_cache_capacity;
     public static final long DISK_CACHE_EXPIRATION_SECONDS = Config.iceberg_metadata_disk_cache_expiration_seconds;
 
-    private ContentCache fileContentCache;
+    private transient ContentCache fileContentCache;
     private FileIO wrappedIO;
-    private Configuration conf;
+    private SerializableSupplier<Configuration> conf;
+    private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
+            Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
 
     @Override
     public void initialize(Map<String, String> properties) {
         ResolvingFileIO resolvingFileIO = new ResolvingFileIO();
-        resolvingFileIO.setConf(conf);
+        resolvingFileIO.setConf(conf.get());
         wrappedIO = resolvingFileIO;
         wrappedIO.initialize(properties);
 
@@ -119,13 +126,34 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
     }
 
     @Override
+    public void close() {
+        try {
+            if (wrappedIO instanceof Closeable) {
+                ((Closeable) wrappedIO).close();
+            }
+            if (fileContentCache instanceof Closeable) {
+                ((Closeable) fileContentCache).close();
+            }
+        } catch (IOException e) {
+            LOG.error("Error closing resources", e);
+        }
+    }
+
+    @Override
     public Configuration getConf() {
-        return conf;
+        return conf.get();
     }
 
     @Override
     public void setConf(Configuration conf) {
-        this.conf = conf;
+        this.conf = new SerializableConfiguration(conf)::get;
+    }
+
+    @Override
+    public void serializeConfWith(Function<Configuration, SerializableSupplier<Configuration>> confSerializer) {
+        if (wrappedIO instanceof HadoopConfigurable) {
+            ((HadoopConfigurable) wrappedIO).serializeConfWith(confSerializer);
+        }
     }
 
     @Override
@@ -143,6 +171,10 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         wrappedIO.deleteFile(path);
         // remove from cache.
         fileContentCache.invalidate(path);
+    }
+
+    public FileIO getWrappedIO() {
+        return wrappedIO;
     }
 
     @Override
@@ -191,6 +223,7 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         public void pin() {
             useCount += 1;
         }
+
         public void unpin() {
             useCount -= 1;
         }
@@ -284,6 +317,7 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
     private static class MemoryCacheHolder {
         static final ContentCache INSTANCE = new MemoryContentCache();
     }
+
     public static class MemoryContentCache extends ContentCache {
         private final Cache<String, CacheEntry> cache;
 
@@ -330,6 +364,7 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
     private static class TwoLevelCacheHolder {
         static final ContentCache INSTANCE = new TwoLevelContentCache();
     }
+
     public static class TwoLevelContentCache extends ContentCache {
         private final Cache<String, CacheEntry> memCache;
         private final Cache<String, DiskCacheEntry> diskCache;
@@ -387,7 +422,7 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
                     }
                 } catch (Exception e) {
                     // Ignore, exception would not have affection on Diskcache
-                    LOG.warn("Encountered exception when loading disk metadata " + e.getMessage());
+                    LOG.warn("Encountered exception when loading disk metadata ", e);
                 }
             });
             executor.shutdown();
@@ -478,6 +513,7 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
             this.diskCache = diskCache;
             this.key = key;
         }
+
         @Override
         public void close() throws IOException {
             try {
@@ -534,7 +570,11 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         public SeekableInputStream newStream() {
             try {
                 // read-through cache if file length is less than or equal to maximum length allowed to cache.
-                if (getLength() <= contentCache.maxContentLength()) {
+                // do not cache metadata json files because the name could be same, like "v1.metadata.json"
+                // when re-create table with same name.
+                Path path = new Path(wrappedInputFile.location());
+                if (getLength() <= contentCache.maxContentLength() &&
+                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches()) {
                     return cachedStream();
                 }
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # acos
 
-## 功能
+
 
 返回 `x` 的反余弦值（单位为弧度）。`x` 为 DOUBLE 类型的数值。
 

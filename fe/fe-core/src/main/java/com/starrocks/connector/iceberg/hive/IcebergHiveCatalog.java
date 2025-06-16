@@ -17,17 +17,19 @@ package com.starrocks.connector.iceberg.hive;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -41,6 +43,8 @@ import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveCatalog;
+import org.apache.iceberg.view.View;
+import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,13 +56,15 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_TIMEOUT;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.METASTOREWAREHOUSE;
 
 public class IcebergHiveCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
-    public static final String LOCATION_PROPERTY = "location";
 
     private final Configuration conf;
     private final HiveCatalog delegate;
@@ -66,8 +72,8 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @VisibleForTesting
     public IcebergHiveCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
-        this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
+        String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
+        this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         if (conf.get(METASTOREWAREHOUSE.varname) == null) {
             this.conf.set(METASTOREWAREHOUSE.varname, METASTOREWAREHOUSE.getDefaultValue());
         }
@@ -84,8 +90,18 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        // The property is false by default, in such case, when we execute SHOW TABLES FROM CATALOG.DB,
+        // it will request all Table Objects from Hive Metastore, when there are lots of tables under the
+        // database, timeout may happen.
+        copiedProperties.putIfAbsent(HiveCatalog.LIST_ALL_TABLES, "true");
 
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
+    }
+
+    @VisibleForTesting
+    public IcebergHiveCatalog(HiveCatalog hiveCatalog, Configuration conf) {
+        this.delegate = hiveCatalog;
+        this.conf = conf;
     }
 
     @Override
@@ -94,24 +110,24 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+    public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         return delegate.loadTable(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
-    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+    public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         return delegate.tableExists(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
-    public List<String> listAllDatabases() {
+    public List<String> listAllDatabases(ConnectContext context) {
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) {
+    public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -135,10 +151,10 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void dropDb(String dbName) throws MetaNotFoundException {
+    public void dropDB(ConnectContext context, String dbName) throws MetaNotFoundException {
         Database database;
         try {
-            database = getDB(dbName);
+            database = getDB(context, dbName);
         } catch (Exception e) {
             LOG.error("Failed to access database {}", dbName, e);
             throw new MetaNotFoundException("Failed to access database " + dbName);
@@ -157,20 +173,21 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Database getDB(String dbName) {
+    public Database getDB(ConnectContext context, String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
         Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override
-    public List<String> listTables(String dbName) {
+    public List<String> listTables(ConnectContext context, String dbName) {
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Override
     public boolean createTable(
+            ConnectContext context,
             String dbName,
             String tableName,
             Schema schema,
@@ -187,8 +204,34 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public boolean dropTable(String dbName, String tableName, boolean purge) {
+    public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
         return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
+    }
+
+    @Override
+    public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
+            throws StarRocksConnectorException {
+        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
+    }
+
+    @Override
+    public ViewBuilder getViewBuilder(ConnectContext context, TableIdentifier identifier) {
+        return delegate.buildView(identifier);
+    }
+
+    @Override
+    public boolean dropView(ConnectContext context, String dbName, String viewName) {
+        return delegate.dropView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+    }
+
+    @Override
+    public View getView(ConnectContext context, String dbName, String viewName) {
+        return delegate.loadView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+    }
+
+    @Override
+    public Map<String, String> loadNamespaceMetadata(ConnectContext context, Namespace ns) {
+        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
     }
 
     @Override

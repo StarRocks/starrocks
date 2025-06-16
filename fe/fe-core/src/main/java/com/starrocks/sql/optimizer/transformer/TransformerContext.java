@@ -31,29 +31,25 @@ public class TransformerContext {
     private final boolean inlineView;
     private final boolean enableViewBasedMvRewrite;
 
+    private final MVTransformerContext mvTransformerContext;
+
     public TransformerContext(
             ColumnRefFactory columnRefFactory,
-            ConnectContext session) {
+            ConnectContext session,
+            MVTransformerContext mvTransformerContext) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), true);
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), true, mvTransformerContext);
     }
 
     public TransformerContext(
             ColumnRefFactory columnRefFactory,
             ConnectContext session,
-            boolean inlineView) {
+            boolean inlineView,
+            MVTransformerContext mvTransformerContext) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), inlineView);
-    }
-
-    public TransformerContext(
-            ColumnRefFactory columnRefFactory,
-            ConnectContext session,
-            ExpressionMapping outer,
-            CTETransformerContext cteContext) {
-        this(columnRefFactory, session, outer, cteContext, true);
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), inlineView, mvTransformerContext);
     }
 
     public TransformerContext(
@@ -61,13 +57,24 @@ public class TransformerContext {
             ConnectContext session,
             ExpressionMapping outer,
             CTETransformerContext cteContext,
-            boolean inlineView) {
+            MVTransformerContext mvTransformerContext) {
+        this(columnRefFactory, session, outer, cteContext, true, mvTransformerContext);
+    }
+
+    public TransformerContext(
+            ColumnRefFactory columnRefFactory,
+            ConnectContext session,
+            ExpressionMapping outer,
+            CTETransformerContext cteContext,
+            boolean inlineView,
+            MVTransformerContext mvTransformerContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = outer;
         this.cteContext = cteContext;
         this.inlineView = inlineView;
         this.enableViewBasedMvRewrite = session.getSessionVariable().isEnableViewBasedMvRewrite();
+        this.mvTransformerContext = mvTransformerContext;
     }
 
     public ColumnRefFactory getColumnRefFactory() {
@@ -92,5 +99,9 @@ public class TransformerContext {
 
     public boolean isEnableViewBasedMvRewrite() {
         return enableViewBasedMvRewrite;
+    }
+
+    public MVTransformerContext getMVTransformerContext() {
+        return mvTransformerContext;
     }
 }

@@ -46,8 +46,10 @@ import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
+import com.starrocks.common.io.Writable;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.meta.MetaContext;
+import com.starrocks.persist.EditLogDeserializer;
+import com.starrocks.persist.OperationType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -62,8 +64,8 @@ import java.util.Map;
 public class BDBTool {
     private static final Logger LOG = LogManager.getLogger(BDBTool.class);
 
-    private String metaPath;
-    private BDBToolOptions options;
+    private final String metaPath;
+    private final BDBToolOptions options;
 
     public BDBTool(String metaPath, BDBToolOptions options) {
         this.metaPath = metaPath;
@@ -76,12 +78,13 @@ public class BDBTool {
         envConfig.setReadOnly(true);
         envConfig.setCachePercent(20);
 
-        Environment env = null;
+        Environment env;
         try {
             env = new Environment(new File(metaPath), envConfig);
         } catch (DatabaseException e) {
-            LOG.warn(e);
-            System.err.println("Failed to open BDBJE env: " + metaPath + ". exit");
+            String msg = "Failed to open BDBJE env: " + metaPath + ". exit";
+            LOG.warn(msg, e);
+            System.err.println(msg);
             return false;
         }
         Preconditions.checkNotNull(env);
@@ -91,7 +94,7 @@ public class BDBTool {
                 // list all databases
                 List<String> dbNames = env.getDatabaseNames();
                 JSONArray jsonArray = new JSONArray(dbNames);
-                System.out.println(jsonArray.toString());
+                System.out.println(jsonArray);
                 return true;
             } else {
                 // db operations
@@ -106,11 +109,11 @@ public class BDBTool {
                         Map<String, String> statMap = Maps.newHashMap();
                         statMap.put("count", String.valueOf(db.count()));
                         JSONObject jsonObject = new JSONObject(statMap);
-                        System.out.println(jsonObject.toString());
+                        System.out.println(jsonObject);
                         return true;
                     } else {
                         // set from key
-                        long fromKey = 0L;
+                        long fromKey;
                         String fromKeyStr = options.hasFromKey() ? options.getFromKey() : dbName;
                         try {
                             fromKey = Long.parseLong(fromKeyStr);
@@ -136,11 +139,6 @@ public class BDBTool {
                             return false;
                         }
 
-                        // meta version
-                        MetaContext metaContext = new MetaContext();
-                        metaContext.setStarRocksMetaVersion(options.getStarRocksMetaVersion());
-                        metaContext.setThreadLocalInfo();
-
                         for (long key = fromKey; key <= endKey; key++) {
                             getValueByKey(db, key);
                         }
@@ -148,8 +146,9 @@ public class BDBTool {
                 }
             }
         } catch (Exception e) {
-            LOG.warn(e);
-            System.err.println("Failed to run bdb tools");
+            String msg = "Failed to run bdb tools";
+            LOG.warn(msg, e);
+            System.err.println(msg);
             return false;
         }
         return true;
@@ -166,17 +165,20 @@ public class BDBTool {
         if (status == OperationStatus.SUCCESS) {
             byte[] retData = value.getData();
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(retData));
-            JournalEntity entity = new JournalEntity();
+            JournalEntity entity = new JournalEntity(OperationType.OP_INVALID, null);
             try {
-                entity.readFields(in);
+                short opCode = in.readShort();
+                Writable writable = EditLogDeserializer.deserialize(opCode, in);
+                entity = new JournalEntity(opCode, writable);
             } catch (Exception e) {
-                LOG.warn(e);
-                System.err.println("Fail to read journal entity for key: " + key + ". reason: " + e.getMessage());
+                String msg = "Fail to read journal entity for key: " + key + ". reason: " + e.getMessage();
+                LOG.warn(msg, e);
+                System.err.println(msg);
                 System.exit(-1);
             }
             System.out.println("key: " + key);
-            System.out.println("op code: " + entity.getOpCode());
-            System.out.println("value: " + entity.getData().toString());
+            System.out.println("op code: " + entity.opCode());
+            System.out.println("value: " + entity.data().toString());
         } else if (status == OperationStatus.NOTFOUND) {
             System.out.println("key: " + key);
             System.out.println("value: NOT FOUND");

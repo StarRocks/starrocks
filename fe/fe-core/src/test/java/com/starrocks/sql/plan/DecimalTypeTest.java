@@ -192,10 +192,10 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(c_0_0) from tab0";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<decimal128(26, 2)>>, true]); " +
+            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<DECIMAL128(26,2)>>, true]); " +
                     "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
             assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
-                    "args: DECIMAL128; result: struct<col1 array<decimal128(26, 2)>>;");
+                    "args: DECIMAL128; result: struct<col1 array<DECIMAL128(26,2)>>;");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
@@ -220,7 +220,7 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(distinct c_1_6) from tab1 group by c_1_0,c_1_1;";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg_distinct");
+            assertNotContains(plan, "array_agg_distinct");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
@@ -273,6 +273,17 @@ public class DecimalTypeTest extends PlanTestBase {
         String sql = "select '1969-12-10 23:46:53' > c_0_0 from tab0";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
-                "  |  <slot 16> : CAST(1: c_0_0 AS VARCHAR) < '1969-12-10 23:46:53'");
+                "  |  <slot 16> : CAST(1: c_0_0 AS DOUBLE) < CAST('1969-12-10 23:46:53' AS DOUBLE)");
+    }
+
+    @Test
+    public void testSameValueDiffTypeDecimal() throws Exception {
+        String sql = "SELECT t1a,\n" +
+                "    sum(t1f * 1.00000000000) / NULLIF(sum(t1c), 0) AS aaaa,\n" +
+                "    sum(t1f * 1.000) / NULLIF(sum(t1d * 1.000), 0) * 1000 AS bbbb\n" +
+                " FROM test_all_type \n" +
+                " GROUP BY t1a;\n ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 11> : 6: t1f * 1.0\n");
     }
 }

@@ -14,27 +14,42 @@
 
 #pragma once
 
-#include "formats/parquet/page_index_reader.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "storage/range.h"
+
+namespace starrocks {
+class Column;
+class NullableColumn;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 
 class StoredColumnReaderWithIndex : public StoredColumnReader {
 public:
-    StoredColumnReaderWithIndex(std::unique_ptr<StoredColumnReader> reader, ColumnOffsetIndexCtx* offset_index_ctx)
-            : _inner_reader(std::move(reader)), _offset_index_ctx(offset_index_ctx) {
+    StoredColumnReaderWithIndex(std::unique_ptr<StoredColumnReader> reader, ColumnOffsetIndexCtx* offset_index_ctx,
+                                bool has_dict_page)
+            : _inner_reader(std::move(reader)), _offset_index_ctx(offset_index_ctx), _has_dict_page(has_dict_page) {
         _page_num = _offset_index_ctx->page_selected.size();
         _inner_reader->set_page_num(_page_num);
+        _inner_reader->set_page_change_on_record_boundry();
     }
 
     ~StoredColumnReaderWithIndex() = default;
 
     void set_need_parse_levels(bool need_parse_levels) override {
         _inner_reader->set_need_parse_levels(need_parse_levels);
-    }
-
-    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override {
-        return _inner_reader->read_records(num_rows, content_type, dst);
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
@@ -46,8 +61,7 @@ public:
 
     Status get_dict_values(Column* column) override { return _inner_reader->get_dict_values(column); }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
         return _inner_reader->get_dict_values(dict_codes, nulls, column);
     }
 
@@ -56,7 +70,8 @@ private:
     ColumnOffsetIndexCtx* _offset_index_ctx;
     size_t _cur_page_idx = 0;
     size_t _page_num = 0;
-    bool _try_dict_loaded = false;
+    bool _dict_page_loaded = false;
+    bool _has_dict_page;
 };
 
 } // namespace starrocks::parquet

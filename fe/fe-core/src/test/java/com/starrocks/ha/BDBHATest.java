@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.ha;
 
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
@@ -31,8 +32,7 @@ public class BDBHATest {
 
     @BeforeClass
     public static void beforeClass() {
-        UtFrameUtils.createMinStarRocksCluster(true);
-        UtFrameUtils.PseudoImage.setUpImageVersion();
+        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -64,34 +64,36 @@ public class BDBHATest {
         BDBEnvironment environment = journal.getBdbEnvironment();
 
         // add two followers
-        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
+        GlobalStateMgr.getCurrentState().getNodeMgr()
+                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
+        GlobalStateMgr.getCurrentState().getNodeMgr()
+                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "192.168.2.4", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
-                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1"),
+                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f),
                         false);
         Assert.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // the other one is dropped
-        GlobalStateMgr.getCurrentState().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
+        GlobalStateMgr.getCurrentState().getNodeMgr().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
 
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getDataOutputStream());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getImageWriter());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
         NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.load(reader);
         reader.close();
-        Assert.assertEquals(GlobalStateMgr.getCurrentState().getRemovedFrontendNames().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames().size(), 1);
         Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNodes().size(), 2);
     }
 }

@@ -53,6 +53,9 @@ analyze full table mv1;
 -- result:
 [REGEX].*analyze	status	OK
 -- !result
+set enable_force_rule_based_mv_rewrite=false;
+-- result:
+-- !result
 set materialized_view_rewrite_mode="disable";
 -- result:
 -- !result

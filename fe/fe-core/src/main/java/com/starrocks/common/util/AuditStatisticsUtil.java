@@ -81,7 +81,7 @@ public class AuditStatisticsUtil {
             if (to.memCostBytes == null) {
                 to.memCostBytes = 0L;
             }
-            to.memCostBytes += from.memCostBytes;
+            to.memCostBytes = Math.max(from.memCostBytes, to.memCostBytes);
         }
         if (from.spillBytes != null) {
             if (to.spillBytes == null) {

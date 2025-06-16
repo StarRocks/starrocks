@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_slice
 
-## Description
+
 
 Returns a slice of an array. This function intercepts `length` elements from `input` from the position specified by `offset`.
 

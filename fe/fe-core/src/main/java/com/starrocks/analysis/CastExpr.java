@@ -78,7 +78,7 @@ public class CastExpr extends Expr {
         try {
             analyze();
         } catch (AnalysisException ex) {
-            LOG.warn(ex);
+            LOG.warn(ex.getMessage(), ex);
             Preconditions.checkState(false,
                     "Implicit casts should never throw analysis exception.");
         }
@@ -241,14 +241,14 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsWithoutChild(Object o) {
         if (this == o) {
             return true;
         }
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+        if (!super.equalsWithoutChild(o)) {
             return false;
         }
         CastExpr castExpr = (CastExpr) o;

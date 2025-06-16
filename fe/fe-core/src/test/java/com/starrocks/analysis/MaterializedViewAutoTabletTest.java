@@ -18,6 +18,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
@@ -46,7 +48,7 @@ public class MaterializedViewAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 "create table test_table1 (k1 bigint, v0 int) DUPLICATE KEY (k1) DISTRIBUTED BY HASH(k1);");
-        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
@@ -54,9 +56,10 @@ public class MaterializedViewAutoTabletTest {
 
         int bucketNum1 = 0;
         int bucketNum2 = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            OlapTable table = (OlapTable) db.getTable("test_table1");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
             if (table == null) {
                 return;
             }
@@ -64,7 +67,7 @@ public class MaterializedViewAutoTabletTest {
                 bucketNum1 += partition.getDistributionInfo().getBucketNum();
             }
 
-            table = (OlapTable) db.getTable("mv1");
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
             if (table == null) {
                 return;
             }
@@ -72,7 +75,7 @@ public class MaterializedViewAutoTabletTest {
                 bucketNum2 += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         Assert.assertEquals(bucketNum1, 6);
         Assert.assertEquals(bucketNum2, 6);

@@ -14,18 +14,16 @@
 
 package com.starrocks.load.pipe;
 
-import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.PipeOpEntry;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * Repo: persistence for Pipe
@@ -61,25 +59,13 @@ public class PipeRepo {
         GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
     }
 
-    public long saveImage(DataOutputStream output, long checksum) throws IOException {
-        Pair<String, Integer> jsonAndChecksum = pipeManager.toJson();
-        checksum ^= jsonAndChecksum.second;
-        Text.writeString(output, jsonAndChecksum.first);
-        return checksum;
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        reader.readCollection(Pipe.class, pipeManager::putPipe);
+        LOG.info("loaded {} pipes", pipeManager.getAllPipes().size());
     }
 
-    public long loadImage(DataInputStream input, long checksum) throws IOException {
-        String imageJson = Text.readString(input);
-        PipeManager data = GsonUtils.GSON.fromJson(imageJson, PipeManager.class);
-        if (data.getPipesUnlock() != null) {
-            Map<PipeId, Pipe> pipes = data.getPipesUnlock();
-            for (Pipe pipe : pipes.values()) {
-                pipeManager.putPipe(pipe);
-            }
-            LOG.info("Load {} pipes from image: {}", pipes.size(), pipes);
-            checksum ^= pipes.size();
-        }
-        return checksum;
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        pipeManager.save(imageWriter);
     }
 
     public void replay(PipeOpEntry entry) {

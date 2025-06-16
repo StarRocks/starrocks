@@ -1,0 +1,18 @@
+-- name: test_date_format
+CREATE TABLE IF NOT EXISTS test_order (
+id varchar(150) NOT NULL COMMENT '',
+reset_period_data varchar(32) NULL COMMENT ""
+) ENGINE=olap PRIMARY KEY (id) COMMENT '' DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("enable_persistent_index" = "true", "replication_num" = "1");
+
+insert into test_order values('1','2023-10-11 00:00:01.030');
+
+select DATE_FORMAT(reset_period_data, '%Y-%m-%d %H:%i:%s.%f') from test_order where id='1';
+
+select LENGTH(DATE_FORMAT(reset_period_data, '%Y-%m-%d %H:%i:%s.tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt%f'))
+from test_order where id='1';
+
+select IFNULL(LENGTH(DATE_FORMAT(reset_period_data, '%Y-%m-%d %H:%i:%s.tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt%f')),-1)
+from test_order where id='1';
+
+select IFNULL(LENGTH(DATE_FORMAT(reset_period_data, '%Y-%m-%d %H:%i:%s.ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt%ftttttttt')),-1)
+from test_order where id='1';

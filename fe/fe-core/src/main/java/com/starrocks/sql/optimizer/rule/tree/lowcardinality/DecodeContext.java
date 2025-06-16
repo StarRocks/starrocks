@@ -50,8 +50,8 @@ import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollect
  * 3. Generate new dictionary column:
  *  a. Generate corresponding dictionary ref based on the string ref
  *  b. Generate the define expression of global dictionary column
- *  b. Rewrite string expressions
- *  c. Rewrite string aggregate expressions
+ *  c. Rewrite string expressions
+ *  d. Rewrite string aggregate expressions
  *  e. Generate the global dictionary expression
  */
 class DecodeContext {
@@ -291,13 +291,13 @@ class DecodeContext {
             }
             Preconditions.checkState(newChildren.get(0).getType().isArrayType());
             ScalarOperator result = new CollectionElementOperator(((ArrayType) newChildren.get(0)
-                    .getType()).getItemType(), newChildren.get(0), newChildren.get(1));
+                    .getType()).getItemType(), newChildren.get(0), newChildren.get(1), collectionElementOp.isCheckOutOfBounds());
 
             return processArrayAnchor(result);
         }
 
         private ScalarOperator processArrayAnchor(ScalarOperator expr) {
-            if (array2StringAnchor.isPresent()) {
+            if (array2StringAnchor.isPresent() && !array2StringAnchor.get().equals(expr)) {
                 return expr;
             }
 
@@ -329,13 +329,15 @@ class DecodeContext {
                 Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
                 // min/max function: will rewrite all stage, return type is dict type
                 if (FunctionSet.MAX.equals(call.getFnName()) || FunctionSet.MIN.equals(call.getFnName())) {
-                    return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn, call.isDistinct());
+                    return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
+                            call.isDistinct(), call.isRemovedDistinct());
                 } else if (FunctionSet.COUNT.equals(call.getFnName()) ||
                         FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFnName()) ||
                         FunctionSet.APPROX_COUNT_DISTINCT.equals(call.getFnName())) {
                     // count, count_distinct, approx_count_distinct:
                     // return type don't update
-                    return new CallOperator(call.getFnName(), call.getType(), newChildren, fn, call.isDistinct());
+                    return new CallOperator(call.getFnName(), call.getType(), newChildren, fn,
+                            call.isDistinct(), call.isRemovedDistinct());
                 }
             }
 
@@ -348,7 +350,8 @@ class DecodeContext {
                 argTypes[i] = newChildren.get(i).getType();
             }
             Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
-            return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn, call.isDistinct());
+            return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
+                    call.isDistinct(), call.isRemovedDistinct());
         }
     }
 

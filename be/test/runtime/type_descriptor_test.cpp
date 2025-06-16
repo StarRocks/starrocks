@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <tuple>
+
 #include "gtest/gtest.h"
 #include "runtime/types.h"
 
@@ -31,6 +33,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.types.back().__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types.back().__set_scalar_type(TScalarType());
         ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::INT);
+        ttype_desc.types.back().scalar_type.__set_len(-1);
 
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
@@ -47,6 +50,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.types.back().__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types.back().__set_scalar_type(TScalarType());
         ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::FLOAT);
+        ttype_desc.types.back().scalar_type.__set_len(-1);
 
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
@@ -63,6 +67,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.types.back().__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types.back().__set_scalar_type(TScalarType());
         ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::DOUBLE);
+        ttype_desc.types.back().scalar_type.__set_len(-1);
 
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
@@ -81,6 +86,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::DECIMALV2);
         ttype_desc.types.back().scalar_type.__set_precision(4);
         ttype_desc.types.back().scalar_type.__set_scale(6);
+        ttype_desc.types.back().scalar_type.__set_len(-1);
 
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
@@ -690,6 +696,54 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
         t.children[0].len = 20;
         t.children[1].type = LogicalType::TYPE_INT;
         EXPECT_EQ("STRUCT{name VARCHAR(20), age INT}", t.debug_string());
+    }
+}
+
+TEST_F(TypeDescriptorTest, test_promote_types) {
+    std::vector<std::tuple<TypeDescriptor, TypeDescriptor, TypeDescriptor>> cases = {
+            // input1, input2, output
+            {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+             TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+
+            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+
+            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 4, 3),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 6, 3)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 4, 1),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 17, 1),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 17, 0),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 19, 2)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 38),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+
+            {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
+             TypeDescriptor::create_varchar_type(20)},
+
+            {TypeDescriptor::create_char_type(10), TypeDescriptor::create_char_type(20),
+             TypeDescriptor::create_char_type(20)},
+
+            {TypeDescriptor::create_varbinary_type(10), TypeDescriptor::create_varbinary_type(20),
+             TypeDescriptor::create_varbinary_type(20)},
+
+            {TypeDescriptor::from_logical_type(TYPE_JSON), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}};
+    for (const auto& tuple : cases) {
+        EXPECT_TRUE(TypeDescriptor::promote_types(std::get<0>(tuple), std::get<1>(tuple)) == std::get<2>(tuple));
     }
 }
 

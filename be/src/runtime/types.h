@@ -37,7 +37,6 @@
 #include <string>
 #include <vector>
 
-#include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "thrift/protocol/TDebugProtocol.h"
@@ -64,7 +63,7 @@ struct TypeDescriptor {
     int scale{-1};
 
     /// Must be kept in sync with FE's max precision/scale.
-    static const int MAX_PRECISION = 38;
+    static const int MAX_PRECISION = 76;
     static const int MAX_SCALE = MAX_PRECISION;
 
     /// The maximum precision representable by a 4-byte decimal (Decimal4Value)
@@ -75,8 +74,12 @@ struct TypeDescriptor {
     /// Empty for scalar types
     std::vector<TypeDescriptor> children;
 
-    /// Only set if type == TYPE_STRUCT. The field name of each child.
+    /// Only set if type == TYPE_STRUCT. The field logical name of each child.
     std::vector<std::string> field_names;
+    // Only set if type == TYPE_STRUCT. The field id of each child.
+    std::vector<int32_t> field_ids;
+    // Only set if type == TYPE_STRUCT. The field physical name of each child.
+    std::vector<std::string> field_physical_names;
 
     TypeDescriptor() = default;
 
@@ -166,7 +169,7 @@ struct TypeDescriptor {
     }
 
     static TypeDescriptor create_decimalv3_type(LogicalType type, int precision, int scale) {
-        DCHECK(type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128);
+        DCHECK(type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256);
         DCHECK_LE(precision, MAX_PRECISION);
         DCHECK_LE(scale, MAX_SCALE);
         DCHECK_GE(precision, 0);
@@ -204,6 +207,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
         case TYPE_DECIMAL128:
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
+        case TYPE_DECIMAL256:
+            return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL256, precision, scale);
         case TYPE_JSON:
             return TypeDescriptor::create_json_type();
         case TYPE_OBJECT:
@@ -254,7 +259,7 @@ struct TypeDescriptor {
         if (children != o.children) {
             return false;
         }
-        if (type == TYPE_CHAR) {
+        if (is_string_type()) {
             return len == o.len;
         }
         if (is_decimal_type()) {
@@ -285,7 +290,7 @@ struct TypeDescriptor {
     inline bool is_date_type() const { return type == TYPE_DATE || type == TYPE_DATETIME; }
 
     inline bool is_decimalv3_type() const {
-        return (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128);
+        return (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256);
     }
 
     inline bool is_decimal_type() const {
@@ -303,6 +308,13 @@ struct TypeDescriptor {
     inline bool is_map_type() const { return type == TYPE_MAP; }
 
     inline bool is_collection_type() const { return type == TYPE_ARRAY || type == TYPE_MAP; }
+
+    inline bool is_integer_type() const {
+        return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
+               type == TYPE_LARGEINT;
+    }
+
+    inline bool is_float_type() const { return type == TYPE_FLOAT || type == TYPE_DOUBLE; }
 
     // Could this type be used at join on conjuncts
     bool support_join() const;
@@ -339,6 +351,9 @@ struct TypeDescriptor {
 
     size_t get_array_depth_limit() const;
 
+    static TypeDescriptor promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2);
+    static TypeDescriptor promote_decimal_type(int precision, int scale);
+
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.
     ///
@@ -349,6 +364,21 @@ private:
     TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNode>& types, int* idx);
     void to_protobuf(PTypeDesc* proto_type) const;
 };
+
+static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+static const TypeDescriptor TYPE_BOOLEAN_DESC = TypeDescriptor{LogicalType::TYPE_BOOLEAN};
+static const TypeDescriptor TYPE_SMALLINT_DESC = TypeDescriptor{LogicalType::TYPE_SMALLINT};
+static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
+static const TypeDescriptor TYPE_BIGINT_DESC = TypeDescriptor(LogicalType::TYPE_BIGINT);
+static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TIME);
+static const TypeDescriptor TYPE_DATE_DESC = TypeDescriptor(LogicalType::TYPE_DATE);
+static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);
+static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
+static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+static const TypeDescriptor TYPE_VARBINARY_DESC =
+        TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+
+static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);
 
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();

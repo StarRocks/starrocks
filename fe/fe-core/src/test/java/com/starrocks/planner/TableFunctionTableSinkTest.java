@@ -15,14 +15,18 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,9 +35,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TableFunctionTableSinkTest {
     @Test
     public void testTableFunctionTableSink() {
-        TableFunctionTable tableFunctionTable = new TableFunctionTable("s3://path/to/directory/", "parquet",
-                "uncompressed", ImmutableList.of(new Column("k1", Type.INT)), null, false,
-                ImmutableMap.of());
+        List<Column> columns = ImmutableList.of(new Column("k1", Type.INT));
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "s3://path/to/directory/");
+        properties.put("format", "csv");
+        properties.put("compression", "uncompressed");
+        properties.put("csv.column_separator", ",");
+        properties.put("csv.row_delimiter", "\n");
+        TableFunctionTable tableFunctionTable = new TableFunctionTable(columns, properties, new SessionVariable());
 
         TableFunctionTableSink tableFunctionTableSink = new TableFunctionTableSink(tableFunctionTable);
 
@@ -43,7 +52,7 @@ public class TableFunctionTableSinkTest {
 
         assertEquals("TABLE FUNCTION TABLE SINK\n" +
                 "  PATH: s3://path/to/directory/\n" +
-                "  FORMAT: parquet\n" +
+                "  FORMAT: csv\n" +
                 "  PARTITION BY: []\n" +
                 "  SINGLE: false\n" +
                 "  RANDOM\n", tableFunctionTableSink.getExplainString("", TExplainLevel.NORMAL));

@@ -23,21 +23,21 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeTabletSchedulesScanner::_s_columns[] = {
-        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIORITY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLET_STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATE_TIME", TYPE_DOUBLE, sizeof(double), false},
-        {"SCHEDULE_TIME", TYPE_DOUBLE, sizeof(double), false},
-        {"FINISH_TIME", TYPE_DOUBLE, sizeof(double), false},
-        {"CLONE_SRC", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CLONE_DEST", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CLONE_BYTES", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CLONE_DURATION", TYPE_DOUBLE, sizeof(double), false},
-        {"MSG", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PRIORITY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLET_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"SCHEDULE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"CLONE_SRC", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_DEST", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_DURATION", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaFeTabletSchedulesScanner::SchemaFeTabletSchedulesScanner()
@@ -67,13 +67,21 @@ Status SchemaFeTabletSchedulesScanner::start(RuntimeState* state) {
     if (_param->limit > 0) {
         request.__set_limit(_param->limit);
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tablet_schedules(*(_param->ip), _param->port, request, &response));
-        _infos.swap(response.tablet_schedules);
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
+    if (nullptr != _param->current_user_ident) {
+        request.__set_current_user_ident(*(_param->current_user_ident));
     }
-    return Status::OK();
+
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tablet_schedules(_ss_state, request, &response));
+    _infos.swap(response.tablet_schedules);
+    return SchemaScanner::start(state);
+}
+
+Status SchemaFeTabletSchedulesScanner::TEST_start(RuntimeState* state, const std::vector<TTabletSchedule>& infos) {
+    _cur_idx = 0;
+    _infos = infos;
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    return SchemaScanner::start(state);
 }
 
 Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
@@ -120,15 +128,33 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 8: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.create_time);
+                if (info.create_time > 0) {
+                    DateTimeValue v;
+                    v.from_unixtime(static_cast<int64_t>(info.create_time), _runtime_state->timezone_obj());
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&v);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
                 break;
             }
             case 9: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.schedule_time);
+                if (info.schedule_time > 0) {
+                    DateTimeValue v;
+                    v.from_unixtime(static_cast<int64_t>(info.schedule_time), _runtime_state->timezone_obj());
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&v);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
                 break;
             }
             case 10: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.finish_time);
+                if (info.finish_time > 0) {
+                    DateTimeValue v;
+                    v.from_unixtime(static_cast<int64_t>(info.finish_time), _runtime_state->timezone_obj());
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&v);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
                 break;
             }
             case 11: {

@@ -40,10 +40,10 @@
 #include <memory>
 #include <string>
 
+#include "cache/object_cache/page_cache.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"
-#include "storage/page_cache.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -88,8 +88,6 @@ TEST_F(OrdinalPageIndexTest, normal) {
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
     opts.read_file = rfile.get();
     opts.use_page_cache = true;
-    opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     OrdinalIndexReader index;
@@ -150,8 +148,6 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     IndexReadOptions opts;
     opts.read_file = nullptr;
     opts.use_page_cache = true;
-    opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     OrdinalIndexReader index;

@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
@@ -30,32 +29,48 @@ public class OptimizeClause extends AlterTableClause {
     private PartitionDesc partitionDesc;
     private DistributionDesc distributionDesc;
     private PartitionNames partitionNames;
+    private OptimizeRange range;
 
     @SerializedName(value = "sourcePartitionIds")
-    List<Long> sourcePartitionIds = Lists.newArrayList();
+    private List<Long> sourcePartitionIds = Lists.newArrayList();
+
+    @SerializedName(value = "isTableOptimize")
+    private boolean isTableOptimize = false;
 
     private List<String> sortKeys = null;
 
     public OptimizeClause(KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           List<String> sortKeys,
-                           PartitionNames partitionNames) {
-        this(keysDesc, partitionDesc, distributionDesc, sortKeys, partitionNames, NodePosition.ZERO);
+                          PartitionDesc partitionDesc,
+                          DistributionDesc distributionDesc,
+                          List<String> sortKeys,
+                          PartitionNames partitionNames,
+                          OptimizeRange range) {
+        this(keysDesc, partitionDesc, distributionDesc, sortKeys, partitionNames, range, NodePosition.ZERO);
     }
 
     public OptimizeClause(KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           List<String> sortKeys,
-                           PartitionNames partitionNames,
-                           NodePosition pos) {
+                          PartitionDesc partitionDesc,
+                          DistributionDesc distributionDesc,
+                          List<String> sortKeys,
+                          PartitionNames partitionNames,
+                          OptimizeRange range,
+                          NodePosition pos) {
         super(AlterOpType.OPTIMIZE, pos);
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.partitionNames = partitionNames;
+        this.range = range;
+    }
+
+    // Add getter and setter for OptimizeRange
+    public OptimizeRange getRange() {
+        return range;
+    }
+
+    public void setRange(OptimizeRange range) {
+        this.range = range;
     }
 
     public KeysDesc getKeysDesc() {
@@ -94,6 +109,14 @@ public class OptimizeClause extends AlterTableClause {
         return sourcePartitionIds;
     }
 
+    public boolean isTableOptimize() {
+        return isTableOptimize;
+    }
+
+    public void setTableOptimize(boolean tableOptimize) {
+        isTableOptimize = tableOptimize;
+    }
+
     public static OptimizeClause read(DataInput in) throws IOException {
         throw new RuntimeException("OptimizeClause serialization is not supported anymore.");
     }
@@ -113,6 +136,9 @@ public class OptimizeClause extends AlterTableClause {
         }
         if (sortKeys != null && !sortKeys.isEmpty()) {
             sb.append(String.join(",", sortKeys));
+        }
+        if (range != null) {
+            sb.append(range.toString());
         }
         return sb.toString();
     }

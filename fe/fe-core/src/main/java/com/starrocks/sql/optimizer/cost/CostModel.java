@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -36,8 +37,9 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -54,6 +56,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -171,21 +175,9 @@ public class CostModel {
                         anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
                         noneMatch(ColumnStatistic::isUnknown)) {
                     return adjustCostForMV(context);
-                } else {
-                    ColumnRefSet usedColumns = statistics.getUsedColumns();
-                    Projection projection = node.getProjection();
-                    if (projection != null) {
-                        // we will add a projection on top of rewritten mv plan to keep the output columns the same as
-                        // original query.
-                        // excludes this projection keys when costing mv,
-                        // or the cost of mv may be larger than original query,
-                        // which will lead to mismatch of mv
-                        usedColumns.except(projection.getColumnRefMap().keySet());
-                    }
-                    // use the used columns to calculate the cost of mv
-                    return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
                 }
             }
+
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -336,7 +328,7 @@ public class CostModel {
                     // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
                     boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
                             && sessionVariable.isEnablePipelineEngine()
-                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                            && GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode();
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
                     result = CostEstimate.of(outputSize * factor, 0, networkCost * factor);
@@ -476,6 +468,20 @@ public class CostModel {
             return CostEstimate.zero();
         }
 
+        @Override
+        public CostEstimate visitLogicalExcept(LogicalExceptOperator node, ExpressionContext context) {
+            double computeSize = context.getChildrenStatistics().stream().mapToDouble(Statistics::getComputeSize).sum();
+            double memoryCost = context.getChildStatistics(0).getComputeSize();
+            return CostEstimate.of(computeSize, memoryCost, 0);
+        }
+
+        @Override
+        public CostEstimate visitLogicalIntersect(LogicalIntersectOperator node, ExpressionContext context) {
+            double computeSize = context.getChildrenStatistics().stream().mapToDouble(Statistics::getComputeSize).sum();
+            double memoryCost = context.getChildStatistics(0).getComputeSize();
+            return CostEstimate.of(computeSize, memoryCost, 0);
+        }
+
         // if there exists a skew hint factor use it
         // if this is an enforcer above a local agg set 0.1 to reduce this exchange cost.
         // The reason is as below:
@@ -509,7 +515,6 @@ public class CostModel {
         private Optional<CostEstimate> invalidOneStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
             boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
             if (mustMultiStageAgg && !node.isSplit() && node.getType().isGlobal()) {
-
                 return Optional.of(CostEstimate.infinite());
             }
             return Optional.empty();
@@ -527,6 +532,24 @@ public class CostModel {
                 Group group = context.getGroupExpression().getGroup();
                 boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
                 if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+                    // Don't limited to multi-stage aggregate node, refs: invalidOneStageAggCost
+                    // split aggregate node lose distinct flag, check the group's origin
+                    // aggregate
+                    LogicalAggregationOperator originAgg = group.getFirstLogicalExpression().getOp().cast();
+                    for (CallOperator callOperator : originAgg.getAggregations().values()) {
+                        if (callOperator.isDistinct()) {
+                            String fnName = callOperator.getFnName();
+                            List<ScalarOperator> children = callOperator.getChildren();
+                            if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())
+                                    || FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)
+                                    || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+                                return Optional.empty();
+                            } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && (children.size() > 1
+                                    || children.get(0).getType().isDecimalOfAnyVersion())) {
+                                return Optional.empty();
+                            }
+                        }
+                    }
                     return Optional.of(CostEstimate.infinite());
                 }
             }

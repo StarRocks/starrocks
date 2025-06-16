@@ -66,7 +66,7 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(VerboseSessionVariablesSystemTable.create());
             super.registerTableUnlocked(GlobalVariablesSystemTable.create());
             super.registerTableUnlocked(TasksSystemTable.create());
-            super.registerTableUnlocked(TaskRunsSystemTable.create());
+            super.registerTableUnlocked(TaskRunsSystemTable.getInstance());
             super.registerTableUnlocked(MaterializedViewsSystemTable.create());
             super.registerTableUnlocked(LoadsSystemTable.create());
             super.registerTableUnlocked(LoadTrackingLogsSystemTable.create());
@@ -86,17 +86,22 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(PipeFileSystemTable.create());
             super.registerTableUnlocked(PipesSystemTable.create());
             super.registerTableUnlocked(BeDataCacheMetricsTable.create());
+            super.registerTableUnlocked(PartitionsMetaSystemTable.create());
+            super.registerTableUnlocked(TemporaryTablesTable.create());
+            super.registerTableUnlocked(ColumnStatsUsageSystemTable.create());
+            super.registerTableUnlocked(AnalyzeStatusSystemTable.create());
+            super.registerTableUnlocked(ClusterSnapshotsTable.create());
+            super.registerTableUnlocked(ClusterSnapshotJobsTable.create());
+            super.registerTableUnlocked(ApplicableRolesSystemTable.create());
+            super.registerTableUnlocked(KeywordsSystemTable.create());
+            super.registerTableUnlocked(WarehouseMetricsSystemTable.create());
+            super.registerTableUnlocked(WarehouseQueriesSystemTable.create());
         }
     }
 
     @Override
-    public void dropTableWithLock(String name) {
-        // Do nothing.
-    }
-
-    @Override
-    public void dropTable(String name) {
-        // Do nothing.
+    public Table dropTable(String name) {
+        return null;
     }
 
     @Override

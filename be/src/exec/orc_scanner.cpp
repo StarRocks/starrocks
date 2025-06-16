@@ -23,7 +23,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -36,6 +35,7 @@ public:
     ~ORCFileStream() override { _file.reset(); }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
+        ++_counter->file_read_count;
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ORCHdfsFileStream::read(buf, length, offset);
     }
@@ -84,9 +84,11 @@ Status ORCScanner::open() {
     _orc_reader = std::make_unique<OrcChunkReader>(_state->chunk_size(), _orc_slot_descriptors);
     _orc_reader->set_broker_load_mode(_strict_mode);
     RETURN_IF_ERROR(_orc_reader->set_timezone(_state->timezone()));
-    _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
     _orc_reader->set_case_sensitive(_case_sensitive);
+    if (_scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping) {
+        _orc_reader->set_invalid_as_null(true);
+    }
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();
@@ -120,8 +122,7 @@ StatusOr<ChunkPtr> ORCScanner::get_next() {
 
 StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
     try {
-        ChunkPtr chunk = _create_src_chunk();
-        RETURN_IF_ERROR(_next_orc_batch(&chunk));
+        ASSIGN_OR_RETURN(ChunkPtr chunk, _next_orc_batch());
         // fill path column
         const TBrokerRangeDesc& range = _scan_range.ranges.at(_next_range - 1);
         if (range.__isset.num_of_columns_from_file) {
@@ -163,7 +164,7 @@ ChunkPtr ORCScanner::_create_src_chunk() {
     return chunk;
 }
 
-Status ORCScanner::_next_orc_batch(ChunkPtr* result) {
+StatusOr<ChunkPtr> ORCScanner::_next_orc_batch() {
     {
         SCOPED_RAW_TIMER(&_counter->read_batch_ns);
         Status status = _orc_reader->read_next();
@@ -178,11 +179,13 @@ Status ORCScanner::_next_orc_batch(ChunkPtr* result) {
         RETURN_IF_ERROR(status);
     }
     {
+        // create chunk after the _orc_reader is initialized
+        auto result = _create_src_chunk();
         SCOPED_RAW_TIMER(&_counter->fill_ns);
-        RETURN_IF_ERROR(_orc_reader->fill_chunk(result));
+        RETURN_IF_ERROR(_orc_reader->fill_chunk(&result));
         _counter->num_rows_filtered += _orc_reader->get_num_rows_filtered();
+        return result;
     }
-    return Status::OK();
 }
 
 Status ORCScanner::_open_next_orc_reader() {
@@ -193,23 +196,42 @@ Status ORCScanner::_open_next_orc_reader() {
         }
         std::shared_ptr<RandomAccessFile> file;
         const TBrokerRangeDesc& range_desc = _scan_range.ranges[_next_range];
-        Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
-                                              CompressionTypePB::NO_COMPRESSION, &file);
-        if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
-            return st;
-        }
-        const std::string& file_name = file->filename();
+        RETURN_IF_ERROR(create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
+                                                  CompressionTypePB::NO_COMPRESSION, &file));
+
+        const std::string file_name = file->filename();
+        std::shared_ptr<io::SeekableInputStream> input_stream = file->stream();
         ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
+
+        auto shared_buffered_input_stream =
+                std::make_shared<io::SharedBufferedInputStream>(input_stream, file_name, file_size);
+        const io::SharedBufferedInputStream::CoalesceOptions options = {
+                .max_dist_size = config::io_coalesce_read_max_distance_size,
+                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+        shared_buffered_input_stream->set_coalesce_options(options);
+
+        // If file size smaller than orc_loading_buffer_size, we will load the whole file in one IO request
+        if (file_size < config::orc_loading_buffer_size) {
+            std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+            io_ranges.emplace_back(0, file_size);
+            RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
+        }
+
+        file = std::make_shared<RandomAccessFile>(shared_buffered_input_stream, file_name);
+        file->set_size(file_size);
+
         auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
         _next_range++;
         _last_file_size = file_size;
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
-        st = _orc_reader->init(std::move(inStream));
+        auto st = _orc_reader->init(std::move(inStream));
         if (st.is_end_of_file()) {
             LOG(WARNING) << "Failed to init orc reader. filename: " << file_name << ", status: " << st.to_string();
             continue;
+        } else if (st.is_not_found() &&
+                   (_file_scan_type == TFileScanType::FILES_INSERT || _file_scan_type == TFileScanType::FILES_QUERY)) {
+            st = st.clone_and_append("Consider setting 'fill_mismatch_column_with' = 'null' property");
         }
         return st;
     }

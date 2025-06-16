@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -29,8 +30,10 @@ import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import io.delta.standalone.DeltaLog;
-import io.delta.standalone.actions.Metadata;
+import io.delta.kernel.Snapshot;
+import io.delta.kernel.engine.Engine;
+import io.delta.kernel.internal.SnapshotImpl;
+import io.delta.kernel.internal.actions.Metadata;
 
 import java.util.List;
 import java.util.Set;
@@ -41,7 +44,10 @@ public class DeltaLakeTable extends Table {
     private String dbName;
     private String tableName;
     private List<String> partColumnNames;
-    private DeltaLog deltaLog;
+    private SnapshotImpl deltaSnapshot;
+    private String tableLocation;
+    private Engine deltaEngine;
+
     public static final String PARTITION_NULL_VALUE = "null";
 
     public DeltaLakeTable() {
@@ -49,13 +55,16 @@ public class DeltaLakeTable extends Table {
     }
 
     public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
-                          List<String> partitionNames, DeltaLog deltaLog, long createTime) {
+                          List<String> partitionNames, SnapshotImpl deltaSnapshot, String tableLocation,
+                          Engine deltaEngine, long createTime) {
         super(id, tableName, TableType.DELTALAKE, schema);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
         this.partColumnNames = partitionNames;
-        this.deltaLog = deltaLog;
+        this.deltaSnapshot = deltaSnapshot;
+        this.tableLocation = tableLocation;
+        this.deltaEngine = deltaEngine;
         this.createTime = createTime;
     }
 
@@ -64,12 +73,21 @@ public class DeltaLakeTable extends Table {
         return true;
     }
 
-    public DeltaLog getDeltaLog() {
-        return deltaLog;
+    @Override
+    public String getTableLocation() {
+        return tableLocation;
     }
 
-    public String getTableLocation() {
-        return deltaLog.getPath().toString();
+    public Metadata getDeltaMetadata() {
+        return deltaSnapshot.getMetadata();
+    }
+
+    public Snapshot getDeltaSnapshot() {
+        return deltaSnapshot;
+    }
+
+    public Engine getDeltaEngine() {
+        return deltaEngine;
     }
 
     @Override
@@ -77,11 +95,13 @@ public class DeltaLakeTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return dbName;
     }
 
-    public String getTableName() {
+    @Override
+    public String getCatalogTableName() {
         return tableName;
     }
 
@@ -94,6 +114,7 @@ public class DeltaLakeTable extends Table {
         }
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
                 .map(name -> nameToColumn.get(name))
@@ -101,18 +122,32 @@ public class DeltaLakeTable extends Table {
     }
 
     public List<String> getPartitionColumnNames() {
-        return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
-                .collect(Collectors.toList());
+        return partColumnNames;
     }
 
     public boolean isUnPartitioned() {
-        return partColumnNames.size() == 0;
+        return partColumnNames.isEmpty();
+    }
+
+    public THdfsPartition toHdfsPartition(DescriptorTable.ReferencedPartitionInfo info) {
+        Metadata deltaMetadata = getDeltaMetadata();
+        PartitionKey key = info.getKey();
+        THdfsPartition tPartition = new THdfsPartition();
+        tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(deltaMetadata.getFormat().getProvider()).toThrift());
+
+        List<LiteralExpr> keys = key.getKeys();
+        tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+
+        THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
+        tPartitionLocation.setPrefix_index(-1);
+        tPartitionLocation.setSuffix(info.getPath());
+        tPartition.setLocation(tPartitionLocation);
+        return tPartition;
     }
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
-        Metadata metadata = deltaLog.snapshot().getMetadata();
 
         TDeltaLakeTable tDeltaLakeTable = new TDeltaLakeTable();
         tDeltaLakeTable.setLocation(getTableLocation());
@@ -138,19 +173,8 @@ public class DeltaLakeTable extends Table {
         }
 
         for (DescriptorTable.ReferencedPartitionInfo info : partitions) {
-            PartitionKey key = info.getKey();
             long partitionId = info.getId();
-
-            THdfsPartition tPartition = new THdfsPartition();
-            tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(metadata.getFormat().getProvider()).toThrift());
-
-            List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
-
-            THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
-            tPartitionLocation.setPrefix_index(-1);
-            tPartitionLocation.setSuffix(info.getPath());
-            tPartition.setLocation(tPartitionLocation);
+            THdfsPartition tPartition = toHdfsPartition(info);
             tDeltaLakeTable.putToPartitions(partitionId, tPartition);
         }
 
@@ -158,5 +182,28 @@ public class DeltaLakeTable extends Table {
                 fullSchema.size(), 0, tableName, dbName);
         tTableDescriptor.setDeltaLakeTable(tDeltaLakeTable);
         return tTableDescriptor;
+    }
+
+    public String getTableIdentifier() {
+        String uuid = this.deltaSnapshot.getMetadata().getId();
+        return Joiner.on(":").join(tableName, uuid == null ? "" : uuid);
+    }
+
+    @Override
+    public int hashCode() {
+        return com.google.common.base.Objects.hashCode(getCatalogName(), dbName, getTableIdentifier());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof DeltaLakeTable otherTable)) {
+            return false;
+        }
+
+        String catalogName = getCatalogName();
+        String tableIdentifier = getTableIdentifier();
+        return Objects.equal(catalogName, otherTable.getCatalogName()) &&
+                Objects.equal(dbName, otherTable.dbName) &&
+                Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 }

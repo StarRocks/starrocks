@@ -116,8 +116,10 @@ public class HashDistributionSpec extends DistributionSpec {
             return true;
         }
 
-        if (spec.type.equals(DistributionType.ROUND_ROBIN)) {
-            return true;
+        // For union operator(not union distinct), if its children is colocate ScanOperator, an
+        // round-robin distribution enforcer is required to generate a random-shuffle ExchangeNode
+        if (this.getHashDistributionDesc().isLocal() && spec.type.equals(DistributionType.ROUND_ROBIN)) {
+            return false;
         }
 
         if (!spec.type.equals(DistributionType.SHUFFLE)) {
@@ -129,7 +131,7 @@ public class HashDistributionSpec extends DistributionSpec {
 
         // check shuffle_local equivalentDescriptor
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
-            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
             long tableId = equivDesc.getTableId();
             // Disable use colocate/bucket join when table with empty partition
             boolean satisfyColocate = equivDesc.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&

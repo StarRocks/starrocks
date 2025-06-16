@@ -42,18 +42,18 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.GenericPool;
 import com.starrocks.common.LoadException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
-import com.starrocks.thrift.TBrokerListPathRequest;
 import com.starrocks.thrift.TBrokerListResponse;
 import com.starrocks.thrift.TBrokerOperationStatus;
 import com.starrocks.thrift.TBrokerOperationStatusCode;
@@ -69,6 +69,8 @@ import org.apache.spark.launcher.SparkLauncher;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.List;
@@ -230,7 +232,7 @@ public class SparkEtlJobHandlerTest {
                                     @Mocked CommandResult commandResult,
                                     @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                     @Mocked SparkLoadAppHandle handle)
-            throws IOException, UserException {
+            throws IOException, StarRocksException {
 
         new Expectations() {
             {
@@ -299,7 +301,7 @@ public class SparkEtlJobHandlerTest {
     public void testGetEtlJobStatusTimeout(@Mocked BrokerUtil brokerUtil, @Mocked Util util,
                                            @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                            @Mocked SparkLoadAppHandle handle)
-            throws IOException, UserException {
+            throws IOException, StarRocksException {
 
         new Expectations() {
             {
@@ -334,7 +336,7 @@ public class SparkEtlJobHandlerTest {
     public void testGetEtlJobStatusFailed(@Mocked Util util, @Mocked CommandResult commandResult,
                                           @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                           @Mocked SparkLoadAppHandle handle)
-            throws IOException, UserException {
+            throws IOException, StarRocksException {
 
         new Expectations() {
             {
@@ -376,7 +378,8 @@ public class SparkEtlJobHandlerTest {
 
     @Test
     public void testKillEtlJob(@Mocked Util util, @Mocked CommandResult commandResult,
-                               @Mocked SparkYarnConfigFiles sparkYarnConfigFiles) throws IOException, UserException {
+                               @Mocked SparkYarnConfigFiles sparkYarnConfigFiles) throws IOException,
+            StarRocksException {
         new Expectations() {
             {
                 sparkYarnConfigFiles.prepare();
@@ -435,7 +438,7 @@ public class SparkEtlJobHandlerTest {
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 99999);
 
-        new MockUp<GenericPool<TFileBrokerService.Client>>() {
+        new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
             public TFileBrokerService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
@@ -452,8 +455,6 @@ public class SparkEtlJobHandlerTest {
 
         new Expectations() {
             {
-                client.listPath((TBrokerListPathRequest) any);
-                result = response;
                 globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.getBroker(anyString, anyString);
@@ -461,15 +462,22 @@ public class SparkEtlJobHandlerTest {
             }
         };
 
-        BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
-        SparkEtlJobHandler handler = new SparkEtlJobHandler();
-        Map<String, Long> filePathToSize = handler.getEtlFilePaths(etlOutputPath, brokerDesc);
-        Assert.assertTrue(filePathToSize.containsKey(filePath));
-        Assert.assertEquals(10, (long) filePathToSize.get(filePath));
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftConnectionPoolMockedStatic.when(()
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(response);
+
+            BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
+            SparkEtlJobHandler handler = new SparkEtlJobHandler();
+            Map<String, Long> filePathToSize = handler.getEtlFilePaths(etlOutputPath, brokerDesc);
+            Assert.assertTrue(filePathToSize.containsKey(filePath));
+            Assert.assertEquals(10, (long) filePathToSize.get(filePath));
+        }
     }
 
     @Test
-    public void testDeleteEtlOutputPath(@Mocked BrokerUtil brokerUtil) throws UserException {
+    public void testDeleteEtlOutputPath(@Mocked BrokerUtil brokerUtil) throws StarRocksException {
         new Expectations() {
             {
                 BrokerUtil.deletePath(etlOutputPath, (BrokerDesc) any);

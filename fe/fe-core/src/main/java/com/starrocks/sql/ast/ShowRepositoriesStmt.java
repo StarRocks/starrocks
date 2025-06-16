@@ -44,4 +44,9 @@ public class ShowRepositoriesStmt extends ShowStmt {
         }
         return builder.build();
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRepositoriesStatement(this, context);
+    }
 }

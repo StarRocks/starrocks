@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Compile StarRocks with Docker
@@ -45,7 +45,7 @@ Before compiling StarRocks, make sure the following requirements are satisfied:
 - **Software**
 
   - Your machine must be running on Ubuntu 22.04 or CentOS 7.9.
-  - You must have Docker installed on your machine.
+  - You must have Docker installed on your machine and version v20.10.10 at least.
 
 ## Step 1: Download the image
 

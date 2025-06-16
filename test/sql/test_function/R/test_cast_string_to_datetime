@@ -1,0 +1,303 @@
+-- name: test_cast_string_to_datetime
+create table t1 (
+    k1 int NULL,
+    date_str string,
+    datetime_str string,
+    date_str_with_whitespace string,
+    datetime_str_with_whitespace string
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 32;
+-- result:
+-- !result
+CREATE TABLE __row_util (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32;
+-- result:
+-- !result
+insert into __row_util select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util select k1 + 20000 from __row_util; 
+insert into __row_util select k1 + 40000 from __row_util; 
+insert into __row_util select k1 + 80000 from __row_util; 
+
+insert into t1
+select 
+    cast(random() *2e9 as int), 
+    cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar),
+    concat(cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03'), 
+    concat('  ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), '  '), 
+    concat('   ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03  ')
+from __row_util;
+-- result:
+-- !result
+insert into t1 (date_str)
+values 
+    ("20200101"),
+    ("20200101010203"),
+    ("20200101T010203"),
+    ("20200101T0102033"),
+    ("20200101T010203.123"),
+
+    ("200101"),
+    ("200101010203"),
+    ("200101T010203"),
+    ("200101T0102033"),
+    ("200101T010203.123"),
+
+    ("2020.01.01"),
+    ("2020.01.01T01.02.03"),
+    ("2020.01.01T01.02.033"),
+    ("2020.01.01T01.0203.123"),
+
+    ("  20200101 "),
+    ("  20200101010203   "),
+    ("  20200101T010203"),
+    ("20200101T0102033  "),
+    ("  20200101T010203.123    \n"),
+    ("  20200101T010203.123    \n \t \v \f \r "),
+    
+    ("2020.13.29"),
+    ("2020.13.61"),
+
+    ("2020.02.29"),
+    ("2020.02.28"),
+    ("2000.02.29"),
+    ("2000.02.28"),
+
+    ("2021.02.28"),
+    ("2100.02.28"),
+
+    ("invalid"),
+
+    ("2021.02.29"),
+    ("2100.02.29"),
+
+    ("?100.02.28"),
+    ("2?00.02.28"),
+    ("21?0.02.28"),
+    ("210?.02.28"),
+    ("2100902.28"),
+    ("2100.?2.28"),
+    ("2100.0?.28"),
+    ("2100.02928"),
+    ("2100.02.?8"),
+    ("2100.02.2?");
+-- result:
+-- !result
+    
+
+select 
+    ifnull(sum(murmur_hash3_32(
+        cast(date_str as datetime)
+    )), 0) +
+    ifnull(sum(murmur_hash3_32(
+        cast(date_str_with_whitespace as datetime)
+    )), 0) +
+    ifnull(sum(murmur_hash3_32(
+        cast(datetime_str as datetime)
+    )), 0) +
+    ifnull(sum(murmur_hash3_32(
+        cast(datetime_str_with_whitespace as datetime)
+    )), 0)
+from t1;
+-- result:
+-1390046567746
+-- !result
+insert into t1
+select 
+    cast(random() *2e9 as int), 
+    null, null, null ,null
+from __row_util;
+-- result:
+-- !result
+    
+select 
+    ifnull(sum(murmur_hash3_32(
+        cast(date_str as datetime)
+    )), 0) +
+    ifnull(sum(murmur_hash3_32(
+        cast(date_str_with_whitespace as datetime)
+    )), 0) +
+    ifnull(sum(murmur_hash3_32(
+        cast(datetime_str as datetime)
+    )), 0) +
+    ifnull(sum(murmur_hash3_32(
+        cast(datetime_str_with_whitespace as datetime)
+    )), 0)
+from t1;
+-- result:
+-1390046567746
+-- !result
+select cast(NULL as datetime);
+-- result:
+None
+-- !result
+select cast("20200101" as datetime);
+-- result:
+2020-01-01 00:00:00
+-- !result
+select cast("20200101010203" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("20200101T010203" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("20200101T0102033" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("20200101T010203.123" as datetime);
+-- result:
+2020-01-01 01:02:03.123000
+-- !result
+select cast("200101" as datetime);
+-- result:
+2020-01-01 00:00:00
+-- !result
+select cast("200101010203" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("200101T010203" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("200101T0102033" as datetime);
+-- result:
+None
+-- !result
+select cast("200101T010203.123" as datetime);
+-- result:
+2020-01-01 01:02:03.123000
+-- !result
+select cast("2020.01.01" as datetime);
+-- result:
+2020-01-01 00:00:00
+-- !result
+select cast("2020.01.01T01.02.03" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("2020.01.01T01.02.033" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("2020.01.01T01.0203.123" as datetime);
+-- result:
+2020-01-01 01:02:03.123000
+-- !result
+select cast("  20200101 " as datetime);
+-- result:
+2020-01-01 00:00:00
+-- !result
+select cast("  20200101010203   " as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("  20200101T010203" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("20200101T0102033  " as datetime);
+-- result:
+None
+-- !result
+select cast("  20200101T010203.123    \n" as datetime);
+-- result:
+2020-01-01 01:02:03.123000
+-- !result
+select cast("  20200101T010203.123    \n \t \v \f \r " as datetime);
+-- result:
+2020-01-01 01:02:03.123000
+-- !result
+    
+select cast("2020.13.29" as datetime);
+-- result:
+None
+-- !result
+select cast("2020.13.61" as datetime);
+-- result:
+None
+-- !result
+select cast("2020.02.29" as datetime);
+-- result:
+2020-02-29 00:00:00
+-- !result
+select cast("2020.02.28" as datetime);
+-- result:
+2020-02-28 00:00:00
+-- !result
+select cast("2000.02.29" as datetime);
+-- result:
+2000-02-29 00:00:00
+-- !result
+select cast("2000.02.28" as datetime);
+-- result:
+2000-02-28 00:00:00
+-- !result
+select cast("2021.02.28" as datetime);
+-- result:
+2021-02-28 00:00:00
+-- !result
+select cast("2100.02.28" as datetime);
+-- result:
+2100-02-28 00:00:00
+-- !result
+select cast("invalid" as datetime);
+-- result:
+None
+-- !result
+select cast("2021.02.29" as datetime);
+-- result:
+None
+-- !result
+select cast("2100.02.29" as datetime);
+-- result:
+None
+-- !result
+select cast("?100.02.28" as datetime);
+-- result:
+None
+-- !result
+select cast("2?00.02.28" as datetime);
+-- result:
+None
+-- !result
+select cast("21?0.02.28" as datetime);
+-- result:
+None
+-- !result
+select cast("210?.02.28" as datetime);
+-- result:
+0210-02-28 00:00:00
+-- !result
+select cast("2100902.28" as datetime);
+-- result:
+None
+-- !result
+select cast("2100.?2.28" as datetime);
+-- result:
+2100-02-28 00:00:00
+-- !result
+select cast("2100.0?.28" as datetime);
+-- result:
+None
+-- !result
+select cast("2100.02928" as datetime);
+-- result:
+None
+-- !result
+select cast("2100.02.?8" as datetime);
+-- result:
+2100-02-08 00:00:00
+-- !result
+select cast("2100.02.2?" as datetime);
+-- result:
+2100-02-02 00:00:00
+-- !result

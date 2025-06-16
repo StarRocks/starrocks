@@ -20,12 +20,15 @@
 #include <exception>
 #include <utility>
 
+#include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
+#include "service/backend_options.h"
 #include "testutil/sync_point.h"
 #include "udf/java/utils.h"
+#include "util/failpoint/fail_point.h"
 #include "util/hdfs_util.h"
 
 using namespace fmt::literals;
@@ -34,12 +37,12 @@ namespace starrocks {
 
 class GetHdfsFileReadOnlyHandle {
 public:
-    GetHdfsFileReadOnlyHandle(const FSOptions options, std::string path, int buffer_size)
+    GetHdfsFileReadOnlyHandle(const FSOptions& options, std::string path, int buffer_size)
             : _options(std::move(options)), _path(std::move(path)), _buffer_size(buffer_size) {}
 
     StatusOr<hdfsFS> getOrCreateFS() {
         if (_hdfs_client == nullptr) {
-            SCOPED_RAW_TIMER(&_open_time_ns);
+            SCOPED_RAW_TIMER(&_total_open_fs_time_ns);
             std::string namenode;
             RETURN_IF_ERROR(get_namenode_from_path(_path, &namenode));
             RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, _hdfs_client, _options));
@@ -49,16 +52,18 @@ public:
 
     StatusOr<hdfsFile> getOrCreateFile() {
         if (_file == nullptr) {
-            SCOPED_RAW_TIMER(&_open_time_ns);
             auto st = getOrCreateFS();
+            SCOPED_RAW_TIMER(&_total_open_file_time_ns);
             if (!st.ok()) return st.status();
             _file = hdfsOpenFile(st.value(), _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
             if (_file == nullptr) {
                 if (errno == ENOENT) {
-                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", _path));
+                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, backend={}, file={}",
+                                                                  BackendOptions::get_localhost(), _path));
                 } else {
-                    return Status::InternalError(
-                            fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", _path, get_hdfs_err_msg()));
+                    return Status::InternalError(fmt::format("hdfsOpenFile failed, backend={}, file={}. err_msg: {}",
+                                                             BackendOptions::get_localhost(), _path,
+                                                             get_hdfs_err_msg()));
                 }
             }
         }
@@ -67,7 +72,8 @@ public:
 
     hdfsFS getFS() { return _hdfs_client->hdfs_fs; }
     hdfsFile getFile() { return _file; }
-    int64_t getOpenTimeNs() const { return _open_time_ns; }
+    int64_t getTotalOpenFSTimeNs() const { return _total_open_fs_time_ns; }
+    int64_t getTotalOpenFileTimeNs() const { return _total_open_file_time_ns; }
     const std::string& getPath() const { return _path; }
     void setOffset(int64_t offset) { _offset = offset; }
 
@@ -158,7 +164,8 @@ private:
     int _buffer_size;
     std::shared_ptr<HdfsFsClient> _hdfs_client = nullptr;
     hdfsFile _file = nullptr;
-    int64_t _open_time_ns = 0;
+    int64_t _total_open_fs_time_ns = 0;
+    int64_t _total_open_file_time_ns = 0;
     int64_t _offset = 0;
 };
 
@@ -244,28 +251,29 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
         if (file == nullptr) {
             return Status::OK();
         }
-        int64_t open_time_ns = _handle->getOpenTimeNs();
-        int64_t open_time_ms = open_time_ns * 0.000001;
-        stats->append("OpenTimeMs", open_time_ms);
+        stats->append(HdfsReadMetricsKey::kTotalOpenFSTimeNs, _handle->getTotalOpenFSTimeNs());
+        stats->append(HdfsReadMetricsKey::kTotalOpenFileTimeNs, _handle->getTotalOpenFileTimeNs());
 
         struct hdfsReadStatistics* hdfs_statistics = nullptr;
         auto r = hdfsFileGetReadStatistics(file, &hdfs_statistics);
         if (r == -1) {
             return Status::IOError(fmt::format("Fail to get read statistics of {}: {}", r, get_hdfs_err_msg()));
         }
-        stats->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
-        stats->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
-        stats->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
-        stats->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
+        stats->append(HdfsReadMetricsKey::kTotalBytesRead, hdfs_statistics->totalBytesRead);
+        stats->append(HdfsReadMetricsKey::kTotalLocalBytesRead, hdfs_statistics->totalLocalBytesRead);
+        stats->append(HdfsReadMetricsKey::kTotalShortCircuitBytesRead, hdfs_statistics->totalShortCircuitBytesRead);
+        stats->append(HdfsReadMetricsKey::kTotalZeroCopyBytesRead, hdfs_statistics->totalZeroCopyBytesRead);
         hdfsFileFreeReadStatistics(hdfs_statistics);
 
         if (config::hdfs_client_enable_hedged_read) {
             struct hdfsHedgedReadMetrics* hdfs_hedged_read_statistics = nullptr;
             r = hdfsGetHedgedReadMetrics(_handle->getFS(), &hdfs_hedged_read_statistics);
             if (r == 0) {
-                stats->append("TotalHedgedReadOps", hdfs_hedged_read_statistics->hedgedReadOps);
-                stats->append("TotalHedgedReadOpsInCurThread", hdfs_hedged_read_statistics->hedgedReadOpsInCurThread);
-                stats->append("TotalHedgedReadOpsWin", hdfs_hedged_read_statistics->hedgedReadOpsWin);
+                stats->append(HdfsReadMetricsKey::kTotalHedgedReadOps, hdfs_hedged_read_statistics->hedgedReadOps);
+                stats->append(HdfsReadMetricsKey::kTotalHedgedReadOpsInCurThread,
+                              hdfs_hedged_read_statistics->hedgedReadOpsInCurThread);
+                stats->append(HdfsReadMetricsKey::kTotalHedgedReadOpsWin,
+                              hdfs_hedged_read_statistics->hedgedReadOpsWin);
                 hdfsFreeHedgedReadMetrics(hdfs_hedged_read_statistics);
             }
         }
@@ -318,6 +326,7 @@ private:
 };
 
 Status HDFSWritableFile::append(const Slice& data) {
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
     tSize r = hdfsWrite(_fs, _file, data.data, data.size);
     if (r == -1) { // error
         auto error_msg = fmt::format("Fail to append {}: {}", _path, get_hdfs_err_msg());
@@ -335,6 +344,7 @@ Status HDFSWritableFile::append(const Slice& data) {
 }
 
 Status HDFSWritableFile::appendv(const Slice* data, size_t cnt) {
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
     for (size_t i = 0; i < cnt; i++) {
         RETURN_IF_ERROR(append(data[i]));
     }
@@ -347,6 +357,7 @@ Status HDFSWritableFile::close() {
     }
     FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
+        FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
         int r = hdfsHSync(_fs, _file);
         TEST_SYNC_POINT_CALLBACK("HDFSWritableFile::close", &r);
         auto st = Status::OK();
@@ -356,6 +367,7 @@ Status HDFSWritableFile::close() {
             st.update(Status::IOError(error_msg));
         }
 
+        FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
         r = hdfsCloseFile(_fs, _file);
         if (r == -1) {
             auto error_msg = fmt::format("Fail to close file {}: {}", _path, get_hdfs_err_msg());
@@ -372,7 +384,7 @@ Status HDFSWritableFile::close() {
 
 class HdfsFileSystem : public FileSystem {
 public:
-    HdfsFileSystem(const FSOptions& options) : _options(options) {}
+    HdfsFileSystem(const FSOptions& options) : _options(std::move(options)) {}
     ~HdfsFileSystem() override = default;
 
     HdfsFileSystem(const HdfsFileSystem&) = delete;
@@ -559,11 +571,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     std::shared_ptr<HdfsFsClient> hdfs_client;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int flags = O_WRONLY;
-    if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
-        if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
-            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path={}", path));
-        }
-    } else if (opts.mode == MUST_CREATE) {
+    // O_WRONLY means create or overwrite for hdfsOpenFile, which is exactly CREATE_OR_OPEN_WITH_TRUNCATE
+    if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
             return Status::AlreadyExist(path);
         }
@@ -571,13 +580,12 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         return Status::NotSupported("Open with MUST_EXIST not supported by hdfs writer");
     } else if (opts.mode == CREATE_OR_OPEN) {
         return Status::NotSupported("Open with CREATE_OR_OPEN not supported by hdfs writer");
-    } else {
+    } else if (opts.mode != CREATE_OR_OPEN_WITH_TRUNCATE) {
         auto msg = strings::Substitute("Unsupported open mode $0", opts.mode);
         return Status::NotSupported(msg);
     }
 
-    flags |= O_CREAT;
-
+    // `io.file.buffer.size` of https://apache.github.io/hadoop/hadoop-project-dist/hadoop-common/core-default.xml
     int hdfs_write_buffer_size = 0;
     // pass zero to hdfsOpenFile will use the default hdfs_write_buffer_size
     if (_options.result_file_options != nullptr) {
@@ -587,7 +595,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
     }
     if (_options.upload != nullptr && _options.upload->__isset.hdfs_write_buffer_size_kb) {
-        hdfs_write_buffer_size = _options.upload->__isset.hdfs_write_buffer_size_kb;
+        hdfs_write_buffer_size = _options.upload->hdfs_write_buffer_size_kb;
     }
 
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);
@@ -599,7 +607,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
                     fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", path, get_hdfs_err_msg()));
         }
     }
-    return std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0);
+    return wrap_encrypted(std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0),
+                          opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const SequentialFileOptions& opts,
@@ -613,8 +622,8 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
         hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
     auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(_options, path, hdfs_read_buffer_size);
-    auto stream = std::make_shared<HdfsInputStream>(std::move(handle));
-    return std::make_unique<SequentialFile>(std::move(stream), path);
+    auto stream = std::make_unique<HdfsInputStream>(std::move(handle));
+    return SequentialFile::from(std::move(stream), path, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
@@ -628,8 +637,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
         hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
     auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(_options, path, hdfs_read_buffer_size);
-    auto stream = std::make_shared<HdfsInputStream>(std::move(handle));
-    return std::make_unique<RandomAccessFile>(std::move(stream), path);
+    auto stream = std::make_unique<HdfsInputStream>(std::move(handle));
+    return RandomAccessFile::from(std::move(stream), path, false, opts.encryption_info);
 }
 
 Status HdfsFileSystem::rename_file(const std::string& src, const std::string& target) {

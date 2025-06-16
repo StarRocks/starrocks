@@ -14,20 +14,20 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.authentication.LDAPSecurityIntegration;
+import com.google.common.base.Preconditions;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.SecurityIntegrationFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
-
-import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY;
 
 public class SecurityIntegrationStatementAnalyzer {
 
@@ -35,14 +35,7 @@ public class SecurityIntegrationStatementAnalyzer {
         new SecurityIntegrationStatementAnalyzerVisitor().analyze(statement, context);
     }
 
-    public static class SecurityIntegrationStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-        final Set<String> supportedAuthMechanism =
-                new HashSet<>(Collections.singletonList(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP));
-        final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
-                SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
-                LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY,
-                LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY,
-                LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY));
+    public static class SecurityIntegrationStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext context) {
             visit(statement, context);
@@ -51,42 +44,61 @@ public class SecurityIntegrationStatementAnalyzer {
         @Override
         public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
                                                             ConnectContext context) {
-            Map<String, String> propertyMap = statement.getPropertyMap();
-
-            requiredProperties.forEach(s -> {
-                if (!propertyMap.containsKey(s)) {
-                    throw new SemanticException("missing required property: " + s);
-                }
-            });
-
-            if (!supportedAuthMechanism.contains(propertyMap.get("type"))) {
-                throw new SemanticException("unsupported security integration type '" +
-                        propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY) + "'");
+            Map<String, String> properties = statement.getPropertyMap();
+            String securityIntegrationType = properties.get("type");
+            if (securityIntegrationType == null) {
+                throw new SemanticException("missing required property: type");
             }
 
-            if (context.getGlobalStateMgr().getAuthenticationMgr()
-                    .getSecurityIntegration(statement.getName()) != null) {
+            SecurityIntegrationFactory.checkSecurityIntegrationIsSupported(securityIntegrationType);
+
+            SecurityIntegration securityIntegration =
+                    SecurityIntegrationFactory.createSecurityIntegration(statement.getName(), statement.getPropertyMap());
+            Preconditions.checkNotNull(securityIntegration);
+            securityIntegration.checkProperty();
+
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (authenticationMgr.getSecurityIntegration(statement.getName()) != null) {
                 throw new SemanticException("security integration '" + statement.getName() + "' already exists");
             }
+            return null;
+        }
 
-            if (propertyMap.containsKey(LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY)) {
-                try {
-                    String val = propertyMap.get(LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY);
-                    int interval = Integer.parseInt(val);
-                    if (interval < 10) {
-                        throw new NumberFormatException("current value of '" +
-                                LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY + "' is less than 10");
-                    }
-                } catch (NumberFormatException e) {
-                    throw new SemanticException("invalid '" +
-                            LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY +
-                            "' property value, error: " + e.getMessage(), e);
-                }
+        @Override
+        public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement,
+                                                           ConnectContext context) {
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (authenticationMgr.getSecurityIntegration(statement.getName()) == null) {
+                throw new SemanticException("security integration '" + statement.getName() + "' not found");
+            }
+
+            if (statement.getProperties().containsKey(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY)) {
+                throw new SemanticException("'type' property cannot be changed");
             }
 
             return null;
         }
 
-    }
+        @Override
+        public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement,
+                                                          ConnectContext context) {
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (authenticationMgr.getSecurityIntegration(statement.getName()) == null) {
+                throw new SemanticException("security integration '" + statement.getName() + "' not found");
+            }
 
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
+                                                                ConnectContext context) {
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (authenticationMgr.getSecurityIntegration(statement.getName()) == null) {
+                throw new SemanticException("security integration '" + statement.getName() + "' not found");
+            }
+
+            return null;
+        }
+    }
 }

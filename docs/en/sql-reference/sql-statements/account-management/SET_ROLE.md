@@ -1,16 +1,23 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # SET ROLE
 
-## Description
 
-Activates roles, along with all of its associated privileges and nested roles, for the current session. After the role is activated, users can use this role to perform operations.
+SET ROLE activates roles, along with all of its associated privileges and nested roles, for the current session. After the role is activated, users can use this role to perform operations.
 
- After running this command, you can run `select is_role_in_session("<role_name>");` to verify whether this role is active in the current session.
+After running this command, you can run `select is_role_in_session("<role_name>");` to verify whether this role is active in the current session.
 
 This command is supported from v3.0.
+
+## Usage notes
+
+Users can only activate roles that have been assigned to them.
+
+You can query the roles of a user using [SHOW GRANTS](./SHOW_GRANTS.md).
+
+You can query the active roles of the current user using `SELECT CURRENT_ROLE()`. For more information, see [current_role](../../sql-functions/utility-functions/current_role.md).
 
 ## Syntax
 
@@ -26,14 +33,6 @@ SET ROLE ALL;
 ## Parameters
 
 `role_name`: the role name
-
-## Usage notes
-
-Users can only activate roles that have been assigned to them.
-
-You can query the roles of a user using [SHOW GRANTS](./SHOW_GRANTS.md).
-
-You can query the active roles of the current user using `SELECT CURRENT_ROLE()`. For more information, see [current_role](../../sql-functions/utility-functions/current_role.md).
 
 ## Examples
 

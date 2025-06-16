@@ -1,14 +1,14 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 1
 description: "StarRocks in Docker: Query real data with JOINs"
 ---
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsAllin1.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
-# StarRocks basics
+# Deploy StarRocks with Docker
 
 This tutorial covers:
 
@@ -38,19 +38,22 @@ There is a lot of information in this document, and it is presented with the ste
 
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL Workbench.
 
 ### curl
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
 ---
+
 ## Terminology
 
 ### FE
+
 Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
 
 ### BE
+
 Backend nodes are responsible for both data storage and executing query plans.
 
 ---
@@ -61,7 +64,9 @@ Backend nodes are responsible for both data storage and executing query plans.
 docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 -itd \
 --name quickstart starrocks/allin1-ubuntu
 ```
+
 ---
+
 ## SQL clients
 
 <Clients />
@@ -109,6 +114,7 @@ mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ---
 
 ## Load two datasets
+
 There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
 :::tip
@@ -222,9 +228,7 @@ There is more to learn; we intentionally glossed over the data transformation do
 
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
-[Materialized views](../cover_pages/mv_use_cases.mdx)
-
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 

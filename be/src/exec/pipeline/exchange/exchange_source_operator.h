@@ -39,6 +39,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    std::string get_name() const override;
+
 private:
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
     std::atomic<bool> _is_finishing = false;
@@ -54,7 +56,9 @@ public:
               _row_desc(row_desc),
               _enable_pipeline_level_shuffle(enable_pipeline_level_shuffle) {}
 
-    virtual ~ExchangeSourceOperatorFactory();
+    ~ExchangeSourceOperatorFactory() override;
+
+    bool support_event_scheduler() const override { return true; }
 
     const TExchangeNode& texchange_node() { return _texchange_node; }
 
@@ -71,7 +75,7 @@ public:
     std::shared_ptr<DataStreamRecvr> create_stream_recvr(RuntimeState* state);
     void close_stream_recvr();
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     const TExchangeNode& _texchange_node;

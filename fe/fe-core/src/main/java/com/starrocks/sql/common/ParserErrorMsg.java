@@ -70,7 +70,7 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported type specification: ''{0}'' {1}")
     String unsupportedType(String a0, String a1);
 
-    @BaseMessage("Unsupported statement: '{0}'")
+    @BaseMessage("Unsupported statement: {0}")
     String unsupportedStatement(String a0);
 
     @BaseMessage("AUTO_INCREMENT column {0} must be NOT NULL")
@@ -94,8 +94,8 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported expr ''{0}'' in {1} clause. {2}")
     String unsupportedExprWithInfoAndExplain(String a0, String a1, String a2);
 
-    @BaseMessage("Cannot use duplicated {0} clause in building materialized view")
-    String duplicatedClause(String a0);
+    @BaseMessage("Cannot use duplicated {0} clause in {1}")
+    String duplicatedClause(String a0, String a1);
 
     @BaseMessage("''{0}'' cannot support ''{1}'' in materialized view")
     String forbidClauseInMV(String a0, String a1);
@@ -211,4 +211,30 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Not support ''{0}'' {1}")
     String unsupportedSubquery(String a0, String a1);
+
+    @BaseMessage("Invalid hint value ''{0}''")
+    String invalidHintValue(String a0);
+
+    @BaseMessage("Failed to evaluate user variable hint ''{0}'', because {1}")
+    String invalidUserVariableHint(String a0, String a1);
+
+    @BaseMessage("No selected database for cancel BACKUP/RESTORE")
+    String nullIdentifierCancelBackupRestore();
+    @BaseMessage("Value count in PIVOT {0} must match number of FOR columns {1}")
+    String pivotValueArityMismatch(int a0, int a1);
+
+    @BaseMessage("Specifying dbName before snapshot name is forbidden if the DbName is specified explicitly in BACKUP/RESTORE")
+    String unsupportedSepcifyDbNameAfterSnapshotName();
+
+    @BaseMessage("Specifying alias for backup object is forbidden in BACKUP stmt")
+    String unsupportedSepcifyAliasInBackupStmt();
+
+    @BaseMessage("`ON` clause is forbidden if no Database explicitly specified in Restore stmt")
+    String unsupportedOnClauseWithoutAnyDbNameInRestoreStmt();
+
+    @BaseMessage("Can not sepcify database name for external catalog Backup/Restore")
+    String unsupportedSepcifyDbForExternalCatalog();
+
+    @BaseMessage("Can not sepcify `ON` clause for external catalog Backup/Restore")
+    String unsupportedOnForExternalCatalog();
 }

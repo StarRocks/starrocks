@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # abs
 
-## Description
+
 
 Returns the absolute value of the numeric value `x`. If the input value is NULL, NULL is returned.
 

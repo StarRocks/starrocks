@@ -1,15 +1,16 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # SHOW ROLES
 
-## Description
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
-Displays all roles in the system. You can use `SHOW GRANTS FOR ROLE <role_name>;` to view the privileges of a specific role. For more information, see [SHOW GRANTS](SHOW_GRANTS.md). This command is supported from v3.0.
+SHOW ROLES displays all roles in the system. You can use `SHOW GRANTS FOR ROLE <role_name>;` to view the privileges of a specific role. For more information, see [SHOW GRANTS](SHOW_GRANTS.md).
 
+This command is supported from v3.0.
 
-> Note: Only the `user_admin` role can execute this statement.
+<UserManagementPriv />
 
 ## Syntax
 

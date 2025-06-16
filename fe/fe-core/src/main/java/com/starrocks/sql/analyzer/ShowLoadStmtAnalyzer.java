@@ -42,7 +42,7 @@ public class ShowLoadStmtAnalyzer {
         new ShowLoadStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowLoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ShowLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private boolean isAccurateMatch;
         private String labelValue;

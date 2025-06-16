@@ -21,65 +21,73 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import io.delta.kernel.types.BinaryType;
+import io.delta.kernel.types.DataType;
+import io.delta.kernel.types.IntegerType;
+import io.delta.kernel.types.StringType;
+import io.delta.kernel.types.StructField;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
+
 import static com.starrocks.connector.ColumnTypeConverter.fromDeltaLakeType;
+import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NONE;
 
 public class DeltaLakeApiConverterTest {
     @Test
     public void testArray() {
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.ArrayType(
-                new io.delta.standalone.types.IntegerType(),
+        DataType deltaType = new io.delta.kernel.types.ArrayType(
+                IntegerType.INTEGER,
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
         Assert.assertEquals(srType, new ArrayType(ScalarType.createType(PrimitiveType.INT)));
     }
 
     @Test
     public void testUnsupported() {
-        io.delta.standalone.types.StructField[] fields = {
-                new io.delta.standalone.types.StructField("k1", new io.delta.standalone.types.IntegerType()),
-                new io.delta.standalone.types.StructField("k2", new io.delta.standalone.types.StringType())
-        };
-        io.delta.standalone.types.DataType innerType = new io.delta.standalone.types.StructType(fields);
+        List<StructField> fields = ImmutableList.of(
+                new StructField("k1", IntegerType.INTEGER, true),
+                new StructField("k2", StringType.STRING, true)
+        );
+        DataType innerType = new io.delta.kernel.types.StructType(fields);
 
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.MapType(
+        DataType deltaType = new io.delta.kernel.types.MapType(
                 innerType,
                 innerType,
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
         Assert.assertTrue(srType.isUnknown());
     }
 
     @Test
     public void testMap() {
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.MapType(
-                new io.delta.standalone.types.IntegerType(),
-                new io.delta.standalone.types.BinaryType(),
+        DataType deltaType = new io.delta.kernel.types.MapType(
+                IntegerType.INTEGER,
+                BinaryType.BINARY,
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
         Assert.assertEquals(srType,
                 new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARBINARY)));
     }
 
     @Test
     public void testStruct() {
-        io.delta.standalone.types.StructField[] fields = {
-                new io.delta.standalone.types.StructField("col1", new io.delta.standalone.types.IntegerType()),
-                new io.delta.standalone.types.StructField("col2", new io.delta.standalone.types.NullType())
-        };
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.StructType(fields);
+        List<StructField> fields = ImmutableList.of(
+                new StructField("col1", IntegerType.INTEGER, true),
+                new StructField("col2", StringType.STRING, true)
+        );
+        DataType deltaType = new io.delta.kernel.types.StructType(fields);
 
-        Type srType = fromDeltaLakeType(deltaType);
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
         Assert.assertEquals(srType, new StructType(ImmutableList.of(
                 ScalarType.createType(PrimitiveType.INT),
-                ScalarType.createType(PrimitiveType.NULL_TYPE))));
+                ScalarType.createDefaultCatalogString())));
     }
 }

@@ -42,12 +42,17 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
         expectedSize = table.getDataSize();
 
         // inject our test db
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getFullNameToDb();
         fullNameToDb.put(SHOW_DATA_DB_NAME, db);
+
+        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
+        idToDb.put(1000 + testDbId, db);
     }
 
     @Test
     public void testGetShowData() throws IOException {
+
         Config.http_slow_request_threshold_ms = 0;
         Request request = new Request.Builder()
                 .get()

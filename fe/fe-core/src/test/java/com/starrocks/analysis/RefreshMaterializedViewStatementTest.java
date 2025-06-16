@@ -18,11 +18,10 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -40,26 +39,17 @@ public class RefreshMaterializedViewStatementTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.bdbje_heartbeat_timeout_second = 60;
-        Config.bdbje_replica_ack_timeout_second = 60;
-        Config.bdbje_lock_timeout_second = 60;
-        // set some parameters to speedup test
-        Config.tablet_sched_checker_interval_seconds = 1;
-        Config.tablet_sched_repair_delay_factor_second = 1;
-        Config.enable_new_publish_mechanism = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         cluster = PseudoCluster.getInstance();
 
-        FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
-
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         starRocksAssert.withDatabase("test").useDatabase("test");
 
         starRocksAssert.withTable("create table table_name_tmp_1 ( c1 bigint NOT NULL, c2 string not null, c3 int not null ) " +
@@ -84,7 +74,7 @@ public class RefreshMaterializedViewStatementTest {
     }
 
     @Test
-    public void testRereshNotMaterializedView() {
+    public void testRefreshNotMaterializedView() {
         String sql = "REFRESH MATERIALIZED VIEW table_name_tmp_1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -95,16 +85,33 @@ public class RefreshMaterializedViewStatementTest {
     }
 
     @Test
+    public void testRefreshMaterializedViewWithPriority() throws Exception {
+        {
+            String sql = "refresh materialized view mv1 with sync mode";
+            RefreshMaterializedViewStatement stmt =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.assertTrue(stmt.isSync());
+            Assert.assertNull(stmt.getPriority());
+        }
+        {
+            String sql = "refresh materialized view mv1 with priority 70";
+            RefreshMaterializedViewStatement stmt =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.assertEquals(70, stmt.getPriority().intValue());
+        }
+    }
+
+    @Test
     public void testRefreshMaterializedView() throws Exception {
 
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
         starRocksAssert.withMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
                 " refresh manual" +
                 " as select c1, sum(c3) as total from table_name_tmp_1 group by c1");
         cluster.runSql("test", "insert into table_name_tmp_1 values(1, \"str1\", 100)");
-        Table table = db.getTable("table_name_tmp_1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "table_name_tmp_1");
         Assert.assertNotNull(table);
-        Table t2 = db.getTable("mv1");
+        Table t2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
         Assert.assertNotNull(t2);
         MaterializedView mv1 = (MaterializedView) t2;
         cluster.runSql("test", "refresh materialized view mv1 with sync mode");
@@ -117,7 +124,8 @@ public class RefreshMaterializedViewStatementTest {
                 refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(table.getId());
         if (partitionInfoMap.containsKey("table_name_tmp_1")) {
             MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
-            Assert.assertEquals(table.getPartition("table_name_tmp_1").getVisibleVersion(), partitionInfo.getVersion());
+            Assert.assertEquals(table.getPartition("table_name_tmp_1").getDefaultPhysicalPartition()
+                    .getVisibleVersion(), partitionInfo.getVersion());
         }
     }
 }

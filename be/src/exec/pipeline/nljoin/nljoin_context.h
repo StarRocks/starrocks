@@ -60,8 +60,7 @@ public:
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
     bool has_spilled() { return _spiller && _spiller->spilled(); }
 
-    [[nodiscard]] Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
-                                                   spill::IOTaskExecutor& executor);
+    Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk);
 
     void finalize();
 
@@ -103,12 +102,12 @@ public:
             : _build_chunks(std::move(build_chunks)), _spillers(std::move(spillers)) {}
 
     // prefetch next chunk from spiller
-    Status prefetch(RuntimeState* state, spill::IOTaskExecutor& executor);
+    Status prefetch(RuntimeState* state);
 
     bool has_output();
 
     // return EOF if all data has been read
-    StatusOr<ChunkPtr> get_next(RuntimeState* state, spill::IOTaskExecutor& executor);
+    StatusOr<ChunkPtr> get_next(RuntimeState* state);
 
     // reset stream
     Status reset(RuntimeState* state, spill::Spiller* dummy_spiller);
@@ -178,12 +177,25 @@ public:
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
     // Return true if it's the last prober, which need to perform the right join task
-    bool finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags);
+    bool finish_probe(int32_t driver_seq, const Filter& build_match_flags);
 
-    const std::vector<uint8_t> get_shared_build_match_flag() const;
+    const Filter get_shared_build_match_flag() const;
 
     const SpillProcessChannelFactoryPtr& spill_channel_factory() { return _spill_process_factory_ptr; }
     NLJoinBuildChunkStreamBuilder& builder() { return _build_stream_builder; }
+
+    void attach_probe_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _builder_observable.add_observer(state, observer);
+    }
+    void attach_build_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _probe_observable.add_observer(state, observer);
+    }
+    auto defer_notify_probe() {
+        return DeferOp([this]() { _builder_observable.notify_source_observers(); });
+    }
+    auto defer_notify_build() {
+        return DeferOp([this]() { _probe_observable.notify_source_observers(); });
+    }
 
 private:
     Status _init_runtime_filter(RuntimeState* state);
@@ -207,13 +219,17 @@ private:
     std::vector<ChunkPtr> _build_chunks; // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
     int _num_post_probers = 0;
-    std::vector<uint8_t> _shared_build_match_flag;
+    Filter _shared_build_match_flag;
 
     // conjuncts in cross join, used for generate runtime_filter
     std::vector<ExprContext*> _rf_conjuncts_ctx;
     RuntimeFilterHub* _rf_hub;
     std::vector<RuntimeFilterBuildDescriptor*> _rf_descs;
     SpillProcessChannelFactoryPtr _spill_process_factory_ptr;
+
+    // probe side notify build observe
+    pipeline::Observable _builder_observable;
+    pipeline::Observable _probe_observable;
 };
 
 } // namespace starrocks::pipeline

@@ -1,0 +1,53 @@
+-- name: testORCBuildSearchArgument
+shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/multi_stripes.orc oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/multi_stripes.orc | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 4,070. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE multi_stripes
+(
+    c0 int,
+    c1 string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select count(*) from multi_stripes;
+-- result:
+200000
+-- !result
+select count(*) from multi_stripes where c1 is not null;
+-- result:
+200000
+-- !result
+select count(*) from multi_stripes where c1 is null;
+-- result:
+0
+-- !result
+select count(*) from multi_stripes where c1 like '%smith%';
+-- result:
+0
+-- !result
+select count(*) from multi_stripes where c1 = '%smith%';
+-- result:
+0
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

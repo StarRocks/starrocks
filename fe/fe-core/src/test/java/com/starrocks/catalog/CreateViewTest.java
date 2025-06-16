@@ -34,7 +34,7 @@ public class CreateViewTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
@@ -43,7 +43,7 @@ public class CreateViewTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
     }
 
     @Test
@@ -68,13 +68,13 @@ public class CreateViewTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"in_memory\" = \"false\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");")
                 .withView("create view test_null_view as select * from site_access;");
 
         Table view = starRocksAssert.getCtx().getGlobalStateMgr()
-                .getDb("test").getTable("test_null_view");
+                .getLocalMetastore().getDb("test").getTable("test_null_view");
         Assert.assertTrue(view instanceof View);
         List<Column> columns = view.getColumns();
         for (Column column : columns) {
@@ -99,7 +99,7 @@ public class CreateViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
@@ -135,7 +135,7 @@ public class CreateViewTest {
                         ", lead(price ignore nulls,1,0) over (partition by username) as leadValue\n" +
                         "from sample_data;");
 
-        Table view = starRocksAssert.getCtx().getGlobalStateMgr()
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                 .getDb("test").getTable("test_ignore_nulls");
         Assert.assertTrue(view instanceof View);
         String str = ((View) view).getInlineViewDef();

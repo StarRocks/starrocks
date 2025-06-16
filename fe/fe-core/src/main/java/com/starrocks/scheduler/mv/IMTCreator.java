@@ -17,7 +17,6 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.CatalogUtils;
@@ -33,6 +32,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.UnsupportedException;
@@ -120,7 +120,7 @@ class IMTCreator {
         for (CreateTableStmt create : createTables) {
             LOG.info("creating IMT {} for MV {}", create.getTableName(), view.getName());
             try {
-                GlobalStateMgr.getCurrentState().createTable(create);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(create);
             } catch (DdlException e) {
                 // TODO(murphy) cleanup created IMT, or make it atomic
                 LOG.warn("create IMT {} failed due to ", create.getTableName(), e);

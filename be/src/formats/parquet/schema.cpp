@@ -14,13 +14,31 @@
 
 #include "formats/parquet/schema.h"
 
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
+#include <memory>
+#include <sstream>
+#include <utility>
 
-#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "types/logical_type.h"
 #include "util/slice.h"
 
 namespace starrocks::parquet {
+
+std::string column_type_to_string(const ColumnType& column_type) {
+    switch (column_type) {
+    case SCALAR:
+        return "scalar";
+    case ARRAY:
+        return "array";
+    case MAP:
+        return "map";
+    case STRUCT:
+        return "struct";
+    default:
+        return "unknown";
+    }
+}
 
 std::string LevelInfo::debug_string() const {
     std::stringstream ss;
@@ -31,7 +49,7 @@ std::string LevelInfo::debug_string() const {
 
 std::string ParquetField::debug_string() const {
     std::stringstream ss;
-    ss << "ParquetField(name=" << name << ",type=" << type.type << ",physical_type=" << physical_type
+    ss << "ParquetField(name=" << name << ",type=" << column_type_to_string(type) << ",physical_type=" << physical_type
        << ",physical_column_index=" << physical_column_index << ",levels_info=" << level_info.debug_string();
     if (children.size() > 0) {
         ss << ",children=[";
@@ -45,6 +63,23 @@ std::string ParquetField::debug_string() const {
     }
     ss << ")";
     return ss.str();
+}
+
+bool ParquetField::is_complex_type() const {
+    return type == ARRAY || type == MAP || type == STRUCT;
+}
+
+bool ParquetField::has_same_complex_type(const TypeDescriptor& type_descriptor) const {
+    // check the complex type is matched
+    if (type == ColumnType::ARRAY && type_descriptor.type == LogicalType::TYPE_ARRAY) {
+        return true;
+    } else if (type == ColumnType::MAP && type_descriptor.type == LogicalType::TYPE_MAP) {
+        return true;
+    } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_STRUCT) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 static bool is_group(const tparquet::SchemaElement* schema) {
@@ -76,6 +111,7 @@ Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, 
                                        bool is_nullable, ParquetField* field) {
     field->name = t_schema->name;
     field->schema_element = *t_schema;
+    field->type = ColumnType::SCALAR;
     field->is_nullable = is_nullable;
     field->physical_type = t_schema->type;
     field->type_length = t_schema->type_length;
@@ -160,8 +196,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
 
     field->name = group_schema->name;
     field->field_id = group_schema->field_id;
-    field->type.type = TYPE_ARRAY;
-    field->type.children.push_back(field->children[0].type);
+    field->type = ColumnType::ARRAY;
     field->is_nullable = is_optional(group_schema);
     field->level_info = cur_level_info;
     field->level_info.immediate_repeated_ancestor_def_level = last_immediate_repeated_ancestor_def_level;
@@ -220,15 +255,20 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     //   }
     // }
     //
+
+    // check map's key must be primitive type
+    ASSIGN_OR_RETURN(const auto* key_schema, _get_schema_element(t_schemas, pos + 2));
+    if (is_group(key_schema)) {
+        return Status::InvalidArgument("Map keys must be primitive type.");
+    }
+
     RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, key_field, next_pos));
     RETURN_IF_ERROR(node_to_field(t_schemas, pos + 3, cur_level_info, value_field, next_pos));
 
     field->name = group_schema->name;
     // Actually, we don't need to put field_id here
     field->field_id = group_schema->field_id;
-    field->type.type = TYPE_MAP;
-    field->type.children.emplace_back(key_field->type);
-    field->type.children.emplace_back(value_field->type);
+    field->type = ColumnType::MAP;
     field->is_nullable = is_optional(group_schema);
     field->level_info = cur_level_info;
     field->level_info.immediate_repeated_ancestor_def_level = last_immediate_repeated_ancestor_def_level;
@@ -251,13 +291,7 @@ Status SchemaDescriptor::group_to_struct_field(const std::vector<tparquet::Schem
     field->name = group_schema->name;
     field->is_nullable = is_optional(group_schema);
     field->level_info = cur_level_info;
-    field->type.type = TYPE_STRUCT;
-    for (size_t i = 0; i < num_children; i++) {
-        field->type.children.emplace_back(field->children[i].type);
-    }
-    for (size_t i = 0; i < num_children; i++) {
-        field->type.field_names.emplace_back(field->children[i].name);
-    }
+    field->type = ColumnType::STRUCT;
     field->field_id = group_schema->field_id;
     return Status::OK();
 }
@@ -284,7 +318,7 @@ Status SchemaDescriptor::group_to_field(const std::vector<tparquet::SchemaElemen
         RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos, cur_level_info, &field->children[0], next_pos));
 
         field->name = group_schema->name;
-        field->type.type = TYPE_ARRAY;
+        field->type = ColumnType::ARRAY;
         field->is_nullable = false;
         field->level_info = cur_level_info;
         field->level_info.immediate_repeated_ancestor_def_level = last_immediate_repeated_ancestor_def_level;
@@ -323,7 +357,7 @@ Status SchemaDescriptor::node_to_field(const std::vector<tparquet::SchemaElement
             RETURN_IF_ERROR(leaf_to_field(node_schema, cur_level_info, false, child));
 
             field->name = node_schema->name;
-            field->type.type = TYPE_ARRAY;
+            field->type = ColumnType::ARRAY;
             field->is_nullable = false;
             field->field_id = node_schema->field_id;
             field->level_info = cur_level_info;

@@ -42,6 +42,7 @@
 #include "storage/types.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
+#include "util/decimal_types.h"
 
 namespace starrocks {
 
@@ -60,7 +61,7 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
-            type == TYPE_DECIMAL128) {
+            type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
             DCHECK(scalar_type.__isset.precision);
             DCHECK(scalar_type.__isset.scale);
         }
@@ -72,6 +73,12 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
+            if (struct_field.__isset.id && struct_field.id != -1) {
+                field_ids.emplace_back(struct_field.id);
+            }
+            if (struct_field.__isset.physical_name && !struct_field.physical_name.empty()) {
+                field_physical_names.emplace_back(struct_field.physical_name);
+            }
         }
         DCHECK_EQ(field_names.size(), children.size());
         break;
@@ -123,9 +130,7 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         curr_node.__set_scalar_type(TScalarType());
         TScalarType& scalar_type = curr_node.scalar_type;
         scalar_type.__set_type(starrocks::to_thrift(type));
-        if (len != -1) {
-            scalar_type.__set_len(len);
-        }
+        scalar_type.__set_len(len);
         if (scale != -1) {
             scalar_type.__set_scale(scale);
         }
@@ -159,9 +164,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         node->set_type(TTypeNodeType::SCALAR);
         PScalarType* scalar_type = node->mutable_scalar_type();
         scalar_type->set_type(starrocks::to_thrift(type));
-        if (len != -1) {
-            scalar_type->set_len(len);
-        }
+        scalar_type->set_len(len);
         if (scale != -1) {
             scalar_type->set_scale(scale);
         }
@@ -239,6 +242,8 @@ std::string TypeDescriptor::debug_string() const {
         return strings::Substitute("DECIMAL64($0, $1)", precision, scale);
     case TYPE_DECIMAL128:
         return strings::Substitute("DECIMAL128($0, $1)", precision, scale);
+    case TYPE_DECIMAL256:
+        return strings::Substitute("DECIMAL256($0, $1)", precision, scale);
     case TYPE_ARRAY:
         return strings::Substitute("ARRAY<$0>", children[0].debug_string());
     case TYPE_MAP:
@@ -352,6 +357,9 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
+    case TYPE_DECIMAL256:
+    case TYPE_INT256:
+        return 32;
     case TYPE_ARRAY:
     case TYPE_MAP:
         return sizeof(void*); // sizeof(Collection*)
@@ -404,6 +412,58 @@ size_t TypeDescriptor::get_array_depth_limit() const {
         depth++;
     }
     return depth;
+}
+
+TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2) {
+    DCHECK(type1 != type2);
+    if (type1.is_integer_type() && type2.is_integer_type()) {
+        // promote integer type. Larger enum values mean larger value ranges.
+        auto tp = type1.type > type2.type ? type1.type : type2.type;
+        return TypeDescriptor::from_logical_type(tp);
+    } else if (type1.is_float_type() && type2.is_float_type()) {
+        // promote all float to double.
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if ((type1.is_float_type() && type2.is_integer_type()) ||
+               (type1.is_integer_type() && type2.is_float_type())) {
+        // if one is float and other is integer, promote to double
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if (type1.is_decimal_type() && type2.is_decimal_type()) {
+        auto precision1 = type1.precision;
+        auto scale1 = type1.scale;
+        auto precision2 = type2.precision;
+        auto scale2 = type2.scale;
+        int final_scale = std::max(scale1, scale2);
+        int max_int_length = std::max(precision1 - scale1, precision2 - scale2);
+        int final_precision = max_int_length + final_scale;
+        return promote_decimal_type(final_precision, final_scale);
+    } else if (type1.type == TYPE_VARCHAR && type2.type == TYPE_VARCHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varchar_type(len);
+    } else if (type1.type == TYPE_CHAR && type2.type == TYPE_CHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_char_type(len);
+    } else if (type1.type == TYPE_VARBINARY && type2.type == TYPE_VARBINARY) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varbinary_type(len);
+    }
+    // treat other conflicted types as varchar.
+    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+}
+
+TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
+    // decimal v3 only
+    if (precision <= 0 || precision > decimal_precision_limit<int128_t>) {
+        // if precision is invalid, use varchar
+        LOG(WARNING) << "failed to promote decimal type, use varchar. precision: " << precision;
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    } else if (precision <= decimal_precision_limit<int32_t>) {
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
+    } else if (precision <= decimal_precision_limit<int64_t>) {
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
+    } else {
+        DCHECK_LE(precision, decimal_precision_limit<int128_t>);
+        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
+    }
 }
 
 } // namespace starrocks

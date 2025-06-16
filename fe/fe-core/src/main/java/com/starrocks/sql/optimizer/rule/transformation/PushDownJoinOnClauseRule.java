@@ -36,8 +36,10 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-
         if (joinOperator.hasPushDownJoinOnClause()) {
+            return false;
+        }
+        if (!context.isEnableJoinPredicatePushDown()) {
             return false;
         }
         return joinOperator.getOnPredicate() != null;
@@ -49,8 +51,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         LogicalJoinOperator join = (LogicalJoinOperator) input.getOp();
         ScalarOperator on = join.getOnPredicate();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
-                input, true, false, context.getColumnRefFactory(),
-                context.isEnableLeftRightJoinEquivalenceDerive());
+                input, true, false, context.getColumnRefFactory(), context);
         OptExpression root = joinPredicatePushdown.pushdown(join.getOnPredicate());
         ((LogicalJoinOperator) root.getOp()).setHasPushDownJoinOnClause(true);
         if (root.getOp().equals(input.getOp()) && on.equals(join.getOnPredicate()) &&

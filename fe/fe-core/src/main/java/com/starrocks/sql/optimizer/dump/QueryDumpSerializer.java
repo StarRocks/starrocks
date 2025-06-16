@@ -29,9 +29,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -57,7 +57,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         try {
             dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
         } catch (IOException e) {
-            LOG.warn("serialize session variables failed. " + e);
+            LOG.warn("serialize session variables failed. ", e);
         }
 
         // BE number
@@ -67,9 +67,9 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         // backend core stat
         JsonObject backendCoreStat = new JsonObject();
         backendCoreStat.addProperty("numOfHardwareCoresPerBe",
-                GsonUtils.GSON.toJson(BackendCoreStat.getNumOfHardwareCoresPerBe()));
+                GsonUtils.GSON.toJson(BackendResourceStat.getInstance().getNumHardwareCoresPerBe()));
         backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
-                BackendCoreStat.getCachedAvgNumOfHardwareCores());
+                BackendResourceStat.getInstance().getCachedAvgNumHardwareCores());
         dumpJson.add("be_core_stat", backendCoreStat);
         // exception
         JsonArray exceptions = new JsonArray();
@@ -113,7 +113,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Pair<String, com.starrocks.catalog.Table> entry : tableMetaPairs) {
             String tableName = entry.first + "." + entry.second.getName();
             List<String> createTableStmt = Lists.newArrayList();
-            GlobalStateMgr.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
+            AstToStringBuilder.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
@@ -289,8 +289,8 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         if (CollectionUtils.isNotEmpty(hiveMeta.getDataColumnNames())) {
             hiveTableDumpInfo.setDataColumnNames(
                     hiveMeta.getDataColumnNames().stream()
-                    .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
-                    .collect(Collectors.toList())
+                            .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
+                            .collect(Collectors.toList())
             );
         }
 

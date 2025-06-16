@@ -1,0 +1,128 @@
+-- name: test_analyze_column @sequential
+DROP DATABASE IF EXISTS test_analyze_column;
+-- result:
+-- !result
+CREATE DATABASE test_analyze_column;
+-- result:
+-- !result
+USE test_analyze_column;
+-- result:
+-- !result
+CREATE TABLE `t1` (
+   `k1`  date,
+   `k2`  datetime,
+   `k3`  char(20),
+   `k4`  varchar(20),
+   `k5`  boolean,
+   `k6`  tinyint,
+   `k7`  smallint,
+   `k8`  int,
+   `k9`  bigint,
+   `k10` largeint,
+   `k11` float,
+   `k12` double,
+   `k13` decimal(27,9) )
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+admin set frontend config('enable_statistic_collect_on_first_load'='false');
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    (null,'2020-10-26 12:12:12',null,null,null,null,null,null,null,null,1,1.12,2.889),
+    (null,'2020-10-27 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+analyze sample table t1;
+-- result:
+test_analyze_column.t1	sample	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+-- !result
+analyze full table t1(k1,k2);
+-- result:
+test_analyze_column.t1	analyze	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+-- !result
+analyze full table t1(k3,k4);
+-- result:
+test_analyze_column.t1	analyze	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+k3	5
+k4	5
+-- !result
+analyze sample table t1(k3,k4);
+-- result:
+test_analyze_column.t1	sample	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+k3	5
+k4	5
+-- !result
+analyze sample table t1;
+-- result:
+test_analyze_column.t1	sample	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+k3	5
+k4	5
+-- !result
+analyze full table t1;
+-- result:
+test_analyze_column.t1	analyze	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k10	5
+k11	5
+k12	5
+k13	5
+k2	5
+k3	5
+k4	5
+k5	5
+k6	5
+k7	5
+k8	5
+k9	5
+-- !result
+drop stats t1;
+-- result:
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+-- !result
+analyze sample table t1;
+-- result:
+test_analyze_column.t1	sample	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+-- !result
+drop stats t1;
+-- result:
+-- !result
+admin set frontend config('enable_statistic_collect_on_first_load'='true');
+-- result:
+-- !result

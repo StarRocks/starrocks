@@ -25,6 +25,7 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     // we must only prepare it at sink operator
     RETURN_IF_ERROR(_analytor->prepare(state, state->obj_pool(), _unique_metrics.get()));
     RETURN_IF_ERROR(_analytor->open(state));
+    _analytor->attach_sink_observer(state, observer());
 
     return Status::OK();
 }
@@ -35,6 +36,7 @@ void AnalyticSinkOperator::close(RuntimeState* state) {
 }
 
 Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _analytor->defer_notify_source();
     _is_finished = true;
 
     // skip processing if cancelled

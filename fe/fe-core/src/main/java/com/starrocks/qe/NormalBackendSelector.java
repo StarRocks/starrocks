@@ -17,7 +17,7 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TNetworkAddress;
@@ -27,6 +27,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -59,7 +60,7 @@ public class NormalBackendSelector implements BackendSelector {
     }
 
     @Override
-    public void computeScanRangeAssignment() throws UserException {
+    public void computeScanRangeAssignment() throws StarRocksException {
         HashMap<TNetworkAddress, Long> assignedRowCountPerHost = Maps.newHashMap();
         // sort the scan ranges by row count
         // only sort the scan range when it is load job
@@ -74,8 +75,21 @@ public class NormalBackendSelector implements BackendSelector {
             // assign this scan range to the host w/ the fewest assigned row count
             Long minRowCount = Long.MAX_VALUE;
             TScanRangeLocation minLocation = null;
+            List<TScanRangeLocation> backupLocations = new ArrayList<>();
+
             for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
                 if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
+                    if (workerProvider.allowUsingBackupNode()) {
+                        long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id());
+                        LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
+                        if (backupNodeId > 0) {
+                            // using the backupNode to generate a new ScanRangeLocation
+                            TScanRangeLocation backupLocation = new TScanRangeLocation();
+                            backupLocation.setBackend_id(backupNodeId);
+                            backupLocation.setServer(workerProvider.getWorkerById(backupNodeId).getAddress());
+                            backupLocations.add(backupLocation);
+                        }
+                    }
                     continue;
                 }
 
@@ -86,6 +100,18 @@ public class NormalBackendSelector implements BackendSelector {
                 }
             }
 
+            // give a try of the backupLocations if minLocation is null
+            if (minLocation == null && !backupLocations.isEmpty()) {
+                for (TScanRangeLocation location : backupLocations) {
+                    Long assignedBytes = assignedRowCountPerHost.getOrDefault(location.server, 0L);
+                    if (assignedBytes < minRowCount) {
+                        minRowCount = assignedBytes;
+                        minLocation = location;
+                    }
+                }
+            }
+
+            // fail eventually if it can't find any location.
             if (minLocation == null) {
                 workerProvider.reportDataNodeNotFoundException();
             }

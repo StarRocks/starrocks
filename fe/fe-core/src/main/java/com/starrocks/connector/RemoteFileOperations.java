@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import jline.internal.Log;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -36,7 +38,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -53,6 +54,7 @@ import static com.starrocks.connector.hive.HiveWriteUtils.fileCreatedByQuery;
 public class RemoteFileOperations {
     private static final Logger LOG = LogManager.getLogger(RemoteFileOperations.class);
     public static final String HMS_PARTITIONS_REMOTE_FILES = "HMS.PARTITIONS.LIST_FS_PARTITIONS";
+
     protected CachingRemoteFileIO remoteFileIO;
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
@@ -74,27 +76,34 @@ public class RemoteFileOperations {
         this.conf = conf;
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions) {
-        return getRemoteFiles(partitions, Optional.empty(), true);
+    public static class Options {
+        public static Options DEFAULT = new Options();
+        public String hudiTableLocation = null;
+        public boolean useCache = true;
+
+        public static Options toUseHudiTableLocation(String hudiTableLocation) {
+            Options opt = new Options();
+            opt.hudiTableLocation = hudiTableLocation;
+            return opt;
+        }
+
+        public static Options toUseCache(boolean useCache) {
+            Options opt = new Options();
+            opt.useCache = useCache;
+            return opt;
+        }
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, boolean useCache) {
-        return getRemoteFiles(partitions, Optional.empty(), useCache);
-    }
-
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
-        return getRemoteFiles(partitions, hudiTableLocation, true);
-    }
-
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation, boolean useCache) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
+        RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
-            RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+            RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive);
             pathKeyToPartition.put(key, partition);
         }
 
         int cacheMissSize = partitions.size();
-        if (enableCatalogLevelCache && useCache) {
+        if (enableCatalogLevelCache && params.isUseCache()) {
             cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
                     Lists.newArrayList(pathKeyToPartition.keySet())).size();
         }
@@ -106,9 +115,10 @@ public class RemoteFileOperations {
         Tracers.count(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES, cacheMissSize);
         try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES)) {
             for (Partition partition : partitions) {
-                RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+                RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
+                pathKey.setScanContext(scanContext);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = pullRemoteFileExecutor.submit(() ->
-                        remoteFileIO.getRemoteFiles(pathKey, useCache));
+                        remoteFileIO.getRemoteFiles(pathKey, params.isUseCache()));
                 futures.add(future);
             }
 
@@ -128,28 +138,45 @@ public class RemoteFileOperations {
         return resultRemoteFiles;
     }
 
-    public List<RemoteFileInfo> getPresentFilesInCache(Collection<Partition> partitions) {
-        return getPresentFilesInCache(partitions, Optional.empty());
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params,
+                                                    Function<GetRemoteFilesParams, List<Partition>> fnGetPartitionValues) {
+
+        RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
+        HMSPartitionBasedRemoteInfoSource remoteInfoSource = new HMSPartitionBasedRemoteInfoSource(pullRemoteFileExecutor, params,
+                partition -> {
+                    final RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
+                    pathKey.setScanContext(scanContext);
+                    Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey, params.isUseCache());
+                    List<RemoteFileDesc> files = res.get(pathKey);
+                    RemoteFileInfo remoteFileInfo = buildRemoteFileInfo(partition, files);
+                    return remoteFileInfo;
+                }, fnGetPartitionValues);
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
+        remoteInfoSource.setMaxOutputQueueSize(sv.getConnectorRemoteFileAsyncQueueSize());
+        remoteInfoSource.setMaxRunningTaskCount(sv.getConnectorRemoteFileAsyncTaskSize());
+        remoteInfoSource.run();
+        return remoteInfoSource;
     }
 
-    public List<RemoteFileInfo> getPresentFilesInCache(Collection<Partition> partitions, Optional<String> hudiTableLocation) {
+    public List<RemoteFileInfo> getPresentFilesInCache(Collection<Partition> partitions) {
         Map<RemotePathKey, Partition> pathKeyToPartition = partitions.stream()
-                .collect(Collectors.toMap(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation),
+                .collect(Collectors.toMap(
+                        partition -> RemotePathKey.of(partition.getFullPath(), isRecursive),
                         Function.identity()));
 
         List<RemotePathKey> paths = partitions.stream()
-                .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation))
+                .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive))
                 .collect(Collectors.toList());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentFiles = remoteFileIO.getPresentRemoteFiles(paths);
         return fillFileInfo(presentFiles, pathKeyToPartition);
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfoForStats(List<Partition> partitions, Optional<String> hudiTableLocation) {
+    public List<RemoteFileInfo> getRemoteFileInfoForStats(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
         if (enableCatalogLevelCache) {
-            return getPresentFilesInCache(partitions, hudiTableLocation);
+            return getPresentFilesInCache(partitions);
         } else {
-            return getRemoteFiles(partitions, hudiTableLocation);
+            return getRemoteFiles(table, partitions, params);
         }
     }
 
@@ -174,7 +201,7 @@ public class RemoteFileOperations {
 
     private RemoteFileInfo buildRemoteFileInfo(Partition partition, List<RemoteFileDesc> fileDescs) {
         RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
-                .setFormat(partition.getInputFormat())
+                .setFormat(partition.getFileFormat())
                 .setFullPath(partition.getFullPath())
                 .setFiles(fileDescs.stream()
                         .map(desc -> desc.setTextFileFormatDesc(partition.getTextFileFormatDesc()))
@@ -287,5 +314,42 @@ public class RemoteFileOperations {
             LOG.error("Failed to list path {}", path, e);
             throw new StarRocksConnectorException("Failed to list path %s. msg: %s", path.toString(), e.getMessage());
         }
+    }
+
+    public FileStatus[] getFileStatus(Path... paths) {
+        try {
+            return remoteFileIO.getFileStatus(paths);
+        } catch (Exception e) {
+            LOG.error("Failed to get file status for paths: {}", paths, e);
+            throw new StarRocksConnectorException("Failed to get file status for paths: %s. msg: %s", paths, e.getMessage());
+        }
+    }
+
+    public List<PartitionInfo> getRemotePartitions(List<Partition> partitions) {
+        List<Path> paths = Lists.newArrayList();
+        for (Partition partition : partitions) {
+            Path partitionPath = new Path(partition.getFullPath());
+            paths.add(partitionPath);
+        }
+        FileStatus[] fileStatuses = getFileStatus(paths.toArray(new Path[0]));
+        List<PartitionInfo> result = Lists.newArrayList();
+        for (int i = 0; i < partitions.size(); i++) {
+            Partition partition = partitions.get(i);
+            FileStatus fileStatus = fileStatuses[i];
+            final String fullPath = partition.getFullPath();
+            final long time = fileStatus.getModificationTime();
+            result.add(new PartitionInfo() {
+                @Override
+                public long getModifiedTime() {
+                    return time;
+                }
+
+                @Override
+                public String getFullPath() {
+                    return fullPath;
+                }
+            });
+        }
+        return result;
     }
 }

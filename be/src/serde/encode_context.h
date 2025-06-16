@@ -37,26 +37,17 @@ constexpr uint32_t EncodeSamplingNum = 5;
 class EncodeContext {
 public:
     static std::shared_ptr<EncodeContext> get_encode_context_shared_ptr(const int col_num, const int encode_level) {
-        return encode_level == 0 ? nullptr : std::make_shared<EncodeContext>(col_num, encode_level);
+        return std::make_shared<EncodeContext>(col_num, encode_level);
     }
     EncodeContext(const int col_num, const int encode_level);
     // update encode_level for each column
     void update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte);
 
-    int get_encode_level(const int col_id) {
-        DCHECK(_session_encode_level != 0);
-        return _column_encode_level[col_id];
-    }
+    int get_encode_level(const int col_id) { return _column_encode_level[col_id]; }
 
-    const std::vector<uint32_t>& get_encode_levels() const {
-        DCHECK(_session_encode_level != 0);
-        return _column_encode_level;
-    }
+    const std::vector<uint32_t>& get_encode_levels() const { return _column_encode_level; }
 
-    int get_session_encode_level() {
-        DCHECK(_session_encode_level != 0);
-        return _session_encode_level;
-    }
+    int get_session_encode_level() { return _session_encode_level; }
 
     void set_encode_levels_in_pb(ChunkPB* const res);
 

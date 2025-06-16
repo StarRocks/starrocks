@@ -70,10 +70,12 @@ static Status get_orc_type_from_scalar_type(const orc::Type* typ, TypeDescriptor
         break;
 
     case orc::TypeKind::STRING:
+        // orc STRING type's length is 0, so we use VARCHAR(MAX_VARCHAR_LENGTH).
         *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         break;
 
     case orc::TypeKind::BINARY:
+        // orc BINARY type's length is 0, so we use VARCHAR(MAX_VARCHAR_LENGTH).
         *desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         break;
 
@@ -90,7 +92,7 @@ static Status get_orc_type_from_scalar_type(const orc::Type* typ, TypeDescriptor
         return Status::NotSupported(fmt::format("Unkown supported orc type: {}", typ->getKind()));
 
     case orc::TypeKind::DECIMAL:
-        *desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, typ->getPrecision(), typ->getScale());
+        *desc = TypeDescriptor::promote_decimal_type(typ->getPrecision(), typ->getScale());
         break;
 
     case orc::TypeKind::DATE:

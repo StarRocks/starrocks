@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Stream Load
@@ -15,7 +15,7 @@ In v2.5 and earlier, Stream Load does not support skipping the first few rows of
 - In the load command or statement, use `-H "where: <column_name> != '<column_name>'"` to filter out the first few rows of the CSV file. `<column_name>` is any of the column names held in the first few rows. Note that StarRocks first transforms and then filters the source data. Therefore, if the column names in the first few rows fail to be transformed into their matching destination data types, `NULL` values are returned for them. This means the destination StarRocks table cannot contain columns that are set to `NOT NULL`.
 - In the load command or statement, add `-H "max_filter_ratio:0.01"` to set a maximum error tolerance that is 1% or lower but can tolerate a few error rows, thereby allowing StarRocks to ignore the data transformation failures in the first few rows. In this case, the Stream Load job can still succeed even if `ErrorURL` is returned to indicate error rows. Do not set `max_filter_ratio` to a large value. If you set `max_filter_ratio` to a large value, some important data quality issues may be missed.
 
-From v3.0 onwards, Stream Load supports the `skip_header` parameter, which specifies whether to skip the first few rows of a CSV file. For more information,see [CSV parameters](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters).
+From v3.0 onwards, Stream Load supports the `skip_header` parameter, which specifies whether to skip the first few rows of a CSV file. For more information,see [CSV parameters](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-parameters).
 
 ## 2. The data to be loaded into the partition column is not of standard DATE or INT type. For example, the data is in a format like 202106.00. How do I transform the data if I load it by using Stream Load?
 
@@ -34,4 +34,4 @@ In the preceding example, `DATE_1` can be considered to be a temporarily named c
 The size of the source data file exceeds 10 GB, which is the maximum file size supported by Stream Load. Take one of the following actions:
 
 - Use `seq -w 0 n` to split the source data file into smaller files.
-- Use `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` to adjust the value of the [BE configuration item](../../administration/BE_configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` to increase the maximum file size.
+- Use `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` to adjust the value of the [BE configuration item](../../administration/management/BE_configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` to increase the maximum file size.

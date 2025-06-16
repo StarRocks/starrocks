@@ -90,6 +90,7 @@ Status ColumnDecoder::_encode_array_to_global_id(Column* datas, Column* codes) {
         auto* array_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
         auto* lowcard_array_column = down_cast<ArrayColumn*>(lowcard_nullcolumn->data_column().get());
 
+        lowcard_nullcolumn->set_has_null(nullable_column->has_null());
         lowcard_nullcolumn->null_column()->swap_column(*nullable_column->null_column());
         lowcard_array_column->offsets_column()->swap_column(*array_column->offsets_column());
         return _encode_string_to_global_id(array_column->elements_column().get(),

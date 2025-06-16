@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "common/logging.h"
 #include "types/logical_type.h"
 
@@ -40,7 +42,8 @@ namespace starrocks {
     M(TYPE_DOUBLE)                   \
     M(TYPE_DECIMAL32)                \
     M(TYPE_DECIMAL64)                \
-    M(TYPE_DECIMAL128)
+    M(TYPE_DECIMAL128)               \
+    M(TYPE_DECIMAL256)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)     \
@@ -87,6 +90,7 @@ namespace starrocks {
     M(DECIMAL)                          \
     M(CHAR)                             \
     M(LARGEINT)                         \
+    M(INT256)                           \
     M(VARCHAR)                          \
     M(HLL)                              \
     M(DECIMALV2)                        \
@@ -96,10 +100,21 @@ namespace starrocks {
     M(DECIMAL32)                        \
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
+    M(DECIMAL256)                       \
     M(FUNCTION)                         \
     M(BINARY)                           \
     M(VARBINARY)                        \
     M(JSON)
+
+#define APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(M) \
+    M(TYPE_BOOLEAN)                               \
+    M(TYPE_TINYINT)                               \
+    M(TYPE_SMALLINT)                              \
+    M(TYPE_INT)                                   \
+    M(TYPE_BIGINT)                                \
+    M(TYPE_DECIMAL32)                             \
+    M(TYPE_DECIMAL64)                             \
+    M(TYPE_DATE)
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
@@ -149,6 +164,8 @@ auto type_dispatch_all(LogicalType ltype, Functor fun, Args... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_ARRAY)
+        _TYPE_DISPATCH_CASE(TYPE_STRUCT)
+        _TYPE_DISPATCH_CASE(TYPE_MAP)
         _TYPE_DISPATCH_CASE(TYPE_HLL)
         _TYPE_DISPATCH_CASE(TYPE_OBJECT)
         _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
@@ -197,10 +214,59 @@ Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, Args...
     }
 }
 
+constexpr size_t get_num_scalar_types() {
+    size_t size = 0;
+#define _NUM_SCALAR_TYPES(type) size++;
+    APPLY_FOR_ALL_SCALAR_TYPE(_NUM_SCALAR_TYPES)
+    return size;
+}
+constexpr size_t NUM_SCALAR_TYPES = get_num_scalar_types();
+constexpr std::array<LogicalType, NUM_SCALAR_TYPES> get_scalar_types() {
+    std::array<LogicalType, NUM_SCALAR_TYPES> scalar_types;
+    size_t index = 0;
+#define _BUILD_SCALAR_TYPES(type) scalar_types[index++] = type;
+    APPLY_FOR_ALL_SCALAR_TYPE(_BUILD_SCALAR_TYPES)
+
+    return scalar_types;
+}
+
+template <size_t I, class Functor>
+constexpr auto dispatch_helper(LogicalType ltype, Functor fun) {
+    constexpr std::array<LogicalType, NUM_SCALAR_TYPES> scalar_types = get_scalar_types();
+    if constexpr (I < scalar_types.size()) {
+        if (ltype == scalar_types[I]) {
+            return fun.template operator()<scalar_types[I]>();
+        } else {
+            return dispatch_helper<I + 1>(ltype, fun);
+        }
+    } else {
+        using RetType = decltype(fun.template operator()<scalar_types[0]>());
+        if constexpr (std::is_void_v<RetType>) {
+            return;
+        } else {
+            return RetType{};
+        }
+    }
+}
+
+template <class Functor, class... Args>
+auto scalar_type_dispatch(LogicalType ltype, Functor fun, Args... args) {
+    return dispatch_helper<0>(ltype, fun);
+}
+
 template <class Functor, class Ret, class... Args>
 auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        return default_value;
+    }
+}
+
+template <class Functor, class Ret, class... Args>
+auto type_dispatch_bitset_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
+    switch (ltype) {
+        APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(_TYPE_DISPATCH_CASE)
     default:
         return default_value;
     }

@@ -20,7 +20,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncatePartitionClause;
@@ -61,10 +61,12 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+
+        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
-        ModifyBackendAddressClause clause = (ModifyBackendAddressClause) field.get(statement);
+        ModifyBackendClause clause = (ModifyBackendClause) field.get(statement);
         Assert.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
     }
 
@@ -76,7 +78,8 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyFrontendAddressClause clause = (ModifyFrontendAddressClause) field.get(statement);
@@ -88,7 +91,7 @@ public class AstBuilderTest {
         String sql = "alter table db.test truncate partition p1";
         StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         AlterTableStmt aStmt = (AlterTableStmt) statement;
-        List<AlterClause> alterClauses = aStmt.getOps();
+        List<AlterClause> alterClauses = aStmt.getAlterClauseList();
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
     }

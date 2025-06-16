@@ -36,7 +36,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -62,7 +62,6 @@ public class BrokerLoadPendingTask extends LoadTask {
                                  Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToBrokerFileGroups,
                                  BrokerDesc brokerDesc) {
         super(loadTaskCallback, TaskType.PENDING, 0);
-        this.retryTime = 3;
         this.attachment = new BrokerPendingTaskAttachment(signature);
         this.aggKeyToBrokerFileGroups = aggKeyToBrokerFileGroups;
         this.brokerDesc = brokerDesc;
@@ -70,12 +69,12 @@ public class BrokerLoadPendingTask extends LoadTask {
     }
 
     @Override
-    void executeTask() throws UserException {
+    void executeTask() throws StarRocksException {
         LOG.info("begin to execute broker pending task. job: {}", callback.getCallbackId());
         getAllFileStatus();
     }
 
-    private void getAllFileStatus() throws UserException {
+    private void getAllFileStatus() throws StarRocksException {
         long start = System.currentTimeMillis();
         long totalFileSize = 0;
         int totalFileNum = 0;

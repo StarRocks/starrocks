@@ -100,7 +100,9 @@ enum TPrimitiveType {
   DECIMAL128,
   JSON,
   FUNCTION,
-  VARBINARY
+  VARBINARY,
+  DECIMAL256,
+  INT256
 }
 
 enum TTypeNodeType {
@@ -126,6 +128,11 @@ struct TScalarType {
 struct TStructField {
     1: optional string name
     2: optional string comment
+    3: optional i32 id
+    // physical_name is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    4: optional string physical_name
 }
 
 struct TTypeNode {
@@ -162,7 +169,8 @@ enum TAggregationType {
     NONE,
     BITMAP_UNION,
     REPLACE_IF_NOT_NULL,
-    PERCENTILE_UNION
+    PERCENTILE_UNION,
+    AGG_STATE_UNION
 }
 
 enum TPushType {
@@ -206,6 +214,8 @@ enum TTaskType {
     COMPACTION,
     REMOTE_SNAPSHOT,
     REPLICATE_SNAPSHOT,
+    UPDATE_SCHEMA,
+    COMPACTION_CONTROL,
     NUM_TASK_TYPE
 }
 
@@ -276,7 +286,10 @@ enum TFunctionBinaryType {
   IR,
 
   // StarRocks customized UDF in jar.
-  SRJAR
+  SRJAR,
+  
+  // 
+  PYTHON
 }
 
 // Represents a fully qualified function name.
@@ -318,6 +331,16 @@ struct TAggregateFunction {
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
   2: optional string symbol
+  // Table function left join
+  3: optional bool is_left_join
+}
+
+struct TAggStateDesc {
+    1: optional string agg_func_name
+    2: optional list<TTypeDesc> arg_types
+    3: optional TTypeDesc ret_type
+    4: optional bool result_nullable
+    5: optional i32 func_version
 }
 
 // Represents a function in the Catalog.
@@ -352,6 +375,7 @@ struct TFunction {
 
   11: optional i64 id
   12: optional string checksum
+  13: optional TAggStateDesc agg_state_desc
 
   // Builtin Function id, used to mark the function in the vectorization engine,
   // and it's different with `id` because `id` is use for serialized and cache
@@ -363,6 +387,8 @@ struct TFunction {
   // Ignore nulls
   33: optional bool ignore_nulls
   34: optional bool isolated
+  35: optional string input_type
+  36: optional string content
 }
 
 enum TLoadJobState {
@@ -397,7 +423,15 @@ enum TTableType {
     FILE_TABLE,
     DELTALAKE_TABLE,
     TABLE_FUNCTION_TABLE,
-    ODPS_TABLE
+    ODPS_TABLE,
+    LOGICAL_ICEBERG_METADATA_TABLE,
+    ICEBERG_REFS_TABLE,
+    ICEBERG_HISTORY_TABLE,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE,
+    ICEBERG_SNAPSHOTS_TABLE,
+    ICEBERG_MANIFESTS_TABLE,
+    ICEBERG_FILES_TABLE,
+    ICEBERG_PARTITIONS_TABLE
 }
 
 enum TKeysType {
@@ -498,6 +532,7 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
     BROTLI = 12;
+    AUTO = 13;
 }
 
 enum TWriteQuorumType {
@@ -548,6 +583,7 @@ struct TIcebergDataFile {
     5: optional string partition_path;
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
+    8: optional string partition_null_fingerprint;
 }
 
 struct THiveFileInfo {
@@ -564,4 +600,20 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+}
+
+struct TSnapshotInfo {
+    1: optional TBackend backend
+    2: optional string snapshot_path
+    3: optional bool incremental_snapshot
+}
+
+enum TTxnType {
+    TXN_NORMAL = 0,
+    TXN_REPLICATION = 1
+}
+
+enum TNodeType {
+    Backend = 0,
+    Compute = 1
 }

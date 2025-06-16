@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # space
 
-## Description
+
 
 Returns a string of the specified number of spaces.
 

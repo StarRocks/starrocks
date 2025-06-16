@@ -17,8 +17,10 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MapType;
@@ -26,6 +28,8 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExprNodeType;
@@ -55,7 +59,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
         IntLiteral sub = new IntLiteral(10);
 
-        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub);
+        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -64,7 +68,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         StringLiteral subCast = new StringLiteral("10");
-        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast);
+        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr1,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -73,7 +77,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         StringLiteral subNoCast = new StringLiteral("aaa");
-        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast);
+        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
@@ -83,7 +87,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         mapType = new MapType(keyTypeChar, valueTypeInt);
         slot.setType(mapType);
         StringLiteral subString = new StringLiteral("aaa");
-        CollectionElementExpr collectionElementExpr3 = new CollectionElementExpr(slot, subString);
+        CollectionElementExpr collectionElementExpr3 = new CollectionElementExpr(slot, subString, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr3,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -105,7 +109,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
         IntLiteral sub = new IntLiteral(10);
 
-        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub);
+        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -114,13 +118,13 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         StringLiteral subCast = new StringLiteral("10");
-        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast);
+        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr1,
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         StringLiteral subNoCast = new StringLiteral("aaa");
-        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast);
+        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
@@ -137,7 +141,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
         IntLiteral sub = new IntLiteral(10);
 
-        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub);
+        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr,
                         new Scope(RelationId.anonymous(), new RelationFields())));
@@ -213,5 +217,26 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             Assert.assertEquals(fnCoalesce.functionName(), "coalesce");
             Assert.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }
+    }
+
+    @Test
+    public void testUserVariableExprAnalyzer() {
+        Expr expr = SqlParser.parseSqlToExpr("[1, 2, 3]", 32);
+        UserVariableExpr userVariableExpr = new UserVariableExpr("test", NodePosition.ZERO);
+        userVariableExpr.setValue(expr);
+        UserVariableExpr copy = (UserVariableExpr) userVariableExpr.clone();
+        Assert.assertEquals(userVariableExpr, copy);
+    }
+
+    @Test
+    public void testLikePatternSyntaxException() {
+        StringLiteral e1 = new StringLiteral("a");
+        e1.setType(Type.VARCHAR);
+        StringLiteral e2 = new StringLiteral("([A-Za-z0-9]+[\\u4e00-\\u9fa5]{2}[A-Za-z0-9]+)");
+        e2.setType(Type.VARCHAR);
+        LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP, e1, e2);
+        ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
+        Assert.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,
+                new Scope(RelationId.anonymous(), new RelationFields())));
     }
 }

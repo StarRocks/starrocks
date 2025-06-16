@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # percentile_approx
 
-## 功能
+
 
 返回第 p 个百分位点的近似值。
 
@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```Haskell
-PERCENTILE_APPROX(expr, p[, compression])
+DOUBLE PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
 ```
 
 ## 参数说明

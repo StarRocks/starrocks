@@ -45,18 +45,6 @@ struct ArrayAggDispatcher {
     }
 };
 
-struct ArrayUnionAggDispatcher {
-    template <LogicalType lt>
-    void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt>) {
-            auto func = std::make_shared<ArrayUnionAggAggregateFunction<lt, false>>();
-            using AggState = ArrayUnionAggAggregateState<lt, false>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_union_agg",
-                                                                                                   false, func);
-        }
-    }
-};
-
 struct ArrayUniqueAggDispatcher {
     template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
@@ -117,13 +105,38 @@ struct ArrayAggDistinctDispatcher {
     }
 };
 
+struct MapAggDispatcher {
+    template <LogicalType kt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_aggregate<kt>) {
+            using KeyCppType = RunTimeCppType<kt>;
+            if constexpr (lt_is_largeint<kt>) {
+                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, Hash128WithSeed<PhmapSeed1>>;
+                auto func = std::make_shared<MapAggAggregateFunction<kt, MyHashMap>>();
+                resolver->add_aggregate_mapping_notnull<kt, TYPE_MAP, AggregateFunctionPtr>("map_agg", false, func);
+            } else if constexpr (lt_is_fixedlength<kt>) {
+                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, StdHash<KeyCppType>>;
+                auto func = std::make_shared<MapAggAggregateFunction<kt, MyHashMap>>();
+                resolver->add_aggregate_mapping_notnull<kt, TYPE_MAP, AggregateFunctionPtr>("map_agg", false, func);
+            } else if constexpr (lt_is_string<kt>) {
+                using MyHashMap =
+                        phmap::flat_hash_map<SliceWithHash, size_t, HashOnSliceWithHash, EqualOnSliceWithHash>;
+                auto func = std::make_shared<MapAggAggregateFunction<kt, MyHashMap>>();
+                resolver->add_aggregate_mapping_notnull<kt, TYPE_MAP, AggregateFunctionPtr>("map_agg", false, func);
+            } else {
+                throw std::runtime_error("map_agg does not support key type " + type_to_string(kt));
+            }
+        }
+    }
+};
+
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);
         type_dispatch_all(type, ArrayAggDispatcher(), this);
         type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
-        type_dispatch_all(type, ArrayUnionAggDispatcher(), this);
         type_dispatch_all(type, ArrayUniqueAggDispatcher(), this);
+        type_dispatch_all(type, MapAggDispatcher(), this);
     }
     type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");

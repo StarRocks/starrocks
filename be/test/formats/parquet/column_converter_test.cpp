@@ -76,16 +76,17 @@ protected:
                const std::string& expected_value, const size_t expected_rows, bool is_failed = false) {
         auto file = _create_file(filepath);
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                        std::filesystem::file_size(filepath), 0);
+                                                        std::filesystem::file_size(filepath));
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
 
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-        ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
+        ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
         Status status = file_reader->init(ctx);
@@ -245,6 +246,17 @@ TEST_F(ColumnConverterTest, Int32Test) {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
             check(file_path, col_type, col_name, "[-99998]", expected_rows);
         }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+            check(file_path, col_type, col_name, "[-99998]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "time_millis";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+            check(file_path, col_type, col_name, "[3600]", expected_rows);
+        }
     }
     {
         const std::string col_name = "uint8";
@@ -269,6 +281,17 @@ TEST_F(ColumnConverterTest, Int32Test) {
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
             check(file_path, col_type, col_name, "[67676767]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "date";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+            check(file_path, col_type, col_name, "[2023-04-25]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2023-04-25 00:00:00]", expected_rows);
         }
     }
     {

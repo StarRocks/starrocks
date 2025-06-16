@@ -39,12 +39,17 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TReportExecStatusParams;
+import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class InsertLoadJobTest {
@@ -53,13 +58,13 @@ public class InsertLoadJobTest {
     public void testGetTableNames(@Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Database database,
                                   @Injectable Table table) throws MetaNotFoundException {
-        InsertLoadJob insertLoadJob = new InsertLoadJob("label", 1L, 1L, 1000, "", "");
+        InsertLoadJob insertLoadJob = new InsertLoadJob("label", 1L, 1L, 1000, "", "", null);
         String tableName = "table1";
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 result = table;
                 table.getName();
                 result = tableName;
@@ -71,5 +76,66 @@ public class InsertLoadJobTest {
         Assert.assertEquals(JobState.FINISHED, insertLoadJob.getState());
         Assert.assertEquals(Integer.valueOf(100), Deencapsulation.getField(insertLoadJob, "progress"));
 
+    }
+
+    @Test
+    public void testUpdateProgress(@Mocked GlobalStateMgr globalStateMgr,
+                                   @Injectable Database database,
+                                   @Injectable Table table) throws MetaNotFoundException {
+        {
+            InsertLoadJob loadJob = new InsertLoadJob("label", 1L,
+                    1L, 1000, "", "", null);
+            TUniqueId loadId = new TUniqueId(1, 2);
+
+            TUniqueId fragmentId = new TUniqueId(3, 4);
+            Set<TUniqueId> fragmentIds = new HashSet<>();
+            fragmentIds.add(fragmentId);
+
+            List<Long> backendIds = new ArrayList<>();
+            backendIds.add(10001L);
+
+            loadJob.initLoadProgress(loadId, fragmentIds, backendIds);
+            loadJob.setEstimateScanRow(100);
+            loadJob.setLoadFileInfo(0, 0);
+
+            TReportExecStatusParams params = new TReportExecStatusParams();
+            params.setSource_load_rows(40);
+            params.setQuery_id(loadId);
+            params.setFragment_instance_id(fragmentId);
+
+            loadJob.updateProgress(params);
+            Assert.assertEquals(39, loadJob.getProgress());
+
+            Assert.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
+            Assert.assertTrue(loadJob.getTabletFailInfos().isEmpty());
+        }
+
+        {
+            InsertLoadJob loadJob = new InsertLoadJob("label", 1L,
+                    1L, 1000, "", "", null);
+            TUniqueId loadId = new TUniqueId(1, 2);
+
+            TUniqueId fragmentId = new TUniqueId(3, 4);
+            Set<TUniqueId> fragmentIds = new HashSet<>();
+            fragmentIds.add(fragmentId);
+
+            List<Long> backendIds = new ArrayList<>();
+            backendIds.add(10001L);
+
+            loadJob.initLoadProgress(loadId, fragmentIds, backendIds);
+            loadJob.setEstimateScanRow(0);
+            loadJob.setLoadFileInfo(10, 100);
+
+            TReportExecStatusParams params = new TReportExecStatusParams();
+            params.setQuery_id(loadId);
+            params.setFragment_instance_id(fragmentId);
+            params.setSource_scan_bytes(80);
+
+            loadJob.updateProgress(params);
+            Assert.assertEquals(80, loadJob.getProgress());
+
+            Assert.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
+            Assert.assertTrue(loadJob.getTabletFailInfos().isEmpty());
+        }
     }
 }

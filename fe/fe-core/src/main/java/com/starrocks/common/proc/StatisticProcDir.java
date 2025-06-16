@@ -40,7 +40,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.LocalTablet.TabletStatus;
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -48,12 +48,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -99,13 +100,13 @@ public class StatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<Long> dbIds = globalStateMgr.getDbIds();
+        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
         if (dbIds == null || dbIds.isEmpty()) {
             // empty
             return result;
         }
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         int totalDbNum = 0;
         int totalTableNum = 0;
@@ -124,7 +125,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 // skip information_schema database
                 continue;
             }
-            Database db = globalStateMgr.getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -132,7 +133,7 @@ public class StatisticProcDir implements ProcDirInterface {
             ++totalDbNum;
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 int dbTableNum = 0;
                 int dbPartitionNum = 0;
@@ -140,7 +141,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbTabletNum = 0;
                 int dbReplicaNum = 0;
 
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
@@ -151,8 +152,8 @@ public class StatisticProcDir implements ProcDirInterface {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                         ++dbPartitionNum;
-                        for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
-                            for (MaterializedIndex materializedIndex : physicalParition
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex materializedIndex : physicalPartition
                                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                                 ++dbIndexNum;
                                 for (Tablet tablet : materializedIndex.getTablets()) {
@@ -168,14 +169,14 @@ public class StatisticProcDir implements ProcDirInterface {
                                         errorStateTabletIds.put(dbId, tablet.getId());
                                     }
 
-                                    Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
-                                            infoService, physicalParition.getVisibleVersion(),
-                                            replicationNum, aliveBeIdsInCluster);
+                                    Pair<TabletHealthStatus, Priority> res = TabletChecker.getTabletHealthStatusWithPriority(
+                                            localTablet, infoService, physicalPartition.getVisibleVersion(),
+                                            replicationNum, aliveBeIdsInCluster, olapTable.getLocation());
 
-                                    // here we treat REDUNDANT as HEALTHY, for user friendly.
-                                    if (res.first != TabletStatus.HEALTHY && res.first != TabletStatus.REDUNDANT
-                                            && res.first != TabletStatus.COLOCATE_REDUNDANT &&
-                                            res.first != TabletStatus.NEED_FURTHER_REPAIR) {
+                                    // here we treat REDUNDANT as HEALTHY, for user-friendly.
+                                    if (res.first != TabletHealthStatus.HEALTHY && res.first != TabletHealthStatus.REDUNDANT
+                                            && res.first != TabletHealthStatus.COLOCATE_REDUNDANT &&
+                                            res.first != TabletHealthStatus.NEED_FURTHER_REPAIR) {
                                         unhealthyTabletIds.put(dbId, tablet.getId());
                                     }
 
@@ -209,7 +210,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 totalTabletNum += dbTabletNum;
                 totalReplicaNum += dbReplicaNum;
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } // end for dbs
 
@@ -258,7 +259,7 @@ public class StatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
-        if (globalStateMgr.getDb(dbId) == null) {
+        if (globalStateMgr.getLocalMetastore().getDb(dbId) == null) {
             throw new AnalysisException("Invalid db id: " + dbIdStr);
         }
 

@@ -16,12 +16,9 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <random>
-
-#include "bench.h"
+#include "bench_util.h"
 #include "column/column_helper.h"
 #include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "util/time.h"
 
@@ -41,7 +38,7 @@ namespace starrocks {
 //   Benchmark_RuntimeFilter_Eval/20000000/100/100  968723953 ns    968634431 ns            1 compute_hash_time(ms)=213 evalute_time(ms)=163 items_per_second=20.6476M/s
 
 static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilterBuildJoinMode::type join_mode,
-                                          std::vector<ColumnPtr> columns, int64_t num_rows, int64_t num_partitions) {
+                                          const Columns& columns, int64_t num_rows, int64_t num_partitions) {
     std::vector<uint32_t> hash_values;
     std::vector<size_t> num_rows_per_partitions(num_partitions, 0);
 
@@ -54,20 +51,20 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
         ++num_rows_per_partitions[hash_values[i]];
     }
 
-    JoinRuntimeFilter::RunningContext running_ctx;
+    RuntimeFilter::RunningContext running_ctx;
     running_ctx.selection.assign(num_rows, 2);
     running_ctx.use_merged_selection = false;
     running_ctx.compatibility = true;
 
-    std::vector<Column*> column_ptrs;
+    std::vector<const Column*> column_ptrs;
     column_ptrs.reserve(columns.size());
     for (auto& column : columns) {
         column_ptrs.push_back(column.get());
     }
 
     int32_t num_column = columns.size();
-    std::vector<RuntimeBloomFilter<TYPE_INT>> bfs(num_column * num_partitions);
-    std::vector<RuntimeBloomFilter<TYPE_INT>> gfs(num_column);
+    std::vector<TRuntimeBloomFilter<TYPE_INT>> bfs(num_column * num_partitions);
+    std::vector<TRuntimeBloomFilter<TYPE_INT>> gfs(num_column);
     for (int i = 0; i < num_column; i++) {
         auto& column = columns[i];
         for (auto p = 0; p < num_partitions; ++p) {
@@ -77,7 +74,7 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
         for (auto j = 0; j < num_rows; ++j) {
             auto ele = column->get(j).get_int32();
             auto pp = hash_values[j] + (i * num_partitions);
-            bfs[pp].insert(&ele);
+            bfs[pp].insert(ele);
         }
 
         for (auto p = 0; p < num_partitions; ++p) {
@@ -89,10 +86,13 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
     }
     // compute hash
     {
+        RuntimeFilterLayout layout;
+        layout.init(1, {});
+
         int64_t t0 = MonotonicMillis();
         auto& grf = gfs[0];
         grf.set_join_mode(join_mode);
-        grf.compute_hash(column_ptrs, &running_ctx);
+        grf.compute_partition_index(layout, column_ptrs, &running_ctx);
         int64_t t1 = MonotonicMillis();
         state.counters["compute_hash_time(ms)"] = t1 - t0;
         // auto& ctx_hash_values = running_ctx.hash_values;
@@ -126,14 +126,13 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
     state.PauseTiming();
 }
 
-static std::vector<ColumnPtr> columns;
+static Columns columns;
 class RuntimeFilterBench {
 public:
     static void Setup(int32_t num_rows, int32_t num_column) {
         if (columns.empty()) {
             for (int i = 0; i < num_column; i++) {
-                auto type_desc = TypeDescriptor(TYPE_INT);
-                auto column = Bench::create_series_column(type_desc, num_rows);
+                auto column = BenchUtil::create_series_int_column(num_rows);
                 columns.push_back(std::move(column));
             }
             std::cout << "generate num_rows:" << num_rows << std::endl;

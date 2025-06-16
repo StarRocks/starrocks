@@ -100,7 +100,7 @@ TEST_F(VarBinaryConverterTest, test_read_large_binary02) {
 TEST_F(VarBinaryConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
-    (void)col->append_strings({"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc"});
+    (void)col->append_strings(std::vector<Slice>{"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc"});
 
     csv::OutputStreamString buff;
     EXPECT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());

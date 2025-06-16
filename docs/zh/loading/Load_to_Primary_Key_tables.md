@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+keywords: ['zhujian']
 ---
 
 # 通过导入实现数据变更
 
-StarRocks 的[主键模型](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 语句对 StarRocks 表进行数据变更。
+StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句对 StarRocks 表进行数据变更。
 
 StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Update)。
 
@@ -20,7 +21,7 @@ StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Up
 
 ## 内部实现
 
-StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分 INSERT 和 UPDATE 操作。
+StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 INSERT 和 UPDATE 操作。
 
 在创建导入作业时，StarRocks 支持在导入作业的创建语句或命令中添加 `__op` 字段，用于指定操作类型。
 
@@ -54,7 +55,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 ### Broker Load
 
-参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/cloud_storage_load.md)中的“背景信息”小节。
+参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/objectstorage.mdx)中的“背景信息”小节。
 
 ### Routine Load
 
@@ -62,7 +63,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 ## 基本操作
 
-下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 和 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### UPSERT
 
@@ -89,7 +90,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table1` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table1`
@@ -105,7 +106,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table1` 表中插入一条数据，如下所示：
 
@@ -154,7 +155,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
         columns terminated by ","
         format as "csv"
     )
-    with broker
+    WITH BROKER;
     ```
 
   - 添加 `__op` 字段：
@@ -168,7 +169,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
         format as "csv"
         set (__op = 'upsert')
     )
-    with broker
+    WITH BROKER;
     ```
 
 - 通过 Routine Load 导入：
@@ -250,7 +251,7 @@ SELECT * FROM table1;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table2` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table2`
@@ -266,7 +267,7 @@ SELECT * FROM table1;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table2` 表中插入数据，如下所示：
 
@@ -303,7 +304,7 @@ SELECT * FROM table1;
       format as "csv"
       set (__op = 'delete')
   )
-  with broker  
+  WITH BROKER;
   ```
 
 - 通过 Routine Load 导入：
@@ -362,7 +363,7 @@ SELECT * FROM table2;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table3` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table3` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table3`
@@ -378,7 +379,7 @@ SELECT * FROM table2;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table3` 表中插入数据，如下所示：
 
@@ -420,7 +421,7 @@ SELECT * FROM table2;
       (id, name, score, temp)
       set (__op=temp)
   )
-  with broker
+  WITH BROKER;
   ```
 
 - 通过 Routine Load 导入：
@@ -462,11 +463,13 @@ SELECT * FROM table3;
 
 ## 部分更新
 
-自 StarRocks v2.2 起，主键模型表支持部分更新 (Partial Update)，您可以选择只更新部分指定的列。这里以 CSV 格式的数据文件为例进行说明。
+主键表还支持部分列更新（Partial Updates），并且针对不同的数据更新场景，提供了行模式和列模式两种部分列更新，在不影响查询性能的同时，尽可能地降低部分更新的开销，从而能够保证更新的实时性。行模式比较适用于较多列且小批量的实时更新场景。列模式适用于少数列并且大量行的批处理更新场景。
 
 > **注意**
 >
-> 在部分更新模式下，如果要更新的行不存在，那么 StarRocks 会插入新的一行，并自动对缺失的列填充默认值。
+> 部分更新时，如果要更新的行不存在，那么 StarRocks 会插入新的一行，并自动对缺失的列填充默认值。如果没有定义默认值，则自动填充 `0`。
+
+如下以 CSV 格式的数据文件为例进行说明。
 
 ### 数据样例
 
@@ -484,7 +487,7 @@ SELECT * FROM table3;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table4` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table4` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table4`
@@ -500,7 +503,7 @@ SELECT * FROM table3;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table4` 表中插入一条数据，如下所示：
 
@@ -527,7 +530,7 @@ SELECT * FROM table3;
 
   > **说明**
   >
-  > 使用 Stream Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `columns` 中声明待更新数据的列的名称。
+  > 使用 Stream Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性，默认为行模式部分更新，如果需要使用列模式部分更新，则需要设置 `partial_update_mode` 为 `column`。另外，还需要在 `columns` 中声明待更新数据的列的名称。
 
 - 通过 Broker Load 导入：
 
@@ -539,7 +542,7 @@ SELECT * FROM table3;
       format as "csv"
       (id, name)
   )
-  WTIH BROKER
+  WITH BROKER
   PROPERTIES
   (
       "partial_update" = "true"
@@ -548,7 +551,7 @@ SELECT * FROM table3;
 
   > **说明**
   >
-  > 使用 Broker Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `column_list` 中声明待更新数据的列的名称。
+  > 使用 Broker Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性，默认为行模式部分更新，如果需要使用列模式部分更新，则需要设置 `partial_update_mode` 为 `column`。另外，还需要在 `column_list` 中声明待更新数据的列的名称。
 
 - 通过 Routine Load 导入：
 
@@ -570,7 +573,8 @@ SELECT * FROM table3;
 
   > **说明**
   >
-  > 使用 Routine Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `COLUMNS` 中声明待更新数据的列的名称。
+  > - 使用 Routine Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `COLUMNS` 中声明待更新数据的列的名称。
+  > - Routine Load 仅支持行模式部分更新，不支持列模式部分更新。
 
 ### 查询数据
 
@@ -592,7 +596,7 @@ SELECT * FROM table4;
 
 ## 条件更新
 
-自 StarRocks v2.5 起，主键模型表支持条件更新 (Conditional Update)。您可以指定某一非主键列为更新条件，这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
+自 StarRocks v2.5 起，主键表支持条件更新 (Conditional Update)。您可以指定某一非主键列为更新条件，这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
 
 条件更新功能用于解决数据乱序的问题。如果上游数据发生乱序，可以使用条件更新功能保证新的数据不被老的数据覆盖。
 
@@ -620,7 +624,7 @@ SELECT * FROM table4;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table5` 的主键模型表。表包含 `id`、`version` 和 `score` 三列，分别代表用户 ID、版本号和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table5` 的主键表。表包含 `id`、`version` 和 `score` 三列，分别代表用户 ID、版本号和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table5`
@@ -635,7 +639,7 @@ SELECT * FROM table4;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table5` 表中插入两条数据，如下所示：
 
@@ -647,7 +651,7 @@ SELECT * FROM table4;
 
 ### 导入数据
 
-通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `verion` 大于等于 `table5` 中对应行的`version` 值时，更新才会生效。
+通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `version` 大于等于 `table5` 中对应行的`version` 值时，更新才会生效。
 
 - 通过 Stream Load 导入：
 

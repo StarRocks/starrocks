@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitmap_agg
 
-## Description
+
 
 Aggregates values (excluding NULLs) in a column into a bitmap (multiple rows into one row).
 

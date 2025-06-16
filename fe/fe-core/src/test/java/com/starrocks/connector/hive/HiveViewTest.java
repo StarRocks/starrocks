@@ -16,9 +16,16 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -57,7 +64,7 @@ public class HiveViewTest extends PlanTestBase {
         assertContains(sqlPlan, "1:HdfsScanNode\n" +
                         "     TABLE: customer",
                 "0:HdfsScanNode\n" +
-                "     TABLE: nation");
+                        "     TABLE: nation");
     }
 
     @Test
@@ -66,9 +73,9 @@ public class HiveViewTest extends PlanTestBase {
                 "on orders.o_custkey = customer_nation_view.c_custkey";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "4:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 11: c_custkey = 2: O_CUSTKEY",
+                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 11: c_custkey = 2: O_CUSTKEY",
                 " 7:HASH JOIN\n" +
                         "  |  join op: INNER JOIN (BROADCAST)\n" +
                         "  |  colocate: false, reason: \n" +
@@ -77,11 +84,12 @@ public class HiveViewTest extends PlanTestBase {
 
     @Test
     public void testHiveViewParseFail() throws Exception {
-        HiveView hiveView = new HiveView(1, "hive0", "test", null, "select\n" +
-                 "    t1b,t1a\n" +
-                 "from\n" +
-                 "    test_all_type\n" +
-                 "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
+        HiveView hiveView = new HiveView(1, "hive0", "testDb", "test", null,
+                "select\n" +
+                        "    t1b,t1a\n" +
+                        "from\n" +
+                        "    test_all_type\n" +
+                        "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Failed to parse view-definition statement of view");
         hiveView.getQueryStatement();
@@ -97,13 +105,36 @@ public class HiveViewTest extends PlanTestBase {
     }
 
     @Test
+    public void testQueryTrinoViewWithoutDb() throws Exception {
+        // test query trino view without db
+        String sql = "select * from hive0.tpch.customer_view_without_db where c_custkey = 1";
+        String sqlPlan = getFragmentPlan(sql);
+        assertContains(sqlPlan, "0:HdfsScanNode\n" +
+                "     TABLE: customer");
+    }
+
+    @Test
+    public void testQueryHiveViewCaseInsensitive() throws Exception {
+        String sql = "select * from hive0.tpch.customer_case_insensitive_view where c_custkey = 1";
+        String sqlPlan = getFragmentPlan(sql);
+        assertContains(sqlPlan, "TABLE: customer");
+
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Column '`t0`.`v1`' cannot be resolved");
+        sql = "select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1";
+        getFragmentPlan(sql);
+    }
+
+    @Test
     public void testRefreshHiveView(@Mocked CachingHiveMetastore hiveMetastore) throws Exception {
-        CacheUpdateProcessor cacheUpdateProcessor = new CacheUpdateProcessor("hive0", hiveMetastore,
+        HiveCacheUpdateProcessor hiveCacheUpdateProcessor = new HiveCacheUpdateProcessor("hive0", hiveMetastore,
                 null, null, true, false);
         HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
-                Optional.of(cacheUpdateProcessor), null, null);
+                Optional.of(hiveCacheUpdateProcessor), null, null,
+                new ConnectorProperties(ConnectorType.HIVE));
 
-        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
+        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(new ConnectContext(), "hive0", "tpch", "customer_view");
         new Expectations() {
             {
                 hiveMetastore.refreshView(anyString, anyString);
@@ -121,7 +152,8 @@ public class HiveViewTest extends PlanTestBase {
         HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0", MetastoreType.HMS);
         Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
 
-        Table table  = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(new ConnectContext(), "hive0", "tpch", "customer");
 
         new Expectations() {
             {
@@ -140,5 +172,20 @@ public class HiveViewTest extends PlanTestBase {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testShowHiveView() {
+        HiveView hiveView = new HiveView(1, "hive0", "testDb", "test",
+                Lists.newArrayList(new Column("t1a", Type.INT), new Column("t1b", Type.INT)),
+                "select\n" +
+                        "    t1b,t1a\n" +
+                        "from\n" +
+                        "    test_all_type", HiveView.Type.Hive);
+        String viewDdl = AstToStringBuilder.getExternalCatalogViewDdlStmt(hiveView);
+        Assert.assertEquals("CREATE VIEW `test` (`t1a`, `t1b`) AS select\n" +
+                "    t1b,t1a\n" +
+                "from\n" +
+                "    test_all_type;", viewDdl);
     }
 }

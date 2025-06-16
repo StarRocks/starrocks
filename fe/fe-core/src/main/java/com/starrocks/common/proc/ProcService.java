@@ -36,6 +36,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.consistency.MetaRecoveryProdDir;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.WarehouseProcDir;
 import org.apache.logging.log4j.LogManager;
@@ -45,24 +46,24 @@ import org.apache.logging.log4j.Logger;
 public final class ProcService {
     private static final Logger LOG = LogManager.getLogger(ProcService.class);
     private static ProcService INSTANCE;
-
     private BaseProcDir root;
 
     private ProcService() {
         root = new BaseProcDir();
-        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentSystemInfo()));
-        root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentSystemInfo()));
+        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
+        root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
         root.register("dbs", new DbsProcDir(GlobalStateMgr.getCurrentState()));
         root.register("jobs", new JobsDbProcDir(GlobalStateMgr.getCurrentState()));
         root.register("statistic", new StatisticProcDir(GlobalStateMgr.getCurrentState()));
         root.register("tasks", new TasksProcDir());
         root.register("frontends", new FrontendsProcNode(GlobalStateMgr.getCurrentState()));
-        root.register("brokers", GlobalStateMgr.getCurrentState().getBrokerMgr().getProcNode());
+        root.register("brokers", new BrokerProcNode());
         root.register("resources", GlobalStateMgr.getCurrentState().getResourceMgr().getProcNode());
         root.register("load_error_hub", new LoadErrorHubProcNode(GlobalStateMgr.getCurrentState()));
         root.register("transactions", new TransDbProcDir());
         root.register("monitor", new MonitorProcDir());
         root.register("current_queries", new CurrentQueryStatisticsProcDir());
+        root.register("global_current_queries", new CurrentGlobalQueryStatisticsProcDir());
         root.register("current_backend_instances", new CurrentQueryBackendInstanceProcDir());
         root.register("cluster_balance", new ClusterBalanceProcDir());
         root.register("routine_loads", new RoutineLoadsProcDir());
@@ -70,7 +71,10 @@ public final class ProcService {
         root.register("colocation_group", new ColocationGroupProcDir());
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
-        root.register("warehouses", new WarehouseProcDir(GlobalStateMgr.getCurrentWarehouseMgr()));
+        root.register("warehouses", new WarehouseProcDir());
+        root.register("meta_recovery", new MetaRecoveryProdDir());
+        root.register("replications", new ReplicationsProcNode());
+        root.register("historical_nodes", new HistoricalNodeProcNode(GlobalStateMgr.getCurrentState()));
     }
 
     // Get the corresponding PROC Node by the specified path

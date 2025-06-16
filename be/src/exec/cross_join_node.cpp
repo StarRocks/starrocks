@@ -73,6 +73,10 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
             RETURN_IF_ERROR(
                     Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
         }
+
+        if (tnode.nestloop_join_node.__isset.interpolate_passthrough) {
+            _interpolate_passthrough = tnode.nestloop_join_node.interpolate_passthrough;
+        }
         if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
             _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
         }
@@ -553,7 +557,7 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     for (size_t i = 0; i < _build_column_count; ++i) {
         SlotDescriptor* slot = _col_types[_probe_column_count + i];
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
-        ColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
+        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
     }
 
@@ -586,9 +590,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     size_t num_right_partitions = context->source_operator(right_ops)->degree_of_parallelism();
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
-    auto spill_process_factory_ptr =
-            std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
+    auto spill_process_factory_ptr = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
     context_params.spill_process_factory_ptr = spill_process_factory_ptr;
 
     auto cross_join_context = std::make_shared<NLJoinContext>(std::move(context_params));
@@ -611,12 +613,19 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
                                            std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
-    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
-                                                                              context->degree_of_parallelism());
+    if (!context->is_colocate_group()) {
+        left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
+                                                                                  context->degree_of_parallelism());
+    }
     left_ops.emplace_back(std::move(left_factory));
 
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (_interpolate_passthrough && !context->is_colocate_group()) {
+        left_ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), left_ops,
+                                                                         context->degree_of_parallelism(), true);
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {

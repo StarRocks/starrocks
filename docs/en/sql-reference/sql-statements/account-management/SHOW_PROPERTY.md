@@ -1,29 +1,63 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # SHOW PROPERTY
 
-## Description
+SHOW PROPERTY displays properties of a user. Currently, only the maximum number of connections can be viewed using this command.
 
-This statement is used to view the user's properties
+:::tip
+The current user can view its own property. Only users with the `user_admin` role can view the property of other users.
 
-Syntax:
+:::
 
-```sql
-SHOW PROPERTY [FOR user] [LIKE key]
+## Syntax
+
+```SQL
+SHOW PROPERTY [FOR 'user_name'] [LIKE '<property_name>']
 ```
+
+## Parameters
+
+| **Parameter**        | **Required** | **Description**                                                              |
+| -------------------- | ------------ | ---------------------------------------------------------------------------- |
+| user_name            | No           | The user name. If not specified, the property of the current user is viewed. |
+| property_name        | No           | The user property name.                                                      |
 
 ## Examples
 
-1. View the properties of jack user
+Example 1: View the property the current user.
 
-    ```sql
-    SHOW PROPERTY FOR 'jack'
-    ```
+```Plain
+SHOW PROPERTY;
 
-2. View the properties related to the cluster imported by Jack user
++----------------------+-------+
+| Key                  | Value |
++----------------------+-------+
+| max_user_connections | 10000 |
++----------------------+-------+
+```
 
-    ```sql
-    SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%'
-    ```
+Example 2: View the property of the user `jack`.
+
+```SQL
+SHOW PROPERTY FOR 'jack';
+```
+
+Or
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
+```
+
+```Plain
++----------------------+-------+
+| Key                  | Value |
++----------------------+-------+
+| max_user_connections | 100   |
++----------------------+-------+
+```
+
+## See also
+
+[ALTER USER](./ALTER_USER.md): Sets properties for a user.

@@ -1,6 +1,9 @@
 # (C) Datadog, Inc. 2022-present
 # All rights reserved
 # Licensed under a 3-clause BSD style license (see LICENSE)
+import ast
+
+from ast import literal_eval
 from codecs import open  # To use a consistent encoding
 from os import path
 
@@ -10,8 +13,12 @@ HERE = path.dirname(path.abspath(__file__))
 
 # Get version info
 ABOUT = {}
-with open(path.join(HERE, 'datadog_checks', 'starrocks_be', '__about__.py')) as f:
-    exec(f.read(), ABOUT)
+about_path = path.join(HERE, 'datadog_checks', 'starrocks_be', '__about__.py')
+with open(about_path, 'r', encoding='utf-8') as f:
+    tree = ast.parse(f.read(), filename='__about__.py')
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+            ABOUT[node.targets[0].id] = literal_eval(node.value)
 
 # Get the long description from the README file
 with open(path.join(HERE, 'README.md'), encoding='utf-8') as f:

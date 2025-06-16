@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # TPC-DS Benchmarking
@@ -13,7 +13,7 @@ This benchmark tests a total of 99 complex SQL queries against 24 tables whose d
 ## 1. Test Conclusion
 
 We perform a test on 99 queries against a TPC-DS 100 GB dataset. The following figure shows the test result.
-![tpc-ds](../assets/tpc-ds.png)
+![tpc-ds](../_assets/tpc-ds.png)
 
 In the test, StarRocks queries data from both its native storage and Hive external tables. StarRocks and Trino query the same copy of data from Hive external tables. Data is LZ4-compressed and stored in the Parquet format.
 
@@ -76,6 +76,7 @@ StarRocks and Trino are deployed on machines with the same configuration. StarRo
 > **NOTE**
 >
 > - The unit of query latency in the following table is ms.
+> - All queries are warmed up 1 time and then executed 3 times to take the average value as the result.
 > - `StarRocks-3.0.5-native` indicates StarRocks native storage, `StarRocks-3.0-Hive external` indicates StarRocks queries Hive external tables through Hive Catalog, `StarRocks-3.0-Hive external-Cache` indicates StarRocks queries Hive external tables through Hive Catalog with Data Cache enabled.
 > - Aggregate pushdown is enabled for StarRocks (`SET global cbo_push_down_aggregate_mode = 0`).
 
@@ -222,11 +223,11 @@ sh bin/benchmark.sh -p -d tpcds
 
 #### 4.2.1 Create Table Schema
 
-Create external tables in Hive, whose storage format is Parquet and compression format is LZ4. For detailed CREATE TABLE statements, see [Create Parquet Hive external tables](#53-create-a-hive-external-tableparquet). StarRocks and Trino query data from these external tables.
+Create external tables in Hive, whose storage format is Parquet and compression format is LZ4. For detailed CREATE TABLE statements, see [Create Parquet Hive external tables](#53-create-hive-external-tables-parquet). StarRocks and Trino query data from these external tables.
 
 #### 4.2.2 Load Data
 
-Load the CSV data generated in [4.1.1](#411-generate-data) to the specified HDFS path of Hive. This example uses `/user/tmp/csv/` as the HDFS path. Create CSV Hive external tables in Hive and store the tables in `/user/tmp/csv/`. For detailed CREATE TABLE statements, see [Create CSV Hive external tables](#54-create-a-hive-external-tablecsv).
+Load the CSV data generated in [4.1.1](#411-generate-data) to the specified HDFS path of Hive. This example uses `/user/tmp/csv/` as the HDFS path. Create CSV Hive external tables in Hive and store the tables in `/user/tmp/csv/`. For detailed CREATE TABLE statements, see [Create CSV Hive external tables](#54-create-hive-external-tables-csv).
 
 Use INSERT INTO to load data from CSV external tables to Parquet external tables. This generates LZ4-compressed Parquet data.
 
@@ -954,7 +955,7 @@ properties(
 );
 ```
 
-### 5.3 Create Hive external tables（Parquet)
+### 5.3 Create Hive external tables (Parquet)
 
 ```SQL
 use tpcds_100g_parquet_lz4;
@@ -1553,7 +1554,7 @@ LOCATION '/user/tmp/parquet/store_sales/'
 tblproperties("parquet.compression"="Lz4");
 ```
 
-### 5.4 Create Hive external tables（CSV）
+### 5.4 Create Hive external tables (CSV)
 
 ```SQL
 use tpcds_100g_csv;

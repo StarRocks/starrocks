@@ -39,6 +39,7 @@
 #include <string_view>
 
 #include "agent/master_info.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/utils.h"
@@ -61,13 +62,18 @@ TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
 #endif
 
-static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx);
+static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms,
+                                  TLoadTxnCommitResult* result);
 static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db,
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
                                    int64_t deadline);
 
 Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
+    if (process_exit_in_progress()) {
+        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
+    }
+
     StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
 // submit this params
 #ifndef BE_TEST
@@ -75,6 +81,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     ctx->start_write_data_nanos = MonotonicNanos();
     LOG(INFO) << "begin to execute job. label=" << ctx->label << ", txn_id: " << ctx->txn_id
               << ", query_id=" << print_id(ctx->put_result.params.params.query_id);
+    // Once this is added into FragmentMgr, the fragment will be counted during graceful exit.
     auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
             ctx->put_result.params,
             [ctx](PlanFragmentExecutor* executor) {
@@ -166,6 +173,11 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.label = ctx->label;
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
+
     // set timestamp
     request.__set_timestamp(GetCurrentTimeMicros());
     if (ctx->timeout_second != -1) {
@@ -207,8 +219,9 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
@@ -223,54 +236,50 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
-    auto st = commit_txn_internal(request, rpc_timeout_ms, ctx);
-    // service unavailable implies that the exception occurred in network transmission or Thrift RPC framework,
-    // rather than due to slow publish. Therefore, we can utilize the remaining timeout to retry.
-    if (st.is_service_unavailable()) {
-        auto remain_timeout_ms = ctx->load_deadline_sec > 0 ? (ctx->load_deadline_sec - UnixSeconds()) * 1000 : 0;
-        if (remain_timeout_ms > 0) {
-            return commit_txn_internal(request, remain_timeout_ms, ctx);
+    int retry = 0;
+    TLoadTxnCommitResult result;
+    while (true) {
+        RETURN_IF_ERROR(commit_txn_internal(request, rpc_timeout_ms, &result));
+        Status st(result.status);
+        if (st.ok()) {
+            ctx->need_rollback = false;
+            return st;
+        } else if (st.is_publish_timeout()) {
+            ctx->need_rollback = false;
+            bool visible =
+                    wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
+            return visible ? Status::OK() : st;
+        } else if (st.is_eagain()) {
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
+                         << result.retry_interval_ms << "ms. errmsg=" << st.message();
+            std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
+        } else if (st.is_time_out()) {
+            if (++retry > 1) {
+                ctx->need_rollback = true;
+                return st;
+            }
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
+            if (ctx->load_deadline_sec > 0) {
+                rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
+            }
+        } else {
+            ctx->need_rollback = true;
+            return st;
         }
     }
-    return st;
 }
 
-Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx) {
+Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, TLoadTxnCommitResult* result) {
     TNetworkAddress master_addr = get_master_address();
-    TLoadTxnCommitResult result;
 #ifndef BE_TEST
-    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(result, request); },
-            rpc_timeout_ms);
-    if (st.is_thrift_rpc_error()) {
-        return Status::ServiceUnavailable(fmt::format(
-                "Commit transaction fail cause {}, Transaction status unknown, you can retry with same label.",
-                st.message()));
-    } else if (!st.ok()) {
-        return st;
-    }
+            [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(*result, request); },
+            rpc_timeout_ms));
 #else
-    result = k_stream_load_commit_result;
+    *result = k_stream_load_commit_result;
 #endif
-    Status status(result.status);
-    if (status.ok()) {
-        ctx->need_rollback = false;
-        return status;
-    } else if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
-        ctx->need_rollback = false;
-        bool visible =
-                wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
-        return visible ? Status::OK() : status;
-    } else if (status.code() == TStatusCode::SR_EAGAIN) {
-        LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
-                     << result.retry_interval_ms << "ms. errmsg=" << status.message();
-        std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
-        return commit_txn_internal(request, rpc_timeout_ms, ctx);
-    } else {
-        ctx->need_rollback = true;
-        return status;
-    }
+    return Status::OK();
 }
 
 StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db, std::string_view table,
@@ -298,7 +307,11 @@ StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::str
 bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
                             int64_t deadline) {
     while (deadline > UnixSeconds()) {
-        sleep(std::min((int64_t)config::get_txn_status_internal_sec, deadline - UnixSeconds()));
+        auto wait_seconds = std::min((int64_t)config::get_txn_status_internal_sec, deadline - UnixSeconds());
+        LOG(WARNING) << "transaction is not visible now, will wait " << wait_seconds
+                     << " seconds before retrieving the status again, txn_id: " << txn_id;
+        // The following sleep might introduce delay to the commit and publish total time
+        sleep(wait_seconds);
         auto status_or = get_txn_status(auth, db, table, txn_id);
         if (!status_or.ok()) {
             return false;
@@ -323,8 +336,9 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
@@ -370,7 +384,10 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
+    request.commitInfos = std::move(ctx->commit_infos);
+    request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     request.__set_reason(std::string(ctx->status.message()));
 
     // set attachment if has
@@ -423,6 +440,9 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
         manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
+        manual_load_attach.__set_beginTxnTime(ctx->begin_txn_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_planTime(ctx->stream_load_put_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_receiveDataTime(ctx->total_received_data_cost_nanos / 1000 / 1000);
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }

@@ -15,9 +15,9 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TUniqueId;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class TransactionStateBatchTest {
     private static String fileName = "./TransactionStateBatchTest";
@@ -44,7 +43,7 @@ public class TransactionStateBatchTest {
     }
 
     @Test
-    public void testSerDe() throws IOException, UserException {
+    public void testSerDe() throws IOException, StarRocksException {
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
@@ -52,16 +51,14 @@ public class TransactionStateBatchTest {
 
         Long dbId = 1000L;
         Long tableId = 20000L;
-        UUID uuid = UUID.randomUUID();
         List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
         TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3000, "label1", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label1", UUIDUtil.genTUniqueId(),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
-        uuid = UUID.randomUUID();
         TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3001, "label2", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3001, "label2", UUIDUtil.genTUniqueId(),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
@@ -95,16 +92,14 @@ public class TransactionStateBatchTest {
     public void testPutBeTablets() {
         Long dbId = 1000L;
         Long tableId = 20000L;
-        UUID uuid = UUID.randomUUID();
         List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
         TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3000, "label1", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label1", UUIDUtil.genTUniqueId(),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
-        uuid = UUID.randomUUID();
         TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3001, "label2", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3001, "label2", UUIDUtil.genTUniqueId(),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);

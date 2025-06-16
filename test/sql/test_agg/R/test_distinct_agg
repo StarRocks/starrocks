@@ -1,6 +1,6 @@
 -- name: test_distinct_agg
 CREATE TABLE `skew_agg` (
-  `c0` bigint DEFAULT NULL,
+  `c0` int DEFAULT NULL,
   `c1` bigint DEFAULT NULL,
   `c2` bigint DEFAULT NULL,
   `c3` bigint DEFAULT NULL,
@@ -12,8 +12,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 6
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -217,4 +216,793 @@ select count(distinct c1, c2, c3), count(distinct c2, c3), sum(c2) from skew_agg
 select count(distinct t1.c1, if(t2.c3 is null, 1, 0)), sum(t1.c2 + if(t2.c3 is null, 1, 0)) from skew_agg t1 left join skew_agg t2 on t1.c4 > t2.c4 group by t1.c4 limit 500;
 -- result:
 1	5000
+-- !result
+-- streaming_preaggregation_mode = 'auto' new_planner_agg_stage = '0'
+set streaming_preaggregation_mode = 'auto';
+-- result:
+-- !result
+set new_planner_agg_stage = '0';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct 1), array_agg(distinct 2),  sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+1	[2]	5000
+1	[2]	5000
+1	[2]	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'auto';
+-- result:
+-- !result
+set new_planner_agg_stage = '2';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct 1), array_agg(distinct 2),  sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+1	[2]	5000
+1	[2]	5000
+1	[2]	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'auto';
+-- result:
+-- !result
+set new_planner_agg_stage = '3';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct 1), array_agg(distinct 2),  sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+1	[2]	5000
+1	[2]	5000
+1	[2]	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'auto';
+-- result:
+-- !result
+set new_planner_agg_stage = '4';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct 1), array_agg(distinct 2),  sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+1	[2]	5000
+1	[2]	5000
+1	[2]	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+[3]	1	5000
+[3]	1	5000
+[3]	1	5000
+-- !result
+-- streaming_preaggregation_mode = 'force_streaming' new_planner_agg_stage = '2'
+set streaming_preaggregation_mode = 'force_streaming';
+-- result:
+-- !result
+set new_planner_agg_stage = '0';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'force_streaming';
+-- result:
+-- !result
+set new_planner_agg_stage = '2';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'force_streaming';
+-- result:
+-- !result
+set new_planner_agg_stage = '3';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'force_streaming';
+-- result:
+-- !result
+set new_planner_agg_stage = '4';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+[3]	1	5000
+[3]	1	5000
+[3]	1	5000
+-- !result
+-- streaming_preaggregation_mode = 'force_preaggregation' new_planner_agg_stage = '2'
+set streaming_preaggregation_mode = 'force_preaggregation';
+-- result:
+-- !result
+set new_planner_agg_stage = '0';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'force_preaggregation';
+-- result:
+-- !result
+set new_planner_agg_stage = '2';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'force_preaggregation';
+-- result:
+-- !result
+set new_planner_agg_stage = '3';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+set streaming_preaggregation_mode = 'force_preaggregation';
+-- result:
+-- !result
+set new_planner_agg_stage = '4';
+-- result:
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by 1 +1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by c1;
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(c3 order by 1, c4),  ceil(sum(c5)) from (select * from skew_agg order by 1,2,3,4,5,6 limit 10) t group by rollup(c1, c2);
+-- result:
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+3A	[4,4,4,4,4,4,4,4,4,4]	11
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by 1+1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by c1;
+-- result:
+3A	[4]	630
+-- !result
+select group_concat(distinct c2, upper(c4) order by abs(c2 + c3)), array_agg(distinct c3 order by 1, c4),  ceil(sum(c5)) from skew_agg group by rollup(c1, c2);
+-- result:
+3A	[4]	630
+3A	[4]	630
+3A	[4]	630
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by 1 +1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by c1;
+-- result:
+3	[3]	1	5000
+-- !result
+select group_concat(distinct c2), array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+3	[3]	1	5000
+3	[3]	1	5000
+3	[3]	1	5000
+-- !result
+select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group by rollup(c1, c2);
+-- result:
+[3]	1	5000
+[3]	1	5000
+[3]	1	5000
+-- !result
+select count(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+1562500	1	a
+-- !result
+select count(c2), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+1562500	a
+-- !result
+select sum(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+4687500	1	a
+-- !result
+select sum(c2),  'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+4687500	a
+-- !result
+select sum(c0), count(distinct c2, c3) from skew_agg where c0 = 480816 and c1 = 2 group by c4;
+-- result:
+480816	1
+-- !result
+select count(distinct 1, 2), count(distinct 1), count(distinct null), group_concat(distinct 'a', 'b'), count(distinct c2) from skew_agg;
+-- result:
+1	1	0	ab	1
 -- !result

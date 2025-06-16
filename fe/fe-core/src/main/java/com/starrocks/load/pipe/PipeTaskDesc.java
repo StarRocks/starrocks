@@ -15,15 +15,21 @@
 package com.starrocks.load.pipe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.Future;
 
 public class PipeTaskDesc {
+
+    private static final Logger LOG = LogManager.getLogger(PipeTaskDesc.class);
 
     private final long id;
     private final String dbName;
@@ -106,7 +112,13 @@ public class PipeTaskDesc {
             return;
         }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        taskManager.killTask(uniqueTaskName, true);
+        Task task = taskManager.getTask(uniqueTaskName);
+        if (task != null) {
+            taskManager.dropTasks(Lists.newArrayList(task.getId()), false);
+        }
+
+        this.state = PipeTaskState.RUNNABLE;
+        LOG.info("interrupt pipe task {}", uniqueTaskName);
     }
 
     /**

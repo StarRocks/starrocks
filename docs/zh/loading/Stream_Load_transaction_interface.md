@@ -1,20 +1,23 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+keywords: ['Stream Load']
 ---
 
 # 使用 Stream Load 事务接口导入
+
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 为了支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 自 2.4 版本起提供 Stream Load 事务接口。
 
 本文介绍 Stream Load 事务接口、以及如何使用该事务接口把数据导入到 StarRocks 中。
 
-> **注意**
->
-> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
-
 ## 接口说明
 
 Stream Load 事务接口支持通过兼容 HTTP 协议的工具或语言发起接口请求。本文以 curl 工具为例介绍如何使用该接口。该接口提供事务管理、数据写入、事务预提交、事务去重和超时管理等功能。
+
+:::note
+Stream Load 支持导入 CSV 和 JSON 格式的数据，并且建议在导入的数据文件数量较少、单个数据文件的大小不超过 10 GB 时使用。Stream Load 不支持 Parquet 文件格式。如果要导入 Parquet 格式的数据，请使用 [INSERT+files()](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件).
+:::
 
 ### 事务管理
 
@@ -77,9 +80,19 @@ Stream Load 事务接口具有如下优势：
 ## 注意事项
 
 - 使用 Stream Load 事务接口导入数据的过程中，注意 `/api/transaction/begin`、`/api/transaction/load`、`/api/transaction/prepare` 接口报错后，事务将失败并自动回滚。
-- 在调用 `/api/transaction/begin` 接口开启事务时，您可以选择指定或者不指定标签 (Label)。如果您不指定标签，StarRocks 会自动为事务生成一个标签。其后的 `/api/transaction/load`、`/api/transaction/prepare`、`/api/transaction/commit` 三个接口中，必须使用与 `/api/transaction/begin` 接口中相同的标签。
+- 在调用 `/api/transaction/begin` 接口开启事务时，您必须指定标签 (Label)，其后的 `/api/transaction/load`、`/api/transaction/prepare`、`/api/transaction/commit` 三个接口中，必须使用与 `/api/transaction/begin` 接口中相同的标签。
 - 重复调用标签相同的 `/api/transaction/begin` 接口，会导致前面使用相同标签已开启的事务失败并回滚。
 - StarRocks支持导入的 CSV 格式数据默认的列分隔符是 `\t`，默认的行分隔符是 `\n`。如果源数据文件中的列分隔符和行分隔符不是 `\t` 和 `\n`，则在调用 `/api/transaction/load` 接口时必须通过 `"column_separator: <column_separator>"` 和 `"row_delimiter: <row_delimiter>"` 指定行分隔符和列分隔符。
+
+## 准备工作
+
+### 查看权限
+
+<InsertPrivNote />
+
+### 查看网络配置
+
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
 
 ## 基本操作
 
@@ -96,7 +109,7 @@ Stream Load 事务接口具有如下优势：
    4,Julia,25
    ```
 
-2. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
+2. 在数据库 `test_db` 中创建一张名为 `table1` 的主键表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
 
    ```SQL
    CREATE TABLE `table1`
@@ -487,4 +500,4 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 有关 Stream Load 适用的业务场景、支持的数据文件格式、基本原理等信息，参见[使用 Stream Load 从本地导入](../loading/StreamLoad.md#使用-stream-load-从本地导入)。
 
-有关创建 Stream Load 作业的语法和参数，参见[STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关创建 Stream Load 作业的语法和参数，参见[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。

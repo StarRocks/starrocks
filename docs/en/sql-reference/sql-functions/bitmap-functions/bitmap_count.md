@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitmap_count
 
-## Description
+
 
 Returns the 1-bit count for the input bitmap.
 

@@ -15,11 +15,13 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <queue>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
+#include "exec/spill/data_stream.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
@@ -49,11 +51,11 @@ public:
         _stream = std::move(stream);
     }
 
-    template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard);
 
-    template <class TaskExecutor, class MemGuard>
-    [[nodiscard]] Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard);
 
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
@@ -105,7 +107,7 @@ public:
 protected:
     Status _decrease_running_flush_tasks();
 
-    const SpilledOptions& options();
+    const SpilledOptions& options() const;
 
     Spiller* _spiller;
     RuntimeState* _runtime_state;
@@ -147,10 +149,10 @@ public:
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush(RuntimeState* state, MemGuard&& guard);
 
     void prepare(RuntimeState* state) override;
 
@@ -162,10 +164,6 @@ public:
 
     const auto& mem_table() const { return _mem_table; }
 
-    BlockPtr& block() { return _block; }
-
-    BlockGroup& block_group() { return _block_group; }
-
     Status acquire_stream(std::shared_ptr<SpillInputStream>* stream) override;
 
     Status acquire_stream(const SpillPartitionInfo* partition, std::shared_ptr<SpillInputStream>* stream) override;
@@ -174,23 +172,32 @@ public:
 
     void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override {}
 
-    Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table,
-                                int* yield);
+    Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table);
+
+    void add_block_group(BlockGroupPtr&& block_group) { _block_group_set.add_block_group(std::move(block_group)); }
+    size_t block_group_num_rows() const { return _block_group_set.num_rows(); }
 
 public:
-    struct FlushContext {
-        BlockPtr block;
+    struct FlushContext : public SpillIOTaskContext {
+        FlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
+        std::shared_ptr<Spiller> spiller;
+        std::shared_ptr<SpillOutputDataStream> output;
+        std::shared_ptr<BlockGroup> block_group;
+        InputStreamPtr input_stream;
+        // only used in DCHECK
+        size_t compact_input_num_rows{};
     };
+    using FlushContextPtr = std::shared_ptr<FlushContext>;
 
 private:
-    template <class Provider>
-    StatusOr<BlockPtr> get_block_from_ctx(Provider&& provider) {
-        return provider();
-    }
+    // spill current mem-table to block group sets
+    Status _spill_mem_table(workgroup::YieldContext& yield_ctx, const MemTablePtr& mem_table);
+    // select small block group then compact to larger block group
+    Status _compact_mem_table(workgroup::YieldContext& yield_ctx);
 
-private:
-    BlockGroup _block_group;
-    BlockPtr _block;
+    bool _need_compact_block() const;
+
+    BlockGroupSet _block_group_set;
     MemTablePtr _mem_table;
     std::queue<MemTablePtr> _mem_table_pool;
     std::mutex _mutex;
@@ -210,12 +217,14 @@ struct SpilledPartition : public SpillPartitionInfo {
     }
 
     std::string debug_string() {
-        return fmt::format("[id={},bytes={},mem_size={},in_mem={},is_spliting={}]", partition_id, bytes, mem_size,
-                           in_mem, is_spliting);
+        return fmt::format("[id={},bytes={},mem_size={},num_rows={},in_mem={},is_spliting={}]", partition_id, bytes,
+                           mem_size, num_rows, in_mem, is_spliting);
     }
 
     bool is_spliting = false;
     std::unique_ptr<RawSpillerWriter> spill_writer;
+    BlockGroupPtr block_group;
+    SpillOutputDataStreamPtr spill_output_stream;
 };
 
 class PartitionedSpillerWriter final : public SpillerWriter {
@@ -239,13 +248,13 @@ public:
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush_if_full(RuntimeState* state, MemGuard&& guard);
 
     void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override;
 
@@ -291,13 +300,13 @@ public:
 
     const auto& level_to_partitions() { return _level_to_partitions; }
 
-    template <class ChunkProvider>
-    Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+    Status spill_partition(workgroup::YieldContext& ctx, SerdeContext& context, SpilledPartition* partition);
 
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
 public:
-    struct PartitionedFlushContext {
+    struct PartitionedFlushContext : public SpillIOTaskContext {
+        PartitionedFlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
         // used in spill stage
         struct SpillStageContext {
             size_t processing_idx{};
@@ -322,6 +331,7 @@ public:
         PartitionedFlushContext(PartitionedFlushContext&&) = default;
         PartitionedFlushContext& operator=(PartitionedFlushContext&&) = default;
 
+        std::shared_ptr<Spiller> spiller;
         SpillStageContext spill_stage_ctx;
         SplitStageContext split_stage_ctx;
     };
@@ -329,7 +339,7 @@ public:
 
     Status yieldable_flush_task(workgroup::YieldContext& ctx,
                                 const std::vector<SpilledPartition*>& splitting_partitions,
-                                const std::vector<SpilledPartition*>& spilling_partitions, int* yield);
+                                const std::vector<SpilledPartition*>& spilling_partitions);
 
 private:
     void _init_with_partition_nums(RuntimeState* state, int num_partitions);
@@ -337,12 +347,10 @@ private:
     void _prepare_partitions(RuntimeState* state);
 
     Status _spill_input_partitions(workgroup::YieldContext& ctx, SerdeContext& context,
-                                   const std::vector<SpilledPartition*>& spilling_partitions, int64_t* time_spent_ns,
-                                   int* yield);
+                                   const std::vector<SpilledPartition*>& spilling_partitions);
 
     Status _split_input_partitions(workgroup::YieldContext& ctx, SerdeContext& context,
-                                   const std::vector<SpilledPartition*>& splitting_partitions, int64_t* time_spent_ns,
-                                   int* yield);
+                                   const std::vector<SpilledPartition*>& splitting_partitions);
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.
@@ -352,7 +360,7 @@ private:
     // 2. If our input is ordered, we can use some sorting-based algorithm to split the partition. This way the probe side can do full streaming of the data
     Status _split_partition(workgroup::YieldContext& ctx, SerdeContext& context, SpillerReader* reader,
                             SpilledPartition* partition, SpilledPartition* left_partition,
-                            SpilledPartition* right_partition, int64_t* time_spent_ns, int* yield);
+                            SpilledPartition* right_partition);
 
     void _add_partition(SpilledPartitionPtr&& partition);
     void _remove_partition(const SpilledPartition* partition);
@@ -377,6 +385,7 @@ private:
 
     // level to partition
     std::map<int, std::vector<SpilledPartitionPtr>> _level_to_partitions;
+    size_t _total_partition_num = 0;
 
     std::unordered_map<int, SpilledPartition*> _id_to_partitions;
 

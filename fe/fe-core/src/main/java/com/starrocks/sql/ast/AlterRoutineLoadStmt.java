@@ -21,7 +21,7 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -56,6 +56,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)
             .add(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)
             .add(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)
+            .add(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .build();
@@ -127,7 +128,11 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         return loadPropertyList;
     }
 
-    public void checkJobProperties() throws UserException {
+    public Map<String, String> getJobProperties() {
+        return jobProperties;
+    }
+
+    public void checkJobProperties() throws StarRocksException {
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !CONFIGURABLE_PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -158,10 +163,10 @@ public class AlterRoutineLoadStmt extends DdlStmt {
                 maxFilterRatio = Double.valueOf(jobProperties.get(
                                     CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
             } catch (NumberFormatException exception) {
-                throw new UserException("Incorrect format of max_filter_ratio", exception);
+                throw new StarRocksException("Incorrect format of max_filter_ratio", exception);
             }
             if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
-                throw new UserException(
+                throw new StarRocksException(
                     CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
             }
             analyzedJobProperties.put(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY,
@@ -174,10 +179,10 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskConsumeSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
             } catch (NumberFormatException exception) {
-                throw new UserException("Incorrect format of task_consume_second", exception);
+                throw new StarRocksException("Incorrect format of task_consume_second", exception);
             }
             if (taskConsumeSecond <= 0) {
-                throw new UserException(
+                throw new StarRocksException(
                         CreateRoutineLoadStmt.TASK_CONSUME_SECOND + " must be greater than 0");
             }
 
@@ -185,15 +190,15 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskTimeoutSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
             } catch (NumberFormatException exception) {
-                throw new UserException("Incorrect format of task_timeout_second", exception);
+                throw new StarRocksException("Incorrect format of task_timeout_second", exception);
             }
             if (taskTimeoutSecond <= 0) {
-                throw new UserException(
+                throw new StarRocksException(
                         CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND + " must be greater than 0");
             }
 
             if (taskConsumeSecond >= taskTimeoutSecond) {
-                throw new UserException("task_timeout_second must be larger than task_consume_second");
+                throw new StarRocksException("task_timeout_second must be larger than task_consume_second");
             }
             analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_CONSUME_SECOND,
                     String.valueOf(taskConsumeSecond));
@@ -204,10 +209,10 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskConsumeSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
             } catch (NumberFormatException exception) {
-                throw new UserException("Incorrect format of task_consume_second", exception);
+                throw new StarRocksException("Incorrect format of task_consume_second", exception);
             }
             if (taskConsumeSecond <= 0) {
-                throw new UserException(
+                throw new StarRocksException(
                         CreateRoutineLoadStmt.TASK_CONSUME_SECOND + " must be greater than 0");
             }
 
@@ -221,10 +226,10 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             try {
                 taskTimeoutSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
             } catch (NumberFormatException exception) {
-                throw new UserException("Incorrect format of task_timeout_second", exception);
+                throw new StarRocksException("Incorrect format of task_timeout_second", exception);
             }
             if (taskTimeoutSecond <= 0) {
-                throw new UserException(
+                throw new StarRocksException(
                         CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND + " must be greater than 0");
             }
 
@@ -276,6 +281,11 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         if (jobProperties.containsKey(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)) {
             boolean stripOuterArray = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
             analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
+        }
+
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)) {
+            boolean pauseOnFatalParseError = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR, String.valueOf(pauseOnFatalParseError));
         }
     }
 

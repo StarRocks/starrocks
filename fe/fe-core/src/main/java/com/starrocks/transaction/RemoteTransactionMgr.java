@@ -15,7 +15,8 @@ package com.starrocks.transaction;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -27,6 +28,7 @@ import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
+import com.starrocks.thrift.TTabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -51,14 +53,15 @@ public class RemoteTransactionMgr {
 
         switch (sourceType) {
             case BACKEND_STREAMING:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
+                GlobalTransactionMgr.checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
                         Config.min_load_timeout_second);
                 break;
             case LAKE_COMPACTION:
                 // skip transaction timeout range check for lake compaction
                 break;
             default:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
+                GlobalTransactionMgr.checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second,
+                        Config.min_load_timeout_second);
         }
 
 
@@ -74,9 +77,9 @@ public class RemoteTransactionMgr {
         request.setAuth_info(authenticateParams);
         TBeginRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
-                    Config.thrift_rpc_retry_times,
+            response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    addr,
                     client -> client.beginRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} beginRemoteTransaction rpc method failed, label: {}", addr, label, e);
@@ -114,10 +117,10 @@ public class RemoteTransactionMgr {
         request.setCommit_timeout_ms(Config.external_table_commit_timeout_ms);
         TCommitRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy.call(addr,
+            response = ThriftRPCRequestExecutor.call(ThriftConnectionPool.frontendPool,
+                    addr,
                     // commit txn might take a while, so add transaction timeout
                     Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
-                    Config.thrift_rpc_retry_times,
                     client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
@@ -144,19 +147,22 @@ public class RemoteTransactionMgr {
     }
 
     // abort transaction in remote StarRocks cluster
-    public static void abortRemoteTransaction(long dbId, long transactionId,
-                                              String host, int port, String errorMsg)
+    public static void abortRemoteTransaction(long dbId, long transactionId, String host, int port, String errorMsg,
+                                              List<TTabletCommitInfo> tabletCommitInfos,
+                                              List<TTabletFailInfo> tabletFailInfos)
             throws AbortTransactionException {
         TNetworkAddress addr = new TNetworkAddress(host, port);
         TAbortRemoteTxnRequest request = new TAbortRemoteTxnRequest();
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setError_msg(errorMsg);
+        request.setCommit_infos(tabletCommitInfos);
+        request.setFail_infos(tabletFailInfos);
         TAbortRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
-                    Config.thrift_rpc_retry_times,
+            response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    addr,
                     client -> client.abortRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
@@ -174,16 +180,6 @@ public class RemoteTransactionMgr {
             throw new AbortTransactionException(errStr);
         } else {
             LOG.info("abort remote, txn_id: {}", transactionId);
-        }
-    }
-
-    private static void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
-            throws AnalysisException {
-        if (timeoutSecond > maxLoadTimeoutSecond ||
-                timeoutSecond < minLoadTimeOutSecond) {
-            throw new AnalysisException("Invalid timeout. Timeout should between "
-                    + minLoadTimeOutSecond + " and " + maxLoadTimeoutSecond
-                    + " seconds");
         }
     }
 }

@@ -14,12 +14,12 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.base.Joiner;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 
@@ -48,7 +48,7 @@ public class ShowFailPointStatement extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return null;
+        return visitor.visitShowFailPointStatement(this, context);
     }
 
     @Override
@@ -71,7 +71,7 @@ public class ShowFailPointStatement extends ShowStmt {
             sb.append(" LIKE '").append(pattern).append("'");
         }
         if (backends != null) {
-            sb.append(" ON BACKEND '").append(Strings.join(backends, ",")).append("'");
+            sb.append(" ON BACKEND '").append(Joiner.on(",").join(backends)).append("'");
         }
         return sb.toString();
     }

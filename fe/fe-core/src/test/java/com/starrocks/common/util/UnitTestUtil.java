@@ -55,6 +55,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TDisk;
@@ -76,10 +77,11 @@ public class UnitTestUtil {
     public static final String MATERIALIZED_VIEW_NAME = "testMV";
     public static final String PARTITION_NAME = "testTable";
     public static final int SCHEMA_HASH = 0;
+    public static final String VIEW_NAME = "testView";
 
     public static Database createDb(long dbId, long tableId, long partitionId, long indexId,
                                     long tabletId, long backendId, long version, KeysType type) {
-        // GlobalStateMgr.getCurrentInvertedIndex().clear();
+        // GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         // table
         OlapTable table = createOlapTable(dbId, tableId, partitionId, indexId, tabletId,
@@ -94,7 +96,7 @@ public class UnitTestUtil {
     public static Database createDbByName(long dbId, long tableId, long partitionId, long indexId,
                                     long tabletId, long backendId, long version, KeysType type, String dbName,
                                     String tableName) {
-        // GlobalStateMgr.getCurrentInvertedIndex().clear();
+        // GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         // table
         OlapTable table = createOlapTableByName(dbId, tableId, partitionId, indexId, tabletId,
@@ -129,7 +131,7 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+        Partition partition = new Partition(partitionId, partitionId + 100,  PARTITION_NAME, index, distributionInfo);
 
         // columns
         List<Column> columns = new ArrayList<Column>();
@@ -178,6 +180,14 @@ public class UnitTestUtil {
     public static OlapTable createOlapTable(long dbId, long tableId, long partitionId, long indexId,
                                             long tabletId, long backendId, long version, KeysType type,
                                             Table.TableType tableType) {
+        return createOlapTableWithName(TABLE_NAME, dbId, tableId, partitionId, indexId,
+                tabletId, backendId, version, type,
+                tableType);
+    }
+
+    public static OlapTable createOlapTableWithName(String tableName, long dbId, long tableId, long partitionId,
+                                                    long indexId, long tabletId, long backendId, long version,
+                                                    KeysType type, Table.TableType tableType) {
         // replica
         long replicaId = 0;
         Replica replica1 = new Replica(replicaId, backendId, ReplicaState.NORMAL, version, 0);
@@ -198,7 +208,7 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+        Partition partition = new Partition(partitionId, partitionId + 100, PARTITION_NAME, index, distributionInfo);
 
         // columns
         List<Column> columns = new ArrayList<Column>();
@@ -224,22 +234,24 @@ public class UnitTestUtil {
         partitionInfo.setReplicationNum(partitionId, (short) 3);
         partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+
         if (tableType == Table.TableType.MATERIALIZED_VIEW) {
             MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            MaterializedView mv = new MaterializedView(tableId, dbId, MATERIALIZED_VIEW_NAME, columns,
+            MaterializedView mv = new MaterializedView(tableId, dbId, tableName, columns,
                     type, partitionInfo, distributionInfo, mvRefreshScheme);
             Deencapsulation.setField(mv, "baseIndexId", indexId);
             mv.addPartition(partition);
-            mv.setIndexMeta(indexId, TABLE_NAME, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
+            mv.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
             return mv;
         } else {
-            OlapTable table = new OlapTable(tableId, TABLE_NAME, columns,
+            OlapTable table = new OlapTable(tableId, tableName, columns,
                     type, partitionInfo, distributionInfo);
             Deencapsulation.setField(table, "baseIndexId", indexId);
             table.addPartition(partition);
-            table.setIndexMeta(indexId, TABLE_NAME, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
+            table.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
+            table.setType(Table.TableType.OLAP);
             return table;
         }
     }
@@ -247,14 +259,25 @@ public class UnitTestUtil {
     public static MaterializedView createMaterializedView(OlapTable baseTable, long dbId, long tableId, long partitionId,
                                                           long indexId,
                                                           long tabletId, long backendId, long version) {
-        OlapTable table = createOlapTable(dbId, tableId, partitionId, indexId, tabletId,
+        OlapTable table = createOlapTableWithName(MATERIALIZED_VIEW_NAME, dbId, tableId, partitionId, indexId, tabletId,
                 backendId, version, KeysType.DUP_KEYS, Table.TableType.MATERIALIZED_VIEW);
         MaterializedView mv = (MaterializedView) table;
-        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo1 = new BaseTableInfo(dbId, DB_NAME, TABLE_NAME, baseTable.getId());
-        baseTableInfos.add(baseTableInfo1);
-        mv.setBaseTableInfos(baseTableInfos);
 
+        // set mv's base table infos
+        {
+            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+            BaseTableInfo baseTableInfo1 = new BaseTableInfo(dbId, DB_NAME, baseTable.getName(), baseTable.getId());
+            baseTableInfos.add(baseTableInfo1);
+            mv.setBaseTableInfos(baseTableInfos);
+            String defineSql = String.format("select * from %s.%s", DB_NAME, baseTable.getName());
+            mv.setViewDefineSql(defineSql);
+            mv.setSimpleDefineSql(defineSql);
+        }
+
+        // set base table's relative mvs
+        {
+            baseTable.getRelatedMaterializedViews().add(mv.getMvId());
+        }
         return mv;
     }
 
@@ -310,6 +333,20 @@ public class UnitTestUtil {
             }
         }
         return innerClass;
+    }
+
+    public static View createTestView(long tableId) {
+        List<Column> columns = new ArrayList<Column>();
+        Column temp = new Column("k1", Type.INT);
+        temp.setIsKey(false);
+        columns.add(temp);
+        temp = new Column("k2", Type.INT);
+        temp.setIsKey(false);
+        columns.add(temp);
+
+        View view = new View(tableId, VIEW_NAME, columns);
+        view.setType(Table.TableType.VIEW);
+        return view;
     }
 
 }

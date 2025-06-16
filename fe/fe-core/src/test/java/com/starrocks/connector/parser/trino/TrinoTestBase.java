@@ -20,9 +20,8 @@ import com.starrocks.planner.TpchSQL;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.ParsingException;
@@ -95,6 +94,10 @@ public class TrinoTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
+                "`day` int NULL COMMENT \"\") \n" +
+                "PROPERTIES ('replication_num' = '1')");
+
         starRocksAssert.withTable("CREATE TABLE `tall` (\n" +
                 "  `ta` varchar(20) NULL COMMENT \"\",\n" +
                 "  `tb` smallint(6) NULL COMMENT \"\",\n" +
@@ -148,6 +151,7 @@ public class TrinoTestBase {
         FeConstants.runningUnitTest = false;
 
         connectContext.getSessionVariable().setSqlDialect("trino");
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
     }
 
     public static StatementBase analyzeSuccess(String originStmt) {
@@ -173,7 +177,7 @@ public class TrinoTestBase {
                     connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
-        } catch (ParsingException | SemanticException | UnsupportedException e) {
+        } catch (ParsingException | StarRocksPlannerException | io.trino.sql.parser.ParsingException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }

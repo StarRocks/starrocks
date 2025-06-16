@@ -24,6 +24,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
+#include "types/int256.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 
@@ -206,6 +207,20 @@ struct RunTimeTypeTraits<TYPE_DECIMAL128> {
 };
 
 template <>
+struct RunTimeTypeTraits<TYPE_DECIMAL256> {
+    using CppType = int256_t;
+    using ColumnType = Decimal256Column;
+    using ProxyContainerType = ColumnType::Container;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_INT256> {
+    using CppType = int256_t;
+    using ColumnType = Int256Column;
+    using ProxyContainerType = ColumnType::Container;
+};
+
+template <>
 struct RunTimeTypeTraits<TYPE_NULL> {
     using CppType = uint8_t;
     using ColumnType = NullColumn;
@@ -352,6 +367,11 @@ struct ColumnTraits<int16_t> {
 };
 
 template <>
+struct ColumnTraits<uint16_t> {
+    using ColumnType = UInt16Column;
+};
+
+template <>
 struct ColumnTraits<int32_t> {
     using ColumnType = Int32Column;
 };
@@ -394,6 +414,11 @@ struct ColumnTraits<DateValue> {
 template <>
 struct ColumnTraits<TimestampValue> {
     using ColumnType = TimestampColumn;
+};
+
+template <>
+struct ColumnTraits<int256_t> {
+    using ColumnType = Int256Column;
 };
 
 // Length of fixed-length type, 0 for dynamic-length type

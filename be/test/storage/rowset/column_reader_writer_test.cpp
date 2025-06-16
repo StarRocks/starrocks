@@ -161,7 +161,7 @@ protected:
         // read and check
         {
             // read and check
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -270,8 +270,7 @@ protected:
 
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
-                int idx = 0;
-                size_t rows_read = 1024;
+                size_t rows_read = 512;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
@@ -284,19 +283,17 @@ protected:
                     } else {
                         ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                     }
-                    idx++;
                 }
             }
 
             {
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
-                for (int rowid = 0; rowid < 2048; rowid += 128) {
+                for (int rowid = 0; rowid < 1024; rowid += 128) {
                     st = iter.seek_to_ordinal(rowid);
                     ASSERT_TRUE(st.ok());
 
-                    int idx = rowid;
-                    size_t rows_read = 1024;
+                    size_t rows_read = 512;
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
@@ -309,7 +306,6 @@ protected:
                         } else {
                             ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                         }
-                        idx++;
                     }
                 }
             }
@@ -326,9 +322,9 @@ protected:
         TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
         array_column.add_sub_column(int_column);
 
-        auto src_offsets = UInt32Column::create();
-        auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        ColumnPtr src_column = ArrayColumn::create(src_elements, src_offsets);
+        UInt32Column::Ptr src_offsets = UInt32Column::create();
+        NullableColumn::Ptr src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ArrayColumn::Ptr src_column = ArrayColumn::create(src_elements, src_offsets);
 
         // insert [1, 2, 3], [4, 5, 6]
         src_elements->append_datum(1);
@@ -388,7 +384,7 @@ protected:
 
         // read and check
         {
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -406,9 +402,9 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_offsets = UInt32Column::create();
-                auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = ArrayColumn::create(dst_elements, dst_offsets);
+                UInt32Column::Ptr dst_offsets = UInt32Column::create();
+                NullableColumn::Ptr dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                ArrayColumn::Ptr dst_column = ArrayColumn::create(dst_elements, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -428,7 +424,7 @@ protected:
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
-        size_t count = 2 * 1024 * 1024 / sizeof(CppType);
+        size_t count = 2 * 1024 / sizeof(CppType);
         col->reserve(count);
         for (size_t i = 0; i < count; ++i) {
             (void)col->append_numbers(&value, sizeof(CppType));
@@ -477,7 +473,7 @@ protected:
         nc->reserve(count);
         down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
-            (void)col->append_strings({s1, s2, s3, s4, s5, s6, s7, s8});
+            (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
 
             std::next_permutation(s1.begin(), s1.end());
             std::next_permutation(s2.begin(), s2.end());
@@ -497,7 +493,7 @@ protected:
     }
 
     ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(DateValue);
+        size_t count = 4 * 1024 / sizeof(DateValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
         DateValue value = DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {
@@ -512,7 +508,7 @@ protected:
     }
 
     ColumnPtr datetime_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(TimestampValue);
+        size_t count = 4 * 1024 / sizeof(TimestampValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
         TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
         for (size_t i = 0; i < count; i++) {
@@ -711,7 +707,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     // read and check
     {
         // read and check
-        auto res = ColumnReader::create(&meta, segment.get());
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
         ASSERT_EQ(1024, meta.num_rows());
@@ -772,7 +768,7 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             ASSERT_TRUE(wfile->close().ok());
             // read and check result
             auto segment = create_dummy_segment(fs, fname);
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator());

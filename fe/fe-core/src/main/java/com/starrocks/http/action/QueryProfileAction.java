@@ -44,6 +44,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -68,8 +69,13 @@ public class QueryProfileAction extends WebBaseAction {
         if (Strings.isNullOrEmpty(queryId)) {
             response.appendContent("");
             response.appendContent("<p class=\"text-error\"> Must specify a query_id[]</p>");
+            getPageFooter(response.getContent());
+            writeResponse(request, response);
+            return;
         }
 
+        // HTML encode the queryId to prevent XSS
+        String encodedQueryId = Encode.forHtml(queryId);
         String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
         if (queryProfileStr != null) {
             appendCopyButton(response.getContent());
@@ -77,7 +83,7 @@ public class QueryProfileAction extends WebBaseAction {
             getPageFooter(response.getContent());
             writeResponse(request, response);
         } else {
-            appendQueryProfile(response.getContent(), "query id " + queryId + " not found.");
+            appendQueryProfile(response.getContent(), "query id " + encodedQueryId + " not found.");
             getPageFooter(response.getContent());
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
         }
@@ -116,6 +122,20 @@ public class QueryProfileAction extends WebBaseAction {
                 "  document.body.removeChild(t)\n" +
                 "}\n" +
                 "</script>");
+        buffer.append("<script type=\"text/javascript\">\n" +
+                "function downloadProfile() {\n" +
+                "  content = $('#profile').html()\n" +
+                "  const file = new Blob([content], { type: \"text/plain\" });\n" +
+                "  const params = new URLSearchParams(window.location.search);\n" +
+                "  const query_id = params.get('query_id');\n" +
+                "  const a = document.createElement('a');\n" +
+                "  a.href = URL.createObjectURL(file);\n" +
+                "  a.download = query_id + \"profile.txt\";\n" +
+                "  a.click();\n" +
+                "\n" +
+                "  URL.revokeObjectURL(a.href);\n" +
+                "}" + "</script>");
         buffer.append("<input type=\"button\" onclick=\"copyProfile();\" value=\"Copy Profile\"></input>");
+        buffer.append("<input type=\"button\" onclick=\"downloadProfile();\" value=\"Download Profile\"></input>");
     }
 }

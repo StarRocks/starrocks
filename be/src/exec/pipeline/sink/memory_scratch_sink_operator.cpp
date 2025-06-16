@@ -15,6 +15,7 @@
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -47,18 +48,13 @@ bool MemoryScratchSinkOperator::is_finished() const {
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        _is_audit_report_done = false;
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx(),
-                                                                         &_is_audit_report_done);
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
     }
     return Status::OK();
 }
 
 bool MemoryScratchSinkOperator::pending_finish() const {
-    // audit report not finish, we need check until finish
-    if (!_is_audit_report_done) {
-        return true;
-    }
     // After set_finishing, there may be data that has not been sent.
     // We need to ensure that all remaining data are put into the queue.
     const_cast<MemoryScratchSinkOperator*>(this)->try_to_put_sentinel();
@@ -69,8 +65,12 @@ Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
     // because we introduced pending_finish, once cancel occurs, some states need to be changed so that the pending_finish can end immediately
     _pending_result.reset();
     _is_finished = true;
-    _has_put_sentinel = true;
     _queue->update_status(Status::Cancelled("Set cancelled by MemoryScratchSinkOperator"));
+    // Make sure all waiters in the result queue can get the notification.
+    // NOTE:
+    //   There is no guarantee that pending_finish() will be invoked before set_cancelled().  In case set_cancelled() is
+    //   called before pending_finish(), there is no chance to invoke try_to_put_sentinel() any more.
+    try_to_put_sentinel();
     return Status::OK();
 }
 
@@ -101,6 +101,7 @@ Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 }
 
 void MemoryScratchSinkOperator::try_to_put_sentinel() {
+    // NOTE: Must be implemented idempotent!
     if (_pending_result != nullptr) {
         if (!_queue->try_put(_pending_result)) {
             return;

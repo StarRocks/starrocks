@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <arrow/record_batch.h>
+
 #include <map>
 #include <thread>
 #include <unordered_map>
@@ -55,28 +57,35 @@ class PUniqueId;
 class ResultBufferMgr {
 public:
     ResultBufferMgr();
-    ~ResultBufferMgr();
+    ~ResultBufferMgr() = default;
     // init Result Buffer Mgr, start cancel thread
-    [[nodiscard]] Status init();
+    Status init();
+    void stop();
     // create one result sender for this query_id
     // the returned sender do not need release
     // sender is not used when call cancel or unregister
-    [[nodiscard]] Status create_sender(const TUniqueId& query_id, int buffer_size,
-                                       std::shared_ptr<BufferControlBlock>* sender);
+    Status create_sender(const TUniqueId& query_id, int buffer_size, std::shared_ptr<BufferControlBlock>* sender);
     // fetch data, used by RPC
-    [[nodiscard]] Status fetch_data(const TUniqueId& fragment_id, TFetchDataResult* result);
+    Status fetch_data(const TUniqueId& fragment_id, TFetchDataResult* result);
 
     void fetch_data(const PUniqueId& finst_id, GetResultBatchCtx* ctx);
 
     // cancel
-    [[nodiscard]] Status cancel(const TUniqueId& fragment_id);
+    Status cancel(const TUniqueId& fragment_id);
 
     // cancel one query at a future time.
-    [[nodiscard]] Status cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
+    Status cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
+
+    Status fetch_arrow_data(const TUniqueId& query_id, std::shared_ptr<arrow::RecordBatch>* result);
+
+    void set_arrow_schema(const TUniqueId& query_id, const std::shared_ptr<arrow::Schema>& arrow_schema);
+
+    std::shared_ptr<arrow::Schema> get_arrow_schema(const TUniqueId& query_id);
 
 private:
     typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;
     typedef std::map<time_t, std::vector<TUniqueId>> TimeoutMap;
+    typedef std::unordered_map<TUniqueId, std::shared_ptr<arrow::Schema>> ArrowSchemaMap;
 
     std::shared_ptr<BufferControlBlock> find_control_block(const TUniqueId& query_id);
 
@@ -98,5 +107,7 @@ private:
     TimeoutMap _timeout_map;
 
     std::unique_ptr<std::thread> _cancel_thread;
+
+    ArrowSchemaMap _arrow_schema_map;
 };
 } // namespace starrocks

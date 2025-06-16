@@ -17,7 +17,6 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -26,6 +25,8 @@
 #include "exec/hash_join_components.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/spill/partition.h"
+#include "exec/spill/spill_components.h"
+#include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -50,6 +51,7 @@ struct SpillableHashJoinProbeMetrics {
     RuntimeProfile::Counter* probe_shuffle_timer = nullptr;
     RuntimeProfile::HighWaterMarkCounter* prober_peak_memory_usage = nullptr;
     RuntimeProfile::HighWaterMarkCounter* build_partition_peak_memory_usage = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_processing_partition_count = nullptr;
 };
 
 class SpillableHashJoinProbeOperator final : public HashJoinProbeOperator {
@@ -78,8 +80,12 @@ public:
 
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
 
+    void set_degree_of_parallelism(int32_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
+
+    void set_spill_hash_join_probe_op_max_bytes(int64_t op_bytes) { _spill_hash_join_probe_op_max_bytes = op_bytes; }
+
 private:
-    bool spilled() const { return _join_builder->spiller()->spilled(); }
+    bool spilled() const;
 
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
@@ -94,7 +100,7 @@ private:
     Status _load_all_partition_build_side(RuntimeState* state);
 
     Status _load_partition_build_side(workgroup::YieldContext& ctx, RuntimeState* state,
-                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx, int* yield);
+                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx);
 
     void _update_status(Status&& status) const;
 
@@ -129,11 +135,13 @@ private:
     bool _is_finished = false;
     bool _is_finishing = false;
 
+    int32_t _degree_of_parallelism;
+    int64_t _spill_hash_join_probe_op_max_bytes;
+
     NoBlockCountDownLatch _latch;
     mutable std::mutex _mutex;
     mutable Status _operator_status;
 
-    std::shared_ptr<spill::IOTaskExecutor> _executor;
     bool _need_post_probe = false;
 };
 
@@ -146,6 +154,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     std::shared_ptr<spill::SpilledOptions> _spill_options;

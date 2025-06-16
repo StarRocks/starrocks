@@ -36,14 +36,16 @@ import java.util.LinkedList;
 import java.util.List;
 
 import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
-import static com.starrocks.catalog.ScalarType.OLAP_MAX_VARCHAR_LENGTH;
+import static com.starrocks.catalog.ScalarType.getOlapMaxVarcharLength;
 import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
+import static com.starrocks.connector.ColumnTypeConverter.fromPaimonType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
 import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
+
 
 public class ColumnTypeConverterTest {
 
@@ -134,6 +136,10 @@ public class ColumnTypeConverterTest {
         itemType = ScalarType.createUnifiedDecimalType(4, 2);
         Assert.assertEquals(new ArrayType(new ArrayType(itemType)),
                 fromHiveTypeToArrayType("array<Array<decimal(4, 2)>>"));
+
+        itemType = ScalarType.createType(PrimitiveType.VARBINARY);
+        Assert.assertEquals(new ArrayType(itemType),
+                fromHiveTypeToArrayType("array<BINARY>"));
     }
 
     @Test
@@ -305,7 +311,7 @@ public class ColumnTypeConverterTest {
 
         Assert.assertEquals("varchar(65535)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
         Assert.assertEquals("varchar(65534)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
-        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(OLAP_MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
         Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
     }
 
@@ -333,6 +339,12 @@ public class ColumnTypeConverterTest {
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
         Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
+    }
+
+    @Test
+    public void testPaimonSchema() {
+        org.apache.paimon.types.TimeType type = new org.apache.paimon.types.TimeType(3);
+        Assert.assertEquals(ScalarType.createType(PrimitiveType.TIME), fromPaimonType(type));
     }
 
     @Test
@@ -431,7 +443,7 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals("varchar(100)", toHiveType(ScalarType.createVarchar(100)));
         Assert.assertEquals("string", toHiveType(ScalarType.createVarcharType(200000)));
 
-        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(OLAP_MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
 
         ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));

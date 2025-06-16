@@ -18,8 +18,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -396,9 +395,9 @@ select [] in (array1), [] not in (array1), [null] in (array1), [null] not in (ar
 -- result:
 None	None	None	None	None	None	None	None	None	None	None	None
 0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
 0	1	0	1	1	0	0	1	0	1	None	1
-0	1	0	1	0	1	None	1	0	1	None	1
-0	1	0	1	0	1	None	1	0	1	None	1
 0	1	0	1	0	1	None	0	0	1	None	1
 0	1	0	1	0	1	None	1	0	1	None	1
 0	1	0	1	0	1	None	1	1	0	0	1
@@ -414,12 +413,12 @@ None	None	None
 None	None	None
 0	None	0
 0	None	1
-0	None	None
-0	None	0
+0	None	1
 0	None	0
 0	None	1
-0	None	1
 0	None	None
+0	None	None
+0	None	0
 0	None	None
 1	0	0
 1	None	1
@@ -434,26 +433,26 @@ None	None	None
 1	None	1
 1	None	0
 1	None	None
+1	None	0
+1	None	0
 1	None	1
-1	None	0
-1	None	0
 1	None	None
 1	None	None
 -- !result
-select array3 in ([]), array3 not in ([]), array3 in ([null]), array3 not in ([null]), array3 in ([row(1, 2)], [null]), array3 not in ([row(1, 2)], [null]) from sc2 order by 1;
+select array3 in ([]), array3 not in ([]), array3 in ([null]), array3 not in ([null]), array3 in ([row(1, 2)], [null]), array3 not in ([row(1, 2)], [null]) from sc2 order by 1,2,3,4,5,6;
 -- result:
 None	None	None	None	None	None
+0	1	None	0	None	None
+0	1	None	1	None	None
+0	1	None	1	None	None
 0	1	None	1	1	0
 0	1	None	1	1	0
-0	1	None	1	None	1
+0	1	None	1	1	0
+0	1	None	1	1	0
+0	1	None	1	1	0
+0	1	None	1	1	0
+0	1	None	1	1	0
 0	1	0	1	0	1
-0	1	None	1	1	0
-0	1	None	1	1	0
-0	1	None	1	1	0
-0	1	None	1	1	0
-0	1	None	0	None	0
-0	1	None	1	None	1
-0	1	None	1	1	0
 1	0	0	1	0	1
 -- !result
 select array1 in (null), array1 not in (null), array2 in (null), array2 not in (null), array3 in (null), array3 not in (null) from sc2 order by 1;
@@ -551,8 +550,8 @@ None	None	None	None	None	None
 0	1	0	1	0	1
 0	1	0	1	0	1
 0	1	0	1	0	1
-0	1	0	1	0	1
 0	1	0	1	1	0
+0	1	0	1	0	1
 0	1	0	1	0	1
 0	1	0	1	0	1
 0	1	0	1	0	1
@@ -612,12 +611,12 @@ select map1 in (map{1:10, 2:20, 4:40}, map{}), map2 in (map{2:[2,3,4], 1:[1,2,3]
 -- result:
 None	None	None
 None	1	1
-0	0	0
 0	0	1
 0	None	1
-0	0	0
 0	1	0
+0	0	0
 0	0	1
+0	0	0
 0	None	0
 1	0	None
 1	0	1
@@ -631,11 +630,11 @@ None	None
 None	None
 None	None
 None	None
+None	None
+None	None
+None	None
 None	1
 None	1
-None	None
-None	None
-None	None
 None	1
 0	1
 0	None

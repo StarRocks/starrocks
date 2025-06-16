@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # dayofyear
 
-## Description
+
 
 Returns the day of the year for a given date.
 

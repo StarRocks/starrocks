@@ -34,14 +34,18 @@
 
 #pragma once
 
+#include "column_reader.h"
 #include "common/status.h"
+#include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
+#include "types/logical_type.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
-
-class CondColumn;
 
 class Column;
 class ColumnAccessPath;
@@ -51,11 +55,15 @@ class ColumnReader;
 class RandomAccessFile;
 
 struct ColumnIteratorOptions {
-    RandomAccessFile* read_file = nullptr;
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
+    bool is_io_coalesce = false;
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    // temporary data does not allow caching
+    bool temporary_data = false;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -71,6 +79,7 @@ struct ColumnIteratorOptions {
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
+    bool has_preaggregation = true;
 };
 
 // Base iterator to read one column data
@@ -85,29 +94,66 @@ public:
     }
 
     // Seek to the first entry in the column.
-    [[nodiscard]] virtual Status seek_to_first() = 0;
+    virtual Status seek_to_first() = 0;
 
     // Seek to the given ordinal entry in the column.
     // Entry 0 is the first entry written to the column.
     // If provided seek point is past the end of the file,
     // then returns false.
-    [[nodiscard]] virtual Status seek_to_ordinal(ordinal_t ord) = 0;
+    virtual Status seek_to_ordinal(ordinal_t ord) = 0;
 
-    [[nodiscard]] virtual Status next_batch(size_t* n, Column* dst) = 0;
+    virtual ordinal_t num_rows() const = 0;
 
-    [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* dst) {
-        return Status::NotSupported("ColumnIterator Not Support batch read");
+    virtual Status next_batch(size_t* n, Column* dst) = 0;
+
+    virtual Status next_batch(const SparseRange<>& range, Column* dst);
+
+    virtual StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                                Column* dst) {
+        return Status::NotSupported("Not Implemented");
+    }
+
+    Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
+        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+            sharedBufferStream == nullptr) {
+            return Status::OK();
+        }
+
+        std::vector<io::SharedBufferedInputStream::IORange> result;
+        ASSIGN_OR_RETURN(auto vec, get_io_range_vec(range, nullptr));
+        for (auto e : vec) {
+            io::SharedBufferedInputStream::IORange io_range(e.first, e.second);
+            result.emplace_back(io_range);
+        }
+
+        return dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file)->set_io_ranges(result);
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
-    /// for vectorized engine
-    [[nodiscard]] virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                            const ColumnPredicate* del_predicate,
-                                                            SparseRange<>* row_ranges) = 0;
+    virtual bool has_zone_map() const { return false; }
 
-    [[nodiscard]] virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                                SparseRange<>* row_ranges) {
+    /// Store the row ranges that satisfy the given predicates into |row_ranges|.
+    /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
+    virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                              CompoundNodeType pred_relation) {
+        row_ranges->add({0, static_cast<rowid_t>(num_rows())});
+        return Status::OK();
+    }
+
+    virtual bool has_original_bloom_filter_index() const { return false; }
+    virtual bool has_ngram_bloom_filter_index() const { return false; }
+    /// Treat the relationship between |predicates| as `(s_pred_1 OR s_pred_2 OR ... OR s_pred_n) AND (ns_pred_1 AND ns_pred_2 AND ... AND ns_pred_n)`,
+    /// where s_pred_i denotes a predicate which supports bloom filter, and ns_pred_i denotes a predicate which does not support bloom filter.
+    /// That is,
+    /// - only keep the rows in |row_ranges| which satisfy any predicate that supports bloom filter in |predicates|.
+    /// - or keep all the rows in |row_ranges| if there is no predicate that supports bloom filter in |predicates|.
+    ///
+    /// prerequisite:
+    /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
+    virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                  SparseRange<>* row_ranges) {
         return Status::OK();
     }
 
@@ -118,7 +164,7 @@ public:
 
     // if all data page of this colum are encoded as dictionary encoding.
     // return all dictionary words that store in dict page
-    [[nodiscard]] virtual Status fetch_all_dict_words(std::vector<Slice>* words) const {
+    virtual Status fetch_all_dict_words(std::vector<Slice>* words) const {
         return Status::NotSupported("Not Support dict.");
     }
 
@@ -135,17 +181,15 @@ public:
     // batch of dictionary codes for dictionary encoded values.
     // this method can be invoked only if `all_page_dict_encoded` returns true.
     // type of |dst| must be `FixedLengthColumn<int32_t>` or `NullableColumn(FixedLengthColumn<int32_t>)`.
-    [[nodiscard]] virtual Status next_dict_codes(size_t* n, Column* dst) { return Status::NotSupported(""); }
+    virtual Status next_dict_codes(size_t* n, Column* dst) { return Status::NotSupported(""); }
 
-    [[nodiscard]] virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
-        return Status::NotSupported("");
-    }
+    virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) { return Status::NotSupported(""); }
 
     // given a list of dictionary codes, fill |dst| column with the decoded values.
     // |codes| pointer to the array of dictionary codes.
     // |size| size of dictionary code array.
     // |words| column used to save the columns values, by append into it.
-    [[nodiscard]] virtual Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) {
+    virtual Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) {
         return Status::NotSupported("");
     }
 
@@ -156,7 +200,7 @@ public:
     // Array column is made of offset and element.
     // This function seek to specified ordinal for offset column.
     // As well, calculate the element ordinal for element column.
-    [[nodiscard]] virtual Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) {
+    virtual Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) {
         return Status::NotSupported("seek_to_ordinal_and_calc_element_ordinal");
     }
 
@@ -164,33 +208,36 @@ public:
     // dictionary codes from the column |codes|.
     // |codes| must be of type `FixedLengthColumn<int32_t>` or `NullableColumn<FixedLengthColumn<int32_t>`
     // and assume no `null` value in |codes|.
-    [[nodiscard]] virtual Status decode_dict_codes(const Column& codes, Column* words);
+    virtual Status decode_dict_codes(const Column& codes, Column* words);
 
     // given a list of ordinals, fetch corresponding values.
     // |ordinals| must be ascending sorted.
-    [[nodiscard]] virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    // NOTE: The default implementation is not high-performant.
+    virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values);
+
+    Status fetch_values_by_rowid(const Column& rowids, Column* values);
+
+    virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
 
-    [[nodiscard]] Status fetch_values_by_rowid(const Column& rowids, Column* values);
+    Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
 
-    [[nodiscard]] virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-        return Status::NotSupported("");
-    }
+    // for Struct type (Struct)
+    virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) { return next_batch(n, dst); }
 
-    [[nodiscard]] Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
-
-    // for complex collection type (Array/Struct/Map)
-    [[nodiscard]] virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) {
-        return next_batch(n, dst);
-    }
-
-    [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* dst, ColumnAccessPath* path) {
+    virtual Status next_batch(const SparseRange<>& range, Column* dst, ColumnAccessPath* path) {
         return next_batch(range, dst);
     }
 
-    [[nodiscard]] virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-        return Status::OK();
+    virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
+
+    virtual Status null_count(size_t* count) { return Status::OK(); };
+
+    // RAW interface, should be used carefully
+    virtual ColumnReader* get_column_reader() {
+        CHECK(false) << "unreachable";
+        return nullptr;
     }
 
 protected:

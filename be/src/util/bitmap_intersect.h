@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "exprs/anyval_util.h"
 #include "runtime/datetime_value.h"
 #include "runtime/string_value.h"
 #include "types/bitmap_value.h"
@@ -148,7 +147,7 @@ public:
         size_t size = 4;
         for (auto& kv : _bitmaps) {
             size += detail::serialize_size(kv.first);
-            size += kv.second.getSizeInBytes();
+            size += kv.second.get_size_in_bytes();
         }
         return size;
     }
@@ -161,7 +160,7 @@ public:
         for (auto& kv : _bitmaps) {
             writer = detail::write_to(kv.first, writer);
             kv.second.write(writer);
-            writer += kv.second.getSizeInBytes();
+            writer += kv.second.get_size_in_bytes();
         }
     }
 
@@ -173,7 +172,7 @@ public:
             T key;
             detail::read_from(&reader, &key);
             BitmapValue bitmap(reader);
-            reader += bitmap.getSizeInBytes();
+            reader += bitmap.get_size_in_bytes();
             _bitmaps[key] = bitmap;
         }
     }

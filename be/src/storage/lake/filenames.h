@@ -29,6 +29,8 @@ constexpr static const int kTabletMetadataFilenameLength = 38;
 constexpr static const int kTxnLogFilenameLength = 37;
 constexpr static const int kTabletMetadataLockFilenameLength = 55;
 
+constexpr static const int64 kInitialVersion = 1;
+
 constexpr static const char* const kGCFileName = "GC.json";
 
 inline bool is_segment(std::string_view file_name) {
@@ -59,12 +61,24 @@ inline bool is_tablet_metadata(std::string_view file_name) {
     return HasSuffixString(file_name, ".meta");
 }
 
+inline bool is_tablet_initial_metadata(std::string_view file_name) {
+    return HasPrefixString(file_name, "0000000000000000_");
+}
+
 inline bool is_tablet_metadata_lock(std::string_view file_name) {
     return HasSuffixString(file_name, ".lock");
 }
 
+inline bool is_sst(std::string_view file_name) {
+    return HasSuffixString(file_name, ".sst");
+}
+
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
+}
+
+inline std::string tablet_initial_metadata_filename() {
+    return tablet_metadata_filename(0, kInitialVersion);
 }
 
 inline std::string gen_delvec_filename(int64_t txn_id) {
@@ -83,6 +97,23 @@ inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.vlog", tablet_id, version);
 }
 
+inline std::string combined_txn_log_filename(int64_t txn_id) {
+    return fmt::format("{:016X}.logs", txn_id);
+}
+
+inline bool is_combined_txn_log(std::string_view file_name) {
+    return HasSuffixString(file_name, ".logs");
+}
+
+inline int64_t parse_combined_txn_log_filename(std::string_view file_name) {
+    constexpr static int kBase = 16;
+    CHECK_EQ(21, file_name.size());
+    StringParser::ParseResult res;
+    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    return txn_id;
+}
+
 inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t version, int64_t expire_time) {
     return fmt::format("{:016X}_{:016X}_{:016X}.lock", tablet_id, version, expire_time);
 }
@@ -91,8 +122,16 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
+inline std::string gen_cols_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.cols", txn_id, generate_uuid_string());
+}
+
 inline std::string gen_del_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.del", txn_id, generate_uuid_string());
+}
+
+inline std::string gen_sst_filename() {
+    return fmt::format("{}.sst", generate_uuid_string());
 }
 
 inline std::optional<int64_t> extract_txn_id_prefix(std::string_view file_name) {

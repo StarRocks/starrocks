@@ -20,26 +20,17 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "gutil/strings/substitute.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+#include "util/json.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {
 
-//class Object {
-//    Object();
-//
-//    Object(const Slice& s);
-//
-//    void clear();
-//
-//    size_t serialize_size() const;
-//    size_t serialize(uint8_t* dst) const;
-//};
-
 template <typename T>
-class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
-    friend class ColumnFactory<Column, ObjectColumn>;
+class ObjectColumn : public CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>> {
+    friend class CowFactory<ColumnFactory<Column, ObjectColumn>, ObjectColumn>;
 
 public:
     using ValueType = T;
@@ -110,7 +101,7 @@ public:
 
     bool append_nulls(size_t count) override { return false; }
 
-    bool append_strings(const Buffer<Slice>& strs) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -125,23 +116,24 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+
+    bool deserialize_and_append(const Slice& src);
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
+    uint32_t max_one_element_serialize_size() const override;
 
-    MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
+    MutableColumnPtr clone_empty() const override { return this->create(); }
 
     MutableColumnPtr clone() const override;
-
-    ColumnPtr clone_shared() const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
@@ -153,7 +145,7 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string get_name() const override { return std::string{"object"}; }
 
@@ -221,15 +213,12 @@ public:
         return ss.str();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+    Status capacity_limit_reached() const override {
         if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("row count of object column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                                   std::to_string(Column::MAX_CAPACITY_LIMIT)));
         }
-        return false;
+        return Status::OK();
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
@@ -237,6 +226,8 @@ public:
     StatusOr<ColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
+
+    void check_or_die() const override {}
 
 private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual
@@ -258,8 +249,6 @@ private:
 
     // Currently, only for data loading
     void _build_slices() const;
-
-    void check_or_die() const override {}
 
 private:
     Buffer<T> _pool;

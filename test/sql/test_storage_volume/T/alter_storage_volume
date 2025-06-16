@@ -6,3 +6,8 @@ DESC STORAGE VOLUME storage_volume_alter;
 DROP STORAGE VOLUME IF EXISTS storage_volume_alter;
 DESC STORAGE VOLUME storage_volume_alter;
 SHOW STORAGE VOLUMES LIKE 'storage_volume_alter';
+-- name: test_alter_storage_volume_immutable_properties @cloud
+CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_immutable type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
+ALTER STORAGE VOLUME storage_volume_immutable SET ("aws.s3.enable_partitioned_prefix" = "true");
+ALTER STORAGE VOLUME storage_volume_immutable SET ("aws.s3.num_partitioned_prefix" = "32");
+DROP STORAGE VOLUME IF EXISTS storage_volume_immutable;

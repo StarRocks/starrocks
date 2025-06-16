@@ -17,14 +17,25 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.PartitionInfo;
 
+import java.util.concurrent.TimeUnit;
+
 public class Partition implements PartitionInfo {
 
     private final String partitionName;
-    private final long version;
+    private final long lastUpdateTime;
 
-    public Partition(String name, long version) {
+    private final Long recordCount;
+    private final Long fileSizeInBytes;
+    private final Long fileCount;
+
+    public Partition(String name, long lastUpdateTime, Long recordCount,
+                     Long fileSizeInBytes, Long fileCount) {
         this.partitionName = name;
-        this.version = version;
+        this.lastUpdateTime = lastUpdateTime;
+        this.recordCount = recordCount;
+        this.fileSizeInBytes = fileSizeInBytes;
+        this.fileCount = fileCount;
+
     }
 
     public String getPartitionName() {
@@ -32,15 +43,35 @@ public class Partition implements PartitionInfo {
     }
 
     @Override
+    public TimeUnit getModifiedTimeUnit() {
+        return TimeUnit.MILLISECONDS;
+    }
+
+    @Override
     public long getModifiedTime() {
-        return version;
+        return lastUpdateTime;
+    }
+
+    public Long getRecordCount() {
+        return recordCount;
+    }
+
+    public Long getFileSizeInBytes() {
+        return fileSizeInBytes;
+    }
+
+    public Long getFileCount() {
+        return fileCount;
     }
 
     @Override
     public String toString() {
         return "PaimonPartitionInfo{" +
                 "partitionName='" + partitionName + '\'' +
-                ", version=" + version +
+                ", lastUpdateTime=" + lastUpdateTime +
+                ", recordCount=" + recordCount +
+                ", fileSizeInBytes=" + fileSizeInBytes +
+                ", fileCount=" + fileCount +
                 '}';
     }
 }

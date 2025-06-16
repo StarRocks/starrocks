@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # base64_to_bitmap
 
-## 功能
+
 
 导入外部 bitmap 数据到 StarRocks 时，需要先对 bitmap 数据进行序列化和 Base64 编码，生成 Base64 字符串。导入字符串到 StarRocks 时再进行 Base64 到 bitmap 的转化。
 该函数用于将 Base64 编码的字符串转化为 bitmap。
@@ -29,7 +29,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
 
 创建库表 `bitmapdb.bitmap_table`，使用 Stream Load 将 JSON 格式数据导入到 `bitmap_table` 中，过程中使用base64_to_bitmap 函数进行数据转换。
 
-1. 在 StarRocks 中创建库和表，以创建主键模型 (PRIMARY KEY) 的表为例。
+1. 在 StarRocks 中创建库和表，以创建主键表为例。
 
     ```SQL
     CREATE database bitmapdb;
@@ -48,7 +48,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
     );
     ```
 
-2. 使用 [Stream Load](../../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 将 JSON 格式数据导入到 `bitmap_table` 中。
+2. 使用 [Stream Load](../../sql-statements/loading_unloading/STREAM_LOAD.md) 将 JSON 格式数据导入到 `bitmap_table` 中。
 
     假设有 JSON 格式文件**simpledata**, 内容如下，`userid`为 Base64 编码后的字符串:
 

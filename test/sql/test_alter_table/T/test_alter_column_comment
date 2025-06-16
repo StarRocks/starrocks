@@ -1,0 +1,12 @@
+-- name: test_alter_table_column_comment
+create table t(k int, v int) primary key(k);
+show create table t;
+alter table t modify column k comment 'k';
+alter table t modify column v comment 'v';
+show create table t;
+create table d(k int, v int) duplicate key(k);
+show create table d;
+alter table d modify column k comment 'k';
+alter table d modify column v comment 'v';
+show create table d;
+

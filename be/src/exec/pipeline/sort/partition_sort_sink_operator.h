@@ -90,6 +90,7 @@ protected:
 
     SortContext* _sort_context;
     RuntimeFilterHub* _hub;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class PartitionSortSinkOperatorFactory : public OperatorFactory {
@@ -123,6 +124,8 @@ public:
               _spill_channel_factory(std::move(spill_channel_factory)) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

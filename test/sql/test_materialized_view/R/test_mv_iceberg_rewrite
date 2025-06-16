@@ -58,9 +58,15 @@ function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${
 -- result:
 None
 -- !result
+set enable_materialized_view_transparent_union_rewrite=false;
+-- result:
+-- !result
 function: check_no_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt", "test_mv1")
 -- result:
 None
+-- !result
+set enable_materialized_view_transparent_union_rewrite=true;
+-- result:
 -- !result
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt;
 -- result:
@@ -176,14 +182,37 @@ select is_active, inactive_reason from information_schema.materialized_views
 -- result:
 true	
 -- !result
-  
 REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
--- result:
-c45fa9dd-ab93-11ee-9b00-5e4f71f202d3
--- !result
 select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
 -- result:
 2023-12-01	4000
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
+-- !result
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1
+REFRESH DEFERRED MANUAL AS SELECT dt,col_int 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+select state from information_schema.task_runs
+  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv1%" ORDER BY CREATE_TIME DESC LIMIT 1;
+-- result:
+SUCCESS
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
 -- !result
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
 -- result:

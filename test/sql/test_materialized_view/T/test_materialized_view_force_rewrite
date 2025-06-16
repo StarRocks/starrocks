@@ -44,6 +44,7 @@ refresh materialized view mv1 with sync mode;
 
 analyze full table mv1;
 
+set enable_force_rule_based_mv_rewrite=false;
 set materialized_view_rewrite_mode="disable";
 -- hit
 function: check_no_hit_materialized_view("SELECT t1.t1_id, bitmap_union(to_bitmap(t1.t1_age)) FROM t1 INNER JOIN t2 ON t1.t1_t2_id=t2.t2_id INNER JOIN t3 ON t1.t1_t3_id=t3.t3_id group by t1.t1_id", "mv1")

@@ -18,6 +18,7 @@
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
+#include "hive_chunk_sink.h"
 
 namespace starrocks::connector {
 
@@ -27,6 +28,8 @@ public:
 
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
+
+    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
 };
@@ -68,6 +71,7 @@ public:
         return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
     }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
+    int32_t extended_column_index(SlotId id) const;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -77,39 +81,43 @@ public:
     int64_t estimated_mem_usage() const override;
     bool can_estimate_mem_usage() const override { return true; }
 
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
+    Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
+
 private:
     const HiveDataSourceProvider* _provider;
-    const THdfsScanRange _scan_range;
+    THdfsScanRange _scan_range;
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
     void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
+    Status _setup_all_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     void _init_rf_counters();
 
     Status _init_partition_values();
+    Status _init_extended_values();
+    Status _init_global_dicts(HdfsScannerParams* params);
     Status _init_scanner(RuntimeState* state);
-    HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
-    HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
-    // for hiveTable/fileTable with avro/rcfile/sequence format
-    HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
-    HdfsScanner* _create_odps_jni_scanner(const FSOptions& options);
     Status _check_all_slots_nullable();
 
     // =====================================
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
-    bool _use_datacache = false;
-    bool _enable_populate_datacache = false;
-    bool _enable_dynamic_prune_scan_range = true;
+    DataCacheOptions _datacache_options{};
     bool _use_file_metacache = false;
+    bool _use_file_pagecache = false;
+    bool _enable_dynamic_prune_scan_range = true;
+    bool _enable_split_tasks = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
+    // contains whole conjuncts, used to generate PredicateTree
+    std::vector<ExprContext*> _all_conjunct_ctxs{};
     // complex conjuncts, such as contains multi slot, are evaled in scanner.
     std::vector<ExprContext*> _scanner_conjunct_ctxs;
     // conjuncts that contains only one slot.
@@ -121,17 +129,18 @@ private:
     // used for reader to decide decode or not
     // if only used by filter(not output) and only used in conjunct_ctx_by_slot
     // there is no need to decode.
-    std::unordered_set<SlotId> _slots_of_mutli_slot_conjunct;
+    std::unordered_set<SlotId> _slots_of_multi_field_conjunct;
 
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
     std::vector<ExprContext*> _partition_values;
+
     bool _has_partition_conjuncts = false;
     bool _filter_by_eval_partition_conjuncts = false;
     bool _no_data = false;
 
     int _min_max_tuple_id = 0;
-    TupleDescriptor* _min_max_tuple_desc = nullptr;
+    const TupleDescriptor* _min_max_tuple_desc = nullptr;
 
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
@@ -140,8 +149,14 @@ private:
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
 
-    // iceberg equality delete column slots.
-    std::vector<SlotDescriptor*> _equality_delete_slots;
+    std::vector<ExprContext*> _extended_column_values;
+    // extended columns.
+    std::vector<SlotDescriptor*> _extended_slots;
+    // extended column index in `tuple_desc`
+    std::vector<int> _extended_index_in_chunk;
+    // index in extended columns
+    std::vector<int> _index_in_extended_column;
+    bool _has_extended_columns = false;
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;

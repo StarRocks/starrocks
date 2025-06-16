@@ -58,10 +58,9 @@ public class BDBJournalCursorTest {
     @Before
     public void setup() throws Exception {
         // init fake journal entity
-        fakeJournalEntity = new JournalEntity();
         short op = OperationType.OP_SAVE_NEXTID;
         Text text = new Text(Long.toString(123));
-        fakeJournalEntity.setData(text);
+        fakeJournalEntity = new JournalEntity(op, text);
         DataOutputBuffer buffer = new DataOutputBuffer();
         buffer.writeShort(op);
         text.write(buffer);
@@ -84,7 +83,7 @@ public class BDBJournalCursorTest {
                 selfNodeHostPort,
                 selfNodeHostPort,
                 true);
-        environment.setup();
+        environment.setup(true);
         return environment;
     }
 
@@ -97,10 +96,9 @@ public class BDBJournalCursorTest {
 
     private DataOutputBuffer makeBuffer(long l) throws IOException {
         DataOutputBuffer buffer = new DataOutputBuffer(128);
-        JournalEntity je = new JournalEntity();
-        je.setData(new Text(Long.toString(l)));
-        je.setOpCode(OperationType.OP_SAVE_NEXTID);
-        je.write(buffer);
+        JournalEntity je = new JournalEntity(OperationType.OP_SAVE_NEXTID, new Text(Long.toString(l)));
+        buffer.writeShort(je.opCode());
+        je.data().write(buffer);
         return buffer;
     }
 
@@ -144,8 +142,8 @@ public class BDBJournalCursorTest {
             BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, i, -1);
             for (int j = i; j <= 6; ++ j) {
                 JournalEntity entity = bdbJournalCursor.next();
-                Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
-                Assert.assertEquals(String.valueOf(j), entity.getData().toString());
+                Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+                Assert.assertEquals(String.valueOf(j), entity.data().toString());
             }
             bdbJournalCursor.close();
         }
@@ -155,8 +153,8 @@ public class BDBJournalCursorTest {
         //
         BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 6, -1);
         JournalEntity entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
-        Assert.assertEquals("6", entity.getData().toString());
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assert.assertEquals("6", entity.data().toString());
 
         Assert.assertNull(bdbJournalCursor.next());
 
@@ -172,8 +170,8 @@ public class BDBJournalCursorTest {
         //
         bdbJournalCursor.refresh();
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
-        Assert.assertEquals("7", entity.getData().toString());
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assert.assertEquals("7", entity.data().toString());
 
         Assert.assertNull(bdbJournalCursor.next());
 
@@ -207,8 +205,8 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.refresh();
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
-        Assert.assertEquals("8", entity.getData().toString());
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assert.assertEquals("8", entity.data().toString());
 
         //
         // write 10
@@ -229,12 +227,12 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.refresh();
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
-        Assert.assertEquals("9", entity.getData().toString());
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assert.assertEquals("9", entity.data().toString());
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
-        Assert.assertEquals("10", entity.getData().toString());
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.opCode());
+        Assert.assertEquals("10", entity.data().toString());
         Assert.assertNull(bdbJournalCursor.next());
 
         journal.close();
@@ -282,8 +280,8 @@ public class BDBJournalCursorTest {
             }
         };
         JournalEntity entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.getOpCode(), fakeJournalEntity.getOpCode());
-        Assert.assertEquals(entity.getData().toString(), fakeJournalEntity.getData().toString());
+        Assert.assertEquals(entity.opCode(), fakeJournalEntity.opCode());
+        Assert.assertEquals(entity.data().toString(), fakeJournalEntity.data().toString());
     }
 
     @Test
@@ -411,7 +409,7 @@ public class BDBJournalCursorTest {
                     public OperationStatus fakeGet(
                             final Transaction txn, final DatabaseEntry key, final DatabaseEntry data,
                             LockMode lockMode) {
-                        data.setData(new String("lalala").getBytes());
+                        data.setData("lalala".getBytes());
                         return OperationStatus.SUCCESS;
                     }
                 };
@@ -508,5 +506,22 @@ public class BDBJournalCursorTest {
         BDBJEJournal journal = new BDBJEJournal(environment);
         JournalCursor cursor = journal.read(10, 10);
         cursor.refresh();
+    }
+
+    @Test
+    public void testDeserializeDataException() throws Exception {
+        DataOutputBuffer buffer = new DataOutputBuffer(128);
+        buffer.writeShort(OperationType.OP_HEARTBEAT_V2);
+        // set an invalid json string, it will throw exception in deserializeData()
+        Text.writeString(buffer, "aaa");
+        DatabaseEntry entry = new DatabaseEntry();
+        entry.setData(buffer.getData(), 0, buffer.getLength());
+
+        try {
+            BDBJournalCursor cursor = new BDBJournalCursor(null, null, 0, 0);
+            JournalEntity entity = cursor.deserializeData(entry);
+        } catch (JournalException e) {
+            Assert.assertEquals(OperationType.OP_HEARTBEAT_V2, e.getOpCode());
+        }
     }
 }

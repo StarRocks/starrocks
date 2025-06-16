@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # hex
 
-## Description
+
 
 If `x` is a numerical value, this function returns a hexadecimal string representation of the value.
 

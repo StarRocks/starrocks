@@ -33,27 +33,33 @@ DictQueryExpr::DictQueryExpr(const TExprNode& node) : Expr(node), _dict_query_ex
 StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
+    bool null_if_not_found = !_dict_query_expr.strict_mode;
     for (int i = 0; i < _children.size(); ++i) {
         columns[i] = _children[i]->evaluate(context, ptr);
     }
 
-    ColumnPtr res;
+    MutableColumnPtr res;
     for (auto& column : columns) {
         if (column->is_constant()) {
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
         }
     }
-    ChunkPtr key_chunk = ChunkHelper::new_chunk(_key_schema, size);
-    key_chunk->reset();
-    for (int i = 0; i < _dict_query_expr.key_fields.size(); ++i) {
-        ColumnPtr key_column = columns[1 + i];
-        key_chunk->update_column_by_index(key_column, i);
-    }
+
+    // key_columns should be columns[1] ~ columns[1 + _dict_query_expr.key_fields.size()]
+    Columns key_columns(columns.begin() + 1, columns.begin() + 1 + _dict_query_expr.key_fields.size());
+    DCHECK(_key_schema.num_fields() == key_columns.size());
+    auto key_chunk = std::make_unique<Chunk>(std::move(key_columns), std::make_shared<Schema>(_key_schema));
+    key_chunk->check_or_die();
+
     for (size_t i = 0; i < key_chunk->num_columns(); ++i) {
         key_chunk->set_slot_id_to_index(_key_slot_ids[i], i);
     }
 
     for (auto& column : key_chunk->columns()) {
+        // key does not support null value, return error in this case
+        if (column->has_null()) {
+            return Status::InternalError("invalid parameter : get NULL paramenter");
+        }
         if (column->is_nullable()) {
             column = ColumnHelper::update_column_nullable(false, column, column->size());
         }
@@ -72,7 +78,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     res = value_chunk->get_column_by_index(0)->clone_empty();
     if (!res->is_nullable()) {
         auto null_column = UInt8Column::create(0, 0);
-        res = NullableColumn::create(res, null_column);
+        res = NullableColumn::create(std::move(res), std::move(null_column));
     }
 
     int res_idx = 0;
@@ -81,8 +87,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             res->append_datum(value_chunk->get_column_by_index(0)->get(res_idx));
             res_idx++;
         } else {
-            if (_dict_query_expr.strict_mode) {
-                return Status::NotFound("In strict mode, query failed if record not exist in dict table.");
+            if (!null_if_not_found) {
+                return Status::NotFound("query failed if record not exist in dict table.");
             }
             res->append_nulls(1);
         }
@@ -100,6 +106,11 @@ Status DictQueryExpr::prepare(RuntimeState* state, ExprContext* context) {
 Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
     // init parent open
     RETURN_IF_ERROR(Expr::open(state, context, scope));
+
+    // make sure ExprContext::clone will not open DictQueryExpr again
+    if (scope == FunctionContext::THREAD_LOCAL) {
+        return Status::OK();
+    }
 
     TGetDictQueryParamRequest request;
     request.__set_db_name(_dict_query_expr.db_name);

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -33,7 +34,7 @@ import com.starrocks.sql.ast.ComputeNodeClause;
 import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.FrontendClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.SystemInfoService;
@@ -41,71 +42,67 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext> {
+    public static final String PROP_KEY_LOCATION = PropertyAnalyzer.PROPERTIES_LABELS_LOCATION;
+    private static final Set<String> PROPS_SUPPORTED = new HashSet<>();
 
-public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
+    static {
+        PROPS_SUPPORTED.add(PROP_KEY_LOCATION);
+    }
 
     public void analyze(DdlStmt ddlStmt, ConnectContext session) {
         if (ddlStmt instanceof AlterSystemStmt) {
             visit(((AlterSystemStmt) ddlStmt).getAlterClause(), session);
         } else if (ddlStmt instanceof CancelAlterSystemStmt) {
             CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
-            try {
-                for (String hostPort : stmt.getHostPorts()) {
-                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
-                    stmt.getHostPortPairs().add(pair);
-                }
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("FRONTEND", e.getMessage()));
+            for (String hostPort : stmt.getHostPorts()) {
+                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                stmt.getHostPortPairs().add(pair);
             }
         }
     }
 
     @Override
     public Void visitComputeNodeClause(ComputeNodeClause computeNodeClause, ConnectContext context) {
-        try {
-            for (String hostPort : computeNodeClause.getHostPorts()) {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
-                        computeNodeClause instanceof AddComputeNodeClause && !FrontendOptions.isUseFqdn());
-                computeNodeClause.getHostPortPairs().add(pair);
-            }
-            Preconditions.checkState(!computeNodeClause.getHostPortPairs().isEmpty());
-        } catch (AnalysisException e) {
-            throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("COMPUTE NODE", e.getMessage()));
+        for (String hostPort : computeNodeClause.getHostPorts()) {
+            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
+                    computeNodeClause instanceof AddComputeNodeClause && !FrontendOptions.isUseFqdn());
+            computeNodeClause.getHostPortPairs().add(pair);
         }
+        Preconditions.checkState(!computeNodeClause.getHostPortPairs().isEmpty());
         return null;
     }
 
     @Override
     public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
-        try {
-            for (String hostPort : backendClause.getHostPorts()) {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
-                        backendClause instanceof AddBackendClause && !FrontendOptions.isUseFqdn());
-                backendClause.getHostPortPairs().add(pair);
-            }
-            Preconditions.checkState(!backendClause.getHostPortPairs().isEmpty());
-        } catch (AnalysisException e) {
-            throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("BACKEND", e.getMessage()));
+        List<Pair<String, Integer>> hostPortPairs = new ArrayList<>();
+        for (String hostPort : backendClause.getHostPortsUnResolved()) {
+            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
+                    backendClause instanceof AddBackendClause && !FrontendOptions.isUseFqdn());
+            hostPortPairs.add(pair);
         }
+        backendClause.setHostPortPairs(hostPortPairs);
+        Preconditions.checkState(!hostPortPairs.isEmpty());
         return null;
     }
 
     @Override
     public Void visitFrontendClause(FrontendClause frontendClause, ConnectContext context) {
-        try {
-            Pair<String, Integer> pair = SystemInfoService
-                    .validateHostAndPort(frontendClause.getHostPort(),
-                            (frontendClause instanceof AddFollowerClause
-                                    || frontendClause instanceof AddObserverClause)
-                                    && !FrontendOptions.isUseFqdn());
-            frontendClause.setHost(pair.first);
-            frontendClause.setPort(pair.second);
-            Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
-        } catch (AnalysisException e) {
-            throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("FRONTEND", e.getMessage()));
-        }
+        Pair<String, Integer> pair = SystemInfoService
+                .validateHostAndPort(frontendClause.getHostPort(),
+                        (frontendClause instanceof AddFollowerClause
+                                || frontendClause instanceof AddObserverClause)
+                                && !FrontendOptions.isUseFqdn());
+        frontendClause.setHost(pair.first);
+        frontendClause.setPort(pair.second);
+        Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
         return null;
     }
 
@@ -126,9 +123,35 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
-    public Void visitModifyBackendHostClause(ModifyBackendAddressClause clause, ConnectContext context) {
-        checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
+    public Void visitModifyBackendClause(ModifyBackendClause clause, ConnectContext context) {
+        if (clause.getBackendHostPort() == null) {
+            checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
+        } else {
+            SystemInfoService.validateHostAndPort(clause.getBackendHostPort(), false);
+            analyzeBackendProperties(clause.getProperties());
+        }
         return null;
+    }
+
+    private void analyzeBackendProperties(Map<String, String> properties) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String propKey = entry.getKey();
+            if (!PROPS_SUPPORTED.contains(propKey)) {
+                throw new SemanticException("unsupported property: " + propKey);
+            }
+            if (propKey.equals(PROP_KEY_LOCATION)) {
+                String propVal = entry.getValue();
+                if (propVal.isEmpty()) {
+                    continue;
+                }
+                // Support single level location label for now
+                String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*)";
+                if (!Pattern.compile(regex).matcher(propVal).matches()) {
+                    throw new SemanticException("invalid location format: " + propVal +
+                            ", should be like: 'key:val'");
+                }
+            }
+        }
     }
 
     private void checkModifyHostClause(String srcHost, String destHost) {
@@ -138,7 +161,7 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
             if (srcHostIsIP && destHostIsIP) {
                 throw new SemanticException("Can't change ip to ip");
             }
-            // If can't get an ip through the srcHost/destHost, will throw UnknownHostException
+            // Can't get an ip through the srcHost/destHost, will throw UnknownHostException
             if (!srcHostIsIP) {
                 InetAddress.getByName(srcHost);
             }
@@ -153,16 +176,12 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitModifyBrokerClause(ModifyBrokerClause clause, ConnectContext context) {
         validateBrokerName(clause);
-        try {
-            if (clause.getOp() != ModifyBrokerClause.ModifyOp.OP_DROP_ALL) {
-                for (String hostPort : clause.getHostPorts()) {
-                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
-                    clause.getHostPortPairs().add(pair);
-                }
-                Preconditions.checkState(!clause.getHostPortPairs().isEmpty());
+        if (clause.getOp() != ModifyBrokerClause.ModifyOp.OP_DROP_ALL) {
+            for (String hostPort : clause.getHostPorts()) {
+                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                clause.getHostPortPairs().add(pair);
             }
-        } catch (AnalysisException e) {
-            throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("BROKER", e.getMessage()));
+            Preconditions.checkState(!clause.getHostPortPairs().isEmpty());
         }
         return null;
     }

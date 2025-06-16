@@ -34,37 +34,17 @@
 
 package com.starrocks.qe;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
-import com.starrocks.common.Status;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.thrift.TResultBatch;
-import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TVariableData;
-import org.apache.thrift.TDeserializer;
-import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TCompactProtocol;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 // Set executor
 public class SetExecutor {
@@ -81,23 +61,17 @@ public class SetExecutor {
             ctx.modifySystemVariable((SystemVariable) var, false);
         } else if (var instanceof UserVariable) {
             UserVariable userVariable = (UserVariable) var;
+            SetStmtAnalyzer.calcuteUserVariable(userVariable);
+
             if (userVariable.getEvaluatedExpression() == null) {
-                deriveUserVariableExpressionResult(userVariable);
+                userVariable.deriveUserVariableExpressionResult(ctx);
             }
 
-            ctx.modifyUserVariable(userVariable);
-        } else if (var instanceof SetPassVar) {
+            ctx.modifyUserVariableCopyInWrite(userVariable);
+        } else if (var instanceof SetPassVar setPassVar) {
             // Set password
-            SetPassVar setPassVar = (SetPassVar) var;
-            UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState()
-                    .getAuthenticationMgr()
-                    .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
-            if (null == userAuthenticationInfo) {
-                throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
-            }
-            userAuthenticationInfo.setPassword(setPassVar.getPassword());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo);
+                    .alterUser(setPassVar.getUserIdent(), setPassVar.getUserAuthenticationInfo(), null);
         }
     }
 
@@ -107,64 +81,31 @@ public class SetExecutor {
      * @throws DdlException
      */
     public void execute() throws DdlException {
-        for (SetListItem var : stmt.getSetListItems()) {
-            setVariablesOfAllType(var);
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
+        boolean hasUserVar = stmt.getSetListItems().stream().anyMatch(var -> var instanceof UserVariable);
+        boolean executeSuccess = true;
+        if (hasUserVar) {
+            clonedUserVars.putAll(ctx.getUserVariables());
+            ctx.modifyUserVariablesCopyInWrite(clonedUserVars);
         }
-    }
-
-    private void deriveUserVariableExpressionResult(UserVariable userVariable) {
-        QueryStatement queryStatement = ((Subquery) userVariable.getUnevaluatedExpression()).getQueryStatement();
-        ExecPlan execPlan = StatementPlanner.plan(queryStatement,
-                ConnectContext.get(), TResultSinkType.VARIABLE);
-        StmtExecutor executor = new StmtExecutor(ctx, queryStatement);
-        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(ctx, execPlan);
-        if (!sqlResult.second.ok()) {
-            throw new SemanticException(sqlResult.second.getErrorMsg());
-        } else {
-            try {
-                List<TVariableData> result = deserializerVariableData(sqlResult.first);
-                LiteralExpr resultExpr;
-                if (result.isEmpty()) {
-                    resultExpr = new NullLiteral();
-                } else {
-                    Preconditions.checkState(result.size() == 1);
-                    if (result.get(0).isIsNull()) {
-                        resultExpr = new NullLiteral();
-                    } else {
-                        Type userVariableType = userVariable.getUnevaluatedExpression().getType();
-                        //JSON type will be stored as string type
-                        if (userVariableType.isJsonType()) {
-                            userVariableType = Type.VARCHAR;
-                        }
-                        resultExpr = LiteralExpr.create(
-                                StandardCharsets.UTF_8.decode(result.get(0).result).toString(), userVariableType);
-                    }
+        try {
+            for (SetListItem var : stmt.getSetListItems()) {
+                setVariablesOfAllType(var);
+            }
+        } catch (Throwable e) {
+            if (hasUserVar) {
+                executeSuccess = false;
+            }
+            throw e;
+        } finally {
+            //If the set sql contains more than one user variable,
+            //the atomicity of the modification of this set of variables must be ensured.
+            if (hasUserVar) {
+                ctx.resetUserVariableCopyInWrite();
+                if (executeSuccess) {
+                    ctx.modifyUserVariables(clonedUserVars);
                 }
-                userVariable.setEvaluatedExpression(resultExpr);
-            } catch (TException | AnalysisException e) {
-                throw new SemanticException(e.getMessage());
             }
         }
-
-        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            throw new SemanticException(ctx.getState().getErrorMessage());
-        }
-    }
-
-    private static List<TVariableData> deserializerVariableData(List<TResultBatch> sqlResult) throws TException {
-        List<TVariableData> statistics = Lists.newArrayList();
-
-        TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
-        for (TResultBatch resultBatch : sqlResult) {
-            for (ByteBuffer bb : resultBatch.rows) {
-                TVariableData sd = new TVariableData();
-                byte[] bytes = new byte[bb.limit() - bb.position()];
-                bb.get(bytes);
-                deserializer.deserialize(sd, bytes);
-                statistics.add(sd);
-            }
-        }
-
-        return statistics;
     }
 }

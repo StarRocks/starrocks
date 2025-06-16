@@ -14,16 +14,22 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
@@ -33,6 +39,10 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -96,10 +106,10 @@ public class ScalarOperatorRewriterTest {
         assertEquals(root, result);
         assertEquals(OperatorType.BINARY, result.getChild(0).getOpType());
         assertEquals(OperatorType.VARIABLE, result.getChild(0).getChild(0).getOpType());
-        assertEquals(OperatorType.CONSTANT, result.getChild(0).getChild(1).getOpType());
+        assertEquals(OperatorType.CALL, result.getChild(0).getChild(1).getOpType());
 
-        assertEquals(Type.VARCHAR, result.getChild(0).getChild(0).getType());
-        assertEquals(Type.VARCHAR, result.getChild(0).getChild(1).getType());
+        assertEquals(Type.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(0).getType().getPrimitiveType());
+        assertEquals(Type.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(1).getType().getPrimitiveType());
 
         assertEquals(OperatorType.COMPOUND, result.getChild(1).getOpType());
         assertEquals(OperatorType.BINARY, result.getChild(1).getChild(0).getOpType());
@@ -148,5 +158,46 @@ public class ScalarOperatorRewriterTest {
 
             Assert.assertEquals("2: b < 101: b", result.toString());
         }
+    }
+
+    @Test
+    public void testNormalizeIsNull() {
+        ColumnRefOperator column1 = new ColumnRefOperator(0, Type.INT, "test0", false);
+        IsNullPredicateOperator isnotNull = new IsNullPredicateOperator(true, column1);
+        ScalarOperator rewritten = new ScalarOperatorRewriter()
+                .rewrite(isnotNull, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+        Assert.assertEquals(ConstantOperator.TRUE, rewritten);
+
+        ScalarOperator rewritten2 = new ScalarOperatorRewriter()
+                .rewrite(isnotNull, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        Assert.assertEquals(ConstantOperator.TRUE, rewritten2);
+    }
+
+    @Test
+    public void testRangeExtract() {
+        Supplier<ScalarOperator> predicate1Maker = () -> {
+            ColumnRefOperator col1 = new ColumnRefOperator(1, Type.DATE, "dt", false);
+            CallOperator call = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATE,
+                    Arrays.asList(ConstantOperator.createVarchar("YEAR"), col1));
+            return new BinaryPredicateOperator(BinaryType.EQ, call, ConstantOperator.createDate(
+                    LocalDateTime.of(2024, 1, 1, 0, 0, 0)));
+        };
+
+        Supplier<ScalarOperator> predicate2Maker = () -> {
+            ColumnRefOperator col2 = new ColumnRefOperator(2, Type.VARCHAR, "mode", false);
+            return new BinaryPredicateOperator(BinaryType.EQ, col2, ConstantOperator.createVarchar("Buzz"));
+        };
+
+        ScalarOperator predicate1 = Utils.compoundAnd(predicate1Maker.get(), predicate2Maker.get());
+        ScalarOperator predicate2 = Utils.compoundAnd(predicate1Maker.get(), predicate2Maker.get());
+        ScalarOperator predicates = Utils.compoundAnd(predicate1, predicate2);
+
+        ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
+        ScalarOperator result = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
+                .stream().map(rangeExtractor::rewriteOnlyColumn).collect(Collectors.toList())));
+        Preconditions.checkState(result != null);
+        String expect = "date_trunc(YEAR, 1: dt) = 2024-01-01 AND 2: mode = Buzz";
+        String actual = result.toString();
+        Assert.assertEquals(actual, expect, actual);
     }
 }

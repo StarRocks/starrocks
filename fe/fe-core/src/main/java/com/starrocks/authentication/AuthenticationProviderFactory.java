@@ -12,40 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.util.HashMap;
-import java.util.Map;
+import com.starrocks.mysql.privilege.AuthPlugin;
 
 public class AuthenticationProviderFactory {
-    private static final Logger LOG = LogManager.getLogger(AuthenticationProviderFactory.class);
-    private static final Map<String, AuthenticationProvider> PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER = new HashMap<>();
-
-    private AuthenticationProviderFactory() {}
-
-    public static void installPlugin(String pluginName, AuthenticationProvider provider) {
-        if (PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(pluginName)) {
-            LOG.warn("Plugin {} has already been installed!", pluginName);
-        }
-        PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.put(pluginName, provider);
+    private AuthenticationProviderFactory() {
     }
 
-    public static void uninstallPlugin(String pluginName) {
-        if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(pluginName)) {
-            LOG.warn("Cannot find {} from {} ", pluginName, PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.keySet());
+    public static AuthenticationProvider create(String authPlugin, String authString) {
+        if (authPlugin == null) {
+            return null;
         }
-        PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.remove(pluginName);
-    }
 
-    public static AuthenticationProvider create(String plugin) throws AuthenticationException {
-        if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(plugin)) {
-            throw new AuthenticationException("Cannot find " + plugin + " from "
-                + PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.keySet());
+        try {
+            AuthPlugin.Server authPluginServer = AuthPlugin.Server.valueOf(authPlugin);
+            return authPluginServer.getProvider(authString);
+        } catch (IllegalArgumentException e) {
+            return null;
         }
-        return PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.get(plugin);
     }
 }

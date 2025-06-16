@@ -21,39 +21,15 @@
 #include <utility>
 
 #include "column/column_builder.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/jsonpath.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
-
-enum JsonFunctionType {
-    JSON_FUN_INT = 0,
-    JSON_FUN_DOUBLE,
-    JSON_FUN_STRING,
-
-    JSON_FUN_UNKOWN //The last
-};
-
-template <LogicalType logical_type>
-struct JsonTypeTraits {};
-
-template <>
-struct JsonTypeTraits<TYPE_INT> {
-    static JsonFunctionType JsonType;
-};
-
-template <>
-struct JsonTypeTraits<TYPE_DOUBLE> {
-    static JsonFunctionType JsonType;
-};
-
-template <>
-struct JsonTypeTraits<TYPE_VARCHAR> {
-    static JsonFunctionType JsonType;
-};
 
 extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
 
@@ -89,50 +65,30 @@ struct SimpleJsonPath {
 
 class JsonFunctions {
 public:
-    [[nodiscard]] static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-    [[nodiscard]] static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [json_string, tagged_value]
      * @paramType: [BinaryColumn, BinaryColumn]
-     * @return: Int32Column
+     * @return: type column
      */
     DEFINE_VECTORIZED_FN(get_json_int);
-
-    /**
-     * @param: [json_string, tagged_value]
-     * @paramType: [BinaryColumn, BinaryColumn]
-     * @return: DoubleColumn
-     */
+    DEFINE_VECTORIZED_FN(get_json_bigint);
     DEFINE_VECTORIZED_FN(get_json_double);
-
-    /**
-     * @param: [json_string, tagged_value]
-     * @paramType: [BinaryColumn, BinaryColumn]
-     * @return: BinaryColumn
-     */
     DEFINE_VECTORIZED_FN(get_json_string);
 
     /**
-     * @param: [json_string, tagged_value]
+     * @param: [json, tagged_value]
      * @paramType: [JsonColumn, BinaryColumn]
-     * @return: Int32Column
+     * @return: type column
      */
+    DEFINE_VECTORIZED_FN(get_native_json_bool);
     DEFINE_VECTORIZED_FN(get_native_json_int);
-
-    /**
-     * @param: [json_string, tagged_value]
-     * @paramType: [JsonColumn, BinaryColumn]
-     * @return: DoubleColumn
-     */
+    DEFINE_VECTORIZED_FN(get_native_json_bigint);
     DEFINE_VECTORIZED_FN(get_native_json_double);
-
-    /**
-     * @param: [json_string, tagged_value]
-     * @paramType: [JsonColumn, BinaryColumn]
-     * @return: BinaryColumn
-     */
     DEFINE_VECTORIZED_FN(get_native_json_string);
+    DEFINE_VECTORIZED_FN(json_query);
 
     /**
      * @param: [json_string]
@@ -147,8 +103,6 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(json_string);
-
-    DEFINE_VECTORIZED_FN(json_query);
 
     /**
      * @param: [json_object, json_path]
@@ -207,19 +161,15 @@ public:
      */
     DEFINE_VECTORIZED_FN(to_json);
 
-    [[nodiscard]] static Status native_json_path_prepare(FunctionContext* context,
-                                                         FunctionContext::FunctionStateScope scope);
-    [[nodiscard]] static Status native_json_path_close(FunctionContext* context,
-                                                       FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.
-    [[nodiscard]] static Status extract_from_object(simdjson::ondemand::object& obj,
-                                                    const std::vector<SimpleJsonPath>& jsonpath,
-                                                    simdjson::ondemand::value* value) noexcept;
+    static Status extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
+                                      simdjson::ondemand::value* value) noexcept;
 
-    [[nodiscard]] static Status parse_json_paths(const std::string& path_strings,
-                                                 std::vector<SimpleJsonPath>* parsed_paths);
+    static Status parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
 
     // jsonpaths_to_string serializes json patsh to std::string. Setting sub_index to serializes paritially json paths.
     static std::string jsonpaths_to_string(const std::vector<SimpleJsonPath>& jsonpaths, size_t sub_index = -1);
@@ -235,39 +185,39 @@ public:
 
 private:
     template <LogicalType ResultType>
-    [[nodiscard]] static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
+
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_flat_json_query_impl);
+
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_full_json_query_impl);
 
     /**
-     * Parse string column as json column
-     * @param: 
-     * @paramType: 
-     * @return: JsonColumn
+     * @param: [json_object, json_path]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: BooleanColumn
      */
-    DEFINE_VECTORIZED_FN(_string_json);
+    DEFINE_VECTORIZED_FN(_flat_json_exists);
+    DEFINE_VECTORIZED_FN(_full_json_exists);
 
     /**
-     * Convert json column to unescaped binary column with the first/last quote trimmed.
-     * @param: 
-     * @paramType: 
-     * @return: BinaryColumn
+     * Return number of elements in a JSON object/array
+     * @param JSON, JSONPath
+     * @return number of elements if it's object or array, otherwise return 1
      */
-    DEFINE_VECTORIZED_FN(_json_string_unescaped);
+    DEFINE_VECTORIZED_FN(_flat_json_length);
+    DEFINE_VECTORIZED_FN(_full_json_length);
 
     /**
-     * Convert json column to int column
-     * @param: [json_column]
-     * @paramType: [JsonColumn]
-     * @return: Int32Column
+     * Returns the keys from the top-level value of a JSON object as a JSON array
      */
-    DEFINE_VECTORIZED_FN(_json_int);
+    DEFINE_VECTORIZED_FN(_json_keys_without_path);
+    DEFINE_VECTORIZED_FN(_flat_json_keys_with_path);
+    DEFINE_VECTORIZED_FN(_full_json_keys_with_path);
 
-    /**
-     * Convert json column to double column
-     * @param: [json_column]
-     * @paramType: [JsonColumn]
-     * @return: DoubleColumn
-     */
-    DEFINE_VECTORIZED_FN(_json_double);
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_get_json_value);
 
     /**
      * @param: [json_object, json_path]
@@ -275,8 +225,8 @@ private:
      * @return: JsonColumn
      */
 
-    [[nodiscard]] static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
-                                                  std::vector<SimpleJsonPath>* parsed_paths);
+    static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
+                                    std::vector<SimpleJsonPath>* parsed_paths);
 };
 
 } // namespace starrocks

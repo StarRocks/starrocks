@@ -125,11 +125,9 @@ insert into dt_year values('2024-03-14', 2);
 -- !result
 CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
-E: (1064, "Getting syntax error from line 1, column 87 to line 1, column 115. Detail message: Unsupported expr 'date_trunc('week', event_day)' in PARTITION BY clause.")
 -- !result
 CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
-E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
 -- !result
 -- name: test_shadow_partition @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
@@ -219,19 +217,15 @@ show partitions from dt_hour;
 -- !result
 CREATE TABLE dt_minute( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('minute', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
-E: (1064, "Getting syntax error from line 1, column 93 to line 1, column 123. Detail message: Unsupported expr 'date_trunc('minute', event_day)' in PARTITION BY clause.")
 -- !result
 CREATE TABLE dt_second( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('second', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
-E: (1064, "Getting syntax error from line 1, column 93 to line 1, column 123. Detail message: Unsupported expr 'date_trunc('second', event_day)' in PARTITION BY clause.")
 -- !result
 CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
-E: (1064, "Getting syntax error from line 1, column 87 to line 1, column 115. Detail message: Unsupported expr 'date_trunc('week', event_day)' in PARTITION BY clause.")
 -- !result
 CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
-E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
 -- !result
 -- name: test_single_replica
 CREATE TABLE site_access ( event_day DATETIME NOT NULL, site_id INT DEFAULT '10', city_code VARCHAR(100), user_name VARCHAR(32) DEFAULT '', pv BIGINT DEFAULT '0') DUPLICATE KEY(event_day, site_id, city_code, user_name) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day, site_id) PROPERTIES( "replication_num" = "1");
@@ -523,4 +517,143 @@ insert into ss values('2021-01-01', 1);
 select * from ss;
 -- result:
 2021-01-01	1
+-- !result
+
+-- name: test_two_replica
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "2");
+-- result:
+-- !result
+insert into ss values('2002-01-01', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-02', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-03', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-04', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-05', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-06', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-07', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-08', 2);
+-- result:
+-- !result
+insert into ss values('2002-01-09', 2);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2002-01-01	2
+2002-01-02	2
+2002-01-03	2
+2002-01-04	2
+2002-01-05	2
+2002-01-06	2
+2002-01-07	2
+2002-01-08	2
+2002-01-09	2
+-- !result
+
+-- name: test_schema_change
+CREATE TABLE ss( event_day DATE, pv BIGINT, cc int) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values('2002-01-01', 1, 2);
+-- result:
+-- !result
+insert into ss values('2002-01-02', 1, 2);
+-- result:
+-- !result
+alter table ss modify column cc INT AFTER event_day;
+-- result:
+-- !result
+insert into ss values('2002-01-03', 1, 2);
+-- result:
+-- !result
+select sleep(3);
+-- result:
+1
+-- !result
+insert into ss values('2002-01-04', 1, 2);
+-- result:
+-- !result
+select sleep(3);
+-- result:
+1
+-- !result
+insert into ss values('2002-01-05', 1, 2);
+-- result:
+-- !result
+select sleep(3);
+-- result:
+1
+-- !result
+insert into ss values('2002-01-06', 1, 2);
+-- result:
+-- !result
+select sleep(3);
+-- result:
+1
+-- !result
+insert into ss values('2002-01-07', 1, 2);
+-- result:
+-- !result
+select sleep(3);
+-- result:
+1
+-- !result
+insert into ss values('2002-01-08', 1, 2);
+-- result:
+-- !result
+select sleep(3);
+-- result:
+1
+-- !result
+function: wait_alter_table_not_pending()
+-- result:
+None
+-- !result
+select * from ss;
+-- result:
+2002-01-03	1	2
+2002-01-01	1	2
+2002-01-02	1	2
+2002-01-04	1	2
+2002-01-05	1	2
+2002-01-08	1	2
+2002-01-07	1	2
+2002-01-06	1	2
+-- !result
+
+-- name: test_time_slice_with_minute_granularity
+create table tt(k datetime) partition by time_slice(k, interval 10 minute);
+-- result:
+-- !result
+insert into tt values(now());
+-- result:
+-- !result
+select count(*) from tt;
+-- result:
+1
+-- !result
+
+-- name: test_date_trunc_with_minute_granularity
+create table tt(k datetime) partition by date_trunc('minute', k);
+-- result:
+-- !result
+insert into tt values(now());
+-- result:
+-- !result
+select count(*) from tt;
+-- result:
+1
 -- !result

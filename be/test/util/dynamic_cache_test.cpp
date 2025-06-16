@@ -67,6 +67,7 @@ TEST(DynamicCacheTest, cache) {
     cache.clear_expired();
     ASSERT_EQ(4, cache.size());
     ASSERT_TRUE(cache.get(19) == nullptr);
+    ASSERT_EQ(4, cache.get_entry_sizes().size());
 }
 
 TEST(DynamicCacheTest, cache2) {
@@ -82,6 +83,21 @@ TEST(DynamicCacheTest, cache2) {
     ASSERT_EQ(entry_list.size(), N);
     for (DynamicCache<int32_t, int64_t>::Entry* entry : entry_list) {
         delete entry;
+    }
+}
+
+TEST(DynamicCacheTest, get_all_entries) {
+    DynamicCache<int32_t, int64_t> cache(100);
+    for (int i = 0; i < 20; i++) {
+        auto e = cache.get_or_create(i, 1);
+        cache.release(e);
+    }
+    std::vector<DynamicCache<int32_t, int64_t>::Entry*> entries = cache.get_all_entries();
+    ASSERT_EQ(20, entries.size());
+    for (int i = 0; i < 20; i++) {
+        auto e = entries[i];
+        ASSERT_EQ(i, e->key());
+        cache.release(e);
     }
 }
 

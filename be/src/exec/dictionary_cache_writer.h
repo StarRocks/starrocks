@@ -17,7 +17,6 @@
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
 #include "util/reusable_closure.h"
@@ -33,7 +32,7 @@ public:
 
     Status prepare();
 
-    Status append_chunk(ChunkPtr chunk, std::atomic_bool* terminate_flag = nullptr);
+    Status append_chunk(const ChunkPtr& chunk, std::atomic_bool* terminate_flag = nullptr);
 
     bool need_input();
 
@@ -76,9 +75,10 @@ private:
     ChunkUniquePtr _buffer_chunk = nullptr;
     ChunkUniquePtr _immutable_buffer_chunk = nullptr;
 
-    static const long kChunkBufferLimit = 256 * 1024 * 1024; // 256MB
+    // control max size of chunk whether we should begin a refresh task
+    static const long kChunkBufferLimit = 16 * 1024 * 1024; // 16MB
     // control max memory useage in current writer
-    static const long kMaxMemoryUsageLimit = 2147483648; // 2GB
+    static const long kMaxMemoryUsageLimit = 256 * 1024 * 1024; // 256MB
 
     RuntimeState* _state = nullptr;
     starrocks::pipeline::FragmentContext* _fragment_ctx;

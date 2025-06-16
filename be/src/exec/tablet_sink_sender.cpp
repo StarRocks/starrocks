@@ -14,23 +14,25 @@
 
 #include "exec/tablet_sink_sender.h"
 
+#include <utility>
+
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "common/statusor.h"
+#include "exec/write_combined_txn_log.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
-                                   OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
+                                   OlapTablePartitionParam* partition_params, std::vector<IndexChannel*> channels,
                                    std::unordered_map<int64_t, NodeChannel*> node_channels,
                                    std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
                                    TWriteQuorumType::type write_quorum_type, int num_repicas)
-        : _load_id(load_id),
+        : _load_id(std::move(load_id)),
           _txn_id(txn_id),
           _index_id_to_tablet_be_map(std::move(index_id_to_tablet_be_map)),
-          _vectorized_partition(vectorized_partition),
+          _partition_params(partition_params),
           _channels(std::move(channels)),
           _node_channels(std::move(node_channels)),
           _output_expr_ctxs(std::move(output_expr_ctxs)),
@@ -40,7 +42,7 @@ TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToT
 
 Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
                                     const std::vector<OlapTablePartition*>& partitions,
-                                    const std::vector<uint32_t>& tablet_indexes,
+                                    const std::vector<uint32_t>& record_hashes,
                                     const std::vector<uint16_t>& validate_select_idx,
                                     std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
                                     Chunk* chunk) {
@@ -56,8 +58,10 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
             auto* index = schema->indexes()[i];
             for (size_t j = 0; j < selection_size; ++j) {
                 uint16_t selection = validate_select_idx[j];
-                index_id_partition_id[index->index_id].emplace(partitions[selection]->id);
-                _tablet_ids[selection] = partitions[selection]->indexes[i].tablets[tablet_indexes[selection]];
+                const auto* partition = partitions[selection];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
+                _tablet_ids[selection] = virtual_buckets[record_hashes[selection] % virtual_buckets.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -66,8 +70,10 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
         for (size_t i = 0; i < index_size; ++i) {
             auto* index = schema->indexes()[i];
             for (size_t j = 0; j < num_rows; ++j) {
-                index_id_partition_id[index->index_id].emplace(partitions[j]->id);
-                _tablet_ids[j] = partitions[j]->indexes[i].tablets[tablet_indexes[j]];
+                const auto* partition = partitions[j];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
+                _tablet_ids[j] = virtual_buckets[record_hashes[j] % virtual_buckets.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -137,7 +143,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
 Status TabletSinkSender::try_open(RuntimeState* state) {
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(_vectorized_partition->open(state));
+    RETURN_IF_ERROR(_partition_params->open(state));
     for_each_index_channel([](NodeChannel* ch) { ch->try_open(); });
     return Status::OK();
 }
@@ -173,8 +179,7 @@ Status TabletSinkSender::open_wait() {
             }
         });
 
-        // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-        if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+        if (index_channel->has_intolerable_failure()) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -188,41 +193,43 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
     bool intolerable_failure = false;
     for (auto& index_channel : _channels) {
         if (index_channel->has_incremental_node_channel()) {
-            // close initial node channel and wait it done
+            // try to finish initial node channel and wait it done
+            // This is added for automatic partition. We need to ensure that
+            // all data has been sent before the incremental channel is closed.
             index_channel->for_each_initial_node_channel([&index_channel, &err_st,
                                                           &intolerable_failure](NodeChannel* ch) {
                 if (!index_channel->is_failed_channel(ch)) {
-                    auto st = ch->try_close(true);
+                    auto st = ch->try_finish();
                     if (!st.ok()) {
                         LOG(WARNING) << "close initial channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
                 }
             });
 
-            // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-            if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+            if (intolerable_failure) {
                 break;
             }
 
-            bool is_initial_node_channel_close_done = true;
-            index_channel->for_each_initial_node_channel([&is_initial_node_channel_close_done](NodeChannel* ch) {
-                is_initial_node_channel_close_done &= ch->is_close_done();
+            bool is_initial_node_channel_finished = true;
+            index_channel->for_each_initial_node_channel([&is_initial_node_channel_finished](NodeChannel* ch) {
+                is_initial_node_channel_finished &= ch->is_finished();
             });
 
-            // close initial node channel not finish, can not close incremental node channel
-            if (!is_initial_node_channel_close_done) {
+            // initial node channel not finish, can not close incremental node channel
+            if (!is_initial_node_channel_finished) {
                 break;
             }
 
-            // close incremental node channel
-            index_channel->for_each_incremental_node_channel([&index_channel, &err_st,
-                                                              &intolerable_failure](NodeChannel* ch) {
+            // close both initial & incremental node channel
+            index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
                 if (!index_channel->is_failed_channel(ch)) {
                     auto st = ch->try_close();
                     if (!st.ok()) {
@@ -231,6 +238,8 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -247,6 +256,8 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -256,7 +267,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
     }
 
     // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+    if (intolerable_failure) {
         return err_st;
     } else {
         return Status::OK();
@@ -273,12 +284,13 @@ bool TabletSinkSender::is_close_done() {
     return _close_done;
 }
 
-Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile) {
+Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
+                                    bool write_txn_log) {
     Status status = std::move(close_status);
+    // BE id -> add_batch method counter
+    std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
+    int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
     if (status.ok()) {
-        // BE id -> add_batch method counter
-        std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
-        int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
         {
             SCOPED_TIMER(ts_profile->close_timer);
             Status err_st = Status::OK();
@@ -297,41 +309,56 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
                 // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-                if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                if (index_channel->has_intolerable_failure()) {
                     status = err_st;
                     index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }
             }
         }
+        if (status.ok() && write_txn_log) {
+            auto merge_txn_log = [this](NodeChannel* channel) {
+                for (auto& log : channel->txn_logs()) {
+                    _txn_log_map[log.partition_id()].add_txn_logs()->Swap(&log);
+                }
+            };
 
-        // only if status is ok can we call this _profile->total_time_counter().
-        // if status is not ok, this sink may not be prepared, so that _profile is null
-        SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
-        COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
-        COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+            for (auto& index_channel : _channels) {
+                index_channel->for_each_node_channel(merge_txn_log);
+            }
 
-        int64_t total_server_rpc_time_us = 0;
-        int64_t total_server_wait_memtable_flush_time_us = 0;
-        // print log of add batch time of all node, for tracing load performance easily
-        std::stringstream ss;
-        ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
-           << ", add chunk time(ms)/wait lock time(ms)/num: ";
-        for (auto const& pair : node_add_batch_counter_map) {
-            total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
-            total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
-            ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
-               << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
+            status.update(_write_combined_txn_log());
         }
-        ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
-        ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
-        LOG(INFO) << ss.str();
     } else {
-        for_each_index_channel([&status](NodeChannel* ch) { ch->cancel(status); });
+        for_each_index_channel(
+                [&status, &node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns](NodeChannel* ch) {
+                    ch->cancel(status);
+                    ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
+                });
     }
 
+    SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
+    COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
+    COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+
+    int64_t total_server_rpc_time_us = 0;
+    int64_t total_server_wait_memtable_flush_time_us = 0;
+    // print log of add batch time of all node, for tracing load performance easily
+    std::stringstream ss;
+    ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+       << ", add chunk time(ms)/wait lock time(ms)/num: ";
+    for (auto const& pair : node_add_batch_counter_map) {
+        total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
+        total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
+        ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
+           << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
+    }
+    ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
+    ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
+    LOG(INFO) << ss.str();
+
     Expr::close(_output_expr_ctxs, state);
-    if (_vectorized_partition) {
-        _vectorized_partition->close(state);
+    if (_partition_params) {
+        _partition_params->close(state);
     }
     return status;
 }
@@ -348,4 +375,16 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
     return has_immutable_partition;
 }
 
-} // namespace starrocks::stream_load
+Status TabletSinkSender::_write_combined_txn_log() {
+    if (config::enable_put_combinded_txn_log_parallel) {
+        return write_combined_txn_log_parallel(_txn_log_map);
+    }
+
+    for (const auto& [partition_id, logs] : _txn_log_map) {
+        (void)partition_id;
+        RETURN_IF_ERROR(write_combined_txn_log(logs));
+    }
+    return Status::OK();
+}
+
+} // namespace starrocks

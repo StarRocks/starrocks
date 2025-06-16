@@ -20,10 +20,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -48,15 +47,13 @@ public class UseMaterializedViewTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-
-        FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -124,18 +121,18 @@ public class UseMaterializedViewTest {
     public void testDropMaterializedView() {
         String sql = "drop materialized view mv_to_drop";
         try {
-            Database database = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+            Database database = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
             Assert.assertTrue(database != null);
-            Table table = database.getTable("mv_to_drop");
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
             Assert.assertTrue(table != null);
             MaterializedView materializedView = (MaterializedView) table;
             long baseTableId = materializedView.getBaseTableInfos().iterator().next().getTableId();
-            OlapTable baseTable = ((OlapTable) database.getTable(baseTableId));
+            OlapTable baseTable = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), baseTableId));
             Assert.assertEquals(2, baseTable.getRelatedMaterializedViews().size());
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
-            table = database.getTable("mv_to_drop");
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
             Assert.assertTrue(table == null);
             Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
         } catch (Exception e) {

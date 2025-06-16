@@ -1,24 +1,25 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # yearweek
 
-## Description
 
-Returns the week number for a given date. This function works in the same way as the yearweek function in MySQL.
+
+Returns year and week number for a given date. This function works in the same way as the yearweek() function in MySQL.
+
+This function is supported from v3.3 onwards.
 
 ## Syntax
 
 ```Haskell
-INT YEARWEEK(DATETIME|DATE date, INT mode)
+INT YEARWEEK(DATETIME|DATE date[, INT mode])
 ```
 
 ## Parameters
 
-- `Date`: The supported data types are DATETIME and DATE.
-
-- `Mode`: optional. The supported data type is INT. This parameter is used to specify the logic for calculating the yearweek number, that is, whether the week starts on Sunday or Monday, and whether the return value is in the range of 0~53 or 1~53. Value range: 0~7. Default value: `0`. If this parameter is not specified, mode `0` is used by default. The following table describes how this parameter works.
+- `date`: The supported data types are DATETIME and DATE.
+- `mode`: optional. The supported data type is INT. This parameter is used to specify the logic for calculating the yearweek number, that is, whether the week starts on Sunday or Monday, and whether the return value is in the range of 0~53 or 1~53. Value range: 0~7. Default value: `0`. If this parameter is not specified, mode `0` is used by default. The following table describes how this parameter works.
 
 | Mode | First day of week | Range | Week 1 is the first week …    |
 | :--- | :---------------- | :---- | :---------------------------- |
@@ -37,7 +38,7 @@ Returns a value of the INT type. Value range: 0~53. The specific range is determ
 
 ## Examples
 
-Returns year and week for a date.The value of the mode argument defaults to 0
+Returns year and week for a date. The value of the mode argument defaults to 0
 
 ```Plaintext
 mysql> SELECT YEARWEEK('2007-01-01', 0);

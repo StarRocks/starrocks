@@ -20,7 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TpchSQL;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
+import com.starrocks.statistic.MockHistogramStatisticStorage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -42,29 +42,31 @@ public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
-        OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
+        OlapTable t5 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("nation");
         setTableStatistics(t5, 25);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("supplier");
         setTableStatistics(t1, 10000 * scale);
 
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("customer");
         setTableStatistics(t4, 150000 * scale);
 
-        OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
+        OlapTable t6 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("part");
         setTableStatistics(t6, 200000 * scale);
 
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("partsupp");
         setTableStatistics(t2, 800000 * scale);
 
-        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
+        OlapTable t3 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("orders");
         setTableStatistics(t3, 1500000 * scale);
 
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
     }
 

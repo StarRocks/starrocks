@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -85,12 +89,16 @@ struct LevelInfo {
     std::string debug_string() const;
 };
 
+enum ColumnType { SCALAR = 0, ARRAY, MAP, STRUCT };
+
+std::string column_type_to_string(const ColumnType& column_type);
+
 struct ParquetField {
     std::string name;
     tparquet::SchemaElement schema_element;
 
     // Used to identify if this field is a nested field.
-    TypeDescriptor type;
+    ColumnType type;
     bool is_nullable;
 
     // Only valid when this field is a leaf node
@@ -114,6 +122,8 @@ struct ParquetField {
     int16_t max_def_level() const { return level_info.max_def_level; }
     int16_t max_rep_level() const { return level_info.max_rep_level; }
     std::string debug_string() const;
+    bool is_complex_type() const;
+    bool has_same_complex_type(const TypeDescriptor& type_descriptor) const;
 };
 
 class SchemaDescriptor {

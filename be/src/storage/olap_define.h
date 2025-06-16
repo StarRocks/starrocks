@@ -43,13 +43,9 @@
 
 namespace starrocks {
 
-// data and index page size, default is 64k
-static const size_t OLAP_PAGE_SIZE = 65536;
-
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
-// the max length supported for varchar type
-static const uint32_t OLAP_STRING_MAX_LENGTH = 1048576;
+uint32_t get_olap_string_max_length();
 
 // the max bytes for stored string length
 using StringLengthType = uint16_t;

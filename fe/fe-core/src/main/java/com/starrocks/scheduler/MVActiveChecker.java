@@ -15,10 +15,12 @@
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
@@ -38,6 +40,9 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+
+import static com.starrocks.common.MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED;
 
 /**
  * A daemon thread that check the MV active status, try to activate the MV it's inactive.
@@ -51,6 +56,15 @@ public class MVActiveChecker extends FrontendDaemon {
     public MVActiveChecker() {
         super("MVActiveChecker", Config.mv_active_checker_interval_seconds * 1000);
     }
+
+    public static final String MV_BACKUP_INACTIVE_REASON = "it's in backup and will be activated after restore if possible";
+
+    // there are some reasons that we don't active mv automatically, eg: mv backup/restore which may cause to refresh all
+    // mv's data behind which is not expected.
+    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
+            MV_BACKUP_INACTIVE_REASON,
+            INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED
+    );
 
     @Override
     protected void runAfterCatalogReady() {
@@ -82,9 +96,10 @@ public class MVActiveChecker extends FrontendDaemon {
     }
 
     private void process() {
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getIdToDb().values();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
-            for (Table table : CollectionUtils.emptyIfNull(db.getTables())) {
+            for (Table table : CollectionUtils.emptyIfNull(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()))) {
                 if (table.isMaterializedView()) {
                     MaterializedView mv = (MaterializedView) table;
                     if (!mv.isActive()) {
@@ -110,9 +125,12 @@ public class MVActiveChecker extends FrontendDaemon {
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
             return;
         }
+        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(x -> reason.contains(x))) {
+            return;
+        }
 
         long dbId = mv.getDbId();
-        Optional<String> dbName = GlobalStateMgr.getCurrentState().mayGetDb(dbId).map(Database::getFullName);
+        Optional<String> dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbId).map(Database::getFullName);
         if (!dbName.isPresent()) {
             LOG.warn("[MVActiveChecker] cannot activate MV {} since database {} not found", mv.getName(), dbId);
             return;
@@ -125,7 +143,8 @@ public class MVActiveChecker extends FrontendDaemon {
         }
 
         boolean activeOk = false;
-        String mvFullName = new TableName(dbName.get(), mv.getName()).toString();
+        String mvFullName =
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(), mv.getName()).toString();
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
         LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}", mvFullName, reason);
         try {

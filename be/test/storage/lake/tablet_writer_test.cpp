@@ -24,7 +24,7 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/tablet_manager.h"
+#include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -40,38 +40,8 @@ using namespace starrocks;
 class LakeTabletWriterTest : public TestBase, testing::WithParamInterface<KeysType> {
 public:
     LakeTabletWriterTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_shared<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(GetParam());
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-            c1->set_aggregation("REPLACE");
-        }
-
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_metadata = generate_simple_tablet_metadata(GetParam());
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -106,8 +76,8 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -192,10 +162,10 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
     auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
 
-    Chunk c0_chunk({c0}, schema0);
-    Chunk c1_chunk({c1}, schema1);
-    Chunk c2_chunk({c2}, schema0);
-    Chunk c3_chunk({c3}, schema1);
+    Chunk c0_chunk({std::move(c0)}, schema0);
+    Chunk c1_chunk({std::move(c1)}, schema1);
+    Chunk c2_chunk({std::move(c2)}, schema0);
+    Chunk c3_chunk({std::move(c3)}, schema1);
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
@@ -274,7 +244,7 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
 
     VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
@@ -293,7 +263,7 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
 
     VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
@@ -336,10 +306,10 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
     auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
 
-    Chunk c0_chunk({c0}, schema0);
-    Chunk c1_chunk({c1}, schema1);
-    Chunk c2_chunk({c2}, schema0);
-    Chunk c3_chunk({c3}, schema1);
+    Chunk c0_chunk({std::move(c0)}, schema0);
+    Chunk c1_chunk({std::move(c1)}, schema1);
+    Chunk c2_chunk({std::move(c2)}, schema0);
+    Chunk c3_chunk({std::move(c3)}, schema1);
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
@@ -364,6 +334,24 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     // `close()` directly without calling `finish()`
     writer->close();
 }
+
+#ifdef USE_STAROS
+
+TEST_P(LakeTabletWriterTest, test_write_sdk) {
+    auto provider = std::make_shared<starrocks::lake::StarletLocationProvider>();
+    auto location = provider->root_location(12345);
+
+    Tablet tablet(_tablet_mgr.get(), next_id(), provider, _tablet_metadata);
+    auto meta_location = tablet.metadata_location(0);
+    auto txn_log_location = tablet.txn_log_location(0);
+    auto txn_vlog_location = tablet.txn_vlog_location(0);
+    auto test_segment_location = tablet.segment_location("test_segment");
+    auto root_location = tablet.root_location();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), 1));
+    writer->close();
+}
+
+#endif // USE_STAROS
 
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,
                          ::testing::Values(DUP_KEYS, AGG_KEYS, UNIQUE_KEYS, PRIMARY_KEYS));

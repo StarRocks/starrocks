@@ -1,8 +1,9 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
-# Java UDFs
+# Java UDF
 
 From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language.
 
@@ -18,7 +19,7 @@ Currently, StarRocks supports scalar UDFs, user-defined aggregate functions (UDA
 
 - You have installed JDK 1.8 on your servers.
 
-- The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/FE_configuration.md).
+- The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/management/FE_configuration.md).
 
 ## Develop and use UDFs
 
@@ -402,6 +403,7 @@ PROPERTIES (
 | symbol    | The name of the class for the Maven project to which the UDF belongs. The value of this parameter is in the `<package_name>.<class_name>` format. |
 | type      | The type of the UDF. Set the value to `StarrocksJar`, which specifies that the UDF is a Java-based function. |
 | file      | The HTTP URL from which you can download the JAR file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<jar_package_name>` format. |
+| isolation | (Optional) To share function instances across UDF executions and support static variables, set this to "shared". |
 
 #### Create a UDAF
 
@@ -520,7 +522,7 @@ Run the following command to query UDFs:
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md).
+For more information, see [SHOW FUNCTIONS](../sql-statements/Function/SHOW_FUNCTIONS.md).
 
 ## Drop a UDF
 
@@ -530,9 +532,11 @@ Run the following command to drop a UDF:
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-For more information, see [DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md).
+For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTION.md).
 
 ## Mapping between SQL data types and Java data types
+
+Only non-nested Arrays/Maps are now supported.
 
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
@@ -544,13 +548,15 @@ For more information, see [DROP FUNCTION](../sql-statements/data-definition/DROP
 | FLOAT          | java.lang.Float   |
 | DOUBLE         | java.lang.Double  |
 | STRING/VARCHAR | java.lang.String  |
+| ARRAY          | java.util.List    |
+| Map            | java.util.Map     |
 
 ## Parameter settings
 
-Configure the following environment variable in the **be/conf/hadoop_env.sh** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage. You can also configure other parameters in the file.
+Configure the following environment variable in the **be/conf/be.conf** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage.
 
 ```Bash
-export LIBHDFS_OPTS="-Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
+JAVA_OPTS="-Xmx12G"
 ```
 
 ## FAQ

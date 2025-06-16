@@ -14,7 +14,14 @@
 
 #include "formats/parquet/stored_column_reader_with_index.h"
 
+#include <glog/logging.h>
+
+#include "gen_cpp/parquet_types.h"
 #include "util/defer_op.h"
+
+namespace starrocks {
+class Column;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 
@@ -34,9 +41,9 @@ Status StoredColumnReaderWithIndex::read_range(const Range<uint64_t>& range, con
 
     // deal with dict page
     // reader move stream cursor, move reader row cursor, load specific_page
-    if (!_try_dict_loaded) {
-        RETURN_IF_ERROR(_inner_reader->try_load_dictionary());
-        _try_dict_loaded = true;
+    if (_has_dict_page && !_dict_page_loaded) {
+        RETURN_IF_ERROR(_inner_reader->load_dictionary_page());
+        _dict_page_loaded = true;
     }
 
     if (_cur_page_idx == _page_num - 1 ||

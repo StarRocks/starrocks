@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # now, current_timestamp, localtime, localtimestamp
 
-## Description
+
 
 Returns the current date and time.
 
@@ -24,7 +24,7 @@ now(5): 2023-12-08 13:46:45.115840
 now(6): 2023-12-08 13:46:45.115843
 ```
 
-This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/timezone.md).
+This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/management/timezone.md).
 
 ## Syntax
 

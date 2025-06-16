@@ -1,4 +1,4 @@
--- name: testSetAsDefault
+-- name: testSetAsDefault @cloud
 CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_default_1 type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
 DESC STORAGE VOLUME 'storage_volume_default_1';
 CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_default_2 type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
@@ -15,3 +15,4 @@ DESC STORAGE VOLUME 'storage_volume_default_2';
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
 SHOW STORAGE VOLUMES like 'storage_volume_default_1';
 DESC STORAGE VOLUME 'storage_volume_default_1';
+SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;

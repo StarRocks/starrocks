@@ -27,4 +27,9 @@ public class AddObserverClause extends FrontendClause {
     public AddObserverClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.OBSERVER, pos);
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddObserverClause(this, context);
+    }
 }

@@ -25,9 +25,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.EtlJobType;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -48,7 +48,7 @@ public class LoadStmtAnalyzer {
         new LoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class LoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class LoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private static final String VERSION = "version";
 
@@ -124,14 +124,15 @@ public class LoadStmtAnalyzer {
                 if (etlJobType == EtlJobType.SPARK && database != null) {
                     for (DataDescription dataDescription : dataDescriptions) {
                         String tableName = dataDescription.getTableName();
-                        Database db = GlobalStateMgr.getCurrentState().getDb(database);
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(database);
                         if (db == null) {
                             continue;
                         }
                         Locker locker = new Locker();
-                        locker.lockDatabase(db, LockType.READ);
+                        locker.lockDatabase(db.getId(), LockType.READ);
                         try {
-                            Table table = db.getTable(tableName);
+                            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getFullName(), tableName);
                             if (table == null) {
                                 continue;
                             }
@@ -143,7 +144,7 @@ public class LoadStmtAnalyzer {
                                 }
                             }
                         } finally {
-                            locker.unLockDatabase(db, LockType.READ);
+                            locker.unLockDatabase(db.getId(), LockType.READ);
                         }
                     }
                 }

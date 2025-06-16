@@ -33,9 +33,11 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GracefulExitFlag;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -47,11 +49,11 @@ import org.xnio.conduits.ConduitStreamSourceChannel;
  */
 public class ReadListener implements ChannelListener<ConduitStreamSourceChannel> {
     private static final Logger LOG = LogManager.getLogger(ReadListener.class);
-    private NConnectContext ctx;
+    private ConnectContext ctx;
     private ConnectProcessor connectProcessor;
 
-    public ReadListener(NConnectContext nConnectContext, ConnectProcessor connectProcessor) {
-        this.ctx = nConnectContext;
+    public ReadListener(ConnectContext connectContext, ConnectProcessor connectProcessor) {
+        this.ctx = connectContext;
         this.connectProcessor = connectProcessor;
     }
 
@@ -67,11 +69,13 @@ public class ReadListener implements ChannelListener<ConduitStreamSourceChannel>
                 ctx.setThreadLocalInfo();
                 try {
                     connectProcessor.processOnce();
-                    if (!ctx.isKilled()) {
-                        ctx.resumeAcceptQuery();
-                    } else {
+                    if (ctx.isKilled()
+                            || (GracefulExitFlag.isGracefulExit()
+                                && !SqlUtils.isPreQuerySQL(connectProcessor.getExecutor().getParsedStmt()))) {
                         ctx.stopAcceptQuery();
                         ctx.cleanup();
+                    } else {
+                        ctx.resumeAcceptQuery();
                     }
                 } catch (RpcException rpce) {
                     LOG.debug("Exception happened in one session(" + ctx + ").", rpce);

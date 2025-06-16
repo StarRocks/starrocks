@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -65,7 +65,7 @@ public class CTASAnalyzerTest {
         // create statistic
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -215,7 +215,7 @@ public class CTASAnalyzerTest {
         String sql = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
 
         StatisticStorage storage = new CachedStatisticStorage();
-        Table table = ctx.getGlobalStateMgr().getDb("ctas")
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
                 1.5256461111280627E-4, 4.0, 64.0);
@@ -330,7 +330,8 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
         createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
-        createTableStmt.createTable(ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt.getCreateTableStmt(), ctx);
+
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 =
@@ -366,7 +367,7 @@ public class CTASAnalyzerTest {
     @Test
     public void testCTASReplicaNum() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Table table = ctx.getGlobalStateMgr().getDb("ctas")
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         OlapTable olapTable = (OlapTable) table;
         olapTable.setReplicationNum((short) 3);
@@ -428,7 +429,7 @@ public class CTASAnalyzerTest {
     }
 
     @Test
-    public void testCtasWithNullale() throws Exception {
+    public void testCtasWithNullable() throws Exception {
         {
             String createSql = "create table emps (\n" +
                     "    empid int null,\n" +

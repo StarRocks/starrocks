@@ -32,10 +32,13 @@ public class JournalTask implements Future<Boolean> {
     // count down latch, the producer which called logEdit() will wait on it.
     // JournalWriter will call notify() after log is committed.
     protected CountDownLatch latch;
+    private Exception executeException;
     // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTimeInNano;
+    private final long startTimeNano;
 
-    public JournalTask(DataOutputBuffer buffer, long maxWaitIntervalMs) {
+    public JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs) {
+        this.startTimeNano = startTimeNano;
         this.buffer = buffer;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
@@ -45,12 +48,21 @@ public class JournalTask implements Future<Boolean> {
         }
     }
 
+    public long getStartTimeNano() {
+        return startTimeNano;
+    }
+
     public void markSucceed() {
         isSucceed = true;
         latch.countDown();
     }
 
     public void markAbort() {
+        markAbort(null);
+    }
+
+    public void markAbort(Exception e) {
+        executeException = e;
         isSucceed = false;
         latch.countDown();
     }
@@ -76,6 +88,9 @@ public class JournalTask implements Future<Boolean> {
     @Override
     public Boolean get() throws InterruptedException, ExecutionException {
         latch.await();
+        if (executeException != null) {
+            throw new ExecutionException(executeException);
+        }
         return isSucceed;
     }
 
@@ -85,18 +100,21 @@ public class JournalTask implements Future<Boolean> {
         if (!latch.await(timeout, unit)) {
             return false;
         }
+        if (executeException != null) {
+            throw new ExecutionException(executeException);
+        }
         return isSucceed;
     }
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-        // cannot canceled for now
+        // cannot be canceled for now
         return false;
     }
 
     @Override
     public boolean isCancelled() {
-        // cannot canceled for now
+        // cannot be canceled for now
         return false;
     }
 }

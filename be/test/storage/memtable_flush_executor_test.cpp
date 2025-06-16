@@ -327,7 +327,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
     bool ret_eos = true;
     ASSERT_TRUE(flush_token
                         ->submit(std::move(mem_table), false,
-                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                                      ret_num_rows = seg->num_rows();
                                      ret_eos = eos;
                                  })
@@ -359,7 +359,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
     std::unique_ptr<SegmentPB> ret_seg = make_unique<SegmentPB>();
     ASSERT_TRUE(flush_token
                         ->submit(std::move(mem_table), true,
-                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                                      ret_seg = std::move(seg);
                                      ret_eos = eos;
                                  })
@@ -373,6 +373,30 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
     ASSERT_TRUE(flush_token->submit(nullptr, true, nullptr).ok());
 
     ASSERT_TRUE(flush_token->wait().ok());
+}
+
+TEST_F(MemTableFlushExecutorTest, testMemtableFlushStatusNotOk) {
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushStatusNotOk";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    ASSERT_TRUE(flush_token->status().ok());
+
+    flush_token->set_status(Status::OK());
+    ASSERT_TRUE(flush_token->status().ok());
+
+    flush_token->set_status(Status::NotSupported("Not Suppoted"));
+    ASSERT_FALSE(flush_token->status().ok());
+
+    flush_token->_flush_memtable(nullptr, nullptr, false, nullptr);
+
+    ASSERT_TRUE(MemTableFlushExecutor::calc_max_threads_for_lake_table(data_dirs) > 0);
 }
 
 } // namespace starrocks

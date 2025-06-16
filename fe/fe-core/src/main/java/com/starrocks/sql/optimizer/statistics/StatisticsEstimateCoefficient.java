@@ -44,12 +44,20 @@ public class StatisticsEstimateCoefficient {
     public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
     // if after aggregate row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT < input row count,
     // the aggregate has good effect.
+    public static final double LOWER_AGGREGATE_EFFECT_COEFFICIENT = 10000;
     public static final double LOW_AGGREGATE_EFFECT_COEFFICIENT = 1000;
     public static final double MEDIUM_AGGREGATE_EFFECT_COEFFICIENT = 100;
+    public static final int SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT = 100000;
+    public static final int SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT = 1000000;
+
+    public static final double EXTREME_HIGH_AGGREGATE_EFFECT_COEFFICIENT = 3;
     // default selectivity for anti join
     public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
     // default shuffle column row count limit
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
+
+    public static final long TINY_SCALE_ROWS_LIMIT = 50000;
+
     // a small scale rows, such as default push down aggregate row count limit, 100w
     public static final long SMALL_SCALE_ROWS_LIMIT = 1000000;
     // default or predicate limit
@@ -64,4 +72,7 @@ public class StatisticsEstimateCoefficient {
     public static final double MAXIMUM_ROW_COUNT = Double.MAX_VALUE / Math.pow(10, 100);
 
     public static final double MAXIMUM_OUTPUT_SIZE = Double.MAX_VALUE / Math.pow(10, 80);
+
+    // used to estimate the cardinality of values not explicitly represented in the histogram.
+    public static final double HISTOGRAM_UNREPRESENTED_VALUE_COEFFICIENT = 0.1;
 }

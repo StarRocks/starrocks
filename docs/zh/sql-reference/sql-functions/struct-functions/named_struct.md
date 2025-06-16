@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # named_struct
 
-## 功能
+
 
 根据给定的字段名和字段值来构建 STRUCT。该参数支持 named struct，使用该函数时需要指定字段名称。
 
@@ -48,5 +48,5 @@ SELECT named_struct('a', null, 'b', 2, 'c', 3);
 
 ## 相关文档
 
-- [STRUCT data type](../../sql-statements/data-types/STRUCT.md)
+- [STRUCT data type](../../data-types/semi_structured/STRUCT.md)
 - [row/struct](row.md)

@@ -95,6 +95,12 @@ TEST_F(StatusTest, Error) {
     }
 }
 
+TEST_F(StatusTest, GlobalDictNotMatch) {
+    Status st = Status::GlobalDictNotMatch("SlotId: 1, Not dict encoded and not low rows on global dict column.");
+    ASSERT_FALSE(st.ok());
+    ASSERT_EQ("Global dictionary not match", st.code_as_string());
+}
+
 TEST_F(StatusTest, ErrorWithContext) {
     // default
     Status st = Status::InternalError("123");
@@ -157,6 +163,18 @@ TEST_F(StatusTest, update) {
 
     st.update(std::move(st1));
     ASSERT_TRUE(st.is_not_found());
+}
+
+TEST_F(StatusTest, test_clone) {
+    Status st = Status::NotFound("abc");
+    ASSERT_TRUE(st.is_not_found());
+    ASSERT_EQ("abc", st.message());
+    Status st1 = st.clone_and_append("def");
+    ASSERT_TRUE(st1.is_not_found());
+    ASSERT_EQ("abc: def", st1.message());
+    Status st2 = st.clone_and_prepend("def");
+    ASSERT_TRUE(st2.is_not_found());
+    ASSERT_EQ("def: abc", st2.message());
 }
 
 } // namespace starrocks

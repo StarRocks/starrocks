@@ -48,3 +48,53 @@ VALUES ('2023-04-01', NULL),
        ('2023-04-03', '2023-04-03 20:13:14');
 select to_tera_date(d2, 'yyyy-mm-dd hh24:mi:ss') from to_tera_date_test order by d1;
 select to_tera_timestamp(d2, 'yyyy-mm-dd hh24:mi:ss') from to_tera_date_test order by d1;
+drop table to_tera_date_test;
+
+CREATE TABLE IF NOT EXISTS test_to_date_table1 (
+id varchar(150) NOT NULL COMMENT '',
+v1 varchar(32) NULL COMMENT ""
+) ENGINE=olap PRIMARY KEY (id) 
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("enable_persistent_index" = "true", "replication_num" = "1");
+
+insert into test_to_date_table1 values('1','2023-10-11 00:00:01.030'), ('2','2023-10-11 00:00:01.031'), ('3','2023-10-13 00:00:01.031'), ('4','2023-10-14 00:00:01.031') ;
+
+-- make sure str_to_jodatime, to_tera_date, to_tera_timestamp exexuted in parallel
+set pipeline_dop=50;
+set new_planner_agg_stage=3;
+
+select DATE_FORMAT(v1, '%Y-%m-%d %H:%i:%s.%f') from test_to_date_table1 where id='1' order by 1;
+select DATE_FORMAT(v1, '%Y-%m-%d') from test_to_date_table1 where id='1' order by 1;
+select DATE_FORMAT(v1, '%Y-%m-%d'), str_to_jodatime('2024-04-01', 'yyyy-MM-dd') from test_to_date_table1 group by DATE_FORMAT(v1, '%Y-%m-%d') order by 1;
+select DATE_FORMAT(v1, '%Y-%m-%d') from test_to_date_table1 group by DATE_FORMAT(v1, '%Y-%m-%d') order by 1;
+select 
+  DATE_FORMAT(v1, '%Y-%m-%d'), str_to_jodatime('2024-04-01', 'yyyy-MM-dd'), 
+  to_tera_date("1988/04/08","yyyy/mm/dd"), to_tera_timestamp("1988/04/08 2","yyyy/mm/dd hh") 
+from test_to_date_table1 group by DATE_FORMAT(v1, '%Y-%m-%d') order by 1;
+drop table test_to_date_table1;
+
+CREATE TABLE test_to_date_table2 (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into test_to_date_table2 select generate_series from TABLE(generate_series(0, 50000));
+
+select a, count(1) from (select str_to_jodatime('2024-04-01', 'yyyy-MM-dd') as a from test_to_date_table2 ) t group by a limit 10;
+select a, count(1) from (select str_to_jodatime('2024-04-01', 'yyyy-MM-dd') as a from test_to_date_table2 ) t group by a limit 10;
+
+select a, count(1) from (select to_tera_date("1988/04/08","yyyy/mm/dd") as a from test_to_date_table2 ) t group by a limit 10;
+select a, count(1) from (select to_tera_date("1988/04/08","yyyy/mm/dd") as a from test_to_date_table2 ) t group by a limit 10;
+
+select a, count(1) from (select to_tera_timestamp("1988/04/08 2","yyyy/mm/dd hh")  as a from test_to_date_table2 ) t group by a limit 10;
+select a, count(1) from (select to_tera_timestamp("1988/04/08 2","yyyy/mm/dd hh")  as a from test_to_date_table2 ) t group by a limit 10;
+
+set sql_dialect = 'trino';
+select a, count(1) from (select format_datetime(parse_datetime('2024-04-01', 'yyyy-MM-dd'), 'yyyy-ww') as a from test_to_date_table2)t group by a limit 10;
+select a, count(1) from (select format_datetime(parse_datetime('2024-04-01', 'yyyy-MM-dd'), 'yyyy-ww') as a from test_to_date_table2)t group by a limit 10;
+
+select a, count(1) from (select parse_datetime('2024-04-01', 'yyyy-MM-dd') as a from test_to_date_table2)t group by a limit 10;
+select a, count(1) from (select parse_datetime('2024-04-01', 'yyyy-MM-dd') as a from test_to_date_table2)t group by a limit 10;
+drop table test_to_date_table2;

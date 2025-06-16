@@ -28,6 +28,9 @@ class BitmapUnionIntAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionIntAggregateFunction<LT, T>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
+
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         DCHECK((*columns[0]).is_numeric());
         if constexpr (std::is_integral_v<T>) {

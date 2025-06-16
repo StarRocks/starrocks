@@ -136,9 +136,9 @@ ColumnPtr PushBrokerReader::_build_hll_column(const ColumnPtr& column) {
 
 ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const SlotDescriptor* slot_desc,
                                                  size_t num_rows) {
-    Column* data_column = ColumnHelper::get_data_column(column.get());
-    auto* binary = down_cast<BinaryColumn*>(data_column);
-    Offsets& offset = binary->get_offset();
+    const Column* data_column = ColumnHelper::get_data_column(column.get());
+    const auto* binary = down_cast<const BinaryColumn*>(data_column);
+    const Offsets& offset = binary->get_offset();
     uint32_t len = slot_desc->type().len;
 
     // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
@@ -149,7 +149,7 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     uint32_t from = 0;
-    Bytes& bytes = binary->get_bytes();
+    const Bytes& bytes = binary->get_bytes();
     for (size_t i = 0; i < num_rows; ++i) {
         uint32_t copy_data_len = std::min(len, offset[i + 1] - offset[i]);
         strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[i], copy_data_len);
@@ -161,8 +161,8 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     }
 
     if (slot_desc->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(column.get());
-        return NullableColumn::create(new_binary, nullable_column->null_column());
+        auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+        return NullableColumn::create(std::move(new_binary), nullable_column->null_column());
     }
     return new_binary;
 }

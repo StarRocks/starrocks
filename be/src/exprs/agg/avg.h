@@ -139,7 +139,8 @@ public:
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
-                                             bool ignore_subtraction, bool ignore_addition) const override {
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
         const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
         const int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
@@ -211,13 +212,14 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
+        auto* column = down_cast<ResultColumnType*>(to);
         // In fact, for StarRocks real query, we don't need this check.
         // But for robust, we add this check.
         if (this->data(state).count == 0) {
+            column->append_default();
             return;
         }
 
-        auto* column = down_cast<ResultColumnType*>(to);
         ResultType result;
         if constexpr (lt_is_decimalv2<LT>) {
             result = this->data(state).sum / DecimalV2Value(this->data(state).count, 0);

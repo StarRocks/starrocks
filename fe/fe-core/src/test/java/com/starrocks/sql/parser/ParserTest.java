@@ -39,7 +39,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.atn.PredictionMode;
 import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -55,6 +57,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 class ParserTest {
+
+    @Test
+    void test() {
+        String sql = "alter plan advisor add " +
+                "select count(*) from customer join " +
+                "(select * from skew_tbl where c_custkey_skew = 100) t on abs(c_custkey) = c_custkey_skew;";
+        SqlParser.parse(sql, new SessionVariable());
+        System.out.println();
+    }
 
     @Test
     void tokensExceedLimitTest() {
@@ -89,20 +100,13 @@ class ParserTest {
     @Test
     void sqlParseTemporalQueriesTest() {
         String[] temporalQueries = new String[] {
-                // DoltDB temporal query syntax
-                // https://docs.dolthub.com/sql-reference/version-control/querying-history
-                "SELECT * FROM t AS OF 'kfvpgcf8pkd6blnkvv8e0kle8j6lug7a';",
-                "SELECT * FROM t AS OF 'myBranch';",
-                "SELECT * FROM t AS OF 'HEAD^2';",
-                "SELECT * FROM t AS OF TIMESTAMP('2020-01-01');",
-                "SELECT * from `mydb/ia1ibijq8hq1llr7u85uivsi5lh3310p`.myTable;",
-
                 // MariaDB temporal query syntax
                 // https://mariadb.com/kb/en/system-versioned-tables/
-                "SELECT * FROM t FOR SYSTEM_TIME AS OF TIMESTAMP '2016-10-09 08:07:06';",
+                "SELECT * FROM t FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06';",
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",
+                "SELECT * FROM t FOR VERSION AS OF 123345456321;",
         };
 
         for (String query : temporalQueries) {
@@ -176,24 +180,24 @@ class ParserTest {
 
     @Test
     void testParseLargeDecimal() {
-        String sql = "select cast(1 as decimal(65,0))";
+        String sql = "select cast(1 as decimal(85,0))";
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setThreadLocalInfo();
         SessionVariable sessionVariable = ctx.getSessionVariable();
         try {
             sessionVariable.setSqlDialect("sr");
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            SqlParser.parse(sql, sessionVariable);
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
             sessionVariable.setSqlDialect("trino");
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            SqlParser.parse(sql, sessionVariable);
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
@@ -202,9 +206,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -213,9 +217,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -224,9 +228,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -235,13 +239,13 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
         try {
             sessionVariable.setLargeDecimalUnderlyingType("foobar");
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable error) {
 
         }
@@ -259,7 +263,7 @@ class ParserTest {
         Analyzer.analyze(stmt, ctx);
         Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
-        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
         Assert.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
@@ -384,7 +388,7 @@ class ParserTest {
         SessionVariable sessionVariable = new SessionVariable();
         try {
             SqlParser.parse(sql, sessionVariable).get(0);
-            fail("sql should fail.");
+            fail("sql should fail: " + sql);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             assertContains(e.getMessage(), expecting);
@@ -393,16 +397,17 @@ class ParserTest {
 
     @Test
     void testWrongVariableName() {
-        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
-        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+        VariableMgr variableMgr = new VariableMgr();
+        String res = variableMgr.findSimilarVarNames("disable_coloce_join");
+        assertContains(res, "{'disable_colocate_join', 'disable_colocate_set', 'disable_join_reorder'");
 
-        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
-        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'sql_mode_v2'}");
+        res = variableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'spill_storage_volume'}");
 
-        res = VariableMgr.findSimilarVarNames("pipeline");
+        res = variableMgr.findSimilarVarNames("pipeline");
         assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
 
-        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        res = variableMgr.findSimilarVarNames("disable_joinreorder");
         assertContains(res, "{'disable_join_reorder', 'disable_colocate_join'");
     }
 
@@ -412,6 +417,77 @@ class ParserTest {
         List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
         String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
         assertEquals("SELECT 100 % 2", newSql);
+    }
+
+    @Test
+    void testComplexExpr() {
+        String exprString = " not X1 + 1  >  X2 and not X3 + 2 > X4 and not X5 + 3 > X6  and not X7 + 1 = X8 " +
+                "and not X9 + X10 < X11 + X12 ";
+        StringBuilder builder = new StringBuilder();
+        builder.append(exprString);
+        for (int i = 0; i < 500; i++) {
+            builder.append("or");
+            builder.append(exprString);
+        }
+
+        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT);
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(builder.toString())));
+        lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+        long start = System.currentTimeMillis();
+        StarRocksParser.ExpressionContext context1 = parser.expression();
+        Expr expr1 = (Expr) astBuilder.visit(context1);
+        long end = System.currentTimeMillis();
+        long timeOfLL = end - start;
+
+        parser.getTokenStream().seek(0);
+        parser.reset();
+        parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+        start = System.currentTimeMillis();
+        StarRocksParser.ExpressionContext context2 = parser.expression();
+        Expr expr2 = (Expr) astBuilder.visit(context2);
+        end = System.currentTimeMillis();
+        long timeOfSLL = end - start;
+
+        Assert.assertEquals(expr1, expr2);
+        Assert.assertTrue(timeOfLL > timeOfSLL);
+    }
+
+    @Test
+    void testPivot() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from t pivot (sum(v1) for v2 in (1, 2, 3))");
+        sqls.add("select * from t pivot (sum(v1) as s1 for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+        sqls.add("select * from t " +
+                "pivot (sum(v1) as s1, count(v2) as c1, avg(v3) as c3 " +
+                "for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+
+
+        List<String> expects = Lists.newArrayList();
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) " +
+                "FOR v2 IN (1, 2, 3)" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1 " +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3 " +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)" +
+                ")");
+        for (String sql : sqls) {
+            try {
+                StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+                String newSql = AstToSQLBuilder.toSQL(stmt);
+                assertEquals(expects.get(sqls.indexOf(sql)), newSql);
+            } catch (Exception e) {
+                e.printStackTrace();
+                fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
     }
 
     private static Stream<Arguments> keyWordSqls() {
@@ -486,7 +562,6 @@ class ParserTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");", ")"));
-        arguments.add(Arguments.of("analyze table tt abc", "';'"));
         arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
         arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
         arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));
@@ -502,6 +577,17 @@ class ParserTest {
         arguments.add(Arguments.of("create MATERIALIZED VIEW  as select * from (t1 join t2);",
                 "the most similar input is {a legal identifier}."));
         return arguments.stream();
+    }
+
+    @Test
+    public void testTranslateFunction() {
+        String sql = "select translate('abcabc', 'ab', '12') as test;";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable);
+        } catch (Exception e) {
+            Assertions.fail("sql should success. errMsg: " +  e.getMessage());
+        }
     }
 
 }

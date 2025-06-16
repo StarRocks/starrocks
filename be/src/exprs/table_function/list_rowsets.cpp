@@ -29,10 +29,6 @@
 
 namespace starrocks {
 
-using TabletMetadata = lake::TabletMetadata;
-using TabletMetadataPtr = lake::TabletMetadataPtr;
-using RowsetMetadataPB = lake::RowsetMetadataPB;
-
 static void append_bigint(ColumnPtr& col, int64_t value) {
     [[maybe_unused]] auto n = col->append_numbers(&value, sizeof(value));
     DCHECK_EQ(1, n);
@@ -78,7 +74,7 @@ static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
         opts.pretty_json = false;
         std::string json;
         (void)json2pb::ProtoMessageToJson(rowset.delete_predicate(), &json, opts);
-        (void)columns[5]->append_strings({json});
+        (void)columns[5]->append_strings(std::vector<Slice>{Slice{json}});
     }
 }
 

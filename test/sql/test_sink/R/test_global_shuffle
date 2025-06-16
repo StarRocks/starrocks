@@ -1,7 +1,6 @@
 -- name: testFilesSinkWithGlobalShuffle
 set enable_connector_sink_global_shuffle = true;
 -- result:
-[]
 -- !result
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/1/", 
@@ -10,7 +9,6 @@ insert into files (
 ) 
 select 1 as k1, "A" as k2;
 -- result:
-[]
 -- !result
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/2/", 
@@ -20,7 +18,6 @@ insert into files (
 ) 
 select 2 as k1, "B" as k2;
 -- result:
-[]
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/1/*",

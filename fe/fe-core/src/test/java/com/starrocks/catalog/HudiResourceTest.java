@@ -16,14 +16,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Injectable;
+import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -40,7 +40,7 @@ public class HudiResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         String name = "hudi0";
         String type = "hudi";
         String metastoreURIs = "thrift://127.0.0.1:9380";
@@ -48,6 +48,13 @@ public class HudiResourceTest {
         properties.put("type", type);
         properties.put("hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         HudiResource resource = (HudiResource) Resource.fromStmt(stmt);
         Assert.assertEquals("hudi0", resource.getName());

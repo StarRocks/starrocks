@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ST_GeometryFromText, ST_GeomFromText
 
-## 功能
+
 
 将一个 WKT（Well Known Text）转化为对应的内存的几何形式。
 

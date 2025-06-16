@@ -31,6 +31,8 @@ using FragmentFuture = std::future<void>;
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
 using Pipelines = std::vector<PipelinePtr>;
+using PipelineRawPtr = Pipeline*;
+using PipelineRawPtrs = std::vector<Pipeline*>;
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;
@@ -48,4 +50,9 @@ class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 class GlobalDriverExecutor;
 class ExecStateReporter;
+class PipelineBuilderContext;
 } // namespace starrocks::pipeline
+
+namespace starrocks {
+using OperatorFactoryPtr = pipeline::OpFactoryPtr;
+}

@@ -1,0 +1,44 @@
+-- name: test_insert_by_name
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int, k2 varchar(100));
+
+insert into t1 by name select "a" as k2, 1 as k1;
+select * from t1;
+truncate table t1;
+
+insert into t1 (k2, k1) select "d" as k1, 4 as k2;
+select * from t1;
+truncate table t1;
+
+insert into t1 by name select 2 as k1;
+select * from t1;
+truncate table t1;
+
+-- error case
+insert into t1 by name values(1, "a");
+insert into t1 by name select "a" as k2, 1 as k1, 2 as k3;
+insert into t1 (k1) by name select 2 as k1;
+
+
+create table t2 (k1 int, k2 varchar(100), k3 int default "10");
+
+insert into t1 values(3, "c");
+select * from t1;
+
+insert into t2 by name select * from t1;
+select * from t2;
+truncate table t2;
+
+insert into t2 by name select *, 11 as k3 from t1;
+select * from t2;
+truncate table t2;
+
+insert into t2 by name select k1 + 1 as k1, k2, 12 as k3 from t1;
+select * from t2;
+truncate table t2;
+
+-- error case
+insert into t2 by name select k1 + 1 as k1, k1, 12 as k3 from t1;

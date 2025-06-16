@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # row
 
-## Description
+
 
 Creates a named STRUCT or ROW value from the given values. It supports unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, such as `col1, col2,...`.
 
@@ -55,5 +55,5 @@ select struct(1,2,3);
 
 ## References
 
-- [STRUCT data type](../../sql-statements/data-types/STRUCT.md)
+- [STRUCT data type](../../data-types/semi_structured/STRUCT.md)
 - [named_struct](named_struct.md)

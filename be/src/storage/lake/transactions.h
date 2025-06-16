@@ -19,6 +19,11 @@
 #include "common/statusor.h"
 #include "storage/lake/tablet_metadata.h"
 
+namespace starrocks {
+class TxnInfoPB;
+class TxnLogPB;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class TabletManager;
@@ -28,23 +33,27 @@ class TabletManager;
 // This function does the following:
 //
 // 1. Load the base tablet metadata with id 'tablet_id' and version 'base_version'.
-// 2. Read the transaction logs for all 'txn_ids' sequentially and apply them to the base metadata.
+// 2. Read the transaction logs for all 'txns' sequentially and apply them to the base metadata.
 // 3. Save the result as a new tablet metadata with version 'new_version'.
 // 4. Update the metadata's commit timestamp to 'commit_time'.
-// 5. Persist the new metadata to the object storage.
+// 5. Persist the new metadata to the object storage or cache the new metadata
+//     a. if skip_write_tablet_metadata is true, we will combined all tablets metadata and only write
+//        one metadata file
+//     b. if skip_write_tablet_metadata is false, each tablet will write its own metadata file
 //
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id Id of the tablet
 // - base_version Version of the base metadata
 // - new_version The new version to be published
-// - txn_ids Transactions to apply in sequence
+// - txns Transactions to apply in sequence
 // - commit_time New commit timestamp
 //
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                            int64_t new_version, std::span<const int64_t> txn_ids, int64_t commit_time);
+                                            int64_t new_version, std::span<const TxnInfoPB> txns,
+                                            bool skip_write_tablet_metadata);
 
 // Publish a batch new versions of transaction logs.
 //
@@ -55,13 +64,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id Id of the tablet
-// - txn_id ID of the transactions to abort
+// - txn_infos Transactions to apply
 // - log_version Version of the new file
 //
 // Return:
 // - Returns OK if the copy was successful, asynchronous deletion does not affect the return value.
-Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids,
-                           const int64_t* log_versions, int txns_size);
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
+                           const int64_t* log_versions);
 
 // Aborts a transaction with the specified transaction IDs on the given tablet.
 //
@@ -74,11 +83,12 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const i
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id The ID of the tablet where the transaction will be aborted.
-// - txn_ids A `std::span` of `int64_t` containing the transaction IDs to be aborted.
-// - txn_types A `std::span` of `int32_t(TxnTypePB)` containing the transaction types to be aborted.
-//             Using int32_t instead of TxnTypePB due to protobuf uses int32_t to store enum
+// - txns A `std::span` of `TxnInfoPB` containing information of the transactions to be aborted.
 //
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids,
-               std::span<const int32_t> txn_types);
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns);
+
+// Collect files to delete for `abort_txn` in transaction log
+void collect_files_in_log(TabletManager* tablet_mgr, const TxnLogPB& txn_log,
+                          std::vector<std::string>* files_to_delete);
 
 } // namespace starrocks::lake

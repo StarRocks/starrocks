@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # stddev_samp
 
-## 功能
+
 
 返回 `expr` 表达式的样本标准差。从 2.5.10 版本开始，该函数也可以用作窗口函数。
 
@@ -20,7 +20,13 @@ STDDEV_SAMP(expr)
 
 ## 返回值说明
 
-返回值为 DOUBLE 类型。
+返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
+
+![image](../../../_assets/stddevsamp_formula.png)
+
+<!--$$
+s = \sqrt{\frac{1}{n-1} \sum_{i=1}^{n} (x_i - \bar{x})^2}
+$$ -->
 
 ## 示例
 
@@ -34,3 +40,7 @@ group by datetime;
 |        2.372044195280762 |
 +--------------------------+
 ```
+
+## 相关函数
+
+[stddev](./stddev.md)

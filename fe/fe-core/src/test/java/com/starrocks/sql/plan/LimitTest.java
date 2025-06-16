@@ -20,7 +20,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Test;
@@ -172,6 +176,7 @@ public class LimitTest extends PlanTestBase {
                 + "  |  \n"
                 + "  1:OlapScanNode"));
     }
+
 
     @Test
     public void testCountStarWithLimitForOneAggStage() throws Exception {
@@ -400,7 +405,6 @@ public class LimitTest extends PlanTestBase {
         String plan;
         sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  4:HASH JOIN\n"
                 + "  |  join op: FULL OUTER JOIN (PARTITIONED)\n"
                 + "  |  colocate: false, reason: \n"
@@ -596,13 +600,23 @@ public class LimitTest extends PlanTestBase {
                 "on a.v3 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(plan, "14:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  other join predicates: 11: v8 > 5: v5\n" +
+                "  |  limit: 10");
         // check join on predicate which has expression with limit operator
         sql = "select t2.v8 from (select v1, v2, v1 as v3 from t0 where v2<> v3 limit 15) as a join t1 " +
                 "on a.v3 + 1 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v3 + 2 = b.v7 where b.v8 > t1.v5 limit 10";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(plan, "15:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 14: add = 4: v4\n" +
+                "  |  other join predicates: 11: v8 > 5: v5\n" +
+                "  |  limit: 10");
     }
 
     @Test
@@ -622,6 +636,43 @@ public class LimitTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n"));
+    }
+
+    @Test
+    public void testOffsetWithSubTopN() throws Exception {
+        String sql;
+        String plan;
+        sql = "select v1 from (\n" +
+                "  select * from (select v1, v2 from t0 order by v1 asc limit 1000, 600) l\n" +
+                "  left join (select null as cx, '1' as c1) r\n" +
+                "  on l.v1 =r.cx\n" +
+                ") b limit 600;";
+        plan = getThriftPlan(sql);
+        assertContains(plan, "TExchangeNode(input_row_tuples:[1], sort_info:" +
+                "TSortInfo(ordering_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF");
+
+        sql = "select * from (select v1, v2 from t0 order by v1 asc limit 1000, 600) l limit 200, 600";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "\n" +
+                "  2:MERGING-EXCHANGE\n" +
+                "     offset: 1200\n" +
+                "     limit: 400");
+    }
+
+    @Test
+    public void testPushDownLimitToTopN() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        String sql;
+        String plan;
+        sql = "select c0 from (select * from ( select v1 c0, v2 c1 from t0 order by c0 asc limit 1000, 600 ) l " +
+                "union all select 0 as c0, '0' as c1 ) b limit 100;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1100\n" +
+                "  |  \n" +
+                "  1:OlapScanNode");
     }
 
     @Test
@@ -778,8 +829,8 @@ public class LimitTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
         // We need to let some tablets have data, some tablets don't data
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
-        MaterializedIndex index = t0.getPartitions().stream().findFirst().get().getBaseIndex();
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        MaterializedIndex index = t0.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition().getBaseIndex();
         LocalTablet tablets = (LocalTablet) index.getTablets().get(0);
         Replica replica = tablets.getSingleReplica();
         new Expectations(replica) {
@@ -882,7 +933,6 @@ public class LimitTest extends PlanTestBase {
                 "union all \n" +
                 "select distinct 2 from with_t_0, (select v10, v11 from t3) subt right SEMI join t0 on subt.v11 = v3;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "7:UNION\n" +
                 "  |  \n" +
                 "  |----33:EXCHANGE\n" +
@@ -907,5 +957,106 @@ public class LimitTest extends PlanTestBase {
                         "\n" +
                         "  2:EXCHANGE\n" +
                         "     limit: 1");
+    }
+
+    @Test
+    public void testLimitUserVariable() throws Exception {
+        {
+            String sql = "set @var = 123";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            sql = "select * from t0 limit @var";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "EXCHANGE\n" +
+                    "     limit: 123");
+        }
+        {
+            String sql = "set @var = 123";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            sql = "select * from t0 limit @var, @var";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "offset: 123\n" +
+                    "     limit: 123");
+        }
+        {
+            String sql = "set @var = 123";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            sql = "select * from t0 limit @var OFFSET @var";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "offset: 123\n" +
+                    "     limit: 123");
+        }
+        {
+            String sql = "set @var = 123";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            sql = "select * from t0 limit @var, 11";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "offset: 123\n" +
+                    "     limit: 11");
+        }
+        {
+            String sql = "set @var = 123";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            sql = "select * from t0 limit 12, @var";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "offset: 12\n" +
+                    "     limit: 123");
+        }
+        {
+            String sql = "set @var = 31 + 16";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            sql = "select * from t0 limit 12, @var";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "offset: 12\n" +
+                    "     limit: 47");
+        }
+    }
+
+    @Test
+    public void testLimitUserVariableError() throws Exception {
+        {
+            String sql = "set @var = '123'";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            String tql = "select * from t0 limit @var";
+            Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(tql));
+        }
+        {
+            String sql = "set @var = 'abc'";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            String tql = "select * from t0 limit @var";
+            Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(tql));
+        }
+        {
+            String sql = "set @var = 'abc'";
+            SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            SetExecutor executor = new SetExecutor(connectContext, stmt);
+            executor.execute();
+
+            String tql = "select * from t0 limit @var, 2";
+            Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(tql));
+        }
     }
 }

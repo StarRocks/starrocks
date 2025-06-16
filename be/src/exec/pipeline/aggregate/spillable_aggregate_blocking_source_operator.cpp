@@ -24,6 +24,7 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSourceOperator::prepare(state));
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
+    _accumulator.set_max_size(state->chunk_size());
     return Status::OK();
 }
 
@@ -49,6 +50,7 @@ bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (_aggregator->spiller()->has_output_data()) {
         return true;
     }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_aggregator->spiller());
     // has eos chunk
     if (_aggregator->is_spilled_eos() && _has_last_chunk) {
         return true;
@@ -86,6 +88,7 @@ Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* stat
 }
 
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->spiller()->task_status());
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::pull_chunk(state);
     }
@@ -120,9 +123,7 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
 
     if (!_aggregator->is_spilled_eos()) {
         DCHECK(_accumulator.need_input());
-        auto executor = _aggregator->spill_channel()->io_executor();
-        ASSIGN_OR_RETURN(auto chunk,
-                         spiller->restore(state, *executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }

@@ -99,17 +99,27 @@ int64_t TimestampValue::diff_microsecond(TimestampValue other) const {
 }
 
 bool TimestampValue::from_string(const char* date_str, size_t len) {
-    int year, month, day, hour, minute, second, microsecond;
-    if (!date::from_string_to_datetime(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond)) {
+    date::ToDatetimeResult res;
+    const auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, len, &res);
+    if (!is_valid) {
         return false;
     }
 
-    if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
-        return false;
-    }
+    auto process = [&](int year, int month, int day, int hour, int minute, int second, int microsecond) {
+        if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
+            return false;
+        }
+        from_timestamp(year, month, day, hour, minute, second, microsecond);
+        return true;
+    };
 
-    from_timestamp(year, month, day, hour, minute, second, microsecond);
-    return true;
+    // If `date_str` only contains date part, then pass constant zero for hour/minute/second/usec
+    // to make compiler eliminate some compution logic.
+    if (is_only_date) {
+        return process(res.year, res.month, res.day, 0, 0, 0, 0);
+    } else {
+        return process(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
+    }
 }
 
 // process string content based on format like "%Y-%m-%d". '-' means any char.
@@ -642,6 +652,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 date_part_used = true;
                 break;
             case 'r':
+                tmp = val + std::min(11, (int)(val_end - val));
                 if (from_uncommon_format_str("%I:%i:%S %p", 11, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -649,6 +660,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 time_part_used = true;
                 break;
             case 'T':
+                tmp = val + std::min(8, (int)(val_end - val));
                 if (from_uncommon_format_str("%H:%i:%S", 8, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -815,11 +827,29 @@ void TimestampValue::trunc_to_quarter() {
     _timestamp = timestamp::from_datetime(year, month_to_quarter[month], 1, 0, 0, 0, 0);
 }
 
+// return seconds since epoch.
 int64_t TimestampValue::to_unix_second() const {
     int64_t result = timestamp::to_julian(_timestamp);
     result *= SECS_PER_DAY;
     result += timestamp::to_time(_timestamp) / USECS_PER_SEC;
     result -= timestamp::UNIX_EPOCH_SECONDS;
+    return result;
+}
+
+// return microseconds since epoch.
+int64_t TimestampValue::to_unixtime() const {
+    int64_t result = timestamp::to_julian(_timestamp);
+    result *= SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= 1000L;
+    result += timestamp::to_time(_timestamp) / USECS_PER_MILLIS;
+    return result;
+}
+
+int64_t TimestampValue::to_unixtime(const cctz::time_zone& ctz) const {
+    int64_t offset = TimezoneUtils::to_utc_offset(ctz);
+    int64_t result = to_unixtime();
+    result -= offset * MILLIS_PER_SEC;
     return result;
 }
 
@@ -862,8 +892,11 @@ bool TimestampValue::is_valid_non_strict() const {
     return is_valid();
 }
 
-std::string TimestampValue::to_string() const {
-    return timestamp::to_string(_timestamp);
+std::string TimestampValue::to_string(bool igonre_microsecond) const {
+    if (igonre_microsecond) {
+        return timestamp::to_string<false, true>(_timestamp);
+    }
+    return timestamp::to_string<false, false>(_timestamp);
 }
 
 int TimestampValue::to_string(char* s, size_t n) const {

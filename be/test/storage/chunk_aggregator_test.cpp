@@ -51,7 +51,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
         v_col->append(1);
     }
 
-    Columns cols{k_col, v_col};
+    Columns cols({std::move(k_col), std::move(v_col)});
 
     ChunkPtr chunk = std::make_shared<Chunk>(cols, schema);
 
@@ -102,7 +102,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
             source_masks.emplace_back(RowSourceMask{0, true});
         }
     }
-    Columns cols{v_col};
+    Columns cols{std::move(v_col)};
     ChunkPtr chunk = std::make_shared<Chunk>(cols, schema);
 
     aggregator.update_source(chunk, &source_masks);

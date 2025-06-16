@@ -52,14 +52,10 @@ public class ErrorReport {
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             ctx.getState().setError(errMsg);
+            ctx.getState().setErrorCode(errorCode);
         }
         // TODO(zc): think about LOG to file
         return errMsg;
-    }
-
-    public static void reportAnalysisException(String pattern, Object... objs)
-            throws AnalysisException {
-        throw new AnalysisException(reportCommon(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs));
     }
 
     public static void reportAnalysisException(ErrorCode errorCode, Object... objs)
@@ -84,11 +80,6 @@ public class ErrorReport {
         throw new AnalysisException(reportCommon(pattern, errorCode, objs));
     }
 
-    public static void reportDdlException(String pattern, Object... objs)
-            throws DdlException {
-        reportDdlException(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs);
-    }
-
     public static void reportDdlException(ErrorCode errorCode, Object... objs)
             throws DdlException {
         reportDdlException(null, errorCode, objs);
@@ -103,14 +94,29 @@ public class ErrorReport {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
     }
 
+    public static void reportUserException(ErrorCode errorCode, Object... objs)
+            throws StarRocksException {
+        throw new StarRocksException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportTimeoutException(ErrorCode errorCode, Object... objs)
+            throws TimeoutException {
+        throw new TimeoutException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportNoAliveBackendException(ErrorCode errorCode, Object... objs)
+            throws NoAliveBackendException {
+        throw new NoAliveBackendException(reportCommon(null, errorCode, objs));
+    }
+
     public interface DdlExecutor {
-        void apply() throws UserException;
+        void apply() throws StarRocksException;
     }
 
     public static void wrapWithRuntimeException(DdlExecutor fun) {
         try {
             fun.apply();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new RuntimeException(e);
         }
     }

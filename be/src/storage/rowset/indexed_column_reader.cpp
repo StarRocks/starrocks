@@ -95,7 +95,6 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
     page_opts.codec = _compress_codec;
     page_opts.stats = opts.stats;
     page_opts.use_page_cache = opts.use_page_cache;
-    page_opts.kept_in_memory = opts.kept_in_memory;
     page_opts.encoding_type = _encoding_info->encoding();
     return PageIO::read_and_decompress_page(page_opts, handle, body, footer);
 }
@@ -106,9 +105,9 @@ Status IndexedColumnReader::new_iterator(const IndexReadOptions& opts, std::uniq
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts)
+IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts)
         : _reader(reader),
-          _opts(opts),
+          _opts(std::move(opts)),
           _ordinal_iter(&reader->_ordinal_index_reader),
           _value_iter(&reader->_value_index_reader) {}
 

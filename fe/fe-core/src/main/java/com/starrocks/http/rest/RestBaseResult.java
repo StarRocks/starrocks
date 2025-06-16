@@ -34,10 +34,8 @@
 
 package com.starrocks.http.rest;
 
-import com.google.gson.ExclusionStrategy;
-import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -46,31 +44,49 @@ import java.lang.annotation.Target;
 
 // Base restful result
 public class RestBaseResult {
+
+    private static final Gson GSON = new Gson();
+
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.FIELD, ElementType.METHOD})
     public @interface Legacy {
     }
 
     private static final RestBaseResult OK = new RestBaseResult();
+
     // For compatibility, status still exists in /api/v1, removed in /api/v2 and later version.
     @Legacy
+    @SerializedName("status")
     public ActionStatus status;
+
+    @SerializedName("code")
     public String code;
+
     // For compatibility, msg still exists in /api/v1, removed in /api/v2 and later version.
     @Legacy
+    @SerializedName("msg")
     public String msg;
+
+    @SerializedName("message")
     public String message;
 
     public RestBaseResult() {
         status = ActionStatus.OK;
-        code = "" + ActionStatus.OK.ordinal();
+        code = Integer.toString(ActionStatus.OK.ordinal());
         msg = "Success";
         message = "OK";
     }
 
     public RestBaseResult(String msg) {
         status = ActionStatus.FAILED;
-        code = "" + ActionStatus.FAILED.ordinal();
+        code = Integer.toString(ActionStatus.FAILED.ordinal());
+        this.msg = msg;
+        this.message = msg;
+    }
+
+    public RestBaseResult(String code, ActionStatus status, String msg) {
+        this.code = code;
+        this.status = status;
         this.msg = msg;
         this.message = msg;
     }
@@ -81,22 +97,18 @@ public class RestBaseResult {
 
     @Legacy
     public String toJson() {
-        Gson gson = new Gson();
-        return gson.toJson(this);
+        return GSON.toJson(this);
     }
 
-    public String toJsonString() {
-        Gson gson = new GsonBuilder().setExclusionStrategies(new ExclusionStrategy() {
-            @Override
-            public boolean shouldSkipField(FieldAttributes f) {
-                return f.getAnnotation(Legacy.class) != null;
-            }
+    public String getCode() {
+        return code;
+    }
 
-            @Override
-            public boolean shouldSkipClass(Class<?> clazz) {
-                return false;
-            }
-        }).create();
-        return gson.toJson(this);
+    public String getMessage() {
+        return message;
+    }
+
+    public ActionStatus getStatus() {
+        return status;
     }
 }

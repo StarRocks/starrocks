@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_label: AWS
 description: "本文介绍如何认证 AWS 资源"
 ---
@@ -38,19 +38,19 @@ IAM User 支持通过 AWS IAM User 来实现对外部数据源的访问认证和
 
 关于访问特定 AWS 资源所需要创建的 IAM 策略，见如下内容：
 
-- [从 AWS S3 批量导入数据](../reference/aws_iam_policies.md#从-aws-s3-批量导入数据)
-- [从 AWS S3 读写数据](../reference/aws_iam_policies.md#从-aws-s3-读写数据)
-- [对接 AWS Glue](../reference/aws_iam_policies.md#对接-aws-glue)
+- [从 AWS S3 批量导入数据](../sql-reference/aws_iam_policies.md#从-aws-s3-批量导入数据)
+- [从 AWS S3 读写数据](../sql-reference/aws_iam_policies.md#从-aws-s3-读写数据)
+- [对接 AWS Glue](../sql-reference/aws_iam_policies.md#对接-aws-glue)
 
 ### 基于 Instance Profile 认证鉴权
 
-把声明了访问特定 AWS 资源的 [IAM 策略](../reference/aws_iam_policies.md) 添加到 EC2 实例关联角色。
+把声明了访问特定 AWS 资源的 [IAM 策略](../sql-reference/aws_iam_policies.md) 添加到 EC2 实例关联角色。
 
 ### 基于 Assumed Role 认证鉴权
 
 #### 创建 IAM 角色并添加策略
 
-您可以根据需要访问的 AWS 资源选择创建一个或多个 IAM 角色。具体操作请参见 AWS 官网文档 [Creating IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create.html)。然后，把声明了访问特定 AWS 资源的 [IAM 策略](../reference/aws_iam_policies.md) 添加到您所创建的 IAM 角色。
+您可以根据需要访问的 AWS 资源选择创建一个或多个 IAM 角色。具体操作请参见 AWS 官网文档 [Creating IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create.html)。然后，把声明了访问特定 AWS 资源的 [IAM 策略](../sql-reference/aws_iam_policies.md) 添加到您所创建的 IAM 角色。
 
 这里假设您的操作场景需要 StarRocks 集群访问 AWS S3 和 AWS Glue。在这种情况下，您可以选择创建一个 IAM 角色（如 `s3_assumed_role`），然后把赋权访问 AWS S3 的策略和赋权访问 AWS Glue 的策略都添加到该角色。您也可以选择创建两个不同的 IAM 角色（如 `s3_assumed_role` 和 `glue_assumed_role`），然后把这些不同的策略分别添加到这两个角色（即，把赋权访问 AWS S3 的策略添加到 `s3_assumed_role`， 把赋权访问 AWS Glue 的策略添加到 `glue_assumed_role`）。
 
@@ -116,13 +116,13 @@ StarRocks 集群的 EC2 实例关联角色通过承担您所创建和配置的 I
 
 创建一个 IAM 用户。具体操作请参见 AWS 官网文档 [Creating an IAM user in your AWS account](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html)。
 
-然后，把声明了访问特定 AWS 资源的 [IAM 策略](../reference/aws_iam_policies.md) 添加到创建好的 IAM 用户。
+然后，把声明了访问特定 AWS 资源的 [IAM 策略](../sql-reference/aws_iam_policies.md) 添加到创建好的 IAM 用户。
 
 ## 原理图
 
 StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方式的原理和差异如下图所示。
 
-![Credentials](../assets/authenticate_s3_credential_methods.png)
+![Credentials](../_assets/authenticate_s3_credential_methods.png)
 
 ## 参数配置
 
@@ -172,7 +172,7 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 StarRocks 支持以下类型的 External Catalog：
 
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
-- [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
+- [Iceberg catalog](../data_source/catalog/iceberg/iceberg_catalog.md)
 - [Hudi catalog](../data_source/catalog/hudi_catalog.md)
 - [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 
@@ -346,7 +346,7 @@ PROPERTIES
 
 ### 数据导入
 
-您可以从 AWS S3 导入数据。 以下示例将存储在 `s3a://test-bucket/test_brokerload_ingestion` 路径下的所有 Parquet 格式数据文件都导入到了现有数据库 `test_s3_db` 中一个名为 `test_ingestion_2` 的表中。有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+您可以从 AWS S3 导入数据。 以下示例将存储在 `s3a://test-bucket/test_brokerload_ingestion` 路径下的所有 Parquet 格式数据文件都导入到了现有数据库 `test_s3_db` 中一个名为 `test_ingestion_2` 的表中。有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 基于 Instance Profile 鉴权认证
 

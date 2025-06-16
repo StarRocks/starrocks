@@ -87,6 +87,7 @@ public:
               _limit(limit) {}
 
     ~ExchangeMergeSortSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
         return std::make_shared<ExchangeMergeSortSourceOperator>(this, _id, _plan_node_id, driver_sequence, _num_sender,
@@ -97,7 +98,7 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     int32_t _num_sender;

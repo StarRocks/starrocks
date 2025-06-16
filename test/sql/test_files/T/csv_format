@@ -1,0 +1,23 @@
+-- name: test_csv_format
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- prepare
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+-- load
+create table t1 as select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+
+-- query
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+select $3 + 1, $2 from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+
+-- check schema
+desc t1;
+desc files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+
+-- clean
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

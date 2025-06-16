@@ -32,6 +32,7 @@ std::vector<int> get_thread_id_list();
 bool install_stack_trace_sighandler();
 std::string get_stack_trace_for_thread(int tid, int timeout_ms);
 std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeout_ms);
+std::string get_stack_trace_for_all_threads_with_prefix(const std::string& line_prefix);
 std::string get_stack_trace_for_all_threads();
 // get all thread stack trace, and filter by function pattern
 std::string get_stack_trace_for_function(const std::string& function_pattern);
@@ -40,12 +41,17 @@ std::string get_stack_trace_for_function(const std::string& function_pattern);
 extern "C" {
 #ifdef __clang__
 void __real___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
-__attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exception, std::type_info* info,
-                                                                void (*dest)(void*));
+#ifdef ADDRESS_SANITIZER
+void __interceptor___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
+#endif
+void __wrap___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
 #elif defined(__GNUC__)
 void __real___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
-__attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exception, void* infov,
-                                                                void (*dest)(void*));
+#ifdef ADDRESS_SANITIZER
+void __interceptor___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
+#endif
+
+void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
 #endif
 }
 

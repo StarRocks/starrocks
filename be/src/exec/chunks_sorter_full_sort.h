@@ -17,7 +17,6 @@
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
-#include "gtest/gtest_prod.h"
 
 namespace starrocks {
 class ExprContext;
@@ -34,6 +33,11 @@ struct ChunksSorterFullSortProfiler {
 };
 class ChunksSorterFullSort : public ChunksSorter {
 public:
+    static constexpr size_t kDefaultMaxBufferRows =
+            1 << 30; // 1 billion rows, the number of rows has little impact on performance
+    static constexpr size_t kDefaultMaxBufferBytes =
+            256 << 20; // 256MB, a larger limit may improve performance but is not memory allocator friendly
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
@@ -48,9 +52,9 @@ public:
     ~ChunksSorterFullSort() override;
 
     // Append a Chunk for sort.
-    [[nodiscard]] Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    [[nodiscard]] Status do_done(RuntimeState* state) override;
-    [[nodiscard]] Status get_next(ChunkPtr* chunk, bool* eos) override;
+    Status update(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_done(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     size_t get_output_rows() const override;
 
@@ -64,19 +68,19 @@ private:
     // 1. Accumulate input chunks into a big chunk(but not exceed the kMaxBufferedChunkSize), to reduce the memory copy during merge
     // 2. Sort the accumulated big chunk partially
     // 3. Merge all big-chunks into global sorted
-    [[nodiscard]] Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
-    [[nodiscard]] Status _partial_sort(RuntimeState* state, bool done);
-    [[nodiscard]] Status _merge_sorted(RuntimeState* state);
+    Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
+    Status _partial_sort(RuntimeState* state, bool done);
+    Status _merge_sorted(RuntimeState* state);
     void _split_late_and_early_chunks();
-    static constexpr SlotId ORDINAL_COLUMN_SLOT_ID = -2;
     void _assign_ordinals();
     template <typename T>
     void _assign_ordinals_tmpl();
-    ChunkPtr _late_materialize(const ChunkPtr& chunk);
     template <typename T>
     ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
 
 protected:
+    ChunkPtr _late_materialize(const ChunkPtr& chunk);
+
     size_t _total_rows = 0;        // Total rows of sorting data
     Permutation _sort_permutation; // Temp permutation for sorting
     size_t _staging_unsorted_rows = 0;
@@ -90,9 +94,9 @@ protected:
     std::unique_ptr<ObjectPool> _object_pool = nullptr;
     ChunksSorterFullSortProfiler* _profiler = nullptr;
 
-    // TODO: further tunning the buffer parameter
-    const size_t max_buffered_rows;  // Max buffer 1024000 rows
-    const size_t max_buffered_bytes; // Max buffer 16MB bytes
+    // Parameters to control the Merge-Sort behavior
+    const size_t max_buffered_rows;
+    const size_t max_buffered_bytes;
 
     // only when order-by columns(_sort_exprs) are all ColumnRefs and the cost of eager-materialization of
     // other columns is large than ordinal column, then we materialize order-by columns and ordinal columns eagerly,

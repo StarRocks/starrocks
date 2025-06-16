@@ -49,17 +49,6 @@ struct DataSegment {
 
     void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
 
-    // There is two compares in the method,
-    // the first is:
-    //     compare every row in every DataSegment of data_segments with `rows_to_sort - 1` row of this DataSegment,
-    //     obtain every row compare result in compare_results_array, if <= 0, mark it with `INCLUDE_IN_SEGMENT`.
-    // the second is:
-    //     compare every row in compare_results_array that <= 0 (i.e. `INCLUDE_IN_SEGMENT` part) with the first row of this DataSegment,
-    //     if < 0, then mark it with `SMALLER_THAN_MIN_OF_SEGMENT`
-    [[nodiscard]] Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
-                                          std::vector<std::vector<uint8_t>>& filter_array,
-                                          const SortDescs& sort_order_flags, uint32_t& least_num, uint32_t& middle_num);
-
     void clear() {
         chunk.reset(std::make_unique<Chunk>().release());
         order_by_columns.clear();
@@ -107,9 +96,9 @@ public:
                  const bool is_topn);
     virtual ~ChunksSorter();
 
-    [[nodiscard]] static StatusOr<ChunkPtr> materialize_chunk_before_sort(
-            Chunk* chunk, TupleDescriptor* materialized_tuple_desc, const SortExecExprs& sort_exec_exprs,
-            const std::vector<OrderByType>& order_by_types);
+    static StatusOr<ChunkPtr> materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
+                                                            const SortExecExprs& sort_exec_exprs,
+                                                            const std::vector<OrderByType>& order_by_types);
 
     virtual void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
@@ -117,20 +106,18 @@ public:
 
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
-    auto& io_executor() { return *spill_channel()->io_executor(); }
-
     // Append a Chunk for sort.
-    [[nodiscard]] virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
+    virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    [[nodiscard]] virtual Status do_done(RuntimeState* state) = 0;
+    virtual Status do_done(RuntimeState* state) = 0;
 
-    [[nodiscard]] Status done(RuntimeState* state);
+    Status done(RuntimeState* state);
 
     // get_next only works after done().
-    [[nodiscard]] virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
+    virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
     // RuntimeFilter generate by ChunkSorter only works in TopNSorter and HeapSorter
-    virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
+    virtual std::vector<RuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
 
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
@@ -163,12 +150,11 @@ protected:
     const std::string _sort_keys;
     const bool _is_topn;
 
-    size_t _next_output_row = 0;
-
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
+    RuntimeProfile::Counter* _sort_cnt = nullptr;
 
     size_t _revocable_mem_bytes = 0;
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
@@ -179,29 +165,75 @@ protected:
 namespace detail {
 struct SortRuntimeFilterBuilder {
     template <LogicalType ltype>
-    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc,
-                                  bool is_close_interval) {
+    RuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc, bool null_first,
+                              bool is_close_interval) {
+        bool need_null = false;
+        if (null_first) {
+            need_null = true;
+            if (column->is_null(rid)) {
+                if (is_close_interval) {
+                    // Null first and all values is null, only need to read null value later.
+                    return MinMaxRuntimeFilter<ltype>::create_with_only_null_range(pool);
+                } else {
+                    // Null first and all values is null, no need to read any value.
+                    return MinMaxRuntimeFilter<ltype>::create_with_empty_range_without_null(pool);
+                }
+            }
+        } else {
+            if (column->is_null(rid)) {
+                if (is_close_interval) {
+                    // Null last and all values is null, need to read all values, so will not build runtime filter.
+                    return nullptr;
+                } else {
+                    // Null last and all values is null, need to read all values without null.
+                    return MinMaxRuntimeFilter<ltype>::create_with_full_range_without_null(pool);
+                }
+            }
+        }
+
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
+        auto runtime_data_column = down_cast<const RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval);
+            return MinMaxRuntimeFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval,
+                                                                                 need_null);
         } else {
-            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval);
+            return MinMaxRuntimeFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval,
+                                                                                need_null);
         }
     }
 };
 
 struct SortRuntimeFilterUpdater {
     template <LogicalType ltype>
-    std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
-        auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
-        auto data = runtime_data_column->get_data()[rid];
-        if (asc) {
-            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<false>(data);
+    std::nullptr_t operator()(RuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc, bool null_first,
+                              bool is_close_interval) {
+        if (null_first) {
+            if (column->is_null(rid)) {
+                if (is_close_interval) {
+                    // all values is null, only need to read null.
+                    down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->update_to_all_null();
+                } else {
+                    // all values is null, no need to read any value.
+                    down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->update_to_empty_and_not_null();
+                }
+                return nullptr;
+            }
         } else {
-            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<true>(data);
+            if (column->is_null(rid)) {
+                // For nulls last, if all values is null, the rf builded is also all null, it's not changed,
+                // so no need to update here.
+                return nullptr;
+            }
+        }
+
+        const auto* data_column = ColumnHelper::get_data_column(column.get());
+        const auto* runtime_data_column = down_cast<const RunTimeColumnType<ltype>*>(data_column);
+        auto data = GetContainer<ltype>::get_data(runtime_data_column)[rid];
+        if (asc) {
+            down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->template update_min_max<false>(data);
+        } else {
+            down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->template update_min_max<true>(data);
         }
         return nullptr;
     }

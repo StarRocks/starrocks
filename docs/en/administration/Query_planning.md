@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Query analysis
@@ -16,9 +16,10 @@ Query performance in StarRocks is determined by query planning and query executi
 
 A query plan provides the DBA with a macro perspective to access query information. A query plan is the key to query performance and a good resource for the DBA to reference. The following code snippet uses `TPCDS query96` as an example to show how to view a query plan.
 
-~~~SQL
--- query96.sql
-select  count(*)
+Use the [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) statement to view the plan of a query.
+
+```SQL
+EXPLAIN select  count(*)
 from store_sales
     ,household_demographics
     ,time_dim
@@ -31,11 +32,11 @@ where ss_sold_time_sk = time_dim.t_time_sk
     and household_demographics.hd_dep_count = 5
     and store.s_store_name = 'ese'
 order by count(*) limit 100;
-~~~
+```
 
-There are two types of query plans –  logical query plan and physical query plan. The query plan described here refers to the logical query plan. The query plan corresponding to `TPCDS query96.sq`l is shown below.
+There are two types of query plans–logical query plan and physical query plan. The query plan described here refers to the logical query plan. The query plan corresponding to `TPCDS query96.sq`l is shown below.
 
-~~~sql
+```sql
 +------------------------------------------------------------------------------+
 | Explain String                                                               |
 +------------------------------------------------------------------------------+
@@ -169,7 +170,7 @@ There are two types of query plans –  logical query plan and physical query pl
 |      tuple ids: 2                                                            |
 +------------------------------------------------------------------------------+
 128 rows in set (0.02 sec)
-~~~
+```
 
 Query 96 shows a query plan that involves several StarRocks concepts.
 
@@ -195,113 +196,138 @@ Fragment 1 uses the `BROADCAST` method to perform `Order/Aggregation/Join` opera
 
 By removing the specific expressions (only keep the operators), the query plan can be presented in a more macroscopic view, as shown in the following figure.
 
-![8-5](../assets/8-5.png)
+![8-5](../_assets/8-5.png)
 
 ## Query hint
 
-Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports two types of hints: variable-setting hint and join hint. Hints only take effect within a single query.
+Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: system variable hint (`SET_VAR`), user-defined variable hint (`SET_USER_VARIABLE`), and Join hint. Hints only take effect within a single query.
 
-### Variable-Setting hint
+### System variable hint
 
-You can set one or more [system variables](../reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can use a `SET_VAR` hint to set one or more [system variables](../sql-reference/System_variable.md) in SELECT and SUBMIT TASK statements, and then execute the statements. You can also use a `SET_VAR` hint in the SELECT clause included in other statements, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT. Note that if the `SET_VAR` hint is used in the SELECT clause of CTE, the `SET_VAR` hint does not take effect even if the statement is executed successfully.
+
+Compared with [the general usage of system variables](../sql-reference/System_variable.md) which takes effect at the session level, the `SET_VAR` hint takes effect at the statement level and does not impact the entire session.
 
 #### Syntax
 
-~~~SQL
-[...] SELECT [/*+ SET_VAR(key=value [, key = value]*) */] ...
-SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
-~~~
+```SQL
+[...] SELECT /*+ SET_VAR(key=value [, key = value]) */ ...
+SUBMIT [/*+ SET_VAR(key=value [, key = value]) */] TASK ...
+```
 
 #### Examples
 
- Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
+To specify the aggregation mode for an aggregate query, use the `SET_VAR` hint to set the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage` in the aggregate query.
 
-~~~SQL
+```SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
-~~~
+```
 
-Hint the query's task execution timeout period by setting the system variable `query_timeout` in the SUBMIT TASK statement.
+To specify the execution timeout for a SUBMIT TASK statement, use the `SET_VAR` Hint to set the system variable `query_timeout` in the SUBMIT TASK statement.
 
-~~~SQL
+
+```SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
-~~~
+```
 
-Hint the query's execution timeout period by setting the system variable `query_timeout` in the SELECT clause when creating a materialized view.
+To specify the subquery execution timeout for creating a materialized view, use the `SET_VAR` hint to set the system variable `query_timeout` in the SELECT clause.
 
-~~~SQL
+```SQL
 CREATE MATERIALIZED VIEW mv 
 PARTITION BY dt 
 DISTRIBUTED BY HASH(`key`) 
 BUCKETS 10 
 REFRESH ASYNC 
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
-~~~
+```
 
-### Join hint
+### User-defined variable hint
 
-For multi-table join queries, the optimizer usually selects the optimal join execution method. In special cases, you can use a join hint to explicitly suggest the join execution method to the optimizer or disable Join Reorder. Currently, a join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a join execution method. When a join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting [Colocate Join](../using_starrocks/Colocate_join.md) or Bucket Shuffle Join as the join execution method, make sure that the data distribution of the joined table meets the requirements of these join execution methods. Otherwise, the suggested join execution method cannot take effect.
+You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../sql-reference/user_defined_variables.md) in the SELECT statements or INSERT statements. If other statements contain a SELECT clause, you can also use the `SET_USER_VARIABLE` hint in that SELECT clause. Other statements can be SELECT statements and INSERT statements, but cannot be CREATE MATERIALIZED VIEW AS SELECT statements and CREATE VIEW AS SELECT statements. Note that if the `SET_USER_VARIABLE` hint is used in the SELECT clause of CTE, the `SET_USER_VARIABLE` hint does not take effect even if the statement is executed successfully. Since v3.2.4, StarRocks supports the user-defined variable hint.
+
+Compared with [the general usage of user-defined variables](../sql-reference/user_defined_variables.md) which takes effect at the session level, the `SET_USER_VARIABLE` hint takes effect at the statement level and does not impact the entire session.
 
 #### Syntax
 
-~~~SQL
-... JOIN { [BROADCAST] | [SHUFFLE] | [BUCKET] | [COLOCATE] | [UNREORDER]} ...
-~~~
+```SQL
+[...] SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+```
 
-> **NOTE**
->
-> Join Hint is case-insensitive.
+#### Examples
+
+The following SELECT statement references scalar subqueries `select max(age) from users` and `select min(name) from users`, so you can use a `SET_USER_VARIABLE` hint to set these two scalar subqueries as user-defined variables and then run the query.
+
+```SQL
+SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ * FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
+```
+
+### Join hint
+
+For multi-table Join queries, the optimizer usually selects the optimal Join execution method. In special cases, you can use a Join hint to explicitly suggest the Join execution method to the optimizer or disable Join Reorder. Currently, a Join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a Join execution method. When a Join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting [Colocate Join](../using_starrocks/Colocate_join.md) or Bucket Shuffle Join as the Join execution method, make sure that the data distribution of the joined table meets the requirements of these Join execution methods. Otherwise, the suggested Join execution method cannot take effect.
+
+#### Syntax
+
+```SQL
+... JOIN { [BROADCAST] | [SHUFFLE] | [BUCKET] | [COLOCATE] | [UNREORDER]} ...
+```
+
+:::note
+Join Hint is case-insensitive.
+:::
 
 #### Examples
 
 - Shuffle Join
 
-  If you need to shuffle the data rows with the same bucketing key values from tables A and B onto the same machine before a Join operation is performed, you can hint the join execution method as Shuffle Join.
+  If you need to shuffle the data rows with the same bucketing key values from tables A and B onto the same machine before a Join operation is performed, you can hint the Join execution method as Shuffle Join.
 
-  ~~~SQL
+  ```SQL
   select k1 from t1 join [SHUFFLE] t2 on t1.k1 = t2.k2 group by t2.k2;
-  ~~~
+  ```
 
 - Broadcast Join
   
-  If table A is a large table and table B is a small table, you can hint the join execution method as Broadcast Join. The data of the table B is fully broadcasted to the machines on which the data of table A resides, and then the Join operation is performed. Compared to Shuffle Join, Broadcast Join saves the cost of shuffling the data of table A.
+  If table A is a large table and table B is a small table, you can hint the Join execution method as Broadcast Join. The data of the table B is fully broadcasted to the machines on which the data of table A resides, and then the Join operation is performed. Compared to Shuffle Join, Broadcast Join saves the cost of shuffling the data of table A.
 
-  ~~~SQL
+  ```SQL
   select k1 from t1 join [BROADCAST] t2 on t1.k1 = t2.k2 group by t2.k2;
-  ~~~
+  ```
 
 - Bucket Shuffle Join
   
-  If the Join equijoin expression in the join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally.
+  If the Join equijoin expression in the Join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the Join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally.
+  Tables participating in Bucket Shuffle Join must be either non-partitioned or colocated.
 
-  ~~~SQL
+  ```SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
-  ~~~
+  ```
 
 - Colocate Join
   
-  If tables A and B belong to the same Colocation Group which is specified during table creation, the data rows with the same bucketing key values from tables A and B are distributed on the same BE node. When the Join equijoin expression contains the bucketing key of tables A and B in the join query, you can hint the join execution method as Colocate Join. Data with the same key values are directly joined locally, reducing the time spent on data transmission between nodes and improving query performance.
+  If tables A and B belong to the same Colocation Group which is specified during table creation, the data rows with the same bucketing key values from tables A and B are distributed on the same BE node. When the Join equijoin expression contains the bucketing key of tables A and B in the Join query, you can hint the Join execution method as Colocate Join. Data with the same key values are directly joined locally, reducing the time spent on data transmission between nodes and improving query performance.
 
-  ~~~SQL
+  ```SQL
   select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
-  ~~~
+  ```
 
-### View join execution method
+#### View Join execution method
 
-Use the `EXPLAIN` command to view the actual join execution method. If the returned result shows that the join execution method matches the join hint, it means that the join hint is effective.
+Use the `EXPLAIN` command to view the actual Join execution method. If the returned result shows that the Join execution method matches the Join hint, it means that the Join hint is effective.
 
-~~~SQL
+```SQL
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
-~~~
+```
 
-![8-9](../assets/8-9.png)
+![8-9](../_assets/8-9.png)
 
 ## SQL fingerprint
 
 SQL fingerprint is used to optimize slow queries and improve system resource utilization. StarRocks uses the SQL fingerprint feature to normalize SQL statements in the slow query log (`fe.audit.log.slow_query`), categorizes the SQL statements into different types, and calculates the MD5 hash value of each SQL type to identify slow queries. The MD5 hash value is specified by the field `Digest`.
 
-~~~SQL
+```SQL
 2021-12-27 15:13:39,108 [slow_query] |Client=172.26.xx.xxx:54956|User=root|Db=default_cluster:test|State=EOF|Time=2469|ScanBytes=0|ScanRows=0|ReturnRows=6|StmtId=3|QueryId=824d8dc0-66e4-11ec-9fdc-00163e04d4c2|IsQuery=true|feIp=172.26.92.195|Stmt=select count(*) from test_basic group by id_bigint|Digest=51390da6b57461f571f0712d527320f4
-~~~
+```
 
 SQL statement normalization transforms a statement text into a more normalized format and preserves only important statement structure.
 
@@ -315,16 +341,16 @@ For example, the following two SQL statements belong to the same type after norm
 
 - SQL statements before normalization
 
-~~~SQL
+```SQL
 SELECT * FROM orders WHERE customer_id=10 AND quantity>20
 
 
 
 SELECT * FROM orders WHERE customer_id = 20 AND quantity > 100
-~~~
+```
 
 - SQL statement after normalization
 
-~~~SQL
+```SQL
 SELECT * FROM orders WHERE customer_id=? AND quantity>?
-~~~
+```

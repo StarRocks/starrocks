@@ -30,6 +30,7 @@ public:
             : Operator(factory, id, "chunk_accumulate", plan_node_id, true, driver_sequence) {}
 
     ~ChunkAccumulateOperator() override = default;
+    Status prepare(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -44,6 +45,7 @@ public:
     Status set_finished(RuntimeState* state) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    void update_exec_stats(RuntimeState* state) override {}
 
 private:
     ChunkPipelineAccumulator _acc;

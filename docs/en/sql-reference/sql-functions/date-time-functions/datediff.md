@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # datediff
 
-## Description
+
 
 Calculates the difference between two date values (`expr1 - expr2`) and returns a result in days. `expr1` and `expr2` are valid DATE or DATETIME expressions.
 

@@ -35,12 +35,10 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -138,8 +136,8 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         return ((BinaryPredicate) obj).opcode == this.opcode;
@@ -165,101 +163,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         } else {
             msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
         }
-    }
-
-    private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {
-        if (t1.isDateType()) {
-            return t2.isDateType() || t2.isStringType();
-        } else if (t2.isDateType()) {
-            return t1.isStringType();
-        } else {
-            return false;
-        }
-    }
-
-    public static Type getCmpType(Type type1, Type type2) {
-        PrimitiveType t1 = type1.getResultType().getPrimitiveType();
-        PrimitiveType t2 = type2.getResultType().getPrimitiveType();
-
-        if (canCompareDate(type1.getPrimitiveType(), type2.getPrimitiveType())) {
-            return Type.DATETIME;
-        }
-
-        // Following logical is compatible with MySQL:
-        //    Cast to DOUBLE by default, because DOUBLE has the largest range of values.
-        if (type1.isJsonType() || type2.isJsonType()) {
-            return Type.JSON;
-        }
-        if (type1.isArrayType() || type2.isArrayType()) {
-            return TypeManager.getCommonSuperType(type1, type2);
-        }
-        if (type1.isComplexType() || type2.isComplexType()) {
-            // We don't support complex type (map/struct) for binary predicate.
-            return Type.INVALID;
-        }
-        if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
-            return Type.VARCHAR;
-        }
-        if (t1 == PrimitiveType.BIGINT && t2 == PrimitiveType.BIGINT) {
-            return Type.getAssignmentCompatibleType(type1, type2, false);
-        }
-        if (t1.isDecimalV3Type()) {
-            return Type.getAssignmentCompatibleType(type1, type2, false);
-        }
-        if (t2.isDecimalV3Type()) {
-            return Type.getAssignmentCompatibleType(type1, type2, false);
-        }
-        if ((t1 == PrimitiveType.BIGINT || t1 == PrimitiveType.DECIMALV2)
-                && (t2 == PrimitiveType.BIGINT || t2 == PrimitiveType.DECIMALV2)) {
-            return Type.DECIMALV2;
-        }
-        if ((t1 == PrimitiveType.BIGINT || t1 == PrimitiveType.LARGEINT)
-                && (t2 == PrimitiveType.BIGINT || t2 == PrimitiveType.LARGEINT)) {
-            return Type.LARGEINT;
-        }
-
-        return Type.DOUBLE;
-    }
-
-    /**
-     * If predicate is of the form "<slotref> <op> <expr>", returns expr,
-     * otherwise returns null. Slotref may be wrapped in a CastExpr.
-     */
-    public Expr getSlotBinding(SlotId id) {
-        SlotRef slotRef = null;
-        // check left operand
-        if (getChild(0) instanceof SlotRef) {
-            slotRef = (SlotRef) getChild(0);
-        } else if (getChild(0) instanceof CastExpr && getChild(0).getChild(0) instanceof SlotRef) {
-            if (((CastExpr) getChild(0)).canHashPartition()) {
-                slotRef = (SlotRef) getChild(0).getChild(0);
-            }
-        }
-        if (slotRef != null && slotRef.getSlotId() == id) {
-            slotIsleft = true;
-            return getChild(1);
-        }
-
-        // check right operand
-        if (getChild(1) instanceof SlotRef) {
-            slotRef = (SlotRef) getChild(1);
-        } else if (getChild(1) instanceof CastExpr && getChild(1).getChild(0) instanceof SlotRef) {
-            if (((CastExpr) getChild(1)).canHashPartition()) {
-                slotRef = (SlotRef) getChild(1).getChild(0);
-            }
-        }
-
-        if (slotRef != null && slotRef.getSlotId() == id) {
-            slotIsleft = false;
-            return getChild(0);
-        }
-
-        return null;
-    }
-
-    public boolean slotIsLeft() {
-        Preconditions.checkState(slotIsleft != null);
-        return slotIsleft;
     }
 
     /*
@@ -314,6 +217,21 @@ public class BinaryPredicate extends Predicate implements Writable {
         BinaryPredicate binaryPredicate = new BinaryPredicate();
         binaryPredicate.readFields(in);
         return binaryPredicate;
+    }
+
+    public Pair<SlotRef, Expr> createSlotAndLiteralPair() {
+        Expr leftExpr = getChild(0);
+        Expr rightExpr = getChild(1);
+        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
+                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) leftExpr;
+            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
+        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
+                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) rightExpr;
+            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
+        }
+        return null;
     }
 
     @Override

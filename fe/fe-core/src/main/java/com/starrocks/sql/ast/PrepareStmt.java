@@ -31,11 +31,16 @@ public class PrepareStmt extends StatementBase {
 
     protected List<Parameter> parameters;
 
+    protected List<Integer> mysqlTypeCodes = new ArrayList<>();
+
     public PrepareStmt(String name, StatementBase stmt, List<Parameter> parameters) {
         super(NodePosition.ZERO);
         this.name = name;
         this.innerStmt = stmt;
         this.parameters = parameters == null ? ImmutableList.of() : parameters;
+        for (int i = 0; i < this.parameters.size(); i++) {
+            mysqlTypeCodes.add(0);
+        }
     }
 
     public StatementBase getInnerStmt() {
@@ -74,6 +79,10 @@ public class PrepareStmt extends StatementBase {
         return labels;
     }
 
+    public List<Integer> getMysqlTypeCodes() {
+        return mysqlTypeCodes;
+    }
+
     @Override
     public String toSql() {
         return "PREPARE " + name + " FROM " + innerStmt.toSql();
@@ -86,6 +95,6 @@ public class PrepareStmt extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return innerStmt.getRedirectStatus();
+        return RedirectStatus.NO_FORWARD;
     }
 }

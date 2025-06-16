@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # stddev_samp
 
-## Description
+
 
 Returns the sample standard deviation of an expression. Since v2.5.10, this function can also be used as a window function.
 
@@ -20,7 +20,9 @@ STDDEV_SAMP(expr)
 
 ## Return value
 
-Returns a DOUBLE value.
+Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
+
+![image](../../../_assets/stddevsamp_formula.png)
 
 ## Examples
 
@@ -34,6 +36,10 @@ group by datetime;
 |        2.372044195280762 |
 +--------------------------+
 ```
+
+## See also
+
+[stddev](./stddev.md)
 
 ## keyword
 

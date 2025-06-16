@@ -1,0 +1,6 @@
+position: 30 # float position is supported
+label: 'Asynchronous materialized views'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
@@ -77,6 +78,60 @@ public class AuditEventProcessorTest {
     }
 
     @Test
+    public void testAuditLogBuilderCONNECTION() throws IOException {
+        try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
+            AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.CONNECTION)
+                    .setTimestamp(System.currentTimeMillis())
+                    .setClientIp("127.0.0.1")
+                    .setUser("user1")
+                    .setAuthorizedUser("user2")
+                    .setDb("db1")
+                    .setState("EOF")
+                    .setQueryTime(2000)
+                    .setScanBytes(100000)
+                    .setScanRows(200000)
+                    .setReturnRows(1)
+                    .setStmtId(1234)
+                    .setStmt("select * from tbl1").build();
+
+            if (auditLogBuilder.eventFilter(event.type)) {
+                auditLogBuilder.exec(event);
+                Config.audit_log_json_format = true;
+                auditLogBuilder.exec(event);
+            }
+            Assert.assertEquals(EventType.CONNECTION,  event.type);
+        }
+    }
+
+    @Test
+    public void testAuditLogBuilderBigQuery() throws IOException {
+        try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
+            AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
+                    .setTimestamp(System.currentTimeMillis())
+                    .setClientIp("127.0.0.1")
+                    .setUser("user1")
+                    .setAuthorizedUser("user2")
+                    .setDb("db1")
+                    .setState("EOF")
+                    .setQueryTime(2000)
+                    .setScanBytes(100000)
+                    .setScanRows(200000)
+                    .setReturnRows(1)
+                    .setStmtId(1234)
+                    .setStmt("select * from tbl1")
+                    .setBigQueryLogCPUSecondThreshold(5)
+                    .setCpuCostNs(6 * 1000000000L).build();
+            if (auditLogBuilder.eventFilter(event.type)) {
+                auditLogBuilder.exec(event);
+                Config.audit_log_json_format = true;
+                auditLogBuilder.exec(event);
+            }
+            Assert.assertEquals(6 * 1000000000L, event.cpuCostNs);
+            Assert.assertEquals(5, event.bigQueryLogCPUSecondThreshold);
+        }
+    }
+
+    @Test
     public void testAuditLogBuilder() throws IOException {
         try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
             PluginInfo pluginInfo = auditLogBuilder.getPluginInfo();
@@ -108,7 +163,7 @@ public class AuditEventProcessorTest {
 
     @Test
     public void testAuditEventProcessor() throws IOException {
-        AuditEventProcessor processor = GlobalStateMgr.getCurrentAuditEventProcessor();
+        AuditEventProcessor processor = GlobalStateMgr.getCurrentState().getAuditEventProcessor();
         long start = System.currentTimeMillis();
         for (int i = 0; i < 10000; i++) {
             AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)

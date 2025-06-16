@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 文件外部表
@@ -8,9 +8,13 @@ displayed_sidebar: "Chinese"
 
 该特性从 StarRocks 2.5 版本开始支持。
 
+:::tip
+自 v3.1 起，StarRocks 支持使用 [INSERT INTO SELECT](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件) 语句和 [FILES](../sql-reference/sql-functions/table-functions/files.md) 表函数直接导入云存储或 HDFS 中的文件，无需提前创建 External Catalog 或文件外部表。除此之外，FILES() 支持自动推断 Table Schema，大大简化了导入过程。
+:::
+
 ## 使用限制
 
-- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 来查询集群下的 catalog。
+- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 来查询集群下的 catalog。
 - 仅支持查询 Parquet、ORC、Avro、RCFile、或 SequenceFile 格式的数据文件。
 - 目前**仅支持读取**目标数据文件中的数据，不支持例如 INSERT、DELETE、DROP 等**写入**操作。
 
@@ -20,7 +24,7 @@ displayed_sidebar: "Chinese"
 
 ## 创建数据库 （可选）
 
-连接到 StarRocks 集群后，您可以在当前已有的数据库下创建文件外部表；也可以创建一个新的数据库来管理文件外部表。您可以使用 [SHOW DATABASES](../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 来查询集群中的数据库，然后执行 `USE <db_name>` 切换到目标数据库。
+连接到 StarRocks 集群后，您可以在当前已有的数据库下创建文件外部表；也可以创建一个新的数据库来管理文件外部表。您可以使用 [SHOW DATABASES](../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 来查询集群中的数据库，然后执行 `USE <db_name>` 切换到目标数据库。
 
 创建数据库的语法如下。
 
@@ -67,13 +71,15 @@ PROPERTIES
 "path" = "<file_path>",
 "format" = "<file_format>"
 "enable_recursive_listing" = "{ true | false }"
+"enable_wildcards" = "{ true | false }"
 ```
 
 | 参数                     | 必选 | 说明                                                         |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| path                     | 是       | 数据文件所在的路径。<ul><li> 若文件在 HDFS 上，则路径格式为 `hdfs://<HDFS的IP地址>:<端口号>/<路径>。`其中端口号默认为 8020，如使用默认端口号可忽略不在路径中指定。</li><li> 若文件在 Amazon S3 或其他兼容 S3 协议的对象存储上，则路径格式为 `s3://<bucket名称>/<folder>/`。</li></ul> 填写路径时，需注意以下两点： <ul><li> 如果要遍历路径下所有文件，则设置路径以 '/' 结尾，例如 `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`。查询时，StarRocks 会遍历该路径下所有文件，但不做递归遍历。</li><li> 如果仅需查询路径下单个文件，则设置路径直接指向文件名，例如 `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`。查询时，StarRocks 会直接扫描该文件。</li></ul> |
+| path                     | 是       | 数据文件所在的路径。<ul><li> 若文件在 HDFS 上，则路径格式为 `hdfs://<HDFS的IP地址>:<端口号>/<路径>`。其中端口号默认为 8020，如使用默认端口号可忽略不在路径中指定。</li><li> 若文件在 Amazon S3 或其他兼容 S3 协议的对象存储上，则路径格式为 `s3://<bucket名称>/<folder>/`。</li></ul> 填写路径时，需注意以下两点： <ul><li> 如果要遍历路径下所有文件，则设置路径以 '/' 结尾，例如 `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`。查询时，StarRocks 会遍历该路径下所有文件，但不做递归遍历。</li><li> 如果仅需查询路径下单个文件，则设置路径直接指向文件名，例如 `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`。查询时，StarRocks 会直接扫描该文件。</li></ul>|
 | format                   | 是       | 数据文件格式。取值范围：`parquet`、`orc`、`avro`、`rctext` 或 `rcbinary`、`sequence`。 |
-| enable_recursive_listing | 否       | 是否递归查询路径下所有文件。默认值：`false`。                  |
+| enable_recursive_listing | 否       | 是否递归查询路径下的所有文件。默认值：`true`。取值为 `true` 表示递归遍历；取值为 `false` 表示只读取当前层级中的文件。       |
+| enable_wildcards         | 否       | 是否支持在 `path` 内使用通配符（`*`）。默认值：`false`。举例：`2024-07-*` 用于匹配所有带 `2024-07-` 前缀的文件。该参数自 3.1.9 版本起支持。|
 
 #### `StorageCredentialParams`（可选）
 
@@ -282,4 +288,4 @@ SELECT * FROM t0;
 
 ## 管理文件外部表
 
-您可以执行 [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) 来查询文件外部表的信息和表结构，或者通过 [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除文件外部表。
+您可以执行 [DESC](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 来查询文件外部表的信息和表结构，或者通过 [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除文件外部表。

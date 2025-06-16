@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # upper
 
-## 功能
+
 
 将字符串转换为大写形式。
 

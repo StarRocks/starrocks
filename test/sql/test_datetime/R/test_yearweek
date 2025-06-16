@@ -1,0 +1,101 @@
+-- name: test_yearweek
+select yearweek('2023-12-31', 2), yearweek('2024-01-01', 2);
+-- result:
+202353	202353
+-- !result
+select yearweek('1900-01-01', 0), yearweek('1900-12-31', 0), yearweek('2000-01-01', 0), yearweek('2000-12-31', 0);
+-- result:
+189953	190052	199952	200053
+-- !result
+select yearweek('1900-01-01', 1), yearweek('1900-12-31', 1), yearweek('2000-01-01', 1), yearweek('2000-12-31', 1);
+-- result:
+190001	190101	199952	200052
+-- !result
+select yearweek('1900-01-01', 2), yearweek('1900-12-31', 2), yearweek('2000-01-01', 2), yearweek('2000-12-31', 2);
+-- result:
+189953	190052	199952	200053
+-- !result
+select yearweek('1900-01-01', 3), yearweek('1900-12-31', 3), yearweek('2000-01-01', 3), yearweek('2000-12-31', 3);
+-- result:
+190001	190101	199952	200052
+-- !result
+select yearweek('1900-01-01', 4), yearweek('1900-12-31', 4), yearweek('2000-01-01', 4), yearweek('2000-12-31', 4);
+-- result:
+190001	190101	199952	200101
+-- !result
+select yearweek('1900-01-01', 5), yearweek('1900-12-31', 5), yearweek('2000-01-01', 5), yearweek('2000-12-31', 5);
+-- result:
+190001	190053	199952	200052
+-- !result
+select yearweek('1900-01-01', 6), yearweek('1900-12-31', 6), yearweek('2000-01-01', 6), yearweek('2000-12-31', 6);
+-- result:
+190001	190101	199952	200101
+-- !result
+select yearweek('1900-01-01', 7), yearweek('1900-12-31', 7), yearweek('2000-01-01', 7), yearweek('2000-12-31', 7);
+-- result:
+190001	190053	199952	200052
+-- !result
+select yearweek('1910-01-05', 0), yearweek('1910-12-27', 0), yearweek('2010-01-05', 0), yearweek('2010-12-27', 0);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1910-01-05', 1), yearweek('1910-12-27', 1), yearweek('2010-01-05', 1), yearweek('2010-12-27', 1);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1910-01-05', 2), yearweek('1910-12-27', 2), yearweek('2010-01-05', 2), yearweek('2010-12-27', 2);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1910-01-05', 3), yearweek('1910-12-27', 3), yearweek('2010-01-05', 3), yearweek('2010-12-27', 3);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1910-01-05', 4), yearweek('1910-12-27', 4), yearweek('2010-01-05', 4), yearweek('2010-12-27', 4);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1910-01-05', 5), yearweek('1910-12-27', 5), yearweek('2010-01-05', 5), yearweek('2010-12-27', 5);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1910-01-05', 6), yearweek('1910-12-27', 6), yearweek('2010-01-05', 6), yearweek('2010-12-27', 6);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1910-01-05', 7), yearweek('1910-12-27', 7), yearweek('2010-01-05', 7), yearweek('2010-12-27', 7);
+-- result:
+191001	191052	201001	201052
+-- !result
+select yearweek('1940-01-11', 0), yearweek('1940-12-21', 0), yearweek('2040-01-11', 0), yearweek('2040-12-21', 0);
+-- result:
+194001	194050	204002	204051
+-- !result
+select yearweek('1940-01-11', 1), yearweek('1940-12-21', 1), yearweek('2040-01-11', 1), yearweek('2040-12-21', 1);
+-- result:
+194002	194051	204002	204051
+-- !result
+select yearweek('1940-01-11', 2), yearweek('1940-12-21', 2), yearweek('2040-01-11', 2), yearweek('2040-12-21', 2);
+-- result:
+194001	194050	204002	204051
+-- !result
+select yearweek('1940-01-11', 3), yearweek('1940-12-21', 3), yearweek('2040-01-11', 3), yearweek('2040-12-21', 3);
+-- result:
+194002	194051	204002	204051
+-- !result
+select yearweek('1940-01-11', 4), yearweek('1940-12-21', 4), yearweek('2040-01-11', 4), yearweek('2040-12-21', 4);
+-- result:
+194002	194051	204002	204051
+-- !result
+select yearweek('1940-01-11', 5), yearweek('1940-12-21', 5), yearweek('2040-01-11', 5), yearweek('2040-12-21', 5);
+-- result:
+194002	194051	204002	204051
+-- !result
+select yearweek('1940-01-11', 6), yearweek('1940-12-21', 6), yearweek('2040-01-11', 6), yearweek('2040-12-21', 6);
+-- result:
+194002	194051	204002	204051
+-- !result
+select yearweek('1940-01-11', 7), yearweek('1940-12-21', 7), yearweek('2040-01-11', 7), yearweek('2040-12-21', 7);
+-- result:
+194002	194051	204002	204051
+-- !result

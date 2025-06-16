@@ -19,12 +19,47 @@
 
 namespace starrocks::io {
 
+Status CompressedInputStream::CompressedBuffer::read_with_hint_size(InputStream* f, size_t hint_size) {
+    if (_eof) return Status::EndOfFile("");
+    hint_size = aligned_size(hint_size + MAX_BLOCK_HEADER_SIZE);
+    size_t buffer_size = available();
+    if (buffer_size >= hint_size) return Status::OK();
+
+    if (hint_size > _compressed_data.size()) {
+        // create tmp buffer, copy it from _compressed_data to tmp, and then swap
+        // noted that tmp resize is uninitialized.
+        raw::RawVector<uint8_t> tmp(hint_size);
+        memcpy(tmp.data(), &_compressed_data[_offset], buffer_size);
+        _compressed_data.swap(tmp);
+    } else {
+        // no need to create tmp buffer, just do memmove.
+        memmove(&_compressed_data[0], &_compressed_data[_offset], buffer_size);
+    }
+    _offset = 0;
+    _limit = buffer_size;
+
+    while (_limit < hint_size) {
+        Slice buff(write_buffer());
+        ASSIGN_OR_RETURN(buff.size, f->read(buff.data, buff.size));
+        if (buff.size == 0) {
+            _eof = true;
+            return Status::EndOfFile("");
+        }
+        _limit += buff.size;
+    }
+    return Status::OK();
+}
+
 StatusOr<int64_t> CompressedInputStream::read(void* data, int64_t size) {
     size_t output_len = size;
     size_t output_bytes = 0;
 
     while (output_bytes == 0) {
-        Status st = _compressed_buff.read(_source_stream.get());
+        InputStream* f = _source_stream.get();
+        size_t hint_size = _decompressor->get_compressed_block_size();
+        _decompressor->set_compressed_block_size(0);
+        Status st = _compressed_buff.read_with_hint_size(f, hint_size);
+
         if (!st.ok() && !st.is_end_of_file()) {
             return st;
         } else if (st.is_end_of_file() && _stream_end) {

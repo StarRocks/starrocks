@@ -167,6 +167,15 @@ public:
     template <LogicalType TYPE, bool isNorm>
     DEFINE_VECTORIZED_FN(cosine_similarity);
 
+    template <LogicalType TYPE, bool isNorm>
+    DEFINE_VECTORIZED_FN(cosine_similarity2);
+
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(l2_distance);
+
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(l2_distance2);
+
     /**
     * @param columns: [DoubleColumn]
     * @return BigIntColumn
@@ -215,6 +224,18 @@ public:
      */
     DEFINE_VECTORIZED_FN(truncate_decimal128);
 
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_truncate_decimal);
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_truncate_int);
+    //iceberg_truncate_string is defined as StringFunction::left
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_bucket_int);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_string);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_date);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_datetime);
+    template <typename T>
+    static vector<uint8_t> int_to_byte_array(T value);
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_bucket_decimal);
+
     /**
     * @param: [DoubleColumn]
     * @return: DoubleColumn
@@ -259,6 +280,11 @@ public:
     * @return: DoubleColumn
     */
     DEFINE_VECTORIZED_FN(sqrt);
+    /**
+    * @param: [DoubleColumn]
+    * @return: DoubleColumn
+    */
+    DEFINE_VECTORIZED_FN(cbrt);
     /**
     * @param: [DoubleColumn base, DoubleColumn exp]
     * @return: DoubleColumn

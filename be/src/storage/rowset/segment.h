@@ -45,6 +45,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -86,19 +87,22 @@ public:
                                                    uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
-                                                   bool skip_fill_local_cache = true,
+                                                   const LakeIOOptions& lake_io_opts = {},
                                                    lake::TabletManager* tablet_manager = nullptr);
 
-    [[nodiscard]] static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                                     size_t* footer_length_hint,
-                                                     const FooterPointerPB* partial_rowset_footer);
+    static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                 size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer);
+
+    static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
 
     Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
             TabletSchemaCSPtr tablet_schema, lake::TabletManager* tablet_manager);
 
     ~Segment();
 
-    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                const LakeIOOptions& lake_io_opts);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
@@ -114,16 +118,19 @@ public:
     // the elements in a column of a segment. The iterator starts from the beginning
     // of the column.
     //
-    // @param id The unique identifier of the column.
+    // @param column The column that need to be read.
     // @param path A pointer to the access path of the column.
     // @return A new iterator object for the specified column, or NotFound if the segment does not have the column.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(ColumnUID id, ColumnAccessPath* path);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(const TabletColumn& column, ColumnAccessPath* path);
 
     // Creates a new iterator for a specific column in a segment.
     //
-    // The main difference from `new_iterator` is, if the segment does not have the
-    // column, `new_column_iterator_or_default` will return an iterator that can read
-    // the default value of the column, if there is one.
+    // Difference from `new_iterator`:
+    //  - If the segment does not have the column, `new_column_iterator_or_default` will return an iterator that
+    //    can read the default value of the column, if there is one.
+    //  - If the type of the data stored in the segment file does not match the type of |column|, the iterator
+    //    returned from `new_column_iterator_or_default` will perform type conversion and return data that matches
+    //    the type of |column|.
     //
     // Note: If this column does not have a default value defined, but is nullable, then
     // NULL will be used as the default value.
@@ -182,35 +189,45 @@ public:
 
     const std::string& file_name() const { return _segment_file_info.path; }
 
+    const FileInfo& file_info() const { return _segment_file_info; }
+
     uint32_t num_rows() const { return _num_rows; }
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
+    Status load_index(const LakeIOOptions& lake_io_opts = {});
     bool has_loaded_index() const;
+
+    Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts);
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
     size_t mem_usage() const;
 
-    int64_t get_data_size() const {
-        if (_segment_file_info.size.has_value()) {
-            return _segment_file_info.size.value();
-        }
-        return _fs->get_file_size(_segment_file_info.path).value_or(0);
-    }
+    StatusOr<int64_t> get_data_size() const;
+
+    lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
 
     // read short_key_index, for data check, just used in unit test now
-    [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
+    Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
     // for cloud native tablet metadata cache.
     // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
     // so the segment size in the cache needs to be updated when indexes are loading.
     void update_cache_size();
 
+    bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
+
+    const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
+
     DISALLOW_COPY_AND_MOVE(Segment);
 
+    // for ut test
+    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
 private:
+    friend struct SegmentZoneMapPruner;
+
     struct DummyDeleter {
         void operator()(const TabletSchema*) {}
     };
@@ -238,7 +255,7 @@ private:
         TabletSchemaCSPtr _schema;
     };
 
-    Status _load_index(bool skip_fill_local_cache);
+    Status _load_index(const LakeIOOptions& lake_io_opts);
 
     void _reset();
 
@@ -255,8 +272,12 @@ private:
     size_t _column_index_mem_usage() const;
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                 const LakeIOOptions& lake_io_opts);
     Status _create_column_readers(SegmentFooterPB* footer);
+
+    Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,
+                                              std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
@@ -282,6 +303,8 @@ private:
     PageHandle _sk_index_handle;
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
+
+    std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;

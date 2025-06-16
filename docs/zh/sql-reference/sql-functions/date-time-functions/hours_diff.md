@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # hours_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差多少个小时 (`expr1` − `expr2`)。
 

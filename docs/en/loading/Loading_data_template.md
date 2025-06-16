@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 unlisted: true
 ---
 
@@ -90,7 +90,7 @@ An asynchronous Broker Load process handles making the connection to S3, pulling
 
 ***Note: Processes that involve multiple components or steps may be easier to understand with a diagram. This example includes a diagram that helps describe the steps that happen when a user chooses the Broker Load option.***
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
 2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE).
@@ -161,7 +161,7 @@ This job has four main sections:
 ```SQL
 LOAD LABEL user_behavior
 (
-    DATA INFILE("s3://starrocks-datasets/user_behavior_sample_data.parquet")
+    DATA INFILE("s3://starrocks-examples/user_behavior_sample_data.parquet")
     INTO TABLE user_behavior
     FORMAT AS "parquet"
  )
@@ -251,7 +251,7 @@ Querying directly from S3 using `FILES()` can gives a good preview of the conten
 
 ```sql
 SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_sample_data.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
@@ -294,7 +294,7 @@ USE project;
 
 CREATE TABLE `user_behavior_inferred` AS
 SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_sample_data.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
@@ -382,7 +382,7 @@ After creating the table, you can load it with `INSERT INTO` … `SELECT FROM FI
 ```SQL
 INSERT INTO user_behavior_declared
   SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_sample_data.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
@@ -392,9 +392,9 @@ INSERT INTO user_behavior_declared
 
 ## More information
 
-- For more details on synchronous and asynchronous data loading please see the [overview of data loading](../loading/Loading_intro.md) documentation.
+- For more details on synchronous and asynchronous data loading, see [Loading concepts](./loading_introduction/loading_concepts.md).
 - Learn about how Broker Load supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 - This document only covered IAM user-based authentication. For other options please see [authenticate to AWS resources](../integrations/authenticate_to_aws_resources.md).
 - The [AWS CLI Command Reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html) covers the S3 URI in detail.
 - Learn more about [table design](../table_design/StarRocks_table_design.md).
-- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)

@@ -45,8 +45,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 
 import java.util.List;
 import java.util.Set;
@@ -77,7 +77,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
@@ -116,7 +116,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -138,7 +138,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
@@ -148,7 +148,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
                 if (schema == null) {
                     throw new AnalysisException("Index " + idxId + " does not exist");
                 }
-                bfColumns = olapTable.getCopiedBfColumns();
+                bfColumns = olapTable.getBfColumnNames();
             } else {
                 schema = table.getBaseSchema();
             }
@@ -158,7 +158,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
             }
             return node;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

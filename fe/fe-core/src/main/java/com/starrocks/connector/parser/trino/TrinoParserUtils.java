@@ -27,6 +27,7 @@ import io.trino.sql.tree.CreateTableAsSelect;
 import io.trino.sql.tree.DropTable;
 import io.trino.sql.tree.Explain;
 import io.trino.sql.tree.ExplainAnalyze;
+import io.trino.sql.tree.Insert;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.Statement;
 
@@ -34,15 +35,18 @@ import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.Set;
 
+import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
+
 public class TrinoParserUtils {
     public static StatementBase toStatement(String query, long sqlMode) {
         String trimmedQuery = query.trim();
         Statement statement = TrinoParser.parse(trimmedQuery);
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
-                || statement instanceof CreateTableAsSelect || statement instanceof DropTable) {
+                || statement instanceof CreateTableAsSelect || statement instanceof Insert
+                || statement instanceof DropTable) {
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
-            throw new UnsupportedOperationException("Unsupported statement type: " + statement.getClass().getName());
+            throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
         }
     }
 

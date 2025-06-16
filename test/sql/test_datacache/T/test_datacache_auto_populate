@@ -1,0 +1,13 @@
+-- name: test_datacache_auto_populate
+
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+function: assert_explain_verbose_contains('select col_tinyint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'dataCacheOptions={populate: true}')
+
+drop catalog delta_test_${uuid0};

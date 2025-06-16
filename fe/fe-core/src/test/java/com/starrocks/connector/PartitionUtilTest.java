@@ -32,7 +32,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
@@ -61,6 +61,17 @@ public class PartitionUtilTest {
             new Column("k2", ScalarType.createVarcharType(10)),
             new Column("k3", Type.DOUBLE),
             new Column("k4", Type.INT));
+
+    @Test
+    public void testStringPartitionKeyConvertToDatePartitionKey() {
+        try {
+            PartitionKey partitionKey = createPartitionKey(
+                    Lists.newArrayList("1", "20250225112345", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns);
+            PartitionUtil.convertToDateLiteral(partitionKey.getKeys().get(1));
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
 
     @Test
     public void testCreatePartitionKey() throws Exception {
@@ -144,8 +155,12 @@ public class PartitionUtilTest {
 
     @Test
     public void testToPartitionValues() {
-        String partitionNames = "a=1/b=2/c=3";
-        Assert.assertEquals(Lists.newArrayList("1", "2", "3"), toPartitionValues(partitionNames));
+        Assert.assertEquals(Lists.newArrayList("1", "2", "3"), toPartitionValues("a=1/b=2/c=3"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=1"), toPartitionValues("a=1/b=2=1"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=null"), toPartitionValues("a=1/b=2=null"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=null", "1"), toPartitionValues("a=1/b=2=null/3=1"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=null", ""), toPartitionValues("a=1/b=2=null/3="));
+        Assert.assertEquals(Lists.newArrayList("1", "", "1"), toPartitionValues("a=1/b=/3=1"));
     }
 
     @Test
@@ -242,7 +257,7 @@ public class PartitionUtilTest {
     }
 
     @Test
-    public void testGetPartitionRange(@Mocked HiveTable table) throws UserException {
+    public void testGetPartitionRange(@Mocked HiveTable table) throws StarRocksException {
         Column partitionColumn = new Column("date", Type.DATE);
         List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
                 "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
@@ -255,7 +270,8 @@ public class PartitionUtilTest {
         };
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+            public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                                   ConnectorMetadatRequestContext requestContext) {
                 return partitionNames;
             }
         };
@@ -271,7 +287,8 @@ public class PartitionUtilTest {
             }
         };
 
-        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
+        Map<String, Range<PartitionKey>> partitionMap =
+                PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
         Assert.assertEquals(partitionMap.size(), partitionNames.size());
         Assert.assertTrue(partitionMap.containsKey("p20221202"));
         PartitionKey upperBound = new PartitionKey();

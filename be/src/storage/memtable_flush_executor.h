@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "storage/memtable.h"
 #include "storage/olap_define.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
@@ -53,14 +54,15 @@ class MemTable;
 // the statistic of a certain flush handler.
 // use atomic because it may be updated by multi threads
 struct FlushStatistic {
-    int64_t flush_time_ns = 0;
     int64_t flush_count = 0;
-    int64_t flush_size_bytes = 0;
     int64_t cur_flush_count = 0;
     std::atomic<int64_t> queueing_memtable_num = 0;
+    int64_t pending_time_ns = 0;
+    MemtableStats memtable_stats;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat);
+using SegmentPBPtr = std::unique_ptr<SegmentPB>;
 
 // A thin wrapper of ThreadPoolToken to submit task.
 // For a tablet, there may be multiple memtables, which will be flushed to disk
@@ -75,7 +77,7 @@ public:
             : _flush_token(std::move(flush_pool_token)), _status() {}
 
     Status submit(std::unique_ptr<MemTable> mem_table, bool eos = false,
-                  std::function<void(std::unique_ptr<SegmentPB>, bool)> cb = nullptr);
+                  std::function<void(SegmentPBPtr, bool, int64_t)> cb = nullptr);
 
     // error has happpens, so we cancel this token
     // And remove all tasks in the queue.
@@ -95,15 +97,20 @@ public:
     }
 
     void set_status(const Status& status) {
-        if (status.ok()) return;
+        if (status.ok()) {
+            return;
+        }
+
         std::lock_guard l(_status_lock);
-        if (_status.ok()) _status = status;
+        if (_status.ok()) {
+            _status = status;
+        }
     }
 
 private:
     friend class MemtableFlushTask;
 
-    void _flush_memtable(MemTable* memtable, SegmentPB* segment);
+    void _flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
@@ -132,6 +139,10 @@ public:
     // init should be called after storage engine is opened,
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
+
+    Status init_for_lake_table(const std::vector<DataDir*>& data_dirs);
+
+    static int calc_max_threads_for_lake_table(const std::vector<DataDir*>& data_dirs);
 
     // dynamic update max threads num
     Status update_max_threads(int max_threads);

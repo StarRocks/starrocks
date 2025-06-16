@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 降级 StarRocks
@@ -22,21 +22,18 @@ displayed_sidebar: "Chinese"
 
   出于兼容性和安全原因，我们强烈建议您将 StarRocks 集群按**大版本逐级降级**。例如，要将 StarRocks v2.5 集群降级到 v2.2，需要按照以下顺序降级：v2.5.x --> v2.4.x --> v2.3.x --> v2.2.x。
 
+  :::warning
+
+  升级至 v3.3 后，请勿直接将集群降级至 v3.2.0、v3.2.1 或 v3.2.2，否则会导致元数据丢失。您必须降级到 v3.2.3 或更高版本以避免出现此问题。
+
+  :::
+
 - **重大版本降级**
 
   - 您无法跨版本降级至 v1.19，必须先降级至 v2.0。
   - 您只能将集群从 v3.0 降级到 v2.5.3 以上版本。
     - StarRocks 在 v3.0 版本中升级了 BDB 库。由于 BDB JE 无法回滚，所以降级后您必须继续使用 v3.0 的 BDB 库。
     - 升级至 v3.0 后，集群默认使用新的 RBAC 权限系统。降级后您只能使用 RBAC 权限系统。
-
-> **注意**
->
-> 如果您在升级之后进行了回滚，之后有计划再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免第二次升级时，部分 FE 节点元数据升级失败，建议您在降级完成后执行如下操作：
->
-> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
-> 2. 等待元数据快照文件同步至其他 FE 节点。
->
-> 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes"。
 
 ### 降级流程
 
@@ -52,7 +49,7 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 
 - **通用兼容性配置**
 
-降级前，请关闭 Tablet Clone。
+降级前，请关闭 Tablet Clone。如果您已经关闭 Balancer，可以跳过该步骤。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
@@ -76,13 +73,45 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 
 - **如果您启用了 FQDN 访问**
 
-如果您启用了 FQDN 访问（自 v2.4 起支持），需要降级至 v2.4 之前版本，则必须在降级之前切换到 IP 地址访问。有关详细说明，请参考 [回滚 FQDN](../administration/enable_fqdn.md#回滚)。
+如果您启用了 FQDN 访问（自 v2.4 起支持），需要降级至 v2.4 之前版本，则必须在降级之前切换到 IP 地址访问。有关详细说明，请参考 [回滚 FQDN](../administration/management/enable_fqdn.md#回滚)。
 
 ## 降级 FE
 
 通过降级正确性测试后，您可以先降级 FE 节点。您必须先降级 Follower FE 节点，然后再降级 Leader FE 节点。
 
-1. 进入 FE 节点工作路径，并停止该节点。
+:::note
+
+如需将 v3.3.0 及以上集群降级至 v3.2，需在降级前执行以下操作：
+
+1. 确保降级前的 v3.3 集群中发起的所有 ALTER TABLE SCHEMA CHANGE 事物已完成或取消。
+2. 通过以下命令清理所有事务历史记录：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("history_job_keep_max_second" = "0");
+   ```
+
+3. 通过以下命令确认无历史记录遗留：
+
+   ```SQL
+   SHOW PROC '/jobs/<db>/schema_change';
+   ```
+:::
+
+1. 生成新的元数据快照。
+
+   a. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+
+   b. 通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成：
+
+   ```
+   push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes
+   ```
+
+   > **注意**
+   >
+   > ALTER SYSTEM CREATE IMAGE 语法只在 v2.5.3 及以上版本支持，低版本需要通过重启 Leader FE 的方式触发新的元数据快照。
+
+2. 进入 FE 节点工作路径，并停止该节点。
 
    ```Bash
    # 将 <fe_dir> 替换为 FE 节点的部署目录。
@@ -90,7 +119,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    ./bin/stop_fe.sh
    ```
 
-2. 替换部署文件原有路径 **bin**、**lib** 以及 **spark-dpp** 为旧版本的部署文件。
+3. 替换部署文件原有路径 **bin**、**lib** 以及 **spark-dpp** 为旧版本的部署文件。
 
    ```Bash
    mv lib lib.bak 
@@ -108,28 +137,23 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    > 1. 将 v3.0 部署文件中的**fe/lib/starrocks-bdb-je-18.3.13.jar** 复制到 v2.5 部署文件的 **fe/lib** 路径下。
    > 2. 删除文件 **fe/lib/je-7.\*.jar**。
 
-3. 启动该 FE 节点。
+4. 启动该 FE 节点。
 
    ```Bash
    sh bin/start_fe.sh --daemon
    ```
 
-4. 查看节点是否启动成功。
+5. 查看节点是否启动成功。
 
    ```Bash
    ps aux | grep StarRocksFE
    ```
 
-5. 重复以上步骤降级其他 Follower FE 节点，最后降级 Leader FE 节点。
+6. 重复以上步骤 2~5 降级其他 Follower FE 节点，最后降级 Leader FE 节点。
 
    > **注意**
    >
-   > 如需将 StarRocks v3.0 降级至 v2.5，则必须在降级完成后执行以下步骤：
-   >
-   > 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
-   > 2. 等待元数据快照文件同步至其他 FE 节点。
-   >
-   > 如果不运行该命令，部分降级操作可能会失败。ALTER SYSTEM CREATE IMAGE 命令仅在 v2.5.3 及更高版本支持。
+   > 如果您在升级之后进行了回滚，之后有计划再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免第二次升级时，部分 FE 节点元数据升级失败，建议您在降级完成后再次执行步骤 1，生成新的元数据快照。
 
 ## 降级 BE
 

@@ -36,4 +36,9 @@ public class DecommissionBackendClause extends BackendClause {
     public void setType(DecommissionType type) {
         this.type = type;
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDecommissionBackendClause(this, context);
+    }
 }

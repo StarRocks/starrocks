@@ -47,15 +47,15 @@ public class FilterSelectivityEvaluator {
 
     public static final double NON_SELECTIVITY = 100;
 
-    public static final int IN_CHILDREN_THRESHOLD = 1024;
+    public static int IN_CHILDREN_THRESHOLD = 1024;
 
-    private int unionNumLimit;
+    private final int unionNumLimit;
 
-    private ScalarOperator predicate;
+    private final ScalarOperator predicate;
 
-    private Statistics statistics;
+    private final Statistics statistics;
 
-    private boolean isDecomposePhase;
+    private final boolean isDecomposePhase;
 
     public FilterSelectivityEvaluator(ScalarOperator predicate, Statistics statistics, boolean isDecomposePhase) {
         this.predicate = predicate;
@@ -90,23 +90,15 @@ public class FilterSelectivityEvaluator {
 
     private List<ColumnFilter> decomposeInPredicate(InPredicateOperator predicate) {
         List<ColumnFilter> inFilters = Lists.newArrayList();
-        Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
+        List<ScalarOperator> inList = predicate.getChildren().stream().skip(1).distinct().collect(Collectors.toList());
         ColumnRefOperator column = (ColumnRefOperator) predicate.getChild(0);
-        int totalSize = inSet.size();
+        int totalSize = inList.size();
         int numSubsets = (int) Math.ceil((double) totalSize / IN_CHILDREN_THRESHOLD);
-        List<List<ScalarOperator>> smallInSets = Lists.newArrayList();
         for (int i = 0; i < numSubsets; i++) {
-            smallInSets.add(Lists.newArrayList(column));
-        }
-
-        int currentIndex = 0;
-        for (ScalarOperator element : inSet) {
-            int subsetIndex = currentIndex / IN_CHILDREN_THRESHOLD;
-            smallInSets.get(subsetIndex).add(element);
-            currentIndex++;
-        }
-        for (int i = 0; i < numSubsets; i++) {
-            InPredicateOperator newInPredicate = new InPredicateOperator(false, smallInSets.get(i));
+            List<ScalarOperator> s = Lists.newArrayListWithExpectedSize(IN_CHILDREN_THRESHOLD + 2);
+            s.add(column);
+            s.addAll(inList.subList(i * IN_CHILDREN_THRESHOLD, Math.min((i + 1) * IN_CHILDREN_THRESHOLD, totalSize)));
+            InPredicateOperator newInPredicate = new InPredicateOperator(false, s);
             inFilters.add(evaluateScalarOperator(newInPredicate));
         }
 
@@ -140,7 +132,7 @@ public class FilterSelectivityEvaluator {
             if (left.isColumnRef() && right.isConstantRef()) {
                 selectRatio =
                         estimateColToConstSelectRatio(column, columnStatistic, predicate, (ConstantOperator) right);
-            } else if (left.isColumnRef()) {
+            } else if (left.isColumnRef() && right.isConstant()) {
                 selectRatio = estimateColumnToExprSelectRatio(columnStatistic, predicate);
             } else {
                 // TODO need to process left child is an expr contains only one col?
@@ -193,9 +185,15 @@ public class FilterSelectivityEvaluator {
                 case AND:
                     ColumnFilter leftChild = predicate.getChild(0).accept(this, null);
                     ColumnFilter rightChild = predicate.getChild(1).accept(this, null);
-                    // choose the child with smaller selectRation
-                    return leftChild.compareTo(rightChild) < 0 ? new ColumnFilter(leftChild.selectRatio, predicate) :
-                            new ColumnFilter(rightChild.selectRatio, predicate);
+                    double selectRatio;
+                    if (leftChild.getSelectRatio() < 1 && rightChild.getSelectRatio() < 1) {
+                        selectRatio = leftChild.selectRatio * rightChild.selectRatio;
+                    } else if (leftChild.compareTo(rightChild) < 0) {
+                        selectRatio = leftChild.selectRatio;
+                    } else {
+                        selectRatio = rightChild.selectRatio;
+                    }
+                    return new ColumnFilter(selectRatio, predicate);
 
                 default:
                     return new ColumnFilter(NON_SELECTIVITY, predicate);
@@ -309,13 +307,12 @@ public class FilterSelectivityEvaluator {
 
     public static class ColumnFilter implements Comparable<ColumnFilter> {
 
-        private Double selectRatio;
+        private final Double selectRatio;
 
         // TODO add index info
+        private final Optional<ColumnRefOperator> column;
 
-        private Optional<ColumnRefOperator> column;
-
-        private ScalarOperator filter;
+        private final ScalarOperator filter;
 
         public ColumnFilter(double selectRatio, ScalarOperator filter) {
             this.selectRatio = selectRatio;
@@ -335,6 +332,10 @@ public class FilterSelectivityEvaluator {
 
         public ScalarOperator getFilter() {
             return filter;
+        }
+
+        public Optional<ColumnRefOperator> getColumn() {
+            return column;
         }
 
         public boolean isUnknownSelectRatio() {
@@ -370,13 +371,7 @@ public class FilterSelectivityEvaluator {
 
         @Override
         public int compareTo(@NotNull ColumnFilter o) {
-            if (selectRatio < o.selectRatio) {
-                return -1;
-            } else if (selectRatio > o.selectRatio) {
-                return 1;
-            } else {
-                return 0;
-            }
+            return selectRatio.compareTo(o.selectRatio);
         }
     }
 }

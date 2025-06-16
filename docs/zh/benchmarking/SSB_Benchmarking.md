@@ -1,25 +1,25 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # SSB Flat Table 性能测试
 
 ## 测试结论
 
-Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用的一个星型模型测试集（来源[论文](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)），通过这个测试集合可以方便的对比各种 OLAP 产品的基础性能指标。ClickHouse 通过改写 SSB，将星型模型打平转化成宽表 (flat table)，改造成了一个单表测试 benchmark（参考[链接](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)）。本报告记录了 StarRocks、ClickHouse 和 Apache Druid 在 SSB 单表数据集上的性能对比结果，测试结论如下：
+Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用的一个星型模型测试集（来源[论文](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)），通过这个测试集合可以方便的对比各种 OLAP 产品的基础性能指标。ClickHouse 通过改写 SSB，将星型模型打平转化成宽表 (flat table)，改造成了一个单表测试 benchmark（参考[链接](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema) StarRocks、ClickHouse 和 Apache Druid 在 SSB 单表数据集上的性能对比结果，测试结论如下：
 
 - 在标准测试数据集的 13 个查询上，StarRocks 整体查询性能是 ClickHouse 的 2.1 倍，Apache Druid 的 8.7 倍。
 - StarRocks 启用 Bitmap Index 后整体查询性能是未启用的 1.3 倍，此时整体查询性能是 ClickHouse 的 2.8 倍，Apache Druid 的 11.4 倍。
 
-![img](../assets/7.1-1.png)
+![img](../_assets/7.1-1.png)
 
-本文在 SSB 单表场景下对比了 StarRocks、ClickHouse 和 Apache Druid 的查询性能。采用 3x16core 64GB 内存的云主机，在 6 亿行的数据规模进行测试。
+本文在 SSB 单表场景下对比了 StarRocks、ClickHouse 和 Apache Druid 的查询性能。采用 4x16core 64GB 内存的云主机，在 6 亿行的数据规模进行测试。
 
 ## 测试准备
 
 ### 硬件环境
 
-| 机器     | 3台 阿里云主机                                               |
+| 机器     | 4 台阿里云主机                                               |
 | -------- | ------------------------------------------------------------ |
 | CPU      | 16core Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz <br />Cache size: 36608 KB |
 | 内存     | 64GB                                                         |
@@ -30,9 +30,9 @@ Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用�
 
 StarRocks，ClickHouse 和 Apache Druid 部署在相同配置的机器上分别进行测试。
 
-- StarRocks 部署 1 个 FE 和 3 个 BE。FE 可以单独部署也可以和 BE 混合部署。
-- ClickHouse 部署三个节点后建立分布式表。
-- Apache Druid 三个节点都部署 Data Servers，同时选择一个节点混合部署 Master Servers，另一个节点混合部署 Query Servers。
+- StarRocks 部署 1 个 FE 和 3 个 BE。
+- ClickHouse 部署 3 个节点后建立分布式表。
+- Apache Druid 部署 3 个 Data Servers，同时选择 1 个节点混合部署 Master Servers，另 1 个节点混合部署 Query Servers。
 
 内核版本：Linux 3.10.0-1160.59.1.el7.x86_64
 
@@ -55,7 +55,9 @@ StarRocks，ClickHouse 和 Apache Druid 部署在相同配置的机器上分别�
 
 ### 测试结果
 
-> 查询时间的单位是 ms。StarRocks 与 ClickHouse、Druid 的查询性能对比，分别使用 ClickHouse、Druid 的查询时间除以 StarRocks 的查询时间，结果数字越大代表 StarRocks 性能越好。
+> 查询时间的单位是 ms。
+> 所有查询预热一次，执行三次取平均值作为结果。
+> StarRocks 与 ClickHouse、Druid 的查询性能对比，分别使用 ClickHouse、Druid 的查询时间除以 StarRocks 的查询时间，结果数字越大代表 StarRocks 性能越好。
 
 |      | StarRocks-3.0 | StarRocks-3.0-index | ClickHouse-23.3 | ClickHouse vs StarRocks | Druid-25.0.0 | Druid vs StarRocks |
 | ---- | ------------- | ------------------- | --------------- | ----------------------- | -------------| ------------------ |
@@ -76,7 +78,7 @@ StarRocks，ClickHouse 和 Apache Druid 部署在相同配置的机器上分别�
 
 ## 测试步骤
 
-ClickHouse 的建表导入参考 [官方文档](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)，StarRocks 的数据生成导入流程如下：
+ClickHouse 的建表导入参考 [官方文档](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema) 的数据生成导入流程如下：
 
 ### 生成数据
 

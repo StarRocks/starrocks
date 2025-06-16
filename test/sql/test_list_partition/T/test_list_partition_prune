@@ -1,0 +1,64 @@
+-- name: test_list_partition_prune_on_ne
+
+CREATE TABLE partitions2_keys311 (
+undef_signed_not_null varchar(10) NOT NULL,
+pk int(11) NULL,
+col_int_undef_signed_not_null int(11) NOT NULL,
+col_bigint_undef_signed_not_null bigint(20) NOT NULL,
+col_date_undef_signed_not_null date NOT NULL,
+col_date_undef_signed_not_null2 date NOT NULL
+)
+ENGINE=OLAP
+DUPLICATE KEY(undef_signed_not_null, pk)
+PARTITION BY LIST(undef_signed_not_null)(
+PARTITION p1 VALUES IN ('n', 'o', 'p', 'q', 'r', 's', 't', 'u'),
+PARTITION p2 VALUES IN ('v', 'w', 'x', 'y', 'z'),
+PARTITION p0 VALUES IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm')
+)
+DISTRIBUTED BY HASH(pk) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into partitions2_keys311(pk,col_int_undef_signed_not_null,col_bigint_undef_signed_not_null,col_date_undef_signed_not_null,col_date_undef_signed_not_null2,undef_signed_not_null) values (0,-12,8,"2023-12-14","2023-12-09",'v'),(1,8,6,"2023-12-12","2023-12-15",'k'),(2,-12,8,"2023-12-20","2023-12-19",'j'),(3,1,-1,"2023-12-16","2023-12-09",'l'),(4,9,3,"2023-12-12","2023-12-18",'p'),(5,-1,6,"2023-12-18","2023-12-09",'l'),(6,-1,-1,"2023-12-18","2023-12-14",'y'),(7,-1,4,"2023-12-09","2023-12-15",'r'),(8,-1,-1,"2023-12-12","2023-12-17",'g'),(9,-12,-1,"2023-12-10","2023-12-18",'h'),(10,8,2,"2023-12-19","2023-12-11",'z'),(11,6,-1,"2023-12-20","2023-12-11",'w'),(12,-12,-1,"2023-12-15","2023-12-09",'n'),(13,-1,-12,"2023-12-16","2023-12-13",'e'),(14,0,2,"2023-12-19","2023-12-20",'g'),(15,0,-1,"2023-12-11","2023-12-10",'b'),(16,-12,0,"2023-12-09","2023-12-11",'b'),(17,3,9,"2023-12-09","2023-12-11",'l'),(18,-12,9,"2023-12-10","2023-12-17",'b'),(19,-1,9,"2023-12-16","2023-12-20",'d'),(20,8,-1,"2023-12-13","2023-12-20",'e'),(21,-1,-12,"2023-12-15","2023-12-19",'o'),(22,2,1,"2023-12-09","2023-12-11",'o'),(23,2,-12,"2023-12-18","2023-12-09",'c'),(24,-1,8,"2023-12-20","2023-12-15",'v'),(25,-1,-12,"2023-12-10","2023-12-14",'r'),(26,-12,-12,"2023-12-19","2023-12-13",'u'),(27,-12,-12,"2023-12-10","2023-12-14",'z'),(28,8,-1,"2023-12-13","2023-12-14",'v'),(29,1,4,"2023-12-16","2023-12-16",'k'),(30,-12,-1,"2023-12-16","2023-12-10",'c'),(31,9,8,"2023-12-11","2023-12-13",'d'),(32,3,7,"2023-12-12","2023-12-18",'y'),(33,2,-1,"2023-12-09","2023-12-15",'p'),(34,2,-1,"2023-12-19","2023-12-18",'n'),(35,6,6,"2023-12-19","2023-12-17",'d'),(36,9,6,"2023-12-10","2023-12-11",'z'),(37,8,8,"2023-12-20","2023-12-14",'k'),(38,-1,4,"2023-12-20","2023-12-11",'i'),(39,2,1,"2023-12-11","2023-12-18",'m'),(40,2,-1,"2023-12-11","2023-12-11",'q'),(41,2,-1,"2023-12-10","2023-12-11",'k'),(42,-1,-1,"2023-12-14","2023-12-12",'k'),(43,-12,6,"2023-12-20","2023-12-14",'a'),(44,3,2,"2023-12-20","2023-12-20",'c'),(45,8,6,"2023-12-16","2023-12-17",'k'),(46,5,-12,"2023-12-17","2023-12-13",'f'),(47,-12,1,"2023-12-14","2023-12-09",'w'),(48,7,6,"2023-12-15","2023-12-13",'q'),(49,7,4,"2023-12-09","2023-12-09",'v'),(50,8,-1,"2023-12-16","2023-12-14",'a'),(51,-1,5,"2023-12-10","2023-12-20",'a'),(52,-12,-1,"2023-12-17","2023-12-18",'f'),(53,7,5,"2023-12-19","2023-12-12",'a'),(54,-1,0,"2023-12-10","2023-12-09",'b'),(55,1,8,"2023-12-11","2023-12-17",'a'),(56,7,-1,"2023-12-15","2023-12-19",'l'),(57,6,7,"2023-12-09","2023-12-15",'o'),(58,2,2,"2023-12-09","2023-12-11",'z'),(59,-12,0,"2023-12-17","2023-12-10",'d'),(60,3,4,"2023-12-10","2023-12-18",'w'),(61,1,1,"2023-12-11","2023-12-12",'g'),(62,-12,8,"2023-12-11","2023-12-12",'y'),(63,-1,4,"2023-12-20","2023-12-18",'f'),(64,9,-12,"2023-12-13","2023-12-19",'h'),(65,-1,-1,"2023-12-10","2023-12-17",'o'),(66,2,8,"2023-12-19","2023-12-15",'l'),(67,0,-12,"2023-12-16","2023-12-18",'u'),(68,1,-1,"2023-12-13","2023-12-17",'y'),(69,7,9,"2023-12-10","2023-12-15",'m'),(70,2,0,"2023-12-11","2023-12-20",'r'),(71,-12,7,"2023-12-16","2023-12-11",'z'),(72,5,8,"2023-12-11","2023-12-19",'y'),(73,9,8,"2023-12-18","2023-12-20",'t'),(74,-1,6,"2023-12-19","2023-12-17",'r'),(75,8,0,"2023-12-12","2023-12-15",'q'),(76,5,-12,"2023-12-19","2023-12-14",'m'),(77,4,9,"2023-12-10","2023-12-09",'w'),(78,-12,-1,"2023-12-14","2023-12-14",'z'),(79,-1,5,"2023-12-12","2023-12-10",'r'),(80,-1,3,"2023-12-14","2023-12-15",'r'),(81,-12,-1,"2023-12-14","2023-12-19",'q'),(82,1,-1,"2023-12-12","2023-12-13",'x'),(83,4,9,"2023-12-17","2023-12-15",'k'),(84,0,-12,"2023-12-13","2023-12-12",'e'),(85,3,0,"2023-12-10","2023-12-11",'y'),(86,0,7,"2023-12-10","2023-12-13",'z'),(87,8,9,"2023-12-15","2023-12-15",'q'),(88,2,-1,"2023-12-17","2023-12-20",'k'),(89,8,2,"2023-12-17","2023-12-20",'z'),(90,8,-12,"2023-12-15","2023-12-20",'t'),(91,-1,-12,"2023-12-11","2023-12-14",'u'),(92,1,-1,"2023-12-18","2023-12-20",'z'),(93,1,6,"2023-12-12","2023-12-17",'h'),(94,9,1,"2023-12-10","2023-12-12",'x'),(95,4,7,"2023-12-16","2023-12-18",'r'),(96,2,9,"2023-12-20","2023-12-14",'j'),(97,7,-1,"2023-12-13","2023-12-16",'k'),(98,-12,-1,"2023-12-17","2023-12-10",'v'),(99,7,-1,"2023-12-13","2023-12-12",'w');
+
+SELECT count(*) FROM partitions2_keys311 AS table1 RIGHT JOIN partitions2_keys311 AS table2 ON table2.undef_signed_not_null <=> table2.undef_signed_not_null AND table1.col_bigint_undef_signed_not_null = table1.col_int_undef_signed_not_null WHERE table2.undef_signed_not_null = table2.undef_signed_not_null AND table2.undef_signed_not_null != 'j';
+
+
+CREATE TABLE partitions_multi_column_1 (
+    c1 int NOT NULL,
+    c2 int NOT NULL,
+    c3 int
+)
+PARTITION BY (c1, c2);
+
+INSERT INTO partitions_multi_column_1 VALUES(1,1,1);
+INSERT INTO partitions_multi_column_1 VALUES(2,2,2);
+INSERT INTO partitions_multi_column_1 VALUES(3,3,3);
+
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2=1;
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2<>1;
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=1;
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2<>1;
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND TRUE;
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE TRUE AND c2=1 ;
+
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2=1', 'partitions=1/3')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2<>1', 'EMPTYSET')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=1', 'EMPTYSET')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2<>1', 'partitions=2/3')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND TRUE', 'partitions=1/3')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE TRUE AND c2=1', 'partitions=1/3')
+
+INSERT INTO partitions_multi_column_1 VALUES(1,2,4);
+INSERT INTO partitions_multi_column_1 VALUES(2,3,5);
+INSERT INTO partitions_multi_column_1 VALUES(3,4,6);
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2<>1', 'partitions=1/6')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=1', 'EMPTYSET')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=2', 'partitions=1/6')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND TRUE', 'partitions=2/6')
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE TRUE AND c2=1', 'partitions=1/6')

@@ -48,7 +48,7 @@ public class ShowAlterStmtAnalyzer {
         new ShowAlterStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowAlterStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ShowAlterStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 
@@ -68,7 +68,7 @@ public class ShowAlterStmtAnalyzer {
 
         private void handleShowAlterTable(ShowAlterStmt statement, ConnectContext context) throws SemanticException {
             // build proc path
-            @Nonnull Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+            @Nonnull Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
             ShowAlterStmt.AlterType type = statement.getType();
             StringBuilder sb = new StringBuilder();
             sb.append("/jobs/");
@@ -102,7 +102,7 @@ public class ShowAlterStmtAnalyzer {
             }
             statement.setDbName(dbName);
             // Check db.
-            if (context.getGlobalStateMgr().getDb(dbName) == null) {
+            if (context.getGlobalStateMgr().getLocalMetastore().getDb(dbName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
 

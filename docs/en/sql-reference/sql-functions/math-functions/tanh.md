@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # tanh
 
-## Description
+
 
 Computes the hyperbolic tangent of the argument.
 

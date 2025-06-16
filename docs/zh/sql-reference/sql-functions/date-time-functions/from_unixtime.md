@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # from_unixtime
 
-## 功能
+
 
 将 UNIX 时间戳转化为对应的时间格式。返回的时间格式由 `string_format` 指定，默认为 `yyyy-MM-dd HH:mm:ss`，也支持 [date_format](./date_format.md) 中的格式。
 
@@ -19,7 +19,7 @@ displayed_sidebar: "Chinese"
 %s：秒。例：59，01
 ```
 
-该函数受时区影响，具体参见 [设置时区](../../../administration/timezone.md)。
+该函数受时区影响，具体参见 [设置时区](../../../administration/management/timezone.md)。
 
 ## 语法
 

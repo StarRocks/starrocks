@@ -74,6 +74,17 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     _estimate_scan_row_bytes();
 
+    if (tnode.__isset.lake_scan_node) {
+        if (tnode.lake_scan_node.__isset.enable_topn_filter_back_pressure &&
+            tnode.lake_scan_node.enable_topn_filter_back_pressure) {
+            _enable_topn_filter_back_pressure = true;
+            _back_pressure_max_rounds = tnode.lake_scan_node.back_pressure_max_rounds;
+            _back_pressure_num_rows = tnode.lake_scan_node.back_pressure_num_rows;
+            _back_pressure_throttle_time = tnode.lake_scan_node.back_pressure_throttle_time;
+            _back_pressure_throttle_time_upper_bound = tnode.lake_scan_node.back_pressure_throttle_time_upper_bound;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -109,6 +120,9 @@ int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
 }
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
+
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
     bool stream_data_source = _data_source_provider->stream_data_source();
@@ -179,9 +193,13 @@ public:
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
+        connector_scan_node_open_limit.fetch_add(1, std::memory_order_relaxed);
         return Status::OK();
     }
-    void close(RuntimeState* state) { _data_source->close(state); }
+    void close(RuntimeState* state) {
+        _data_source->close(state);
+        connector_scan_node_open_limit.fetch_sub(1, std::memory_order_relaxed);
+    }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
@@ -272,9 +290,6 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRange& scan_range) {
-    if (scan_range.__isset.broker_scan_range) {
-        scan_range.broker_scan_range.params.__set_non_blocking_read(false);
-    }
     connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range);
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
@@ -384,7 +399,7 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
     const TQueryOptions& query_options = runtime_state()->query_options();
     if (query_options.query_type == TQueryType::LOAD && query_options.load_job_type == TLoadJobType::STREAM_LOAD &&
         config::enable_streaming_load_thread_pool) {
-        VLOG(1) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
+        VLOG(2) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
@@ -441,7 +456,7 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
                 return true;
             }
         }
-        VLOG(1) << "Failed to submit scanner for streaming load with block mode, "
+        VLOG(2) << "Failed to submit scanner for streaming load with block mode, "
                 << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", first status: " << status
                 << ", last status: " << block_status;
         // always return true for blockable which is same as that in _submit_scanner
@@ -659,7 +674,7 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
         // it means data source provider does not support reading by scan ranges.
         // So here we insert a single placeholder, to force data source provider
         // to create at least one data source
-        _scan_ranges.emplace_back(TScanRangeParams());
+        _scan_ranges.emplace_back();
     }
     return Status::OK();
 }
@@ -683,10 +698,9 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
-    _data_source_provider->peek_scan_ranges(scan_ranges);
-    return ScanNode::convert_scan_range_to_morsel_queue(scan_ranges, node_id, pipeline_dop,
-                                                        enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-                                                        num_total_scan_ranges);
+    return _data_source_provider->convert_scan_range_to_morsel_queue(
+            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            num_total_scan_ranges);
 }
 
 } // namespace starrocks

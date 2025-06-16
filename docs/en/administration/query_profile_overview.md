@@ -1,10 +1,13 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+keywords: ['profile', 'query']
 ---
 
 # Query Profile Overview
 
 This topic introduces how to view and analyze the Query Profile. The Query Profile records execution information for all working nodes involved in a query. You can quickly identify bottlenecks affecting the query performance through Query Profile.
+
+From v3.3.0 onwards, StarRocks supports providing Query Profile for data loading with INSERT INTO FILES() and Broker Load. For details of the metrics involved, see [OlapTableSink Operator](./query_profile_details.md#olaptablesink-operator).
 
 ## Enable Query Profile
 
@@ -16,10 +19,17 @@ SET enable_profile = true;
 
 ### Enable Query Profile for Slow Queries
 
-It is not recommended to enable Query Profile in a production environment on a global, long-term basis. This is because the data collection and processing of Query Profile may impose additional burdens on the system. However, if you need to capture and analyze slow queries, you can enable Query Profile only for slow queries. This can be achieved by setting the variable `big_query_profile_second_threshold` to an integer greater than `0`. For example, if this variable is set to `30`, it means that only queries with an execution time exceeding 30 seconds will trigger Query Profile. This ensures system performance while effectively monitoring slow queries.
+It is not recommended to enable Query Profile in a production environment on a global, long-term basis. This is because the data collection and processing of Query Profile may impose additional burdens on the system. However, if you need to capture and analyze slow queries, you can enable Query Profile only for slow queries. This can be achieved by setting the variable `big_query_profile_threshold` to a time duration greater than `0s`. For example, if this variable is set to `30s`, it means that only queries with an execution time exceeding 30 seconds will trigger Query Profile. This ensures system performance while effectively monitoring slow queries.
 
 ```SQL
-SET global big_query_profile_second_threshold = 30;
+-- 30 seconds
+SET global big_query_profile_threshold = '30s';
+
+-- 500 milliseconds
+SET global big_query_profile_threshold = '500ms';
+
+-- 60 minutes
+SET global big_query_profile_threshold = '60m';
 ```
 
 ### Enable Runtime Query Profile
@@ -36,13 +46,48 @@ Runtime Query Profile has the same format and content as regular Query Profile. 
 
 ### Configure Query Profile Behavior
 
-| Configuration Type | Configuration Item | Valid Values | Default Value | Description |
-| -- | -- | -- | -- | -- |
-| Session Variable | enable_profile | true/false | false | Whether to enable Query Profile. `true` means to enable this feature. |
-| Session Variable | pipeline_profile_level | 1/2 | 1 | Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. |
-| Session Variable | runtime_profile_report_interval | Positive integer | 10 | The report interval of Runtime Query Profile. Unit: second. |
-| Session Variable | big_query_profile_second_threshold | Integer | 0 | If the execution time of a big query excceds this value, Query Profile is automatically enbaled for this query. Setting this item to `0` indicates this feature is disabled. Unit: second. |
-| FE Dynamic Configuration Item | enable_statistics_collect_profile | true/false | false | Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. |
+The configuration settings are either session variables or FE dynamic configuration items.
+
+####  Session Variable 
+
+- **Configuration item**:  enable_profile 
+- **Valid values**:  true/false 
+- **Default value**:  false 
+- **Description**:  Whether to enable Query Profile. `true` means to enable this feature. 
+
+
+####  Session Variable 
+
+- **Configuration item**:  pipeline_profile_level 
+- **Valid values**:  1/2 
+- **Default value**:  1 
+- **Description**:  Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. 
+
+
+####  Session Variable 
+
+- **Configuration item**:  runtime_profile_report_interval 
+- **Valid values**:  Positive integer 
+- **Default value**:  10 
+- **Description**:  The report interval of Runtime Query Profile. Unit: second. 
+
+
+####  Session Variable 
+
+- **Configuration item**:  big_query_profile_threshold 
+- **Valid values**:  String 
+- **Default value**:  `0s` 
+- **Description**:  If the execution time of a big query exceeds this value, Query Profile is automatically enabled for this query. Setting this item to `0s` indicates this feature is disabled. Its value can be represented by a integral number followed by a unit, where the units can be `ms`, `s`, `m`. 
+
+
+####  FE Dynamic Configuration Item 
+
+- **Configuration item**:  enable_statistics_collect_profile 
+- **Valid values**:  true/false 
+- **Default value**:  false 
+- **Description**:  Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. 
+
+
 
 ### Obtain Query Profile via Web UI
 
@@ -52,17 +97,17 @@ Follow these steps to obtain Query Profile:
 2. On the page that appears, click **queries** in the top navigation.
 3. In the **Finished Queries** list, select the query you want to analyze and click the link in the **Profile** column.
 
-![img](../assets/profile-1.png)
+![img](../_assets/profile-1.png)
 
 You will be redirected to the detailed page of the selected Query Profile.
 
-![img](../assets/profile-2.png)
+![img](../_assets/profile-2.png)
 
 ### Obtain Query Profile via get_query_profile
 
 The following example shows how to obtain Query Profile via the function get_query_profile:
 
-```Plain
+```sql
 -- Enable the profiling feature.
 set enable_profile = true;
 -- Run a simple query.

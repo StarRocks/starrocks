@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # radians
 
-## Description
+
 
 Converts `x` from an angle to a radian.
 

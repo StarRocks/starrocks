@@ -1,0 +1,214 @@
+-- name: test_phased_schedule
+set enable_phased_scheduler = true;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `small_table1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `small_table2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `small_table3` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+create table empty_t like t0;
+-- result:
+-- !result
+create table TMP like t0;
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into t0 values (null,null,null,null);
+-- result:
+-- !result
+insert into small_table1 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100));
+-- result:
+-- !result
+insert into small_table2 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  2));
+-- result:
+-- !result
+insert into small_table3 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  10));
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+40961
+-- !result
+select count(*) from t1;
+-- result:
+0
+-- !result
+select count(*) from empty_t;
+-- result:
+0
+-- !result
+select count(*) from small_table1;
+-- result:
+100
+-- !result
+set phased_scheduler_max_concurrency = 1;
+-- result:
+-- !result
+insert into TMP select * from small_table2 s1 union all select * from small_table2 s2 union all select * from small_table2 s3 union all select * from small_table2 s4 union all select * from small_table2 s4 union all select * from small_table2 s5;
+-- result:
+-- !result
+select count(*) from TMP;
+-- result:
+12
+-- !result
+truncate table TMP;
+-- result:
+-- !result
+select * from small_table2 s1 union all select * from small_table2 s2 union all select * from small_table2 s3 union all select * from small_table2 s4 union all select * from small_table2 s4 union all select * from small_table2 s5;
+-- result:
+1	1	1	1
+2	2	2	2
+1	1	1	1
+2	2	2	2
+1	1	1	1
+2	2	2	2
+1	1	1	1
+2	2	2	2
+1	1	1	1
+2	2	2	2
+1	1	1	1
+2	2	2	2
+-- !result
+select c0,c1,c2 from small_table2 s1 group by 1,2,3 union all select c0,c1,c2 from small_table2 s2 group by 1,2,3  union all select c0,c1,c2 from small_table2 s3 group by 1,2,3  union all select c0,c1,c2 from small_table2 s4 group by 1,2,3 union all select c0,c1,c2 from small_table2 s4 group by 1,2,3 union all select c0,c1,c2 from small_table2 s5 group by 1,2,3;
+-- result:
+2	2	2
+1	1	1
+2	2	2
+1	1	1
+2	2	2
+1	1	1
+2	2	2
+1	1	1
+2	2	2
+1	1	1
+2	2	2
+1	1	1
+-- !result
+select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0;
+-- result:
+2
+-- !result
+select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join empty_t s3 on s1.c0 = s3.c0;
+-- result:
+0
+-- !result
+select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join small_table3 s3 on s1.c0 = s3.c0 where s3.c3 = 0;
+-- result:
+0
+-- !result
+select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join small_table3 s3 on s1.c0 = s3.c0 where s3.c1 = 0;
+-- result:
+0
+-- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l join [bucket] t0 r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+-- result:
+40960	40960
+-- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l join agged_table r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+-- result:
+40960	40960
+-- !result
+with agged_table as ( select distinct c2 as c0, c3 as c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l join agged_table r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+-- result:
+40960	40960
+-- !result
+with agged_table as ( select distinct c0,c1 from (select l.c0, r.c1 from t0 l join t1 r on l.c3=r.c3)t) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l join agged_table r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+-- result:
+0	0
+-- !result
+with agged_table as ( select distinct c0,c1 from (select l.c0, r.c1 from t0 l join t1 r on l.c1=r.c1)t) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l join agged_table r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+-- result:
+0	0
+-- !result
+select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join small_table3 s3 on s1.c0 = s3.c0 join small_table1 s4 on s1.c0 = s4.c0 join small_table2 s5 on s1.c0 = s5.c0 join small_table3 s6 on s1.c0 = s6.c0 join small_table1 s7 on s1.c0 = s7.c0 join small_table2 s8 on s1.c0 = s8.c0 join small_table3 s9 on s1.c0 = s9.c0 join small_table1 s10 on s1.c0 = s10.c0;
+-- result:
+2
+-- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(*), sum(c0),sum(c1) from (select * from agged_table union all select l.c1, l.c0 from agged_table l join t0 r on l.c0=r.c2) tb;
+-- result:
+81921	1677762560.0	1677762560.0
+-- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(*), sum(c0),sum(c1) from (select l.c1, l.c0 from agged_table l join t0 r on l.c0=r.c2 union all select * from agged_table) tb;
+-- result:
+81921	1677762560.0	1677762560.0
+-- !result

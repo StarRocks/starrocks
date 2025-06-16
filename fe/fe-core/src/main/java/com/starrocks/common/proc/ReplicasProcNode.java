@@ -36,9 +36,19 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.Backend;
 
 import java.util.Arrays;
@@ -58,18 +68,42 @@ public class ReplicasProcNode implements ProcNodeInterface {
             .add("CompactionStatus").add("IsErrorState")
             .build();
 
-    private long tabletId;
-    private List<Replica> replicas;
+    private final long tabletId;
+    private final List<Replica> replicas;
+    private final Database db;
+    private final OlapTable table;
 
     public ReplicasProcNode(long tabletId, List<Replica> replicas) {
+        this.db = null;
+        this.table = null;
+        this.tabletId = tabletId;
+        this.replicas = replicas;
+    }
+
+    public ReplicasProcNode(Database db, OlapTable table, long tabletId, List<Replica> replicas) {
+        this.db = db;
+        this.table = table;
         this.tabletId = tabletId;
         this.replicas = replicas;
     }
 
     @Override
     public ProcResult fetchResult() {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        Boolean hideIpPort = false;
+        if (db != null && table != null) {
+            Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
+                    ConnectContext.get(), db.getFullName(), table);
+            if (!privResult.first) {
+                ConnectContext connectContext = ConnectContext.get();
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
+            }
+            hideIpPort = privResult.second;
+        }
 
+        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         for (Replica replica : replicas) {
@@ -77,14 +111,11 @@ public class ReplicasProcNode implements ProcNodeInterface {
             String compactionUrl;
             Backend backend = backendMap.get(replica.getBackendId());
             if (backend != null) {
-                metaUrl = String.format("http://%s:%d/api/meta/header/%d",
-                        backend.getHost(),
-                        backend.getHttpPort(),
-                        tabletId);
+                String hostPort = hideIpPort ? "*:0" :
+                        NetUtils.getHostPortInAccessibleFormat(backend.getHost(), backend.getHttpPort());
+                metaUrl = String.format("http://" + hostPort + "/api/meta/header/%d", tabletId);
                 compactionUrl = String.format(
-                        "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
-                        backend.getHost(),
-                        backend.getHttpPort(),
+                        "http://" + hostPort + "/api/compaction/show?tablet_id=%d&schema_hash=%d",
                         tabletId,
                         replica.getSchemaHash());
             } else {

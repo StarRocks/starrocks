@@ -44,15 +44,18 @@ public:
 
     std::string to_string() const;
 
-    std::vector<ColumnUniquePtr> pk_cols;
+    std::vector<MutableColumnPtr> pk_cols;
 
 private:
     Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
 
     UpdateManager* _update_manager = nullptr;
     size_t _memory_usage = 0;
+    // to be destructed after segment iters
+    OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;
     int64_t _tablet_id = 0;
+    std::mutex _state_lock;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const CompactionState& o) {

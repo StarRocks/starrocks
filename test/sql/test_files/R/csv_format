@@ -1,0 +1,59 @@
+-- name: test_csv_format
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 52. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 34. OK num: 1(upload 1 files).
+-- !result
+
+create table t1 as select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+-- result:
+4	Tom	30.4	1
+5	Jerry	40.8	0
+1	Julia	20.2	1
+2	Andy	21.3	0
+3	Joke	22.4	1
+-- !result
+
+select $3 + 1, $2 from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+-- result:
+31.4	Tom
+41.8	Jerry
+21.2	Julia
+22.3	Andy
+23.4	Joke
+-- !result
+
+desc t1;
+-- result:
+$1	bigint	YES	true	None	
+$2	varchar(1048576)	YES	true	None	
+$3	decimal(38,9)	YES	false	None	
+$4	boolean	YES	false	None	
+-- !result
+
+desc files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+-- result:
+$1	bigint	YES
+$2	varchar(1048576)	YES
+$3	double	YES
+$4	boolean	YES
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

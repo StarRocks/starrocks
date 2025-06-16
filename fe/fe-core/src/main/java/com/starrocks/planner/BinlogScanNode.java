@@ -26,7 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.StreamSourceType;
@@ -93,7 +93,7 @@ public class BinlogScanNode extends ScanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         super.init(analyzer);
     }
 
@@ -102,7 +102,7 @@ public class BinlogScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
         if (isFinalized) {
             return;
         }
@@ -126,9 +126,9 @@ public class BinlogScanNode extends ScanNode {
     }
 
     // TODO: support partition prune and bucket prune
-    public void computeScanRanges() throws UserException {
+    public void computeScanRanges() throws StarRocksException {
         scanRanges = new ArrayList<>();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         long localBeId = -1;
         long dbId = -1;
         String dbName = null;
@@ -141,7 +141,7 @@ public class BinlogScanNode extends ScanNode {
                 if (dbId == -1) {
                     TabletMeta meta = invertedIndex.getTabletMeta(tablet.getId());
                     dbId = meta.getDbId();
-                    dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
+                    dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
                 }
 
                 long tabletId = tablet.getId();
@@ -167,11 +167,11 @@ public class BinlogScanNode extends ScanNode {
                 List<Replica> localReplicas = Lists.newArrayList();
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas, visibleVersion, localBeId, schemaHash);
                 if (CollectionUtils.isEmpty(allQueryableReplicas)) {
-                    throw new UserException("No queryable replica for tablet " + tabletId);
+                    throw new StarRocksException("No queryable replica for tablet " + tabletId);
                 }
                 for (Replica replica : allQueryableReplicas) {
                     Backend backend = Preconditions.checkNotNull(
-                            GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()),
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId()),
                             "backend not found: " + replica.getBackendId());
                     scanBackendIds.add(backend.getId());
                     TScanRangeLocation replicaLocation = new TScanRangeLocation(backend.getAddress());
@@ -190,10 +190,6 @@ public class BinlogScanNode extends ScanNode {
         return scanRanges;
     }
 
-    @Override
-    public int getNumInstances() {
-        return scanRanges.size();
-    }
 
     @Override
     public boolean canDoReplicatedJoin() {

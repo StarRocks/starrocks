@@ -71,5 +71,6 @@ public class CachingRemoteFileIOTest {
         Assert.assertEquals(1, presentRemoteFileInfos.size());
 
         queryLevelCache.updateRemoteFiles(pathKey);
+        queryLevelCache.invalidatePartition(pathKey);
     }
 }
