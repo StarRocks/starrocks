@@ -53,7 +53,8 @@ enum LogicalType {
     TYPE_OBJECT = 25,
 
     // Added by StarRocks
-
+    TYPE_DECIMAL256 = 26,
+    TYPE_INT256 = 27,
     // Reserved some field for commutiy version
 
     TYPE_NULL = 42,
@@ -99,6 +100,8 @@ template <>
 inline constexpr LogicalType DelegateType<TYPE_DECIMAL64> = TYPE_BIGINT;
 template <>
 inline constexpr LogicalType DelegateType<TYPE_DECIMAL128> = TYPE_LARGEINT;
+template <>
+inline constexpr LogicalType DelegateType<TYPE_DECIMAL256> = TYPE_INT256;
 
 inline LogicalType delegate_type(LogicalType type) {
     switch (type) {
@@ -108,6 +111,8 @@ inline LogicalType delegate_type(LogicalType type) {
         return TYPE_BIGINT;
     case TYPE_DECIMAL128:
         return TYPE_LARGEINT;
+    case TYPE_DECIMAL256:
+        return TYPE_INT256;
     default:
         return type;
     }
@@ -132,7 +137,7 @@ constexpr bool is_object_type(LogicalType type) {
 }
 
 inline bool is_decimalv3_field_type(LogicalType type) {
-    return type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128;
+    return type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256;
 }
 
 LogicalType string_to_logical_type(const std::string& type_str);
@@ -156,6 +161,7 @@ inline bool is_scalar_field_type(LogicalType type) {
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
         return false;
     default:
         return true;
@@ -242,6 +248,7 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
+    case TYPE_DECIMAL256: /* 27 */
     case TYPE_JSON:
         return true;
     default:
@@ -311,7 +318,8 @@ VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
 VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
 VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)
 VALUE_GUARD(LogicalType, Decimal128LTGuard, lt_is_decimal128, TYPE_DECIMAL128)
-VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+            TYPE_DECIMAL256)
 VALUE_GUARD(LogicalType, SumDecimal64LTGuard, lt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
 VALUE_GUARD(LogicalType, HllLTGuard, lt_is_hll, TYPE_HLL)
 VALUE_GUARD(LogicalType, ObjectLTGuard, lt_is_object, TYPE_OBJECT)
