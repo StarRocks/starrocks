@@ -256,7 +256,7 @@ True
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-11-20' and num > 4 order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:

@@ -34,6 +34,11 @@ function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY 
 
 function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
 function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+
 SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;
 SELECT k1,max(k2) FROM t1 GROUP BY k1 order by 1;
 
