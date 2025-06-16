@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# What is StarRocks?
+# StarRocks とは？
 
 StarRocks は、次世代の超高速な大規模並列処理 (MPP) データベースであり、企業向けにリアルタイム分析を容易にします。大規模なサブセカンドクエリを実現するために設計されています。
 

@@ -64,6 +64,7 @@ public:
 private:
     static int _execute_tasks(void* meta, bthread::TaskIterator<Task>& iter);
 
+    Status _create_and_wait_async_task(StreamLoadContext* data_ctx);
     Status _execute_write(AsyncAppendDataContext* async_ctx);
     Status _write_data_to_pipe(AsyncAppendDataContext* data_ctx);
     Status _send_rpc_request(StreamLoadContext* data_ctx);

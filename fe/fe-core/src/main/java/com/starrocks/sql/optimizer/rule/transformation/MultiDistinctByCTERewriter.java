@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -158,7 +159,7 @@ public class MultiDistinctByCTERewriter {
             OptExpression join;
             if (!hasGroupBy) {
                 join = OptExpression.create(
-                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, JoinOperator.HINT_UNREORDER),
+                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, HintNode.HINT_JOIN_UNREORDER),
                         left, right);
             } else {
                 // create inner join when aggregate has group by keys
@@ -212,7 +213,7 @@ public class MultiDistinctByCTERewriter {
             onPredicateList.add(onPredicate);
         }
         return OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
-                Utils.compoundAnd(onPredicateList), JoinOperator.HINT_UNREORDER), left, right);
+                Utils.compoundAnd(onPredicateList), HintNode.HINT_JOIN_UNREORDER), left, right);
     }
 
     private List<ColumnRefOperator> getJoinOnPredicateColumn(Operator operator) {

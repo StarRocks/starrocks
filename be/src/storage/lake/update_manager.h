@@ -154,7 +154,7 @@ public:
     void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
         int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
         _index_cache.set_capacity(byte_limits * update_mem_percent);
         return Status::OK();

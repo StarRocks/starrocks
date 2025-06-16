@@ -37,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class LakeTableRollupBuilder extends AlterJobV2Builder {
@@ -65,7 +64,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
                 rollupColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 rollupKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
-        mvJob.setWarehouseId(warehouseId);
+        mvJob.setComputeResource(computeResource);
 
         for (Partition partition : olapTable.getPartitions()) {
             long partitionId = partition.getId();
@@ -88,11 +87,10 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(rollupIndexId));
 
                 List<Tablet> originTablets = physicalPartition.getIndex(baseIndexId).getTablets();
-                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(
-                        ConnectContext.get().getCurrentWarehouseId());
-                if (workerGroupId.isEmpty()) {
-                    Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                if (!warehouseManager.isResourceAvailable(computeResource)) {
+                    final long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                    Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                     ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
                 }
                 List<Long> originTableIds = originTablets.stream()
@@ -102,7 +100,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                         originTablets.size(),
                         olapTable.getPartitionFilePathInfo(partitionId),
                         olapTable.getPartitionFileCacheInfo(partitionId),
-                        shardGroupId, originTableIds, shardProperties, workerGroupId.get());
+                        shardGroupId, originTableIds, shardProperties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TabletMeta shadowTabletMeta =

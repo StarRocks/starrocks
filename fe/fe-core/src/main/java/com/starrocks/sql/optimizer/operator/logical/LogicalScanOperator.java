@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -39,8 +39,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -61,7 +63,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected ScanOptimizeOption scanOptimizeOption;
     protected TableVersionRange tableVersionRange;
 
     public LogicalScanOperator(
@@ -89,7 +91,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         this.columnAccessPaths = ImmutableList.of();
-        this.scanOptimzeOption = new ScanOptimzeOption();
+        this.scanOptimizeOption = new ScanOptimizeOption();
         this.tableVersionRange = tableVersionRange;
         buildColumnFilters(predicate);
     }
@@ -99,7 +101,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.of();
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
-        this.scanOptimzeOption = new ScanOptimzeOption();
+        this.scanOptimizeOption = new ScanOptimizeOption();
         this.tableVersionRange = TableVersionRange.empty();
     }
 
@@ -125,15 +127,18 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         if (cachedColumnNameToColRefMap.isPresent()) {
             return cachedColumnNameToColRefMap.get();
         }
-
-        Map<String, ColumnRefOperator> columnRefOperatorMap = columnMetaToColRefMap.entrySet().stream()
-                .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
-        cachedColumnNameToColRefMap = Optional.of(columnRefOperatorMap);
+        CaseInsensitiveMap<String, ColumnRefOperator> columnRefOperatorMap = new CaseInsensitiveMap<>();
+        columnMetaToColRefMap.forEach((k, v) -> columnRefOperatorMap.put(k.getName(), v));
+        cachedColumnNameToColRefMap = Optional.of(Collections.unmodifiableMap(columnRefOperatorMap));
         return columnRefOperatorMap;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
+    }
+
+    public void setScanOptimizeOption(ScanOptimizeOption scanOptimizeOption) {
+        this.scanOptimizeOption = scanOptimizeOption;
     }
 
     public TableVersionRange getTableVersionRange() {
@@ -248,7 +253,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             builder.columnFilters = scanOperator.columnFilters;
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
-            builder.scanOptimzeOption = scanOperator.scanOptimzeOption;
+            builder.scanOptimizeOption = scanOperator.scanOptimizeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
             builder.tableVersionRange = scanOperator.tableVersionRange;
             return (B) this;

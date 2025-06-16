@@ -46,13 +46,48 @@ Runtime Query Profile has the same format and content as regular Query Profile. 
 
 ### Configure Query Profile Behavior
 
-| Configuration Type | Configuration Item | Valid Values | Default Value | Description |
-| -- | -- | -- | -- | -- |
-| Session Variable | enable_profile | true/false | false | Whether to enable Query Profile. `true` means to enable this feature. |
-| Session Variable | pipeline_profile_level | 1/2 | 1 | Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. |
-| Session Variable | runtime_profile_report_interval | Positive integer | 10 | The report interval of Runtime Query Profile. Unit: second. |
-| Session Variable | big_query_profile_threshold | String | `0s` | If the execution time of a big query exceeds this value, Query Profile is automatically enabled for this query. Setting this item to `0s` indicates this feature is disabled. Its value can be represented by a integral number followed by a unit, where the units can be `ms`, `s`, `m`. |
-| FE Dynamic Configuration Item | enable_statistics_collect_profile | true/false | false | Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. |
+The configuration settings are either session variables or FE dynamic configuration items.
+
+####  Session Variable 
+
+- **Configuration item**:  enable_profile 
+- **Valid values**:  true/false 
+- **Default value**:  false 
+- **Description**:  Whether to enable Query Profile. `true` means to enable this feature. 
+
+
+####  Session Variable 
+
+- **Configuration item**:  pipeline_profile_level 
+- **Valid values**:  1/2 
+- **Default value**:  1 
+- **Description**:  Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. 
+
+
+####  Session Variable 
+
+- **Configuration item**:  runtime_profile_report_interval 
+- **Valid values**:  Positive integer 
+- **Default value**:  10 
+- **Description**:  The report interval of Runtime Query Profile. Unit: second. 
+
+
+####  Session Variable 
+
+- **Configuration item**:  big_query_profile_threshold 
+- **Valid values**:  String 
+- **Default value**:  `0s` 
+- **Description**:  If the execution time of a big query exceeds this value, Query Profile is automatically enabled for this query. Setting this item to `0s` indicates this feature is disabled. Its value can be represented by a integral number followed by a unit, where the units can be `ms`, `s`, `m`. 
+
+
+####  FE Dynamic Configuration Item 
+
+- **Configuration item**:  enable_statistics_collect_profile 
+- **Valid values**:  true/false 
+- **Default value**:  false 
+- **Description**:  Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. 
+
+
 
 ### Obtain Query Profile via Web UI
 
@@ -72,7 +107,7 @@ You will be redirected to the detailed page of the selected Query Profile.
 
 The following example shows how to obtain Query Profile via the function get_query_profile:
 
-```Plain
+```sql
 -- Enable the profiling feature.
 set enable_profile = true;
 -- Run a simple query.

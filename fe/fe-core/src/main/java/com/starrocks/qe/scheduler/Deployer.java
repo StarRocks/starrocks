@@ -19,9 +19,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ExecuteExceptionHandler;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -40,9 +42,13 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
@@ -52,6 +58,9 @@ import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.Deploymen
  */
 public class Deployer {
     private static final Logger LOG = LogManager.getLogger(Deployer.class);
+    private static final ThreadPoolExecutor EXECUTOR =
+            ThreadPoolManager.newDaemonCacheThreadPool(ThreadPoolManager.cpuCores(),
+                    Integer.MAX_VALUE, "deployer", true);
 
     private final JobSpec jobSpec;
     private final ExecutionDAG executionDAG;
@@ -107,9 +116,20 @@ public class Deployer {
 
         if (enablePlanSerializeConcurrently) {
             try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeConcurrencyTime")) {
-                threeStageExecutionsToDeploy.stream().parallel().forEach(
-                        executions -> executions.stream().parallel()
-                                .forEach(FragmentInstanceExecState::serializeRequest));
+                List<Future<?>> futures = new LinkedList<>();
+                threeStageExecutionsToDeploy.forEach(
+                        executions -> executions.forEach(e ->
+                            futures.add(EXECUTOR.submit(e::serializeRequest))
+                        )
+                );
+                for (Future<?> future : futures) {
+                    future.get();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException e) {
+                LOG.warn("Error serialize request during deployFragments", e);
+                throw new StarRocksException(e);
             }
         }
 
@@ -241,6 +261,12 @@ public class Deployer {
             // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
             // causing the instances to become stale and only able to be released after a timeout.
             if (firstErrResult == null) {
+                firstErrResult = res;
+                firstErrExecution = execution;
+            } else if (firstErrResult.getStatusCode() == TStatusCode.CANCELLED &&
+                    ExecuteExceptionHandler.isRetryableStatus(res.getStatusCode())) {
+                // If the first error is cancelled and the subsequent error is retryable, we store the latter to give a chance
+                // to retry this query.
                 firstErrResult = res;
                 firstErrExecution = execution;
             }

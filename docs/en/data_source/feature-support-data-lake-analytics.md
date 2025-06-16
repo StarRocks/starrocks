@@ -187,12 +187,6 @@ Please note that the default value of the session variable `enable_iceberg_metad
 
 StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only Iceberg views created through StarRocks are supported.
 
-:::note
-
-While StarRocks executes queries against an Iceberg view, it will try to parse the definition of the view using the syntax of StarRocks and Trino. An error will be returned if StarRocks cannot parse the definition of the view. There is a possibility that StarRocks failed to parse the Iceberg views created with functions exclusive to Iceberg or Spark.
-
-:::
-
 ### Query statistics interfaces
 
 | Feature                                                       | Supported Version(s) |
@@ -215,6 +209,8 @@ While StarRocks executes queries against an Iceberg view, it will try to parse t
 | Feature                                                      | Supported Version(s) |
 | :----------------------------------------------------------- | :------------------- |
 | Supports reading TIMESTAMP-type partition formats `yyyy-MM-ddTHH:mm` and `yyyy-MM-dd HH:mm`. | v2.5.19+<br />v3.1.9+<br />v3.2.3+ |
+| Supports Iceberg metadata table                              | v3.4.1+              |
+| Supports Iceberg TimeTravel                                  | v3.4.0+              |
 
 ## Hudi Catalog
 

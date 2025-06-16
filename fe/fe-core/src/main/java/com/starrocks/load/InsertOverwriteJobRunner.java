@@ -54,6 +54,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -390,8 +391,14 @@ public class InsertOverwriteJobRunner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
+        // acquire compute resource
+        ComputeResource computeResource = context.getCurrentComputeResource();
+        if (computeResource == null) {
+            throw new DmlException("insert overwrite commit failed because no available resource");
+        }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null, job.getWarehouseId());
+                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null,
+                computeResource);
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 
@@ -546,12 +553,12 @@ public class InsertOverwriteJobRunner {
                                 .collect(Collectors.toList()));
                     }
                     LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
-                    targetTable.replaceMatchPartitions(tmpPartitionNames);
+                    targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
                 } else {
-                    targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                    targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
                 }
             } else if (partitionInfo instanceof SinglePartitionInfo) {
-                targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+                targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }

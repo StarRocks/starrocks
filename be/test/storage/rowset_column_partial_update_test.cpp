@@ -403,7 +403,7 @@ static void final_check(const TabletSharedPtr& tablet, const std::vector<RowsetS
 }
 
 static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletSharedPtr& tablet, int64_t& version,
-                           int64_t& version_before_partial_update, int N) {
+                           int64_t& version_before_partial_update, int N, bool enable_error_point = false) {
     std::vector<int64_t> keys(N);
     for (int i = 0; i < N; i++) {
         keys[i] = i;
@@ -430,6 +430,10 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
         std::vector<RowsetSharedPtr> rowsets;
         rowsets.reserve(10);
         std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+        if (enable_error_point) {
+            TEST_ENABLE_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk", Status::TimedOut("injected internal error"));
+            SyncPoint::GetInstance()->EnableProcessing();
+        }
         // partial update v1 and v2 one by one
         for (int i = 0; i < 10; i++) {
             std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
@@ -439,6 +443,10 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
             ASSERT_EQ(rowsets[i]->num_update_files(), 5);
             // preload rowset update state
             ASSERT_OK(StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(), rowsets[i].get()));
+        }
+        if (enable_error_point) {
+            TEST_DISABLE_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk");
+            SyncPoint::GetInstance()->DisableProcessing();
         }
         commit_rowsets(tablet, rowsets, version);
         // check data
@@ -623,6 +631,15 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_preload_and_c
     int64_t version = 1;
     int64_t version_before_partial_update = 1;
     prepare_tablet(this, tablet, version, version_before_partial_update, N);
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_index_lock_timeout) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    int64_t version = 1;
+    int64_t version_before_partial_update = 1;
+    prepare_tablet(this, tablet, version, version_before_partial_update, N, true);
 }
 
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_compaction_and_check) {

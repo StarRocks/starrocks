@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Collection;
 import java.util.List;
@@ -43,7 +44,7 @@ public interface WorkerProvider {
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
                                                ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                               long warehouseId);
+                                               ComputeResource computeResource);
     }
 
     /**
@@ -101,4 +102,6 @@ public interface WorkerProvider {
      * @return -1, no available backup worker
      */
     long selectBackupWorker(long workerId);
+
+    ComputeResource getComputeResource();
 }

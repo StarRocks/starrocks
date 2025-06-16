@@ -91,10 +91,6 @@ public class AnalyticExpr extends Expr {
     // SQL string of this AnalyticExpr before standardization. Returned in toSqlImpl().
     private String sqlString;
 
-    private static final String HINT_SORT = "sort";
-    private static final String HINT_HASH = "hash";
-    private static final String HINT_SKEW = "skewed";
-
     public static String LEAD = "LEAD";
     public static String LAG = "LAG";
     public static String FIRSTVALUE = "FIRST_VALUE";
@@ -135,10 +131,11 @@ public class AnalyticExpr extends Expr {
 
         if (CollectionUtils.isNotEmpty(hints)) {
             for (String hint : hints) {
-                if (HINT_SORT.equalsIgnoreCase(hint) || HINT_HASH.equalsIgnoreCase(hint)) {
+                if (HintNode.HINT_ANALYTIC_SORT.equalsIgnoreCase(hint) ||
+                        HintNode.HINT_ANALYTIC_HASH.equalsIgnoreCase(hint)) {
                     this.partitionHint = hint;
-                    this.useHashBasedPartition = !HINT_SORT.equalsIgnoreCase(hint);
-                } else if (HINT_SKEW.equalsIgnoreCase(hint)) {
+                    this.useHashBasedPartition = !HintNode.HINT_ANALYTIC_SORT.equalsIgnoreCase(hint);
+                } else if (HintNode.HINT_ANALYTIC_SKEW.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
                     this.isSkewed = true;
                 } else {

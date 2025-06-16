@@ -270,10 +270,12 @@ select sum(v2) from (select * from t0 union all select * from t1) x group by v1;
 AGGREGATE ([GLOBAL] aggregate [{10: sum=sum(11: sum)}] group by [[7: v1]] having [null]
     EXCHANGE SHUFFLE[7]
         UNION
-            AGGREGATE ([GLOBAL] aggregate [{12: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                SCAN (columns[1: v1, 2: v2] predicate[null])
-            AGGREGATE ([GLOBAL] aggregate [{13: sum=sum(5: v5)}] group by [[4: v4]] having [null]
-                SCAN (columns[4: v4, 5: v5] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                AGGREGATE ([GLOBAL] aggregate [{12: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                    SCAN (columns[1: v1, 2: v2] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                AGGREGATE ([GLOBAL] aggregate [{13: sum=sum(5: v5)}] group by [[4: v4]] having [null]
+                    SCAN (columns[4: v4, 5: v5] predicate[null])
 [end]
 
 [sql]
@@ -282,13 +284,15 @@ select sum(v2) from (select t0.* from t0 join t1 on t0.v1 = t1.v4 union all sele
 AGGREGATE ([GLOBAL] aggregate [{13: sum=sum(14: sum)}] group by [[10: v1]] having [null]
     EXCHANGE SHUFFLE[10]
         UNION
-            INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-                AGGREGATE ([GLOBAL] aggregate [{15: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                    SCAN (columns[1: v1, 2: v2] predicate[1: v1 IS NOT NULL])
-                EXCHANGE SHUFFLE[4]
-                    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
-            AGGREGATE ([GLOBAL] aggregate [{16: sum=sum(8: v5)}] group by [[7: v4]] having [null]
-                SCAN (columns[7: v4, 8: v5] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                    AGGREGATE ([GLOBAL] aggregate [{15: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                        SCAN (columns[1: v1, 2: v2] predicate[1: v1 IS NOT NULL])
+                    EXCHANGE SHUFFLE[4]
+                        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+            EXCHANGE ROUND_ROBIN
+                AGGREGATE ([GLOBAL] aggregate [{16: sum=sum(8: v5)}] group by [[7: v4]] having [null]
+                    SCAN (columns[7: v4, 8: v5] predicate[null])
 [end]
 
 [sql]
@@ -299,13 +303,15 @@ select sum(v2) from (
 AGGREGATE ([GLOBAL] aggregate [{13: sum=sum(14: sum)}] group by [[10: v1]] having [null]
     EXCHANGE SHUFFLE[10]
         UNION
-            INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-                AGGREGATE ([GLOBAL] aggregate [{15: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                    SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 1])
-                EXCHANGE SHUFFLE[4]
-                    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
-            AGGREGATE ([GLOBAL] aggregate [{16: sum=sum(8: v5)}] group by [[7: v4]] having [null]
-                SCAN (columns[7: v4, 8: v5] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                    AGGREGATE ([GLOBAL] aggregate [{15: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                        SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 1])
+                    EXCHANGE SHUFFLE[4]
+                        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+            EXCHANGE ROUND_ROBIN
+                AGGREGATE ([GLOBAL] aggregate [{16: sum=sum(8: v5)}] group by [[7: v4]] having [null]
+                    SCAN (columns[7: v4, 8: v5] predicate[null])
 [end]
 
 [sql]
@@ -318,11 +324,13 @@ where abs(x.v2) = 2;
 AGGREGATE ([GLOBAL] aggregate [{13: sum=sum(11: v2)}] group by [[]] having [null]
     EXCHANGE GATHER
         UNION
-            INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-                SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 2])
-                EXCHANGE SHUFFLE[4]
-                    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
-            SCAN (columns[8: v5] predicate[abs(8: v5) = 2])
+            EXCHANGE ROUND_ROBIN
+                INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                    SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 2])
+                    EXCHANGE SHUFFLE[4]
+                        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+            EXCHANGE ROUND_ROBIN
+                SCAN (columns[8: v5] predicate[abs(8: v5) = 2])
 [end]
 
 [sql]
@@ -338,16 +346,18 @@ group by v1;
 AGGREGATE ([GLOBAL] aggregate [{16: sum=sum(17: sum)}] group by [[13: v1]] having [null]
     EXCHANGE SHUFFLE[13]
         UNION
-            INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-                AGGREGATE ([GLOBAL] aggregate [{18: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                    SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 2])
-                EXCHANGE SHUFFLE[4]
-                    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
-            INNER JOIN (join-predicate [11: v8 = 8: v5] post-join-predicate [null])
-                AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(11: v8)}] group by [[10: v7, 11: v8]] having [null]
-                    SCAN (columns[10: v7, 11: v8] predicate[abs(11: v8) = 2])
-                EXCHANGE BROADCAST
-                    SCAN (columns[8: v5] predicate[abs(8: v5) = 2])
+            EXCHANGE ROUND_ROBIN
+                INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                    AGGREGATE ([GLOBAL] aggregate [{18: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                        SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 2])
+                    EXCHANGE SHUFFLE[4]
+                        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+            EXCHANGE ROUND_ROBIN
+                INNER JOIN (join-predicate [11: v8 = 8: v5] post-join-predicate [null])
+                    AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(11: v8)}] group by [[10: v7, 11: v8]] having [null]
+                        SCAN (columns[10: v7, 11: v8] predicate[abs(11: v8) = 2])
+                    EXCHANGE BROADCAST
+                        SCAN (columns[8: v5] predicate[abs(8: v5) = 2])
 [end]
 
 [sql]
@@ -363,16 +373,18 @@ group by x.v1;
 AGGREGATE ([GLOBAL] aggregate [{16: sum=sum(17: sum)}] group by [[13: v1]] having [null]
     EXCHANGE SHUFFLE[13]
         UNION
-            INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-                AGGREGATE ([GLOBAL] aggregate [{18: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                    SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 2])
-                EXCHANGE SHUFFLE[4]
-                    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
-            INNER JOIN (join-predicate [11: v8 = 8: v5] post-join-predicate [null])
-                AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(11: v8)}] group by [[10: v7, 11: v8]] having [null]
-                    SCAN (columns[10: v7, 11: v8] predicate[abs(11: v8) = 2])
-                EXCHANGE BROADCAST
-                    SCAN (columns[8: v5] predicate[abs(8: v5) = 2])
+            EXCHANGE ROUND_ROBIN
+                INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                    AGGREGATE ([GLOBAL] aggregate [{18: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                        SCAN (columns[1: v1, 2: v2] predicate[abs(2: v2) = 2])
+                    EXCHANGE SHUFFLE[4]
+                        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+            EXCHANGE ROUND_ROBIN
+                INNER JOIN (join-predicate [11: v8 = 8: v5] post-join-predicate [null])
+                    AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(11: v8)}] group by [[10: v7, 11: v8]] having [null]
+                        SCAN (columns[10: v7, 11: v8] predicate[abs(11: v8) = 2])
+                    EXCHANGE BROADCAST
+                        SCAN (columns[8: v5] predicate[abs(8: v5) = 2])
 [end]
 
 [sql]
@@ -387,16 +399,22 @@ group by v1
 AGGREGATE ([GLOBAL] aggregate [{22: sum=sum(23: sum)}] group by [[19: v1]] having [null]
     EXCHANGE SHUFFLE[19]
         UNION
-            UNION
-                AGGREGATE ([GLOBAL] aggregate [{26: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                    SCAN (columns[1: v1, 2: v2] predicate[null])
-                AGGREGATE ([GLOBAL] aggregate [{27: sum=sum(5: v5)}] group by [[4: v4]] having [null]
-                    SCAN (columns[4: v4, 5: v5] predicate[null])
-            UNION
-                AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(11: v5)}] group by [[10: v4]] having [null]
-                    SCAN (columns[10: v4, 11: v5] predicate[null])
-                AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(14: v8)}] group by [[13: v7]] having [null]
-                    SCAN (columns[13: v7, 14: v8] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                UNION
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{26: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                            SCAN (columns[1: v1, 2: v2] predicate[null])
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{27: sum=sum(5: v5)}] group by [[4: v4]] having [null]
+                            SCAN (columns[4: v4, 5: v5] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                UNION
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(11: v5)}] group by [[10: v4]] having [null]
+                            SCAN (columns[10: v4, 11: v5] predicate[null])
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(14: v8)}] group by [[13: v7]] having [null]
+                            SCAN (columns[13: v7, 14: v8] predicate[null])
 [end]
 
 [sql]
@@ -411,16 +429,22 @@ group by v1
 AGGREGATE ([GLOBAL] aggregate [{22: sum=sum(23: sum)}] group by [[19: v1]] having [null]
     EXCHANGE SHUFFLE[19]
         UNION
-            UNION
-                AGGREGATE ([GLOBAL] aggregate [{26: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                    SCAN (columns[1: v1, 2: v2] predicate[null])
-                AGGREGATE ([GLOBAL] aggregate [{27: sum=sum(5: v5)}] group by [[4: v4]] having [null]
-                    SCAN (columns[4: v4, 5: v5] predicate[null])
-            UNION
-                AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(11: v5)}] group by [[10: v4]] having [null]
-                    SCAN (columns[10: v4, 11: v5] predicate[null])
-                AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(14: v8)}] group by [[13: v7]] having [null]
-                    SCAN (columns[13: v7, 14: v8] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                UNION
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{26: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                            SCAN (columns[1: v1, 2: v2] predicate[null])
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{27: sum=sum(5: v5)}] group by [[4: v4]] having [null]
+                            SCAN (columns[4: v4, 5: v5] predicate[null])
+            EXCHANGE ROUND_ROBIN
+                UNION
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(11: v5)}] group by [[10: v4]] having [null]
+                            SCAN (columns[10: v4, 11: v5] predicate[null])
+                    EXCHANGE ROUND_ROBIN
+                        AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(14: v8)}] group by [[13: v7]] having [null]
+                            SCAN (columns[13: v7, 14: v8] predicate[null])
 [end]
 
 [sql]
@@ -436,16 +460,20 @@ AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(20: sum)}] group by [[8: v2]] having
     EXCHANGE SHUFFLE[8]
         INNER JOIN (join-predicate [8: v2 = 17: v5 AND add(8: v2, 17: v5) = 1] post-join-predicate [null])
             UNION
-                AGGREGATE ([GLOBAL] aggregate [{21: sum=sum(2: v2)}] group by [[2: v2]] having [null]
-                    EXCHANGE SHUFFLE[2]
-                        SCAN (columns[2: v2] predicate[2: v2 IS NOT NULL])
-                AGGREGATE ([GLOBAL] aggregate [{22: sum=sum(5: v5)}] group by [[5: v5]] having [null]
-                    EXCHANGE SHUFFLE[5]
-                        SCAN (columns[5: v5] predicate[5: v5 IS NOT NULL])
+                EXCHANGE ROUND_ROBIN
+                    AGGREGATE ([GLOBAL] aggregate [{21: sum=sum(2: v2)}] group by [[2: v2]] having [null]
+                        EXCHANGE SHUFFLE[2]
+                            SCAN (columns[2: v2] predicate[2: v2 IS NOT NULL])
+                EXCHANGE ROUND_ROBIN
+                    AGGREGATE ([GLOBAL] aggregate [{22: sum=sum(5: v5)}] group by [[5: v5]] having [null]
+                        EXCHANGE SHUFFLE[5]
+                            SCAN (columns[5: v5] predicate[5: v5 IS NOT NULL])
             EXCHANGE BROADCAST
                 UNION
-                    SCAN (columns[11: v5] predicate[11: v5 IS NOT NULL])
-                    SCAN (columns[14: v8] predicate[14: v8 IS NOT NULL])
+                    EXCHANGE ROUND_ROBIN
+                        SCAN (columns[11: v5] predicate[11: v5 IS NOT NULL])
+                    EXCHANGE ROUND_ROBIN
+                        SCAN (columns[14: v8] predicate[14: v8 IS NOT NULL])
 [end]
 
 [sql]
@@ -461,12 +489,16 @@ AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(8: v2)}] group by [[]] having [null]
         TOP-N (order by [[7: v1 ASC NULLS FIRST]])
             INNER JOIN (join-predicate [8: v2 = 17: v5] post-join-predicate [null])
                 UNION
-                    SCAN (columns[1: v1, 2: v2] predicate[2: v2 IS NOT NULL])
-                    SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
+                    EXCHANGE ROUND_ROBIN
+                        SCAN (columns[1: v1, 2: v2] predicate[2: v2 IS NOT NULL])
+                    EXCHANGE ROUND_ROBIN
+                        SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
                 EXCHANGE BROADCAST
                     UNION
-                        SCAN (columns[11: v5] predicate[11: v5 IS NOT NULL])
-                        SCAN (columns[14: v8] predicate[14: v8 IS NOT NULL])
+                        EXCHANGE ROUND_ROBIN
+                            SCAN (columns[11: v5] predicate[11: v5 IS NOT NULL])
+                        EXCHANGE ROUND_ROBIN
+                            SCAN (columns[14: v8] predicate[14: v8 IS NOT NULL])
 [end]
 
 [sql]
@@ -564,3 +596,4 @@ AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(9: sum), 8: sum=sum(10: sum)}] group 
         EXCHANGE SHUFFLE[4]
             SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
+

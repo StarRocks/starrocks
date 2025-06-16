@@ -24,7 +24,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 public class OdpsSplitScannerFactory implements ScannerFactory {
-    static ChildFirstClassLoader classLoader;
+    static ClassLoader classLoader;
 
     static {
         String basePath = System.getenv("STARROCKS_HOME");

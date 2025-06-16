@@ -76,6 +76,10 @@ select * from struct_in_struct where (c0 in (101, 1000)) or (c0 > 5000 and c0 < 
 9001	1000	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
 10000	1	None	None
 -- !result
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 < '55' and (c_struct_struct.c_struct.c0 > '15' or c_struct_struct.c_struct.c1 = '90');
+-- result:
+4000
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0

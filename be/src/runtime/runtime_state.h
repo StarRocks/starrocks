@@ -45,7 +45,7 @@
 #include <vector>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/datacache_utils.h"
+#include "cache/datacache_utils.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -399,6 +399,20 @@ public:
 
     bool enable_hyperscan_vec() const {
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
+    }
+
+    long column_view_concat_rows_limit() const {
+        return _query_options.__isset.column_view_concat_rows_limit ? _query_options.column_view_concat_rows_limit
+                                                                    : -1L;
+    }
+
+    long column_view_concat_bytes_limit() const {
+        return _query_options.__isset.column_view_concat_bytes_limit ? _query_options.column_view_concat_bytes_limit
+                                                                     : -1L;
+    }
+
+    bool enable_column_view() const {
+        return column_view_concat_bytes_limit() > 0 || column_view_concat_rows_limit() > 0;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }

@@ -151,13 +151,13 @@ public class AnalyzerUtils {
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by time_slice
     public static final Set<String> TIME_SLICE_SUPPORTED_PARTITION_FORMAT =
             ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by mv date_trunc
     public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "week", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "week", "month", "year");
 
     public static final String DEFAULT_PARTITION_NAME_PREFIX = "p";
 
@@ -1553,12 +1553,12 @@ public class AnalyzerUtils {
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
-                        beginTime = beginTime.withDayOfMonth(1);
+                        beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                         partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
-                        beginTime = beginTime.withDayOfYear(1);
+                        beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                         partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
@@ -1936,5 +1936,28 @@ public class AnalyzerUtils {
             }
         }
         return expr;
+    }
+
+    public static boolean isGranularityGreater(String g1, String g2) {
+        Map<String, Integer> orderMap = Map.of(
+                "minute", 0,
+                "hour", 1,
+                "day", 2,
+                "month", 3,
+                "year", 4
+        );
+
+        if (g1 == null || g2 == null) {
+            return false;
+        }
+
+        Integer order1 = orderMap.get(g1.toLowerCase());
+        Integer order2 = orderMap.get(g2.toLowerCase());
+
+        if (order1 == null || order2 == null) {
+            return false;
+        }
+
+        return order1 > order2;
     }
 }

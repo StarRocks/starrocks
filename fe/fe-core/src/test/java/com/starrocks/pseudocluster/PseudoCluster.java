@@ -46,6 +46,7 @@ import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import junit.framework.Assert;
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.commons.io.FileUtils;
@@ -210,7 +211,8 @@ public class PseudoCluster {
 
         @Override
         public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                       long groupId, List<Long> matchShardIds, Map<String, String> properties, long workerGroupId)
+                                       long groupId, List<Long> matchShardIds, Map<String, String> properties,
+                                       ComputeResource computeResource)
                 throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {

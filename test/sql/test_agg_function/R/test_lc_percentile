@@ -145,5 +145,5 @@ None	None
 -- !result
 select percentile_disc_lc(score, 1.1) from test_pc;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: percentile_disc_lc second parameter'value should be between 0 and 1.")
+[REGEX].*percentile_disc_lc second parameter'value should be between 0 and 1.*
 -- !result

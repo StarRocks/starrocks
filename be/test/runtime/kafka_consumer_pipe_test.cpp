@@ -36,6 +36,8 @@
 
 #include <gtest/gtest.h>
 
+#include "testutil//assert.h"
+
 namespace starrocks {
 
 class KafkaConsumerPipeTest : public testing::Test {
@@ -60,7 +62,7 @@ TEST_F(KafkaConsumerPipeTest, append_read) {
     char row_delimiter = '\n';
     st = k_pipe.append_with_row_delimiter(msg1.c_str(), msg1.length(), row_delimiter);
     ASSERT_TRUE(st.ok());
-    st = k_pipe.append_with_row_delimiter(msg2.c_str(), msg2.length(), row_delimiter);
+    st = k_pipe.append_with_row_delimiter(msg2.c_str(), msg2.length(), row_delimiter, 1, 2);
     ASSERT_TRUE(st.ok());
     st = k_pipe.finish();
     ASSERT_TRUE(st.ok());
@@ -78,6 +80,36 @@ TEST_F(KafkaConsumerPipeTest, append_read) {
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(data_size, 0);
     ASSERT_EQ(eof, true);
+}
+
+TEST_F(KafkaConsumerPipeTest, append_read_json) {
+    KafkaConsumerPipe k_pipe(1024 * 1024, 64 * 1024);
+
+    std::string msg1 = R"({"k1":1}")";
+    std::string msg2 = R"({"k2":2}")";
+
+    Status st;
+    char row_delimiter = '\n';
+    st = k_pipe.append_json(msg1.c_str(), msg1.length(), row_delimiter);
+    ASSERT_TRUE(st.ok());
+    st = k_pipe.append_json(msg2.c_str(), msg2.length(), row_delimiter, 1, 2);
+    ASSERT_TRUE(st.ok());
+    st = k_pipe.finish();
+    ASSERT_TRUE(st.ok());
+
+    StatusOr<ByteBufferPtr> buf_st1 = k_pipe.read();
+    ASSERT_OK(buf_st1.status());
+    auto buf1 = buf_st1.value();
+    ASSERT_EQ(NoneByteBufferMeta::instance(), buf1->meta());
+
+    StatusOr<ByteBufferPtr> buf_st2 = k_pipe.read();
+    ASSERT_OK(buf_st2.status());
+    auto buf2 = buf_st2.value();
+    ByteBufferMeta* meta = buf2->meta();
+    ASSERT_EQ(ByteBufferMetaType::KAFKA, meta->type());
+    KafkaByteBufferMeta* kafka_meta = static_cast<KafkaByteBufferMeta*>(meta);
+    ASSERT_EQ(1, kafka_meta->partition());
+    ASSERT_EQ(2, kafka_meta->offset());
 }
 
 } // namespace starrocks

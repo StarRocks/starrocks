@@ -82,10 +82,11 @@ public class AuthenticationManagerTest {
         UserIdentity testUserWithIp = UserIdentity.createAnalyzedUserIdentWithIp("test", "10.1.1.1");
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
+        ctx.setAuthDataSalt(seed);
 
         AuthenticationMgr masterManager = new AuthenticationMgr();
         Assert.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, testUserWithIp.getUser(), testUserWithIp.getHost(), scramble, seed));
+                AuthenticationHandler.authenticate(ctx, testUserWithIp.getUser(), testUserWithIp.getHost(), scramble));
 
         Assert.assertFalse(masterManager.doesUserExist(testUser));
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
@@ -121,9 +122,9 @@ public class AuthenticationManagerTest {
         // login from 10.1.1.2 with password will fail
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry =
                 masterManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
-        PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider();
+        PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(entry.getValue().getPassword());
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry.getKey().getUser(), entry.getKey().getHost(), scramble, seed, entry.getValue()));
+                provider.authenticate(ctx, entry.getKey(), scramble));
 
         // start to replay
         AuthenticationMgr followerManager = new AuthenticationMgr();
@@ -167,8 +168,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry1 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry1.getKey().getUser(), entry1.getKey().getHost(), scramble, seed,
-                        entry1.getValue()));
+                provider.authenticate(ctx, entry1.getKey(), scramble));
 
         // purely loaded from image
         AuthenticationMgr imageManager = new AuthenticationMgr();
@@ -181,8 +181,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry2 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry2.getKey().getUser(), entry2.getKey().getHost(), scramble, seed,
-                        entry2.getValue()));
+                provider.authenticate(ctx, entry2.getKey(), scramble));
     }
 
     @Test
@@ -336,10 +335,11 @@ public class AuthenticationManagerTest {
         UserIdentity testUserWithIp = UserIdentity.createAnalyzedUserIdentWithIp("test", "10.1.1.1");
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
+        ctx.setAuthDataSalt(seed);
 
         AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), testUser.getHost(), scramble, seed));
+                testUser.getUser(), testUser.getHost(), scramble));
         Assert.assertFalse(manager.doesUserExist(testUser));
         Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
@@ -351,20 +351,20 @@ public class AuthenticationManagerTest {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), testUser.getHost(), scramble, seed));
+                testUser.getUser(), testUser.getHost(), scramble));
         Assert.assertTrue(manager.doesUserExist(testUserWithIp));
 
         sql = "alter user test identified by 'abc'";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         Assert.assertEquals(testUser,
-                AuthenticationHandler.authenticate(ctx, testUser.getUser(), testUser.getHost(), scramble, seed));
+                AuthenticationHandler.authenticate(ctx, testUser.getUser(), testUser.getHost(), scramble));
         Assert.assertTrue(manager.doesUserExist(testUser));
 
         StatementBase dropStmt = UtFrameUtils.parseStmtWithNewParser("drop user test", ctx);
         DDLStmtExecutor.execute(dropStmt, ctx);
         Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), testUser.getHost(), scramble, seed));
+                testUser.getUser(), testUser.getHost(), scramble));
         Assert.assertFalse(manager.doesUserExist(testUser));
 
         // can drop twice
@@ -484,6 +484,7 @@ public class AuthenticationManagerTest {
         AuthenticationMgr masterManager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertFalse(masterManager.doesUserExist(testUser));
         Assert.assertTrue(masterManager.doesUserExist(UserIdentity.ROOT));
+        ctx.setAuthDataSalt(seed);
 
         // 1. create empty image
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -496,14 +497,14 @@ public class AuthenticationManagerTest {
         masterManager.createUser(createStmt);
         Assert.assertTrue(masterManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), "10.1.1.1", new byte[0], null));
+                testUser.getUser(), "10.1.1.1", new byte[0]));
 
         // 3. alter user
         sql = "alter user test identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo(), null);
         Assert.assertEquals(testUser, AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), "10.1.1.1", scramble, seed));
+                testUser.getUser(), "10.1.1.1", scramble));
 
         // 3.1 update user property
         sql = "set property for 'test' 'max_user_connections' = '555'";
@@ -578,6 +579,7 @@ public class AuthenticationManagerTest {
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
         AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertFalse(manager.doesUserExist(testUserWithHost));
+        ctx.setAuthDataSalt(seed);
 
         // create a user with host name
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -585,7 +587,7 @@ public class AuthenticationManagerTest {
         Assert.assertTrue(manager.doesUserExist(testUserWithHost));
         Assert.assertEquals(new HashSet<String>(Arrays.asList("host01")), manager.getAllHostnames());
         Assert.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
 
         // update host -> ip list
         Map<String, Set<String>> hostToIpList = new HashMap<>();
@@ -594,11 +596,11 @@ public class AuthenticationManagerTest {
 
         // check login
         Assert.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
         Assert.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble));
         Assert.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.3", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.3", scramble));
 
         // update host -> ip list
         hostToIpList = new HashMap<>();
@@ -608,11 +610,11 @@ public class AuthenticationManagerTest {
 
         // check login
         Assert.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
         Assert.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble));
         Assert.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.3", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.3", scramble));
 
         // create a user with ip
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -623,7 +625,7 @@ public class AuthenticationManagerTest {
 
         // login matches ip
         Assert.assertEquals(testUserWithIp,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
 
         // create a user with %
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -635,16 +637,16 @@ public class AuthenticationManagerTest {
         Assert.assertTrue(manager.doesUserExist(testUserWithAll));
 
         Assert.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble2, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble2));
         Assert.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble2, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble2));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "alter user user_with_host@'%' identified by 'abc'", ctx), ctx);
         Assert.assertEquals(testUserWithIp,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
         Assert.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble, seed));
+                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble));
     }
 
     @Test

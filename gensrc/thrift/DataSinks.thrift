@@ -148,7 +148,10 @@ struct TDataStreamSink {
   5: optional i32 dest_dop
 
   // Specify the columns which need to send
-  6: optional list<i32> output_columns;
+  6: optional list<i32> output_columns
+
+  // Specify limit on output columns
+  7: optional i64 limit;
 }
 
 struct TMultiCastDataStreamSink {
@@ -236,6 +239,7 @@ struct TOlapTableSink {
     30: optional bool ignore_out_of_partition
     31: optional binary encryption_meta;
     32: optional bool dynamic_overwrite
+    33: optional bool enable_data_file_bundling
 }
 
 struct TSchemaTableSink {

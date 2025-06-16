@@ -46,6 +46,7 @@ public:
     //     input 1000 length data, and decoder digest 100 bytes. slice will be set to
     //     the last 900.
     Status parse(tparquet::Encoding::type encoding, level_t max_level, uint32_t num_levels, Slice* slice);
+    Status parse_v2(uint32_t num_bytes, level_t max_level, uint32_t num_levels, Slice* slice);
 
     size_t next_repeated_count() {
         DCHECK_EQ(_encoding, tparquet::Encoding::RLE);
@@ -114,9 +115,11 @@ private:
             // NOTE(zc): Because RLE can only record elements that are multiples of 8,
             // it must be ensured that the incoming parameters cannot exceed the boundary.
             n = std::min((size_t)_num_levels, n);
-            auto num_decoded = _rle_decoder.GetBatch(levels, n);
-            _num_levels -= num_decoded;
-            return num_decoded;
+            if (PREDICT_FALSE(!_rle_decoder.GetBatch(levels, n))) {
+                return 0;
+            }
+            _num_levels -= n;
+            return n;
         } else if (_encoding == tparquet::Encoding::BIT_PACKED) {
             DCHECK(false);
         }

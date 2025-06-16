@@ -16,6 +16,7 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
@@ -23,7 +24,6 @@ import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TransactionState;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.junit.Assert;
 import org.junit.Before;

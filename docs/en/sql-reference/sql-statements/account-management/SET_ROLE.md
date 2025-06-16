@@ -4,11 +4,10 @@ displayed_sidebar: docs
 
 # SET ROLE
 
-## Description
 
-Activates roles, along with all of its associated privileges and nested roles, for the current session. After the role is activated, users can use this role to perform operations.
+SET ROLE activates roles, along with all of its associated privileges and nested roles, for the current session. After the role is activated, users can use this role to perform operations.
 
- After running this command, you can run `select is_role_in_session("<role_name>");` to verify whether this role is active in the current session.
+After running this command, you can run `select is_role_in_session("<role_name>");` to verify whether this role is active in the current session.
 
 This command is supported from v3.0.
 

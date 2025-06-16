@@ -37,6 +37,7 @@
 #include <boost/preprocessor/repetition/repeat_from_to.hpp>
 
 #include "util/bit_packing.h"
+#include "util/bit_util.h"
 
 namespace starrocks {
 

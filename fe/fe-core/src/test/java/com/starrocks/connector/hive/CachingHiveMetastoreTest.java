@@ -409,7 +409,7 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, executor,
                 expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
 
-        HiveCommonStats stats = new HiveCommonStats(10, 100);
+        HiveCommonStats stats = new HiveCommonStats(10, 100, 1);
 
         // unpartition
         {
@@ -434,7 +434,7 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, executor,
                 expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
 
-        HiveCommonStats stats = new HiveCommonStats(10, 100);
+        HiveCommonStats stats = new HiveCommonStats(10, 100, 1);
         HivePartitionName hivePartitionName = HivePartitionName.of("db1", "unpartitioned_table", "col1=1");
         Partition partition = cachingHiveMetastore.getPartition(
                 "db1", "unpartitioned_table", Lists.newArrayList("col1"));
@@ -510,9 +510,9 @@ public class CachingHiveMetastoreTest {
         String externalTableMark = externalPartition.getParameters().get(TASK);
         for (int i = 0; i < 5; i++) {
             partition =
-              cachingHiveMetastore.getPartition("db1", "tbl1", Lists.newArrayList("par1"));
+                    cachingHiveMetastore.getPartition("db1", "tbl1", Lists.newArrayList("par1"));
             externalPartition =
-              cachingHiveMetastore.getPartition("db1", "external_table", Lists.newArrayList("par1"));
+                    cachingHiveMetastore.getPartition("db1", "external_table", Lists.newArrayList("par1"));
             Thread.sleep(1000);
         }
         Assert.assertEquals(partition.getParameters().get(TASK), mangedTableMark);

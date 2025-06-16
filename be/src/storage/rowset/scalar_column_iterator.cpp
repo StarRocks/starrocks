@@ -41,6 +41,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
+#include "types/logical_type.h"
 #include "util/bitmap.h"
 
 namespace starrocks {
@@ -53,9 +54,8 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
 
     IndexReadOptions index_opts;
-    index_opts.use_page_cache = !opts.temporary_data && opts.use_page_cache &&
-                                (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
-    index_opts.kept_in_memory = !opts.temporary_data && config::enable_ordinal_index_memory_page_cache;
+    index_opts.use_page_cache = !opts.temporary_data && opts.use_page_cache && !config::disable_storage_page_cache &&
+                                config::enable_ordinal_index_memory_page_cache;
     index_opts.lake_io_opts = opts.lake_io_opts;
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
@@ -102,13 +102,16 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     case TYPE_DECIMALV2:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMALV2>;
         break;
+    case TYPE_JSON:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_JSON>;
+        break;
     default:
         return Status::NotSupported(strings::Substitute("dict encoding with unsupported $0 field type", column_type));
     }
 
     // TODO: The following logic is primarily used for optimizing queries for VARCHAR/CHAR types during
     // dictionary encoding. Can we also optimize queries for non-TYPE_VARCHAR types?
-    if (column_type != TYPE_VARCHAR && column_type != TYPE_CHAR) {
+    if (column_type != TYPE_VARCHAR && column_type != TYPE_CHAR && column_type != TYPE_JSON) {
         return Status::OK();
     }
     if (opts.check_dict_encoding) {
@@ -118,6 +121,8 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
             RETURN_IF(!_all_dict_encoded, Status::OK());
             if (column_type == TYPE_VARCHAR) {
                 RETURN_IF_ERROR(_load_dict_page<TYPE_VARCHAR>());
+            } else if (column_type == TYPE_JSON) {
+                RETURN_IF_ERROR(_load_dict_page<TYPE_JSON>());
             } else {
                 RETURN_IF_ERROR(_load_dict_page<TYPE_CHAR>());
             }
@@ -143,6 +148,12 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<TYPE_VARCHAR>;
         _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<TYPE_VARCHAR>;
         _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<TYPE_VARCHAR>;
+    } else if (_all_dict_encoded && column_type == TYPE_JSON) {
+        _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<TYPE_JSON>;
+        _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<TYPE_JSON>;
+        _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<TYPE_JSON>;
+        _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<TYPE_JSON>;
+        _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<TYPE_JSON>;
     }
     return Status::OK();
 }
@@ -349,7 +360,7 @@ Status ScalarColumnIterator::_load_dict_page() {
             _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
-    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR || Type == TYPE_JSON) {
         _dict_decoder = std::make_unique<BinaryPlainPageDecoder<Type>>(dict_data);
     } else {
         _dict_decoder = std::make_unique<BitShufflePageDecoder<Type>>(dict_data);
@@ -359,7 +370,7 @@ Status ScalarColumnIterator::_load_dict_page() {
 
 template <LogicalType Type>
 Status ScalarColumnIterator::_do_init_dict_decoder() {
-    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR || Type == TYPE_JSON) {
         auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
         if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
             if (_dict_decoder == nullptr) {
@@ -408,9 +419,8 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         }
 
         IndexReadOptions opts;
-        opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
-                              (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
-        opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
+        opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache &&
+                              config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
@@ -451,7 +461,6 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
 
     IndexReadOptions opts;
     opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache && _opts.use_page_cache;
-    opts.kept_in_memory = false;
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
@@ -660,6 +669,9 @@ int ScalarColumnIterator::dict_size() {
     if (_reader->column_type() == TYPE_CHAR) {
         auto dict = down_cast<BinaryPlainPageDecoder<TYPE_CHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
+    } else if (_reader->column_type() == TYPE_JSON) {
+        auto dict = down_cast<BinaryPlainPageDecoder<TYPE_JSON>*>(_dict_decoder.get());
+        return static_cast<int>(dict->dict_size());
     } else if (_reader->column_type() == TYPE_VARCHAR) {
         auto dict = down_cast<BinaryPlainPageDecoder<TYPE_VARCHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
@@ -674,6 +686,49 @@ bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {
     }
     // if there is no zone map should be treated as DEL_PARTIAL_SATISFIED
     return true;
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                          Column* dst) {
+    (void)dst;
+    std::vector<std::pair<int64_t, int64_t>> res;
+    auto reader = get_column_reader();
+    if (reader == nullptr) {
+        // should't happen
+        return Status::InvalidArgument(fmt::format("column reader for {} is nullptr", _opts.read_file->filename()));
+    }
+
+    std::vector<std::pair<int, int>> page_index;
+    int prev_page_index = -1;
+    for (auto index = 0; index < range.size(); index++) {
+        auto row_start = range[index].begin();
+        auto row_end = range[index].end() - 1;
+        OrdinalPageIndexIterator iter_start;
+        OrdinalPageIndexIterator iter_end;
+        RETURN_IF_ERROR(reader->seek_at_or_before(row_start, &iter_start));
+        RETURN_IF_ERROR(reader->seek_at_or_before(row_end, &iter_end));
+
+        if (prev_page_index == iter_start.page_index()) {
+            // merge page index
+            page_index.back().second = iter_end.page_index();
+        } else {
+            page_index.emplace_back(std::make_pair(iter_start.page_index(), iter_end.page_index()));
+        }
+
+        prev_page_index = iter_end.page_index();
+    }
+
+    for (auto pair : page_index) {
+        OrdinalPageIndexIterator iter_start;
+        OrdinalPageIndexIterator iter_end;
+        RETURN_IF_ERROR(reader->seek_by_page_index(pair.first, &iter_start));
+        RETURN_IF_ERROR(reader->seek_by_page_index(pair.second, &iter_end));
+        auto offset = iter_start.page().offset;
+        auto size = iter_end.page().offset - offset + iter_end.page().size;
+        res.emplace_back(offset, size);
+    }
+
+    return res;
 }
 
 } // namespace starrocks

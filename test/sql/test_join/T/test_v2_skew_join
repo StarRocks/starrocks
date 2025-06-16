@@ -1,4 +1,4 @@
--- name: test_skew_join
+-- name: test_v2_skew_join
 
 CREATE TABLE t1 (
     c_key      INT NOT NULL,
@@ -42,8 +42,6 @@ PROPERTIES (
 
 set enable_optimize_skew_join_by_query_rewrite=false;
 set enable_optimize_skew_join_by_broadcast_skew_values=true;
--- large enough so global rf must deploy
-set runtime_filter_scan_wait_time=100000;
 
 -- tinyint
 truncate table t1;

@@ -151,6 +151,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
     }
+    if (process_exit_in_progress()) {
+        // Just assume this response can reach the frontend side.
+        set_frontend_aware_of_exit();
+    }
 }
 
 std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) const {

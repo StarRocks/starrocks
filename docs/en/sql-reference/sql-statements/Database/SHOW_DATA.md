@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW DATA
 
-## Description
-
-This statement is used to display the amount of data, the number of copies, and the number of statistical rows in a database or a database table.
+SHOW DATA is used to display the amount of data, the number of copies, and the number of statistical rows in a database or a database table.
 
 Syntax:
 

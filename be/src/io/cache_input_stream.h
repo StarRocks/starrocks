@@ -35,9 +35,14 @@ public:
         int64_t read_cache_bytes = 0;
         int64_t read_mem_cache_bytes = 0;
         int64_t read_disk_cache_bytes = 0;
+        int64_t read_peer_cache_bytes = 0;
+        int64_t read_peer_cache_count = 0;
+        int64_t read_peer_cache_ns = 0;
         int64_t write_cache_bytes = 0;
         int64_t skip_read_cache_count = 0;
         int64_t skip_read_cache_bytes = 0;
+        int64_t skip_read_peer_cache_count = 0;
+        int64_t skip_read_peer_cache_bytes = 0;
         int64_t skip_write_cache_count = 0;
         int64_t skip_write_cache_bytes = 0;
         int64_t write_cache_fail_count = 0;
@@ -79,6 +84,8 @@ public:
 
     void set_ttl_seconds(const uint64_t ttl_seconds) { _ttl_seconds = ttl_seconds; }
 
+    void set_peer_cache_node(const std::string& peer_node);
+
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
@@ -99,9 +106,15 @@ protected:
     virtual Status _read_block_from_local(const int64_t offset, const int64_t size, char* out);
     // Read multiple blocks from remote
     virtual Status _read_blocks_from_remote(const int64_t offset, const int64_t size, char* out);
+    Status _read_from_cache(const int64_t offset, const int64_t size, const int64_t block_offset,
+                            const int64_t block_size, char* out);
+    Status _read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, ReadCacheOptions* options);
     void _populate_to_cache(const char* src, int64_t offset, int64_t count, const SharedBufferPtr& sb);
+    void _write_cache(int64_t offset, const IOBuffer& iobuf, WriteCacheOptions* options);
+
     void _deduplicate_shared_buffer(const SharedBufferPtr& sb);
     bool _can_ignore_populate_error(const Status& status) const;
+    bool _can_try_peer_cache();
 
     std::string _cache_key;
     std::string _filename;
@@ -116,6 +129,10 @@ protected:
     bool _enable_block_buffer = false;
     bool _enable_cache_io_adaptor = false;
     int32_t _datacache_evict_probability = 100;
+
+    std::string _peer_host;
+    int32_t _peer_port = 0;
+
     BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;

@@ -257,7 +257,7 @@ public class TabletSchedCtxTest {
                         TABLET_ID_2, System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         ctx.setTablet(repairTablet);
         ctx.setStorageMedium(TStorageMedium.HDD);
-        ctx.setVersionInfo(101, 108, 12332);
+        ctx.setVersionInfo(101, 108, 12332, 12333);
 
         Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
         List<Long> pathHashes = new ArrayList<>();

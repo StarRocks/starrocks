@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # STRUCT
 
-## Description
-
 STRUCT is widely used to express complex data types. It represents a collection of elements (also called fields) with different data types, for example, `<a INT, b STRING>`.
 
 Field names in a struct must be unique. Fields can be of primitive data types (such as numeric, string, or date) or complex data types (such as ARRAY or MAP).

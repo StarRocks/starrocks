@@ -4,6 +4,25 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.16
+
+Release Date: April 30, 2025
+
+### Improvements
+
+- Stream Load task scheduling now supports BE node blacklist. Nodes in the blacklist will be excluded from task scheduling. [#57919](https://github.com/StarRocks/starrocks/pull/57919)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Create tablet timeout. [#55808](https://github.com/StarRocks/starrocks/pull/55808)
+- Authentication information is lost when creating views via the `files()` function. [#56606](https://github.com/StarRocks/starrocks/pull/56606)
+- Optimizer failed to correctly handle constant comparisons when processing empty sets, leading to query failure. [#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- Pre-aggregation strategy caused BE crashes when handling data overflow. [#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- Attempting to delete associated materialized views after some partitions of the base table were deleted may cause exceptions, resulting in failure of the delete operation. [#58037](https://github.com/StarRocks/starrocks/pull/58037)
+- Defect in priority evaluation logic when loading Tablets for primary key tables, resulting in data loss due to incorrect version recognition. [#58404](https://github.com/StarRocks/starrocks/pull/58404)
+
 ## 3.2.15
 
 Release date: February 14, 2025

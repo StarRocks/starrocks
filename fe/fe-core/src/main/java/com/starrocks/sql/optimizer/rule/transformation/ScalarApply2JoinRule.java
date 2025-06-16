@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -46,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
@@ -57,6 +59,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
     public ScalarApply2JoinRule() {
         super(RuleType.TF_SCALAR_APPLY_TO_JOIN,
                 Pattern.create(OperatorType.LOGICAL_APPLY, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF));
+    }
+
+    @Override
+    public List<Rule> predecessorRules() {
+        return List.of(new ScalarApplyNormalizeCountRule());
     }
 
     @Override
@@ -249,7 +256,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // use hint, forbidden reorder un-correlate subquery
         OptExpression joinOptExpression = new OptExpression(LogicalJoinOperator.builder()
                 .setJoinType(JoinOperator.CROSS_JOIN)
-                .setJoinHint(JoinOperator.HINT_BROADCAST).build());
+                .setJoinHint(HintNode.HINT_JOIN_BROADCAST).build());
         joinOptExpression.getInputs().add(input.getInputs().get(0));
         joinOptExpression.getInputs().add(assertOptExpression);
 

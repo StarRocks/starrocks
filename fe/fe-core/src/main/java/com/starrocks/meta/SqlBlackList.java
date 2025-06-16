@@ -19,6 +19,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -53,6 +54,7 @@ public class SqlBlackList {
             for (BlackListSql patternAndId : sqlBlackListMap.values()) {
                 Matcher m = patternAndId.pattern.matcher(formatSql);
                 if (m.find()) {
+                    MetricRepo.COUNTER_SQL_BLOCK_HIT_COUNT.increase(1L);
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR);
                 }
             }

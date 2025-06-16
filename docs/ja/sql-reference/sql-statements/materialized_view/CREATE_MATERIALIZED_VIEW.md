@@ -255,6 +255,37 @@ AS
 
 非同期マテリアライズドビューのソートキー。このソートキーを指定しない場合、StarRocksはSELECT列からいくつかのプレフィックス列をソートキーとして選択します。例: `select a, b, c, d`では、ソートキーとして`a`と`b`を使用できます。このパラメータはStarRocks v3.0以降でサポートされています。
 
+**INDEX** (オプション)
+
+非同期マテリアライズドビューは、クエリパフォーマンスを高速化するために Bitmap インデックスと BloomFilter インデックスをサポートしています。Bitmap インデックスと BloomFilter インデックスの使用例と情報の詳細については、[Bitmap Index](../../../table_design/indexes/Bitmap_index.md) と [Bloom filter Index](../../../table_design/indexes/Bloomfilter_index.md) を参照してください。
+
+Bitmap インデックスの使用：  
+```sql
+-- インデックスを作成する  
+CREATE INDEX <index_name> ON <mv_name>(<column_name>) USING BITMAP COMMENT '<comment>';  
+
+-- インデックス作成の状況を確認する  
+SHOW ALTER TABLE COLUMN;  
+
+-- インデックスを確認する  
+SHOW INDEXES FROM <mv_name>;  
+
+-- インデックスを削除する  
+DROP INDEX <index_name> ON <mv_name>;  
+```  
+
+BloomFilter インデックスの使用：  
+```sql
+-- インデックスを作成する  
+ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "<col1,col2,col3,...>");  
+
+-- インデックスを確認する  
+SHOW CREATE MATERIALIZED VIEW <mv_name>;  
+
+-- インデックスを削除する  
+ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");  
+```
+
 **PROPERTIES** (オプション)
 
 非同期マテリアライズドビューのプロパティ。既存のマテリアライズドビューのプロパティを変更するには、[ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md)を使用できます。
@@ -263,6 +294,7 @@ AS
 - `replication_num`: 作成するマテリアライズドビューのレプリカの数。
 - `storage_medium`: 記憶媒体のタイプ。有効な値: `HDD`と`SSD`。
 - `storage_cooldown_time`: パーティションのストレージクールダウン時間。HDDとSSDの両方の記憶媒体が使用されている場合、このプロパティで指定された時間の後、SSDストレージのデータはHDDストレージに移動されます。形式: "yyyy-MM-dd HH:mm:ss"。指定された時間は現在の時間より後でなければなりません。このプロパティが明示的に指定されていない場合、デフォルトではストレージクールダウンは実行されません。
+- `bloom_filter_columns`: BloomFilter インデックスを有効にするカラム名の配列。BloomFilter インデックスについての詳細は、[ブルーム・フィルター・インデックス](../../../table_design/indexes/Bloomfilter_index.md) を参照ください。
 - `partition_ttl`: パーティションの有効期限 (TTL)。指定された時間範囲内のデータを持つパーティションが保持されます。期限切れのパーティションは自動的に削除されます。単位: `YEAR`、`MONTH`、`DAY`、`HOUR`、`MINUTE`。例: `2 MONTH`としてこのプロパティを指定できます。このプロパティは`partition_ttl_number`より推奨されます。v3.1.5以降でサポートされています。
 - `partition_ttl_number`: 保持する最新のマテリアライズドビューのパーティション数。開始時間が現在の時間より前のパーティションについて、この値を超えると、古いパーティションが削除されます。StarRocksはFE設定項目`dynamic_partition_check_interval_seconds`で指定された時間間隔に従ってマテリアライズドビューパーティションを定期的にチェックし、期限切れのパーティションを自動的に削除します。[動的パーティション化](../../../table_design/data_distribution/dynamic_partitioning.md)戦略を有効にした場合、事前に作成されたパーティションはカウントされません。値が`-1`の場合、マテリアライズドビューのすべてのパーティションが保持されます。デフォルト: `-1`。
 - `partition_refresh_number`: 単一のリフレッシュでリフレッシュする最大パーティション数。リフレッシュするパーティションの数がこの値を超える場合、StarRocksはリフレッシュタスクを分割し、バッチで完了します。前のバッチのパーティションが正常にリフレッシュされると、StarRocksは次のバッチのパーティションをリフレッシュし続け、すべてのパーティションがリフレッシュされるまで続けます。パーティションのいずれかがリフレッシュに失敗した場合、後続のリフレッシュタスクは生成されません。値が`-1`の場合、リフレッシュタスクは分割されません。デフォルト値はv3.3以降`-1`から`1`に変更され、StarRocksはパーティションを1つずつリフレッシュします。

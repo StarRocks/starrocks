@@ -33,6 +33,9 @@ public:
                                int64_t* flush_data_size = nullptr) = 0;
     virtual Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info = nullptr,
                                             bool eos = false, int64_t* flush_data_size = nullptr) = 0;
+
+    virtual int64_t txn_id() = 0;
+    virtual int64_t tablet_id() = 0;
 };
 
 } // namespace starrocks

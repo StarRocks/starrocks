@@ -21,6 +21,9 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
+
 public class OAuth2SecurityConfigTest {
 
     @Test
@@ -28,14 +31,14 @@ public class OAuth2SecurityConfigTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("security", "none");
         OAuth2SecurityConfig config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.NONE, config.getSecurity());
+        Assert.assertEquals(NONE, config.getSecurity());
 
         properties = new HashMap<>();
         properties.put("security", "oaUth2");
         properties.put("oauth2.credential", "smith:cruise");
         properties.put("oauth2.scope", "PRINCIPAL");
         config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.OAUTH2, config.getSecurity());
+        Assert.assertEquals(OAUTH2, config.getSecurity());
         Assert.assertEquals("smith:cruise", config.getCredential().get());
         Assert.assertEquals("PRINCIPAL", config.getScope().get());
 
@@ -45,7 +48,7 @@ public class OAuth2SecurityConfigTest {
         properties.put("oauth2.token", "123456");
         properties.put("oauth2.scope", "PRINCIPAL");
         config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.NONE, config.getSecurity());
+        Assert.assertEquals(NONE, config.getSecurity());
     }
 
     @Test

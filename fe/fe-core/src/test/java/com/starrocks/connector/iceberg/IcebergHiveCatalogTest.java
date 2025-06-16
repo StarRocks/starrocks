@@ -24,6 +24,7 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
@@ -59,8 +60,10 @@ public class IcebergHiveCatalogTest {
     private static final String CATALOG_NAME = "iceberg_hive_catalog";
     public static final Map<String, String> DEFAULT_CONFIG = new HashMap<>();
     public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
+    public static ConnectContext connectContext;
 
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
+
     static {
         DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
         DEFAULT_CONFIG.put(ICEBERG_CATALOG_TYPE, "hive");
@@ -70,6 +73,7 @@ public class IcebergHiveCatalogTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        connectContext = UtFrameUtils.createDefaultCtx();
         AnalyzeTestUtil.init();
     }
 
@@ -97,7 +101,7 @@ public class IcebergHiveCatalogTest {
         icebergProperties.put("hive.metastore.uris", "thrift://129.1.2.3:9876");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(
                 "hive_native_catalog", new Configuration(), icebergProperties);
-        List<String> dbs = icebergHiveCatalog.listAllDatabases();
+        List<String> dbs = icebergHiveCatalog.listAllDatabases(connectContext);
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
@@ -111,8 +115,8 @@ public class IcebergHiveCatalogTest {
         };
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(
                 "catalog", new Configuration(), ImmutableMap.of("hive.metastore.uris", "thrift://129.1.2.3:9876"));
-        icebergHiveCatalog.renameTable("db", "tb1", "tb2");
-        boolean exists = icebergHiveCatalog.tableExists("db", "tbl2");
+        icebergHiveCatalog.renameTable(connectContext, "db", "tb1", "tb2");
+        boolean exists = icebergHiveCatalog.tableExists(connectContext, "db", "tbl2");
         Assert.assertTrue(exists);
     }
 
@@ -132,7 +136,7 @@ public class IcebergHiveCatalogTest {
         CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
-        metadata.createView(stmt);
+        metadata.createView(connectContext, stmt);
 
         new Expectations() {
             {
@@ -166,7 +170,7 @@ public class IcebergHiveCatalogTest {
             }
         };
 
-        Table table = metadata.getView("db", "view");
+        Table table = metadata.getView(connectContext, "db", "view");
         Assert.assertEquals(ICEBERG_VIEW, table.getType());
         Assert.assertEquals("xxx", table.getTableLocation());
         Assert.assertEquals("view", table.getName());
@@ -177,7 +181,7 @@ public class IcebergHiveCatalogTest {
 
     @Test
     public void testAlterViewProperties(@Mocked HiveCatalog hiveCatalog, @Mocked BaseView baseView,
-                               @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
+                                        @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(hiveCatalog);
 
         new Expectations() {
@@ -202,7 +206,7 @@ public class IcebergHiveCatalogTest {
 
         AlterViewStmt alterViewStmt = new AlterViewStmt(new TableName("catalog", "db", "view"), false,
                 AlterViewStmt.AlterDialectType.NONE, Map.of("comment", "no comment"), null, NodePosition.ZERO);
-        metadata.alterView(alterViewStmt);
+        metadata.alterView(connectContext, alterViewStmt);
 
         new Expectations() {
             {
@@ -212,7 +216,7 @@ public class IcebergHiveCatalogTest {
             }
         };
 
-        Table table = metadata.getView("db", "view");
+        Table table = metadata.getView(connectContext, "db", "view");
         Assert.assertEquals("no comment", table.getComment());
     }
 }

@@ -14,22 +14,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.sql.parser.NodePosition;
 
 public class SetPassVar extends SetListItem {
     private UserIdentity userIdent;
-    private final String passwdParam;
-    private byte[] passwdBytes;
+    private final UserAuthOption authOption;
+    private UserAuthenticationInfo userAuthenticationInfo;
 
-    // The password in parameter is a hashed password.
-    public SetPassVar(UserIdentity userIdent, String passwd) {
-        this(userIdent, passwd, NodePosition.ZERO);
-    }
-
-    public SetPassVar(UserIdentity userIdent, String passwd, NodePosition pos) {
+    public SetPassVar(UserIdentity userIdentity, UserAuthOption authOption, NodePosition pos) {
         super(pos);
-        this.userIdent = userIdent;
-        this.passwdParam = passwd;
+        this.userIdent = userIdentity;
+        this.authOption = authOption;
     }
 
     public UserIdentity getUserIdent() {
@@ -40,15 +36,15 @@ public class SetPassVar extends SetListItem {
         this.userIdent = userIdent;
     }
 
-    public String getPasswdParam() {
-        return passwdParam;
+    public UserAuthOption getAuthOption() {
+        return authOption;
     }
 
-    public byte[] getPassword() {
-        return passwdBytes;
+    public void setUserAuthenticationInfo(UserAuthenticationInfo userAuthenticationInfo) {
+        this.userAuthenticationInfo = userAuthenticationInfo;
     }
 
-    public void setPasswdBytes(byte[] passwdBytes) {
-        this.passwdBytes = passwdBytes;
+    public UserAuthenticationInfo getUserAuthenticationInfo() {
+        return userAuthenticationInfo;
     }
 }

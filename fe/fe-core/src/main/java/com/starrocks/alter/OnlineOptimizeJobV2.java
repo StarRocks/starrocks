@@ -198,8 +198,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         OlapTable targetTable = checkAndGetTable(db, tableId);
         try {
             PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                        optimizeClause.getSourcePartitionIds(), getTmpPartitionIds(), optimizeClause.getDistributionDesc(),
-                        warehouseId);
+                    optimizeClause.getSourcePartitionIds(), getTmpPartitionIds(), optimizeClause.getDistributionDesc(),
+                    computeResource);
             LOG.debug("create temp partitions {} success. job: {}", getTmpPartitionIds(), jobId);
         } catch (Exception e) {
             LOG.warn("create temp partitions failed", e);
@@ -469,9 +469,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 targetTable.replaceTempPartitions(
-                            Arrays.asList(sourcePartitionName), Arrays.asList(tmpPartitionName), true, false);
+                        db.getId(), Arrays.asList(sourcePartitionName), Arrays.asList(tmpPartitionName), true, false);
             } else if (partitionInfo instanceof SinglePartitionInfo) {
-                targetTable.replacePartition(sourcePartitionName, tmpPartitionName);
+                targetTable.replacePartition(db.getId(), sourcePartitionName, tmpPartitionName);
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
             }

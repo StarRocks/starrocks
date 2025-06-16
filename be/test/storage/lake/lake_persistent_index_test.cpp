@@ -136,18 +136,10 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     vector<Slice> upsert_key_slices;
     vector<IndexValue> upsert_values(upsert_keys.size());
     upsert_key_slices.reserve(N);
-    size_t expect_exists = 0;
-    size_t expect_not_found = 0;
     idxes.clear();
     for (int i = 0; i < N; i++) {
         upsert_keys[i] = i * 2;
-        if (i % 3 != 0 && i * 2 < N) {
-            expect_exists++;
-        }
         upsert_key_slices.emplace_back((uint8_t*)(&upsert_keys[i]), sizeof(Key));
-        if (i * 2 >= N && i * 2 != N + 2) {
-            expect_not_found++;
-        }
         upsert_values[i] = i * 3;
         idxes.emplace_back(i);
     }

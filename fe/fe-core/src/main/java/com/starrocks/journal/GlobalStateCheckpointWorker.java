@@ -22,7 +22,7 @@ import com.starrocks.server.GlobalStateMgr;
 public class GlobalStateCheckpointWorker extends CheckpointWorker {
 
     public GlobalStateCheckpointWorker(Journal journal) {
-        super("global_state_checkpoint_worker", journal, "");
+        super("global_state_checkpoint_worker", journal);
     }
 
     @Override
@@ -34,7 +34,7 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
         globalStateMgr.setEditLog(new EditLog(null));
         globalStateMgr.setJournal(journal);
         try {
-            globalStateMgr.loadImage(imageDir);
+            globalStateMgr.loadImage();
             globalStateMgr.initDefaultWarehouse();
 
             checkEpoch(epoch);

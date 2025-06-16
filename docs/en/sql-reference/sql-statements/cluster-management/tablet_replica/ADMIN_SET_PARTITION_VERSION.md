@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN SET PARTITION VERSION
 
-## Description
-
-Sets a partition to a specific data version.
+ADMIN SET PARTITION VERSION sets a partition to a specific data version.
 
 Note that manually setting the partition version is a high-risk operation and is recommended only when problems occur in the cluster metadata. In normal circumstances, the version of a partition is consistent with that of the tablets within.
 

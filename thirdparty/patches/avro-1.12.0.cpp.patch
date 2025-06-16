@@ -1,0 +1,13 @@
+diff --git a/lang/c++/CMakeLists.txt b/lang/c++/CMakeLists.txt
+index 19059a41b..a09b9ca94 100644
+--- a/lang/c++/CMakeLists.txt
++++ b/lang/c++/CMakeLists.txt
+@@ -198,7 +198,7 @@ enable_testing()
+ 
+ macro (unittest name)
+     add_executable (${name} test/${name}.cc)
+-    target_link_libraries (${name} avrocpp ${Boost_LIBRARIES} ${SNAPPY_LIBRARIES})
++    target_link_libraries (${name} avrocpp snappy ${Boost_LIBRARIES} ${SNAPPY_LIBRARIES})
+     add_test (NAME ${name} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+         COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${name})
+ endmacro (unittest)

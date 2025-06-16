@@ -4,11 +4,7 @@ displayed_sidebar: docs
 
 # DECIMAL
 
-## Description
-
-DECIMAL(P[,S])
-
-High-precision fixed-point value. `P` stands for the total number of significant numbers (precision). `S` stands for the maximum number of decimal points (scale).
+DECIMAL(P[,S]) is a high-precision fixed-point value. `P` stands for the total number of significant numbers (precision). `S` stands for the maximum number of decimal points (scale).
 
 If `P` is omitted, the default is 10. If `S` is omitted, the default is 0.
 

@@ -80,6 +80,7 @@ static const int64_t USECS_PER_SEC = 1000000;
 static const int64_t USECS_PER_MILLIS = 1000;
 
 static const int64_t NANOSECS_PER_USEC = 1000;
+static const int64_t NANOSECS_PER_MILLIS = 1000000;
 static const int64_t NANOSECS_PER_SEC = 1000000000;
 
 // Corresponding to TimeUnit

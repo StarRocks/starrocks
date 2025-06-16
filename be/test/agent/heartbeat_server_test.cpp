@@ -14,6 +14,7 @@
 
 #include "agent/heartbeat_server.h"
 
+#include "common/process_exit.h"
 #include "gen_cpp/Types_types.h"
 #include "gtest/gtest.h"
 #include "service/backend_options.h"
@@ -108,6 +109,34 @@ TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
     EXPECT_EQ(TStatusCode::INTERNAL_ERROR, res.status().code());
     EXPECT_TRUE(res.status().message().find("Unmatched node type"));
     EXPECT_TRUE(res.status().message().find("actually BE"));
+}
+
+TEST(HeartbeatServerTest, test_frontend_aware_of_exit) {
+    clear_frontend_aware_of_exit();
+    ASSERT_FALSE(is_frontend_aware_of_exit());
+
+    HeartbeatServer server;
+    {
+        THeartbeatResult result;
+        TMasterInfo info;
+        server.heartbeat(result, info);
+        EXPECT_EQ(TStatusCode::OK, result.status.status_code);
+        // service is running, no exit at all
+        ASSERT_FALSE(is_frontend_aware_of_exit());
+    }
+
+    k_starrocks_exit = true;
+    {
+        THeartbeatResult result;
+        TMasterInfo info;
+        server.heartbeat(result, info);
+        EXPECT_EQ(TStatusCode::SHUTDOWN, result.status.status_code);
+        Status status(result.status);
+        EXPECT_TRUE(status.is_shutdown());
+        // service is in shutdown, the shutdown response is replied to the frontend
+        ASSERT_TRUE(is_frontend_aware_of_exit());
+    }
+    k_starrocks_exit = false;
 }
 
 } // namespace starrocks

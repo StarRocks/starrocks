@@ -37,6 +37,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TableSnapshotInfo;
@@ -84,6 +85,7 @@ import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -482,5 +484,117 @@ public class MVTestBase extends StarRocksTestBase {
 
     protected boolean hasNonDeterministicFunction(OptExpression root) {
         return root.getOp().accept(new NonDeterministicVisitor(), root, null);
+    }
+
+    /**
+     * TestListener is a base class that can be used to test cases in multi-variable environments.
+     */
+    public abstract class TestListener {
+        protected boolean val;
+
+        public abstract void onBeforeCase(ConnectContext connectContext);
+
+        public abstract void onAfterCase(ConnectContext connectContext);
+    }
+
+    public class EnableMVRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(val);
+        }
+    }
+
+    public class DisableMVRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(val);
+        }
+    }
+
+    public class EnableMVMultiStageRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewMultiStagesRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(val);
+        }
+    }
+
+    public class DisableMVMultiStageRewriteListener extends TestListener {
+        @Override
+        public void onBeforeCase(ConnectContext connectContext) {
+            this.val = connectContext.getSessionVariable().isEnableMaterializedViewMultiStagesRewrite();
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
+        }
+
+        @Override
+        public void onAfterCase(ConnectContext connectContext) {
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(val);
+        }
+    }
+
+    public interface ExceptionRunnable {
+        public abstract void run() throws Exception;
+    }
+
+    protected void doTest(List<TestListener> listeners, ExceptionRunnable testCase) {
+        for (TestListener listener : listeners) {
+            listener.onBeforeCase(connectContext);
+            try {
+                testCase.run();
+            } catch (Exception e) {
+                Assert.fail(e.getMessage());
+            } finally {
+                listener.onAfterCase(connectContext);
+            }
+        }
+    }
+
+    protected void testMVRefreshWithOnePartitionAndOneUnPartitionTable(String t1,
+                                                                       String s1,
+                                                                       String mvQuery,
+                                                                       String... expect) throws Exception {
+        String t2 = "CREATE TABLE non_partition_table (dt2 date, int2 int);";
+        String s2 = "INSERT INTO non_partition_table VALUES (\"2020-06-23\",1),(\"2020-07-23\",1),(\"2020-07-23\",1)" +
+                ",(\"2020-08-23\",1),(null,null);\n";
+        if (!Strings.isNullOrEmpty(t1)) {
+            starRocksAssert.withTable(t1);
+        }
+        starRocksAssert.withTable(t2);
+        executeInsertSql(s1);
+        executeInsertSql(s2);
+        starRocksAssert.withMaterializedView(mvQuery, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = starRocksAssert.getMv("test", mvName);
+            ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor =
+                    (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+            ExecPlan execPlan = mvTaskRunContext.getExecPlan();
+            Assert.assertTrue(execPlan != null);
+            for (String expectStr : expect) {
+                assertPlanContains(execPlan, expectStr);
+            }
+        });
     }
 }

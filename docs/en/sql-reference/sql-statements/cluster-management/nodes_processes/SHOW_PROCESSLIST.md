@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW PROCESSLIST
 
-## Description
-
-Lists the operations currently being performed by threads executing within the server. The current version of StarRocks only supports listing queries.
+SHOW PROCESSLIST lists the operations currently being performed by threads executing within the server. The current version of StarRocks only supports listing queries.
 
 :::tip
 

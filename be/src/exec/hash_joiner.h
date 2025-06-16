@@ -71,8 +71,8 @@ struct HashJoinerParam {
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
-                    const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
-                    bool enable_late_materialization, bool enable_partition_hash_join, bool is_skew_join)
+                    const TJoinDistributionMode::type distribution_mode, bool enable_late_materialization,
+                    bool enable_partition_hash_join, bool is_skew_join)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -89,7 +89,6 @@ struct HashJoinerParam {
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
-              _mor_reader_mode(mor_reader_mode),
               _enable_late_materialization(enable_late_materialization),
               _enable_partition_hash_join(enable_partition_hash_join),
               _is_skew_join(is_skew_join) {}
@@ -115,7 +114,6 @@ struct HashJoinerParam {
     std::set<SlotId> _probe_output_slots;
 
     const TJoinDistributionMode::type _distribution_mode;
-    const bool _mor_reader_mode;
     const bool _enable_late_materialization;
     const bool _enable_partition_hash_join;
     const bool _is_skew_join;
@@ -347,7 +345,7 @@ public:
 private:
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* state);
 
     Status _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk, const vector<ExprContext*>& expr_ctxs) {
         key_columns.resize(0);
@@ -479,7 +477,6 @@ private:
     HashJoinBuildMetrics* _build_metrics;
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
-    bool _mor_reader_mode = false;
     bool _enable_late_materialization = false;
     // probe side notify build observe
     pipeline::Observable _builder_observable;

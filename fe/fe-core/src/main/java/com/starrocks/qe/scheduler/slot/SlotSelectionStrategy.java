@@ -16,11 +16,11 @@ package com.starrocks.qe.scheduler.slot;
 
 import java.util.List;
 
-public interface SlotSelectionStrategy extends SlotTracker.Listener {
+public interface SlotSelectionStrategy extends BaseSlotTracker.Listener {
     /**
      * Select slots to allocate.
      * @param slotTracker The slot tracker which contains all the requiring and allocated slots.
      * @return The slots to allocate.
      */
-    List<LogicalSlot> peakSlotsToAllocate(SlotTracker slotTracker);
+    List<LogicalSlot> peakSlotsToAllocate(BaseSlotTracker slotTracker);
 }

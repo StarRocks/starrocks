@@ -19,10 +19,7 @@
 
 namespace starrocks::bthreads {
 namespace {
-class ClassType {
-private:
-    int x;
-};
+struct ClassType {};
 
 class AbstractClass {
 public:
@@ -189,16 +186,6 @@ TEST(FutureTest, test_get06) {
         EXPECT_EQ(value, e);
     }
     EXPECT_FALSE(f1.valid());
-}
-
-static int iterations = 200;
-
-template <typename Duration>
-static double print(const char* desc, Duration dur) {
-    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count();
-    double d = double(ns) / iterations;
-    std::cout << desc << ": " << ns << "ns for " << iterations << " calls, avg " << d << "ns per call\n";
-    return d;
 }
 
 TEST(FutureTest, test_share01) {

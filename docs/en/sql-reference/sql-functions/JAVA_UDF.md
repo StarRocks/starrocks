@@ -536,6 +536,8 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 
 ## Mapping between SQL data types and Java data types
 
+Only non-nested Arrays/Maps are now supported.
+
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
 | BOOLEAN        | java.lang.Boolean |
@@ -546,15 +548,15 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 | FLOAT          | java.lang.Float   |
 | DOUBLE         | java.lang.Double  |
 | STRING/VARCHAR | java.lang.String  |
+| ARRAY          | java.util.List    |
+| Map            | java.util.Map     |
 
 ## Parameter settings
 
-Configure the following environment variable in the **be/conf/be.conf** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage. If you use JDK 8, configure `JAVA_OPTS`. If you use JDK 9 or later, configure `JAVA_OPTS_FOR_JDK_9_AND_LATER`.
+Configure the following environment variable in the **be/conf/be.conf** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage.
 
 ```Bash
 JAVA_OPTS="-Xmx12G"
-
-JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
 ## FAQ

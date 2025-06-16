@@ -43,12 +43,12 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
@@ -173,7 +173,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
         feInfo.put("can_read", String.valueOf(GlobalStateMgr.getCurrentState().canRead()));
         feInfo.put("is_ready", String.valueOf(GlobalStateMgr.getCurrentState().isReady()));
         try {
-            Storage storage = new Storage(Config.meta_dir + "/image");
+            Storage storage = new Storage(MetaHelper.getImageFileDir(true));
             feInfo.put("last_checkpoint_version", String.valueOf(storage.getImageJournalId()));
             long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
             feInfo.put("last_checkpoint_time", String.valueOf(lastCheckpointTime));

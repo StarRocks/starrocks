@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER RESOURCE
 
-## Description
-
-You can use the ALTER RESOURCE statement to modify the properties of a resource.
+Use the ALTER RESOURCE statement to modify the properties of a resource.
 
 ## Syntax
 

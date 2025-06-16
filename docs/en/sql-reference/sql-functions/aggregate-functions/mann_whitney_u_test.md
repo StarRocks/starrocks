@@ -4,9 +4,7 @@ displayed_sidebar: "docs"
 
 # mann_whitney_u_test
 
-## Description
-
-Performs the Mann-Whitney rank test on samples derived from two populations. The Mann-Whitney U test is a non-parametric test that can be used to determine if two populations were selected from the same distribution.
+`mann_whitney_u_test` performs the Mann-Whitney rank test on samples derived from two populations. The Mann-Whitney U test is a non-parametric test that can be used to determine if two populations were selected from the same distribution.
 
 ## Syntax
 

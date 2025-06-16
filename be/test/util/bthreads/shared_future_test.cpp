@@ -20,10 +20,7 @@
 namespace starrocks::bthreads {
 
 namespace {
-class ClassType {
-private:
-    int x;
-};
+struct ClassType {};
 
 class AbstractClass {
 public:

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW PLUGINS
 
-## Description
-
-This statement is used to view the installed plugins.
+SHOW PLUGINS is used to view the installed plugins.
 
 :::tip
 

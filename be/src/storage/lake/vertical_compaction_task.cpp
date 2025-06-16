@@ -38,6 +38,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
         _total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
+        // do not check `is_overlapped`, we want actual segment count here
+        _context->stats->read_segment_count += rowset->num_segments();
     }
 
     const auto& store_paths = ExecEnv::GetInstance()->store_paths();
@@ -81,6 +83,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     //    number of rows counted in the metadata.
     // 2. If the number of rows is 0, the progress will not be updated
     _context->progress.update(100);
+    _context->stats->collect(writer->stats());
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
@@ -89,7 +92,13 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
     op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
-    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    TEST_ERROR_POINT("VerticalCompactionTask::execute::1");
+    if (_context->skip_write_txnlog) {
+        // return txn_log to caller later
+        _context->txn_log = txn_log;
+    } else {
+        RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
         Tablet t(_tablet.tablet_manager(), _tablet.id());

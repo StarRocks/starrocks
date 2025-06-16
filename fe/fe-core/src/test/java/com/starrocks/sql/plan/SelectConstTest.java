@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
+import com.starrocks.thrift.TResultBatch;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -216,19 +218,44 @@ public class SelectConstTest extends PlanTestBase {
                 "-78883632:00:01");
     }
 
+    @Test
+    public void testExecuteInFEWithComplexQuery() throws Exception {
+        String sql = "select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), " +
+                "cast(10 as bigint), cast(100 as largeint),\n" +
+                "1000000000000, 1+1, 100 * 100, 'abc', \"中文\", '\"abc\"', " +
+                "\"'abc'\", '\\'abc\\\\', \"\\\"abc\\\\\", cast(1.123000000 as decimalv2),\n" +
+                "cast(1.123 as decimal(10, 7)), date '2021-01-01', " +
+                "datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',\n" +
+                "timediff('2028-01-01 11:25:36', '2000-11-21 12:12:12'), " +
+                "timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';";
+        ExecPlan execPlan = getExecPlan(sql);
+        FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
+        try {
+            RowBatch rowBatch = coordinator.getNext();
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
     private void assertFeExecuteResult(String sql, String expected) throws Exception {
         ExecPlan execPlan = getExecPlan(sql);
         FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
         RowBatch rowBatch = coordinator.getNext();
-        byte[] bytes = rowBatch.getBatch().getRows().get(0).array();
-        int lengthOffset = getOffset(bytes);
-        String value;
-        if (lengthOffset == -1) {
-            value = "NULL";
+        TResultBatch tResultBatch = rowBatch.getBatch();
+        if (tResultBatch.rows.isEmpty()) {
+            Assert.assertNull(expected);
         } else {
-            value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
+            byte[] bytes = tResultBatch.getRows().get(0).array();
+            int lengthOffset = getOffset(bytes);
+            String value;
+            if (lengthOffset == -1) {
+                value = "NULL";
+            } else {
+                value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
+            }
+            System.out.println(value);
+            Assert.assertEquals(expected, value);
         }
-        Assert.assertEquals(expected, value);
     }
 
     private static int getOffset(byte[] bytes) {
@@ -245,5 +272,57 @@ public class SelectConstTest extends PlanTestBase {
             default:
                 return 1;
         }
+    }
+
+    @Test
+    public void testEmptyScan() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tbl0 (\n" +
+                "  c1 int,\n" +
+                "  c2 date,\n" +
+                "  c3 varchar(10),\n" +
+                "  c4 bigint,\n" +
+                "  c5 varchar(3),\n" +
+                "  c6 datetime,\n" +
+                "  c7 string,\n" +
+                "  c8 decimal(10,5),\n" +
+                "  c9 boolean,\n" +
+                "  c10 largeint,\n" +
+                "  c11 date,\n" +
+                "  c12 float,\n" +
+                "  c13 double)\n" +
+                "  PRIMARY KEY(c1,c2)\n" +
+                "  DISTRIBUTED BY HASH(c1) BUCKETS 3\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        String sql = "select c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13," +
+                "c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13 " +
+                "from tbl0;";
+        FeConstants.enablePruneEmptyOutputScan = true;
+        assertFeExecuteResult(sql, null);
+        FeConstants.enablePruneEmptyOutputScan = false;
+    }
+
+    @Test
+    public void testUnionWithUnAlignedValues() throws Exception {
+        String sql = "WITH temp AS (\n" +
+                "  SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3\n" +
+                "  UNION ALL\n" +
+                "  SELECT 'test' AS c1, 'test' AS c2, 'test' AS c3\n" +
+                " )\n" +
+                "SELECT c1, c2, c3\n" +
+                "FROM (\n" +
+                " SELECT c1, c2, c3\n" +
+                " FROM temp\n" +
+                " UNION ALL\n" +
+                " SELECT 'test1' AS c1, 'test1' AS c2, 'test1' AS c3\n" +
+                " UNION ALL\n" +
+                " SELECT 'test1' AS c1, 'test2' AS c2, 'test3' AS c3\n" +
+                ") t;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "     constant exprs: \n" +
+                        "         'test1' | 'test1' | 'test1'\n" +
+                        "         'test1' | 'test2' | 'test3'",
+                "     constant exprs: \n" +
+                        "         'test' | 'test' | 'test'\n" +
+                        "         'test' | 'test' | 'test'");
     }
 }

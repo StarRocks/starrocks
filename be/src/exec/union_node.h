@@ -63,6 +63,7 @@ private:
 
     std::vector<std::vector<ExprContext*>> _const_expr_lists;
     std::vector<std::vector<ExprContext*>> _child_expr_lists;
+    std::vector<std::vector<ExprContext*>> _local_partition_by_exprs;
 
     // the map from slot id of output chunk to slot id of child chunk
     // There may be multiple DestSlotId mapped to the same SrcSlotId,

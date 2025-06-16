@@ -177,7 +177,7 @@ target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
 
-max_replication_data_size_per_job_in_gb=-1
+max_replication_data_size_per_job_in_gb=1024
 
 meta_job_interval_seconds=180
 meta_job_threads=4
@@ -223,7 +223,7 @@ report_interval_seconds=300
 | ddl_job_allow_drop_partition_target_only  | 移行ツールがソースクラスタで削除されたパーティションを削除して、ソースクラスタとターゲットクラスタのパーティションを一致させることを許可するかどうか。デフォルトは `true` で、削除されることを意味します。この項目にはデフォルト値を使用できます。 |
 | replication_job_interval_seconds          | 移行ツールがデータ同期タスクをトリガーする間隔 (秒単位)。この項目にはデフォルト値を使用できます。 |
 | replication_job_batch_size                | 移行ツールがデータ同期タスクをトリガーする際のバッチサイズ。この項目にはデフォルト値を使用できます。 |
-| max_replication_data_size_per_job_in_gb   | 移行ツールがデータ同期タスクをトリガーするデータサイズの閾値。単位: GB。移行するパーティションのサイズがこの値を超える場合、複数のデータ同期タスクがトリガーされます。デフォルト値は `-1` で、制限がなく、テーブル内のすべてのパーティションが単一の同期タスクで移行されることを意味します。移行するテーブルのデータ量が多い場合、このパラメータを設定して各タスクのデータサイズを制限できます。 |
+| max_replication_data_size_per_job_in_gb   | 移行ツールがデータ同期タスクをトリガーするデータサイズの閾値。単位: GB。移行するパーティションのサイズがこの値を超える場合、複数のデータ同期タスクがトリガーされます。デフォルト値は `1024` で、この項目にはデフォルト値を使用できます。 |
 | report_interval_seconds                   | 移行ツールが進捗情報を出力する間隔。単位: 秒。デフォルト値: `300`。この項目にはデフォルト値を使用できます。 |
 
 ### クラスタトークンの取得

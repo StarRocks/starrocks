@@ -35,3 +35,12 @@ admin enable failpoint 'expr_prepare_fragment_thread_local_call_failed';
 admin disable failpoint 'expr_prepare_fragment_thread_local_call_failed';
 -- result:
 -- !result
+admin enable failpoint 'not_exist_agg_function';
+-- result:
+-- !result
+[UC]select * from (select l.c0,r.c1  from t0 l join [bucket](select regexp_replace(sum(c1), '1', '2') c1, c0 from t0 group by c0) r on l.c0 = r.c0) t;
+-- result:
+-- !result
+admin disable failpoint 'not_exist_agg_function';
+-- result:
+-- !result

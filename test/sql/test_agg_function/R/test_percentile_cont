@@ -116,3 +116,35 @@ select percentile_cont(db, 1) from test_pc;
 -- result:
 11.5
 -- !result
+select percentile_cont(db, 2) from test_pc;
+-- result:
+[REGEX].*percentile_cont second parameter'value should be between 0 and 1.*
+-- !result
+select percentile_cont(db, -1) from test_pc;
+-- result:
+[REGEX].*percentile_cont second parameter'value should be between 0 and 1.*
+-- !result
+select percentile_cont(db, cast(1.0 as double)) from test_pc;
+-- result:
+11.5
+-- !result
+select percentile_cont(db, cast(0.5 as double)) from test_pc;
+-- result:
+11.3
+-- !result
+select percentile_cont(db, cast(1.5 as double)) from test_pc;
+-- result:
+[REGEX].*Percentile rate must be between 0 and 1.*
+-- !result
+select percentile_cont(1, cast(1.0 as double));
+-- result:
+1.0
+-- !result
+select percentile_cont(1, cast(0.5 as double));
+-- result:
+1.0
+-- !result
+select percentile_cont(1, cast(1.5 as double));
+-- result:
+[REGEX].*Percentile rate must be between 0 and 1.*
+-- !result

@@ -126,7 +126,7 @@ public class MinMaxCountOptOnScanRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        scanOperator.getScanOptimzeOption().setCanUseMinMaxCountOpt(true);
+        scanOperator.getScanOptimizeOption().setCanUseMinMaxCountOpt(true);
         return Collections.emptyList();
     }
 }

@@ -32,6 +32,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_STS_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_SSL;
@@ -45,6 +46,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_STS_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.DEFAULT_AWS_REGION;
 
 public class AwsCloudConfigurationProvider implements CloudConfigurationProvider {
@@ -54,6 +56,7 @@ public class AwsCloudConfigurationProvider implements CloudConfigurationProvider
         AwsCloudCredential awsCloudCredential = new AwsCloudCredential(
                 hiveConf.getBoolean(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
                 hiveConf.getBoolean(AWS_GLUE_USE_INSTANCE_PROFILE, false),
+                hiveConf.getBoolean(AWS_GLUE_USE_WEB_IDENTITY_TOKEN_FILE, false),
                 hiveConf.get(AWS_GLUE_ACCESS_KEY, ""),
                 hiveConf.get(AWS_GLUE_SECRET_KEY, ""),
                 hiveConf.get(AWS_GLUE_SESSION_TOKEN, ""),
@@ -76,6 +79,7 @@ public class AwsCloudConfigurationProvider implements CloudConfigurationProvider
         AwsCloudCredential awsCloudCredential = new AwsCloudCredential(
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false")),
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false")),
+                Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false")),
                 properties.getOrDefault(AWS_S3_ACCESS_KEY, ""),
                 properties.getOrDefault(AWS_S3_SECRET_KEY, ""),
                 properties.getOrDefault(AWS_S3_SESSION_TOKEN, ""),

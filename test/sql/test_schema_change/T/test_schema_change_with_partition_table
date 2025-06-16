@@ -1,0 +1,31 @@
+-- name: test_schema_change_with_partition_table
+CREATE TABLE t1(
+    id varchar(100),
+    k1 varchar(100),
+    k2 decimal,
+    k3 int
+)
+PARTITION BY RANGE(str2date(id, '%Y-%m-%d'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into t1 values('2021-01-04','1',1.1,1), ('2021-01-05','1',1.1,1), ('2021-01-06','1',1.1,1);
+
+alter table t1 modify column k1 varchar(1024) NULL COMMENT 'k1';
+function: wait_alter_table_finish()
+select * from t1 order by id;
+
+alter table t1 drop column id;
+function: wait_alter_table_finish()
+select * from t1 order by id;
+
+alter table t1 drop column k1;
+function: wait_alter_table_finish()
+select * from t1 order by id;
+
+alter table t1 drop column k2;
+function: wait_alter_table_finish()
+select * from t1 order by id;
+
+alter table t1 drop column k3;
+function: wait_alter_table_finish()
+select * from t1 order by id;

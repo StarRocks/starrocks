@@ -178,6 +178,7 @@ public class ReplayFromDumpTestBase {
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
+        queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));

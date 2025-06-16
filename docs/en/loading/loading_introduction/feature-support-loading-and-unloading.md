@@ -42,7 +42,8 @@ This document outlines the features of various data loading and unloading method
         <td>To be supported</td>
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="3">To be supported</td>
+        <td>Yes (v3.4.4+)</td>
+        <td colspan="2">To be supported</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -344,7 +345,7 @@ This document outlines the features of various data loading and unloading method
         <td>CSV</td>
         <td rowspan="2">
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>
@@ -420,7 +421,7 @@ This document outlines the features of various data loading and unloading method
         <td>CSV</td>
         <td>
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>

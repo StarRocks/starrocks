@@ -241,7 +241,7 @@ public class MockedFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init(null);
                 ExecuteEnv.setup();
 
                 if (!startBDB) {
@@ -263,7 +263,7 @@ public class MockedFrontend {
                     }
                 };
 
-                GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().initialize(null);
 
                 if (RunMode.isSharedDataMode()) {
                     // setup and start StarManager service
@@ -271,8 +271,7 @@ public class MockedFrontend {
                     // TODO: support MockJournal in StarMgrServer
                     Preconditions.checkState(journal instanceof BDBJEJournal);
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState()
-                            .initialize(bdbEnvironment, GlobalStateMgr.getCurrentState().getImageDir());
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
                     StateChangeExecutor.getInstance().registerStateChangeExecution(
                             StarMgrServer.getCurrentState().getStateChangeExecution());
                 }

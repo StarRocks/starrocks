@@ -203,7 +203,7 @@ public class PruneHDFSScanColumnRuleTest {
         };
         List<OptExpression> list = hudiRule.transform(scan, context);
         LogicalHudiScanOperator scanOperator = (LogicalHudiScanOperator) list.get(0).getOp();
-        Assert.assertEquals(scanOperator.getScanOptimzeOption().getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
+        Assert.assertEquals(scanOperator.getScanOptimizeOption().getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
         Map<ColumnRefOperator, Column> transferMap = scanOperator.getColRefToColumnMetaMap();
         Assert.assertEquals(transferMap.size(), 1);
         Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
@@ -238,7 +238,7 @@ public class PruneHDFSScanColumnRuleTest {
         };
         List<OptExpression> list = icebergRule.transform(scan, context);
         LogicalIcebergScanOperator op = ((LogicalIcebergScanOperator) list.get(0).getOp());
-        Assert.assertEquals(op.getScanOptimzeOption().getCanUseAnyColumn(), false);
+        Assert.assertEquals(op.getScanOptimizeOption().getCanUseAnyColumn(), false);
     }
 
     @Test
@@ -314,7 +314,7 @@ public class PruneHDFSScanColumnRuleTest {
         };
         List<OptExpression> list = odpsRule.transform(scan, context);
         LogicalOdpsScanOperator scanOperator = (LogicalOdpsScanOperator) list.get(0).getOp();
-        Assert.assertEquals(scanOperator.getScanOptimzeOption().getCanUseAnyColumn(),
+        Assert.assertEquals(scanOperator.getScanOptimizeOption().getCanUseAnyColumn(),
                 (requiredOutputColumns.size() == 0));
         Map<ColumnRefOperator, Column> transferMap = scanOperator.getColRefToColumnMetaMap();
         Assert.assertEquals(transferMap.size(), 1);

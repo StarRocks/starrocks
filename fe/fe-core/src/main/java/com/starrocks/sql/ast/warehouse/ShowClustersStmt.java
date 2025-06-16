@@ -26,9 +26,10 @@ public class ShowClustersStmt extends ShowStmt {
     private String warehouseName;
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("ClusterId", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("CNGroupId", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("CNGroupName", ScalarType.createVarchar(256)))
                     .addColumn(new Column("WorkerGroupId", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("ComputeNodeIds", ScalarType.createVarchar(256)))
+                    .addColumn(new Column("ComputeNodeIds", ScalarType.createVarchar(4096)))
                     .addColumn(new Column("Pending", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Running", ScalarType.createVarchar(20)))
                     .build();

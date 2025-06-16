@@ -22,7 +22,7 @@ AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 PARTITION start('2025-01-01') end('2025-01-03') WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION (('2025-01-01'), ('2025-01-02'), ('2025-01-03')) WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;", "test_mv1")
 -- result:
 True
@@ -64,7 +64,7 @@ select * from test_mv1 order by prcdate;
 2025-01-01	b	1.0
 2025-01-02	b	2.0
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 PARTITION start('2025-01-03') end('2025-01-04') WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION (('2025-01-03'), ('2025-01-04')) WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT distinct prcdate FROM mv_iceberg_${uuid0}.sql_test_db.test_iceberg_with_month order by prcdate;", "test_mv1")
 -- result:
 True

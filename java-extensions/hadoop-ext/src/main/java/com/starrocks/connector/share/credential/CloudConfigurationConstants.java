@@ -28,6 +28,8 @@ public class CloudConfigurationConstants {
     // Credential for AWS s3
     public static final String AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
     public static final String AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
+
+    public static final String AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE = "aws.s3.use_web_identity_token_file";
     public static final String AWS_S3_ACCESS_KEY = "aws.s3.access_key";
     public static final String AWS_S3_SECRET_KEY = "aws.s3.secret_key";
     public static final String AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
@@ -63,6 +65,7 @@ public class CloudConfigurationConstants {
 
     public static final String AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.glue.use_aws_sdk_default_behavior";
     public static final String AWS_GLUE_USE_INSTANCE_PROFILE = "aws.glue.use_instance_profile";
+    public static final String AWS_GLUE_USE_WEB_IDENTITY_TOKEN_FILE = "aws.glue.use_web_identity_token_file";
     public static final String AWS_GLUE_ACCESS_KEY = "aws.glue.access_key";
     public static final String AWS_GLUE_SECRET_KEY = "aws.glue.secret_key";
     public static final String AWS_GLUE_SESSION_TOKEN = "aws.glue.session_token";
@@ -84,6 +87,10 @@ public class CloudConfigurationConstants {
     public static final String AZURE_BLOB_SHARED_KEY = "azure.blob.shared_key";
     public static final String AZURE_BLOB_CONTAINER = "azure.blob.container";
     public static final String AZURE_BLOB_SAS_TOKEN = "azure.blob.sas_token";
+    public static final String AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY = "azure.blob.oauth2_use_managed_identity";
+    public static final String AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client_id";
+    public static final String AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
+    public static final String AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";
     // For Azure Data Lake Storage Gen1 (ADLS1)
     public static final String AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY = "azure.adls1.use_managed_service_identity";
     public static final String AZURE_ADLS1_OAUTH2_CLIENT_ID = "azure.adls1.oauth2_client_id";
@@ -102,12 +109,13 @@ public class CloudConfigurationConstants {
 
     // Credential for Google Cloud Platform (GCP)
     // For Google Cloud Storage (GCS)
+    public static final String GCP_GCS_ENDPOINT = "gcp.gcs.endpoint";
     public static final String GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT =
             "gcp.gcs.use_compute_engine_service_account";
     public static final String GCP_GCS_SERVICE_ACCOUNT_EMAIL = "gcp.gcs.service_account_email";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY = "gcp.gcs.service_account_private_key";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID = "gcp.gcs.service_account_private_key_id";
-    public static final String GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT =
+    public static final String GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT =
             "gcp.gcs.impersonation_service_account";
 
     // Credential for HDFS

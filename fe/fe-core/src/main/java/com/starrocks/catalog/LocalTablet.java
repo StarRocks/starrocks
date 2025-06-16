@@ -45,11 +45,13 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -275,6 +277,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                     continue;
                 }
 
+                if (SimpleScheduler.isInBlocklist(replica.getBackendId())) {
+                    continue;
+                }
                 ReplicaState state = replica.getState();
                 if (infoService.checkBackendAlive(replica.getBackendId())
                         && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
@@ -318,7 +323,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     @Override
     public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
-                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+                                     long visibleVersion, long localBeId, int schemaHash,
+                                     ComputeResource computeResource) {
         throw new SemanticException("not implemented");
     }
 

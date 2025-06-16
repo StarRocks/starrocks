@@ -58,6 +58,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -221,7 +222,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
                 result = Sets.newHashSet(testBackendId1);
 
                 GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeId(anyLong, (LakeTablet) any);
+                        .getComputeNodeId((ComputeResource) any, (LakeTablet) any);
                 minTimes = 0;
                 result = testBackendId1;
             }

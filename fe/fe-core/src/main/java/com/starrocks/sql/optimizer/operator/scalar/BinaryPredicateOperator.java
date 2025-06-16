@@ -51,12 +51,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
         super(OperatorType.BINARY, arguments);
         this.type = type;
         Preconditions.checkState(arguments.length == 2);
+        this.incrDepth(arguments);
     }
 
     public BinaryPredicateOperator(BinaryType type, List<ScalarOperator> arguments) {
         super(OperatorType.BINARY, arguments);
         this.type = type;
         Preconditions.checkState(arguments.size() == 2);
+        this.incrDepth(arguments);
     }
 
     public void setBinaryType(BinaryType type) {

@@ -469,14 +469,16 @@ fi
 cd -
 echo "Finished patching $VPACK_SOURCE"
 
-# patch avro-c
+# patch avro-c and avro-cpp
 cd $TP_SOURCE_DIR/$AVRO_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
-    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
-    patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
+if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.12.0" ]; then
+    # c patches
     cd $TP_SOURCE_DIR/$AVRO_SOURCE
-    cp $TP_PATCH_DIR/avro-1.10.2.c.findjansson.patch $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c/Findjansson.cmake
-    patch -p1 < $TP_PATCH_DIR/avro-1.10.2.c.gcc14.patch
+    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.patch
+    cp $TP_PATCH_DIR/avro-1.12.0.c.findjansson.patch ./lang/c/Findjansson.cmake
+
+    # c++ patches
+    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.cpp.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -596,4 +598,15 @@ if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $BREAK_PAD_SOURCE"
+fi
+
+# patch azure
+if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$AZURE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $AZURE_SOURCE == "azure-storage-files-shares_12.12.0" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/azure-storage-files-shares_12.12.0.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $AZURE_SOURCE"
 fi

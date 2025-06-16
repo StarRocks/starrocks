@@ -15,18 +15,12 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ClusterSnapshotLog;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TClusterSnapshotJobsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class ClusterSnapshotJob implements Writable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJob.class);
@@ -56,10 +50,15 @@ public class ClusterSnapshotJob implements Writable {
     private String detailInfo;
 
     public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
-        this.snapshot = new ClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs, -1, 0, 0);
+        this.snapshot = createClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs);
         this.state = ClusterSnapshotJobState.INITIALIZING;
         this.errMsg = "";
         this.detailInfo = "";
+    }
+
+    protected ClusterSnapshot createClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
+        return new ClusterSnapshot(id, snapshotName, ClusterSnapshot.ClusterSnapshotType.AUTOMATED,
+                    storageVolumeName, createdTimeMs, -1, 0, 0);
     }
 
     public void setState(ClusterSnapshotJobState state) {
@@ -165,15 +164,5 @@ public class ClusterSnapshotJob implements Writable {
         item.setDetail_info(detailInfo);
         item.setError_message(errMsg);
         return item;
-    }
-
-    public static ClusterSnapshotJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ClusterSnapshotJob.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 }

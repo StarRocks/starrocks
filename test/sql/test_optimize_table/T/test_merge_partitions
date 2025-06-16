@@ -24,3 +24,34 @@ insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
 alter table t partition by date_trunc('month',k) between '2020-02-01 12:00:00' and '2020-02-28';
 function: wait_optimize_table_finish(expect_status="CANCELLED")
 show partitions from t;
+
+-- name: test_time_slice
+create table t1(a int,b datetime) partition by time_slice(b, interval 100 microsecond);
+alter table t1 partition by time_slice(b, interval 100 millisecond);
+create table t2(a int,b datetime) partition by time_slice(b, interval 1 second);
+alter table t2 partition by time_slice(b, interval 1 minute);
+create table t(a int,b datetime)                 partition by time_slice(b, interval 1 minute);
+insert into t values(101, '2001-01-01 00:00:00' + interval 3*101 hour);
+insert into t values(102, '2001-01-01 00:00:00' + interval 3*102 hour);
+insert into t values(103, '2001-01-01 00:00:00' + interval 3*103 hour);
+insert into t values(104, '2001-01-01 00:00:00' + interval 3*104 hour);
+insert into t values(105, '2001-01-01 00:00:00' + interval 3*105 hour);
+alter table t partition by time_slice(b, interval 2 day);
+alter table t partition by time_slice(b, interval 1 day);
+function: wait_optimize_table_finish()
+show partitions from t order by partitionName;
+select * from t;
+
+-- name: test_corner_case
+create table t(a int, b datetime) partition by date_trunc('month', b);
+alter table t partition by date_trunc('year',b);
+function: wait_optimize_table_finish()
+insert into t values
+(1, '2001-01-01 01:00:00'),
+(2, '2001-01-01 02:00:00'),
+(3, '2001-01-10 01:00:00'),
+(4, '2001-02-01 01:00:00'),
+(5, '2002-01-01 01:00:00');
+alter table t partition by date_trunc('month',b);
+alter table t partition by date_trunc('day',b);
+

@@ -4,6 +4,25 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.16
+
+发布日期：2025 年 4 月 30 日
+
+### 功能优化
+
+- Stream Load 任务调度支持 BE 节点黑名单，在黑名单内的节点在任务调度中会被剔除。[#57919](https://github.com/StarRocks/starrocks/pull/57919)
+
+### 问题修复
+
+修复了如下问题：
+
+- 创建 Tablet 超时。[#55808](https://github.com/StarRocks/starrocks/pull/55808)
+- 通过 `files()` 函数创建视图时认证信息丢失。[#56606](https://github.com/StarRocks/starrocks/pull/56606)
+- 处理空集时，优化器未能正确处理常量比较，导致查询失败。 [#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- 预聚合策略在处理数据溢出时导致 BE Crash。[#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- 当基表的某些分区被删除后，尝试删除关联的物化视图可能会引发异常，导致删除操作失败。[#58037](https://github.com/StarRocks/starrocks/pull/58037)
+- 加载主键表的 Tablet 时存在优先级评估逻辑的缺陷，版本识别错误导致的数据丢失。[#58404](https://github.com/StarRocks/starrocks/pull/58404)
+
 ## 3.2.15
 
 发布日期：2025 年 2 月 14 日

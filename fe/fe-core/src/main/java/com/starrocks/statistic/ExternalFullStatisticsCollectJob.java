@@ -256,12 +256,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            params.add(table.getUUID());
+            params.add("'" + table.getUUID() + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getPartitionName()) + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
-            params.add(catalogName);
-            params.add(db.getOriginName());
-            params.add(table.getName());
+            params.add("'" + catalogName + "'");
+            params.add("'" + db.getOriginName() + "'");
+            params.add("'" + table.getName() + "'");
             params.add(String.valueOf(data.getRowCount()));
             params.add(String.valueOf(data.getDataSize()));
             params.add("hll_deserialize(unhex('mockData'))");

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # USE
 
-## Description
-
-Specifies the active database for your session. You can then perform operations, such as creating tables and executing queries.
+USE specifies the active database for your session. You can then perform operations, such as creating tables and executing queries.
 
 ## Syntax
 

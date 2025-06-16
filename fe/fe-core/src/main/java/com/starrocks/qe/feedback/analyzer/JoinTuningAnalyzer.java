@@ -90,14 +90,14 @@ public class JoinTuningAnalyzer implements PlanTuningAnalyzer.Analyzer {
 
             if (rightExecStats.getPullRows() > rightStats.getOutputRowCount() * UNDERESTIMATED_FACTOR
                     && rightExecStats.getPullRows() > LARGE_TABLE_ROWS_THRESHOLD) {
-                tuningGuides.addTuningGuide(joinNode.getNodeId(),
+                tuningGuides.addTuningGuide(joinNode.getNodeId(), skeletonNode.getOperatorId(),
                         new RightChildEstimationErrorTuningGuide(joinNode, RIGHT_INPUT_UNDERESTIMATED));
             } else if (rightStats.getOutputRowCount() > rightExecStats.getPullRows() * UNDERESTIMATED_FACTOR) {
-                tuningGuides.addTuningGuide(joinNode.getNodeId(),
+                tuningGuides.addTuningGuide(joinNode.getNodeId(), skeletonNode.getOperatorId(),
                         new RightChildEstimationErrorTuningGuide(joinNode, RIGHT_INPUT_OVERESTIMATED));
             } else if (rightExecStats.getPullRows() > LARGE_TABLE_ROWS_THRESHOLD &&
                     leftStats.getOutputRowCount() > leftExecStats.getPullRows() * UNDERESTIMATED_FACTOR) {
-                tuningGuides.addTuningGuide(joinNode.getNodeId(),
+                tuningGuides.addTuningGuide(joinNode.getNodeId(), skeletonNode.getOperatorId(),
                         new LeftChildEstimationErrorTuningGuide(joinNode, LEFT_INPUT_OVERESTIMATED));
             }
             visit(optExpression, context);

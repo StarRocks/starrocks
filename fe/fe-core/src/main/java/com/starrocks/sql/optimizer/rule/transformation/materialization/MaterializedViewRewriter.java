@@ -2484,7 +2484,12 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 newProjection =
                         projection.getColumnRefMap().entrySet()
                                 .stream()
-                                .map(e -> Pair.create(e.getKey(), columnMapping.get(e.getKey())))
+                                .map(e -> {
+                                    Preconditions.checkArgument(columnMapping.containsKey(e.getKey()),
+                                            "columnMapping not contains key: %s, %s",
+                                            e.getKey(), columnMapping);
+                                    return Pair.create(e.getKey(), columnMapping.get(e.getKey()));
+                                })
                                 .collect(Collectors.toMap(p -> p.first, p -> p.second));
 
             } else {

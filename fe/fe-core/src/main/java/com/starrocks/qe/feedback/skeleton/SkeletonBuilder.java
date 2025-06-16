@@ -15,8 +15,6 @@
 package com.starrocks.qe.feedback.skeleton;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.Id;
-import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.proto.NodeExecStatsItemPB;
 import com.starrocks.qe.feedback.NodeExecStats;
@@ -24,6 +22,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
 import java.util.Map;
@@ -32,10 +31,7 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
 
     private Map<Integer, NodeExecStats> nodeExecStatsMap = Maps.newHashMap();
 
-    private Map<Integer, SkeletonNode> skeletonNodeMap = Maps.newHashMap();
-
-    private IdGenerator<SkeletonNodeId> idGenerator = SkeletonNodeId.createGenerator();
-
+    private final Map<Integer, SkeletonNode> skeletonNodeMap = Maps.newHashMap();
 
     public SkeletonBuilder() {
 
@@ -52,6 +48,14 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
     }
 
     public Pair<SkeletonNode, Map<Integer, SkeletonNode>> buildSkeleton(OptExpression root) {
+        // buildSkeleton is invoked at two stages:
+        // - Query execution completion phase: Analyze the query based on actual execution information to produce tuning guides.
+        // - Rewrite phase: Rewrite the query according to the tuning guides. At this stage, operator IDs are not yet set,
+        //   since they are assigned only when the FragmentBuilder decomposes the physical plan into fragments.
+        // Therefore, assign operator ids temporally if it doesn't exist.
+        if (root.getOp().getOperatorId() == Operator.ABSENT_OPERATOR_ID) {
+            ExecPlan.assignOperatorIds(root);
+        }
         SkeletonNode skeletonRoot = root.getOp().accept(this, root, null);
         return Pair.create(skeletonRoot, skeletonNodeMap);
     }
@@ -69,7 +73,6 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
         int planNodeId = optExpression.getOp().getPlanNodeId();
         SkeletonNode node = new SkeletonNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
         visitChildren(node, optExpression.getInputs());
-        fillNodeId(optExpression.getOp(), node);
         skeletonNodeMap.putIfAbsent(planNodeId, node);
         return node;
     }
@@ -78,7 +81,6 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
     public SkeletonNode visitPhysicalScan(OptExpression optExpression, SkeletonNode parent) {
         int planNodeId = optExpression.getOp().getPlanNodeId();
         ScanNode node = new ScanNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
-        fillNodeId(optExpression.getOp(), node);
         skeletonNodeMap.putIfAbsent(planNodeId, node);
         return node;
     }
@@ -88,7 +90,6 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
         int planNodeId = optExpression.getOp().getPlanNodeId();
         JoinNode node = new JoinNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
         visitChildren(node, optExpression.getInputs());
-        fillNodeId(optExpression.getOp(), node);
         skeletonNodeMap.putIfAbsent(planNodeId, node);
         return node;
     }
@@ -100,13 +101,11 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
         if (aggOperator.getType().isAnyGlobal()) {
             BlockingAggNode node = new BlockingAggNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
             visitChildren(node, optExpression.getInputs());
-            fillNodeId(optExpression.getOp(), node);
             skeletonNodeMap.putIfAbsent(planNodeId, node);
             return node;
         } else {
             StreamingAggNode node = new StreamingAggNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
             visitChildren(node, optExpression.getInputs());
-            fillNodeId(optExpression.getOp(), node);
             skeletonNodeMap.putIfAbsent(planNodeId, node);
             return node;
         }
@@ -117,7 +116,6 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
         int planNodeId = optExpression.getOp().getPlanNodeId();
         DistributionNode node = new DistributionNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
         visitChildren(node, optExpression.getInputs());
-        fillNodeId(optExpression.getOp(), node);
         skeletonNodeMap.putIfAbsent(planNodeId, node);
         return node;
     }
@@ -126,20 +124,13 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
     public SkeletonNode visitPhysicalCTEAnchor(OptExpression optExpression, SkeletonNode parent) {
         SkeletonNode node = new SkeletonNode(optExpression, null, parent);
         visitChildren(node, optExpression.getInputs());
-        if (nodeExecStatsMap.isEmpty()) {
-            node.setNodeId(node.getChild(1).getNodeId());
-        }
         return node;
     }
-
 
     @Override
     public SkeletonNode visitPhysicalCTEProduce(OptExpression optExpression, SkeletonNode parent) {
         SkeletonNode node = new SkeletonNode(optExpression, null, parent);
         visitChildren(node, optExpression.getInputs());
-        if (nodeExecStatsMap.isEmpty()) {
-            node.setNodeId(node.getChild(0).getNodeId());
-        }
         return node;
     }
 
@@ -147,42 +138,6 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
     public SkeletonNode visitPhysicalNoCTE(OptExpression optExpression, SkeletonNode parent) {
         SkeletonNode node = new SkeletonNode(optExpression, null, parent);
         visitChildren(node, optExpression.getInputs());
-        if (nodeExecStatsMap.isEmpty()) {
-            node.setNodeId(node.getChild(0).getNodeId());
-        }
         return node;
-    }
-
-    private void fillNodeId(Operator operator, SkeletonNode node) {
-        if (nodeExecStatsMap.isEmpty()) {
-            node.setNodeId(idGenerator.getNextId().asInt());
-            fillProjectionNodeId(operator);
-        }
-    }
-
-    private void fillProjectionNodeId(Operator operator) {
-        if (operator.getProjection() != null) {
-            idGenerator.getNextId();
-        }
-    }
-
-    public static class SkeletonNodeId extends Id<SkeletonNodeId> {
-        public SkeletonNodeId(int id) {
-            super(id);
-        }
-
-        public static IdGenerator<SkeletonNodeId> createGenerator() {
-            return new IdGenerator<>() {
-                @Override
-                public SkeletonNodeId getNextId() {
-                    return new SkeletonNodeId(nextId++);
-                }
-
-                @Override
-                public SkeletonNodeId getMaxId() {
-                    return new SkeletonNodeId(nextId - 1);
-                }
-            };
-        }
     }
 }

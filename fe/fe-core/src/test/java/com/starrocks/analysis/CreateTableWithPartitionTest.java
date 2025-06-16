@@ -22,15 +22,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.logging.log4j.util.Strings;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-public class CreateTableWithPartitionTest {
-    private static StarRocksAssert starRocksAssert;
+public class CreateTableWithPartitionTest extends StarRocksTestBase  {
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -937,8 +938,8 @@ public class CreateTableWithPartitionTest {
                     "'partition_retention_condition' = 'cast(id as date) > current_date() - interval 1 month'\n" +
                     ")");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Column is not a partition column which can not be " +
-                    "used in where clause for drop partition"));
+            Assert.assertTrue(e.getMessage().contains("Column `id` in the partition condition is not a table's partition " +
+                    "expression, please use table's partition expressions: `province`/`dt`."));
         }
     }
 
@@ -957,8 +958,8 @@ public class CreateTableWithPartitionTest {
                     "'partition_retention_condition' = 'cast(id as date) > current_date() - interval 1 month'\n" +
                     ")");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can't drop partitions with where expression " +
-                    "since it is not partitioned"));
+            Assert.assertTrue(e.getMessage().contains("Partition condition `CAST(id AS DATE) > current_date() - INTERVAL 1 MONTH` " +
+                    "is supported for a partitioned table"));
         }
     }
 
@@ -1034,7 +1035,7 @@ public class CreateTableWithPartitionTest {
     }
 
     @Test
-    public void testRangeTableWithRetentionCondition() throws Exception {
+    public void testRangeTableWithRetentionCondition1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE r1 \n" +
                 "(\n" +
                 "    dt date,\n" +
@@ -1095,6 +1096,84 @@ public class CreateTableWithPartitionTest {
         retentionCondition = r1.getTableProperty().getPartitionRetentionCondition();
         Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
         starRocksAssert.dropTable("r1");
+    }
+
+    @Test
+    public void testRangeTableWithRetentionCondition2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE r1 \n" +
+                "(\n" +
+                "    dt date,\n" +
+                "    k2 int,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(\n" +
+                "    PARTITION p0 values [('2024-01-29'),('2024-01-30')),\n" +
+                "    PARTITION p1 values [('2024-01-30'),('2024-01-31')),\n" +
+                "    PARTITION p2 values [('2024-01-31'),('2024-02-01')),\n" +
+                "    PARTITION p3 values [('2024-02-01'),('2024-02-02')) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1',\n" +
+                "'partition_retention_condition' = 'dt > current_date() - interval 1 month'\n" +
+                ")");
+        OlapTable r1 = (OlapTable) starRocksAssert.getTable("db1", "r1");
+        String retentionCondition = r1.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+
+        String result = starRocksAssert.showCreateTable("show create table r1");
+        final String expect = "CREATE TABLE `r1` (\n" +
+                "  `dt` date NULL COMMENT \"\",\n" +
+                "  `k2` int(11) NULL COMMENT \"\",\n" +
+                "  `v1` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`dt`, `k2`, `v1`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p0 VALUES [(\"2024-01-29\"), (\"2024-01-30\")),\n" +
+                "PARTITION p1 VALUES [(\"2024-01-30\"), (\"2024-01-31\")),\n" +
+                "PARTITION p2 VALUES [(\"2024-01-31\"), (\"2024-02-01\")),\n" +
+                "PARTITION p3 VALUES [(\"2024-02-01\"), (\"2024-02-02\")))\n" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"partition_retention_condition\" = \"dt > current_date() - interval 1 month\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        Assert.assertEquals(expect, result);
+    }
+
+    @Test
+    public void testRangeTableWithRetentionCondition3() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE r1 \n" +
+                "(\n" +
+                "    dt date,\n" +
+                "    k2 int,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(\n" +
+                "    PARTITION p0 values [('2024-01-29'),('2024-01-30')),\n" +
+                "    PARTITION p1 values [('2024-01-30'),('2024-01-31')),\n" +
+                "    PARTITION p2 values [('2024-01-31'),('2024-02-01')),\n" +
+                "    PARTITION p3 values [('2024-02-01'),('2024-02-02')) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1',\n" +
+                "'partition_retention_condition' = 'dt > current_date() - interval 1 month'\n" +
+                ")");
+        OlapTable r1 = (OlapTable) starRocksAssert.getTable("db1", "r1");
+        String retentionCondition = r1.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+
+        String alterPartitionSql = "alter table r1 set ('partition_retention_condition' = '');";
+        starRocksAssert.alterTable(alterPartitionSql);
+
+        retentionCondition = r1.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertTrue(Strings.isEmpty(retentionCondition));
     }
 }
 

@@ -45,6 +45,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -190,8 +191,7 @@ public class LakeTable extends OlapTable {
         try {
             // Ignore the parameter replicationNum
             shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, index.getShardGroupId(),
-                    null, properties,
-                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                    null, properties, WarehouseManager.DEFAULT_RESOURCE);
         } catch (DdlException e) {
             LOG.error(e.getMessage(), e);
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
@@ -264,10 +264,10 @@ public class LakeTable extends OlapTable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        // We should restore column unique id before calling super.gsonPostProcess(), which will rebuild full schema there.
+        // And the max unique id will be reset while rebuilding full schema.
+        LakeTableHelper.restoreColumnUniqueIdIfNeeded(this);
         super.gsonPostProcess();
-        if (getMaxColUniqueId() <= 0) {
-            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
-        }
     }
 
     @Override

@@ -63,14 +63,14 @@ public class HoistHeavyCostExprsUponTopnTest extends PlanTestNoneDBBase {
                 "order by EventDate\n" +
                 "limit 10 offset 20";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
-        assertCContains(plan, "  1:Project\n" +
+        assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  1 <-> [1: EventDate, DATE, false]\n" +
                 "  |  4 <-> [4: M1, DECIMAL128(20,2), true]\n" +
                 "  |  7 <-> [3: M0, DECIMAL128(20,2), true] / [4: M1, DECIMAL128(20,2), true]\n" +
+                "  |  limit: 10\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  0:OlapScanNode");
+                "  2:MERGING-EXCHANGE");
     }
 
     @Test
@@ -80,14 +80,14 @@ public class HoistHeavyCostExprsUponTopnTest extends PlanTestNoneDBBase {
                 "order by EventDate\n" +
                 "limit 10 offset 20";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
-        assertCContains(plan, "  1:Project\n" +
+        assertCContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  1 <-> [1: EventDate, DATE, false]\n" +
                 "  |  5 <-> [5: M2, LARGEINT, true]\n" +
                 "  |  6 <-> [6: M3, LARGEINT, true]\n" +
                 "  |  7 <-> cast([5: M2, LARGEINT, true] as DOUBLE) / cast([6: M3, LARGEINT, true] as DOUBLE)\n" +
+                "  |  limit: 10\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  0:OlapScanNode");
+                "  2:MERGING-EXCHANGE");
     }
 }

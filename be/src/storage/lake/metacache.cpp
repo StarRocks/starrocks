@@ -64,6 +64,17 @@ static bvar::Adder<uint64_t> g_segment_cache_miss;
 static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_miss_minute("lake", "segment_cache_miss_minute",
                                                                        &g_segment_cache_miss, 60);
 
+static bvar::Adder<uint64_t> g_aggregate_partition_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_aggregate_partition_cache_hit_minute("lake",
+                                                                                  "aggregate_partition_hit_minute",
+                                                                                  &g_aggregate_partition_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_aggregate_partition_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_aggregate_partition_cache_miss_minute("lake",
+                                                                                   "aggregate_partition_miss_minute",
+                                                                                   &g_aggregate_partition_cache_miss,
+                                                                                   60);
+
 #ifndef BE_TEST
 static Metacache* get_metacache() {
     auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
@@ -89,7 +100,7 @@ Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capaci
 Metacache::~Metacache() = default;
 
 void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size) {
-    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, size, cache_value_deleter);
+    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, cache_value_deleter);
     _cache->release(handle);
 }
 
@@ -206,6 +217,24 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) 
     }
 }
 
+bool Metacache::lookup_aggregation_partition(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_aggregate_partition_cache_miss << 1;
+        return false;
+    }
+    DeferOp defer([this, handle]() { _cache->release(handle); });
+
+    try {
+        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto is_aggregation = std::get<bool>(*value);
+        g_aggregate_partition_cache_hit << 1;
+        return is_aggregation;
+    } catch (const std::bad_variant_access& e) {
+        return false;
+    }
+}
+
 void Metacache::cache_segment(std::string_view key, std::shared_ptr<Segment> segment) {
     std::lock_guard<std::mutex> lock(_mutex);
     _cache_segment_no_lock(key, std::move(segment));
@@ -253,6 +282,11 @@ void Metacache::cache_combined_txn_log(std::string_view key, std::shared_ptr<con
 void Metacache::cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size) {
     auto cache_value = std::make_unique<CacheValue>(schema);
     insert(key, cache_value.release(), size);
+}
+
+void Metacache::cache_aggregation_partition(std::string_view key, bool is_aggregation) {
+    auto cache_value = std::make_unique<CacheValue>(is_aggregation);
+    insert(key, cache_value.release(), sizeof(bool));
 }
 
 void Metacache::erase(std::string_view key) {

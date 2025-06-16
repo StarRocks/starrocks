@@ -74,7 +74,11 @@ DISTRIBUTED BY HASH(site_id);
 > - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../data_distribution/Data_distribution.md#bucketing).
 > - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 ## Generic aggregate function states
+
+<Beta />
 
 StarRocks supports generic aggregate function states from v3.4.0.
 

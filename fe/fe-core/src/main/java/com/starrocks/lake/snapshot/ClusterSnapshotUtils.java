@@ -33,7 +33,7 @@ public class ClusterSnapshotUtils {
 
         StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotStorageVolume();
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
-        String localImagePath = GlobalStateMgr.getServingState().getImageDir();
+        String localImagePath = GlobalStateMgr.getImageDirPath();
 
         HdfsUtil.copyFromLocal(localImagePath, snapshotImagePath, sv.getProperties());
     }
@@ -44,6 +44,10 @@ public class ClusterSnapshotUtils {
         }
 
         StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotStorageVolume();
+        clearClusterSnapshotFromRemote(snapshotName, sv);
+    }
+
+    public static void clearClusterSnapshotFromRemote(String snapshotName, StorageVolume sv) throws StarRocksException {
         BrokerDesc brokerDesc = new BrokerDesc(sv.getProperties());
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
 

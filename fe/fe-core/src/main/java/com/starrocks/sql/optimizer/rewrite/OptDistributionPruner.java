@@ -74,16 +74,16 @@ public class OptDistributionPruner {
                 } else {
                     filters = operator.getColumnFilters();
                 }
-                distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
+                distributionPruner = new HashDistributionPruner(index.getVirtualBuckets(),
+                        index.getTabletIds(),
                         MetaUtils.getColumnsByColumnIds(idToColumn, info.getDistributionColumns()),
-                        filters,
-                        info.getBucketNum());
+                        filters);
                 return distributionPruner.prune();
             }
         } catch (AnalysisException e) {
             LOG.warn("distribution prune failed. ", e);
         }
 
-        return index.getTabletIdsInOrder();
+        return index.getTabletIds();
     }
 }

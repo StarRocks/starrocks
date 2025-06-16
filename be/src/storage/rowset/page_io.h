@@ -64,9 +64,6 @@ struct PageReadOptions {
     bool verify_checksum = true;
     // whether to use page cache in read path
     bool use_page_cache = true;
-    // if true, use DURABLE CachePriority in page cache
-    // currently used for in memory olap table
-    bool kept_in_memory = false;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
 

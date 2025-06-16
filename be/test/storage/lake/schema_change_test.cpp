@@ -100,7 +100,7 @@ protected:
         txn_info.set_combined_txn_log(false);
         txn_info.set_commit_time(time(NULL));
         return publish_version(_tablet_manager.get(), tablet_id, 1, new_version,
-                               std::span<const TxnInfoPB>(&txn_info, 1))
+                               std::span<const TxnInfoPB>(&txn_info, 1), false)
                 .status();
     }
 

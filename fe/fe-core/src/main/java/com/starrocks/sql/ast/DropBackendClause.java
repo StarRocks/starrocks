@@ -21,15 +21,17 @@ import java.util.List;
 public class DropBackendClause extends BackendClause {
     private final boolean force;
     public String warehouse;
+    public String cngroupName;
 
     public DropBackendClause(List<String> hostPorts, boolean force, String warehouse) {
-        this(hostPorts, force, warehouse, NodePosition.ZERO);
+        this(hostPorts, force, warehouse, "", NodePosition.ZERO);
     }
 
-    public DropBackendClause(List<String> hostPorts, boolean force, String warehouse, NodePosition pos) {
+    public DropBackendClause(List<String> hostPorts, boolean force, String warehouse, String cngroupName, NodePosition pos) {
         super(hostPorts, pos);
         this.force = force;
         this.warehouse = warehouse;
+        this.cngroupName = cngroupName;
     }
 
     public boolean isForce() {
@@ -38,6 +40,10 @@ public class DropBackendClause extends BackendClause {
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    public String getCNGroupName() {
+        return cngroupName;
     }
 
     @Override

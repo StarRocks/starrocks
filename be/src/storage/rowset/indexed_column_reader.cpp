@@ -95,7 +95,6 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
     page_opts.codec = _compress_codec;
     page_opts.stats = opts.stats;
     page_opts.use_page_cache = opts.use_page_cache;
-    page_opts.kept_in_memory = opts.kept_in_memory;
     page_opts.encoding_type = _encoding_info->encoding();
     return PageIO::read_and_decompress_page(page_opts, handle, body, footer);
 }

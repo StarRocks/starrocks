@@ -56,16 +56,24 @@ public class DropPartitionsInfo implements Writable {
     private boolean forceDrop = false;
     @SerializedName(value = "partitionNames")
     private List<String> partitionNames = new ArrayList<>();
+    @SerializedName(value = "isDropAll")
+    private boolean isDropAll = false;
 
     private DropPartitionsInfo() {
     }
 
     public DropPartitionsInfo(Long dbId, Long tableId, boolean isTempPartition, boolean forceDrop, List<String> partitionNames) {
+        this(dbId, tableId, isTempPartition, forceDrop, partitionNames, false);
+    }
+
+    public DropPartitionsInfo(Long dbId, Long tableId, boolean isTempPartition,
+                              boolean forceDrop, List<String> partitionNames, boolean isDropAll) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.isTempPartition = isTempPartition;
         this.forceDrop = forceDrop;
         this.partitionNames = partitionNames;
+        this.isDropAll = isDropAll;
     }
 
     public Long getDbId() {
@@ -86,6 +94,10 @@ public class DropPartitionsInfo implements Writable {
 
     public List<String> getPartitionNames() {
         return partitionNames;
+    }
+
+    public boolean isDropAll() {
+        return isDropAll;
     }
 
     public void setPartitionNames(List<String> partitionNames) {
@@ -109,11 +121,12 @@ public class DropPartitionsInfo implements Writable {
         }
         DropPartitionsInfo that = (DropPartitionsInfo) o;
         return isTempPartition == that.isTempPartition && forceDrop == that.forceDrop && Objects.equals(dbId, that.dbId) &&
-                Objects.equals(tableId, that.tableId) && Objects.equals(partitionNames, that.partitionNames);
+                Objects.equals(tableId, that.tableId) && Objects.equals(partitionNames, that.partitionNames) &&
+                isDropAll == that.isDropAll;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dbId, tableId, isTempPartition, forceDrop, partitionNames);
+        return Objects.hash(dbId, tableId, isTempPartition, forceDrop, partitionNames, isDropAll);
     }
 }

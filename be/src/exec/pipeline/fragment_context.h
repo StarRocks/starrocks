@@ -90,7 +90,7 @@ public:
         return status == nullptr ? Status::OK() : *status;
     }
 
-    void cancel(const Status& status);
+    void cancel(const Status& status, bool cancelled_by_fe = false);
 
     void finish() { cancel(Status::OK()); }
 

@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# System limits
+# システム制限
 
 このトピックでは、StarRocks を使用する際に適用されるルールと制限について説明します。
 

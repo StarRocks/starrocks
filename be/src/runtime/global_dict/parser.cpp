@@ -141,8 +141,13 @@ private:
             const auto& container = data_column->get_data();
             auto res = _dict_opt_ctx->convert_column->clone_empty();
 
-            res->append_selective(*_dict_opt_ctx->convert_column,
-                                  _code_convert(container, _dict_opt_ctx->code_convert_map));
+            if (!input->has_null() && _is_strict) {
+                res->append_selective(*_data_column_ptr, _code_convert(container, _dict_opt_ctx->code_convert_map));
+            } else {
+                res->append_selective(*_dict_opt_ctx->convert_column,
+                                      _code_convert(container, _dict_opt_ctx->code_convert_map));
+            }
+
             return res;
         } else {
             // is not nullable

@@ -18,6 +18,8 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import org.junit.After;
 import org.junit.Before;
@@ -64,7 +66,7 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
     public void testCreateFromEnv() {
         {
             Config.enable_query_queue_v2 = false;
-            QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             assertThat(opts.isEnableQueryQueueV2()).isFalse();
         }
@@ -80,7 +82,7 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
             BackendResourceStat.getInstance().setNumHardwareCoresOfBe(2, numCores);
             BackendResourceStat.getInstance().setMemLimitBytesOfBe(2, memLimitBytes);
             Config.enable_query_queue_v2 = true;
-            QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             assertThat(opts.isEnableQueryQueueV2()).isTrue();
             assertThat(opts.v2().getNumWorkers()).isEqualTo(numBEs);
@@ -123,5 +125,48 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
             QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coordinator);
             assertThat(opts.isEnableQueryQueueV2()).isFalse();
         }
+    }
+
+    @Test
+    public void testCreateV2WithMetrics() {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        assertThat(warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID)).isNotNull();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        assertThat(slotManager.getQueryQueuePendingTimeoutSecond(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+                .isEqualTo(GlobalVariable.getQueryQueuePendingTimeoutSecond());
+        assertThat(slotManager.getQueryQueueMaxQueuedQueries(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+                .isEqualTo(GlobalVariable.getQueryQueueMaxQueuedQueries());
+        assertThat(slotManager.isEnableQueryQueueV2(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+                .isEqualTo(Config.enable_query_queue_v2);
+
+        {
+            Config.enable_query_queue_v2 = false;
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            assertThat(opts.isEnableQueryQueueV2()).isFalse();
+            assertThat(opts.v2()).isEqualTo(new QueryQueueOptions.V2());
+        }
+
+        {
+            Config.enable_query_queue_v2 = true;
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            assertThat(opts.isEnableQueryQueueV2()).isTrue();
+            assertThat(opts.v2()).isNotEqualTo(new QueryQueueOptions.V2());
+            QueryQueueOptions.V2 v2 = opts.v2();
+            assertThat(v2.getNumWorkers()).isEqualTo(1);
+            assertThat(v2.getNumRowsPerSlot()).isEqualTo(Config.query_queue_v2_num_rows_per_slot);
+            assertThat(v2.getTotalSlots()).isEqualTo(4);
+            assertThat(v2.getTotalSmallSlots()).isEqualTo(1);
+            assertThat(v2.getCpuCostsPerSlot()).isEqualTo(Config.query_queue_v2_cpu_costs_per_slot);
+        }
+    }
+
+    @Test
+    public void testCorrectSlotNum() {
+        assertThat(QueryQueueOptions.correctSlotNum(-1)).isEqualTo(0);
+        assertThat(QueryQueueOptions.correctSlotNum(0)).isEqualTo(0);
+        assertThat(QueryQueueOptions.correctSlotNum(1)).isEqualTo(1);
+        assertThat(QueryQueueOptions.correctSlotNum(2)).isEqualTo(2);
+        assertThat(QueryQueueOptions.correctSlotNum(4)).isEqualTo(4);
+        assertThat(QueryQueueOptions.correctSlotNum(5)).isEqualTo(5);
     }
 }

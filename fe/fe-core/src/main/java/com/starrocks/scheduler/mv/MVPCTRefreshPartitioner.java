@@ -17,6 +17,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -35,6 +36,7 @@ import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCell;
@@ -55,6 +57,8 @@ import static com.starrocks.sql.optimizer.rule.transformation.partition.Partitio
  * refresh.
  */
 public abstract class MVPCTRefreshPartitioner {
+    protected  static final int CREATE_PARTITION_BATCH_SIZE = 64;
+
     protected final MvTaskRunContext mvContext;
     protected final TaskRunContext context;
     protected final Database db;
@@ -90,6 +94,16 @@ public abstract class MVPCTRefreshPartitioner {
     public abstract Expr generatePartitionPredicate(Table refBaseTable,
                                                     Set<String> refBaseTablePartitionNames,
                                                     List<Expr> mvPartitionSlotRefs) throws AnalysisException;
+
+    /**
+     * Generate partition predicate for mv refresh based on the mv partition names.
+     * @param tableName: materialized view table name(db + name)
+     * @param mvPartitionNames: materialized view partition names to check.
+     * @return : partition predicate for mv refresh.
+     * @throws AnalysisException
+     */
+    public abstract Expr generateMVPartitionPredicate(TableName tableName,
+                                                      Set<String> mvPartitionNames) throws AnalysisException;
 
     /**
      * Get mv partitions to refresh based on the ref base table partitions.
@@ -130,11 +144,17 @@ public abstract class MVPCTRefreshPartitioner {
                                                         Set<String> mvPotentialPartitionNames,
                                                         boolean tentative);
 
+    public abstract void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
+                                                        Set<String> mvPotentialPartitionNames,
+                                                        boolean tentative);
+
     /**
      * Check whether the base table is supported partition refresh or not.
      */
     public static boolean isPartitionRefreshSupported(Table baseTable) {
-        return ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType());
+        // An external table is not supported to refresh by partition.
+        return ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType()) &&
+                !MaterializedViewAnalyzer.isExternalTableFromResource(baseTable);
     }
 
     /**
@@ -224,7 +244,7 @@ public abstract class MVPCTRefreshPartitioner {
             if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
-            if (needsToRefreshTable(mv, snapshotTable, false)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, false)) {
                 return true;
             }
         }
@@ -243,7 +263,7 @@ public abstract class MVPCTRefreshPartitioner {
             if (!isPartitionRefreshSupported(snapshotTable)) {
                 return true;
             }
-            if (needsToRefreshTable(mv, snapshotTable, false)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, false)) {
                 return true;
             }
         }

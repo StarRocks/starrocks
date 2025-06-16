@@ -129,6 +129,12 @@ public:
     static Status get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
                                TGetKeywordsResponse* response);
 
+    static Status get_warehouse_metrics(const SchemaScannerState& state, const TGetWarehouseMetricsRequest& request,
+                                        TGetWarehouseMetricsRespone* response);
+
+    static Status get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
+                                        TGetWarehouseQueriesResponse* response);
+
 private:
     static Status _call_rpc(const SchemaScannerState& state,
                             std::function<void(ClientConnection<FrontendServiceClient>&)> callback);

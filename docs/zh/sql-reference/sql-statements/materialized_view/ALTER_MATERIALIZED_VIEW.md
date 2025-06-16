@@ -17,6 +17,7 @@ displayed_sidebar: docs
 
   您可以使用此 SQL 语句变更异步物化视图的以下属性：
 
+  - `bloom_filter_columns`
   - `partition_ttl_number`
   - `partition_refresh_number`
   - `resource_group`
@@ -115,4 +116,9 @@ ALTER MATERIALIZED VIEW mv1 SET ("session.new_planner_optimize_timeout" = "30000
 
 ```SQL
 ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
+```
+
+示例 10：修改物化视图的 BloomFilter 索引。
+```
+ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
 ```

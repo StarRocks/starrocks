@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "common/statusor.h"
+#include "exec/filter_condition.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "tablet_schema.h"
 
@@ -44,6 +45,7 @@ public:
     // Parse |condition| into a predicate that can be pushed down.
     // return nullptr if parse failed.
     virtual ColumnPredicate* parse_thrift_cond(const TCondition& condition) const = 0;
+    virtual ColumnPredicate* parse_thrift_cond(const GeneralCondition& condition) const = 0;
 
     virtual StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
                                                       ExprContext* expr_ctx) const = 0;
@@ -52,6 +54,8 @@ public:
 
 protected:
     static ColumnPredicate* create_column_predicate(const TCondition& condition, TypeInfoPtr& type_info,
+                                                    ColumnId index);
+    static ColumnPredicate* create_column_predicate(const GeneralCondition& condition, TypeInfoPtr& type_info,
                                                     ColumnId index);
 };
 
@@ -70,6 +74,7 @@ public:
     // Parse |condition| into a predicate that can be pushed down.
     // return nullptr if parse failed.
     ColumnPredicate* parse_thrift_cond(const TCondition& condition) const override;
+    ColumnPredicate* parse_thrift_cond(const GeneralCondition& condition) const override;
 
     StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
                                               ExprContext* expr_ctx) const override;
@@ -77,6 +82,9 @@ public:
     uint32_t column_id(const SlotDescriptor& slot_desc) const override;
 
 private:
+    template <typename ConditionType>
+    ColumnPredicate* t_parse_thrift_cond(const ConditionType& condition) const;
+
     const TabletSchemaCSPtr _schema = nullptr;
     // const std::vector<SlotDescriptor*>* _slot_desc = nullptr;
 };
@@ -93,6 +101,7 @@ public:
     bool can_pushdown(const SlotDescriptor* slot_desc) const override;
 
     ColumnPredicate* parse_thrift_cond(const TCondition& condition) const override;
+    ColumnPredicate* parse_thrift_cond(const GeneralCondition& condition) const override;
 
     StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
                                               ExprContext* expr_ctx) const override;
@@ -100,6 +109,9 @@ public:
     uint32_t column_id(const SlotDescriptor& slot_desc) const override;
 
 private:
+    template <typename ConditionType>
+    ColumnPredicate* t_parse_thrift_cond(const ConditionType& condition) const;
+
     const std::vector<SlotDescriptor*>* _slot_desc = nullptr;
 };
 

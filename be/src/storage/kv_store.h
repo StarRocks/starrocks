@@ -53,6 +53,7 @@ namespace starrocks {
 
 using ColumnFamilyHandle = rocksdb::ColumnFamilyHandle;
 using WriteBatch = rocksdb::WriteBatch;
+class MemTracker;
 
 class KVStore {
 public:
@@ -100,6 +101,9 @@ public:
     // 2. and then generate write batch with batch delete.
     Status OptDeleteRange(ColumnFamilyIndex column_family_index, const std::string& begin_key,
                           const std::string& end_key, WriteBatch* batch);
+
+private:
+    static int64_t calc_rocksdb_write_buffer_size(MemTracker* mem_tracker);
 
 private:
     std::string _root_path;

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: Feature Support
+sidebar_label: 機能サポート
 ---
 
 # 機能サポート: データロードとアンロード
@@ -42,7 +42,8 @@ sidebar_label: Feature Support
         <td>サポート予定</td>
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="3">サポート予定</td>
+        <td>Yes (v3.4.4+)</td>
+        <td colspan="2">サポート予定</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -344,7 +345,7 @@ sidebar_label: Feature Support
         <td>CSV</td>
         <td rowspan="2">
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>
@@ -420,7 +421,7 @@ sidebar_label: Feature Support
         <td>CSV</td>
         <td>
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>

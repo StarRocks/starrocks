@@ -44,6 +44,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -155,7 +156,7 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     // convert offset of OFFSET_END and OFFSET_BEGINNING to current offset number
-    public void convertOffset(String brokerList, String topic, Map<String, String> properties, long warehouseId)
+    public void convertOffset(String brokerList, String topic, Map<String, String> properties, ComputeResource computeResource)
             throws StarRocksException {
         List<Integer> beginningPartitions = Lists.newArrayList();
         List<Integer> endPartitions = Lists.newArrayList();
@@ -171,13 +172,13 @@ public class KafkaProgress extends RoutineLoadProgress {
         }
 
         if (beginningPartitions.size() > 0) {
-            Map<Integer, Long> partOffsets = KafkaUtil
-                    .getBeginningOffsets(brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions, warehouseId);
+            Map<Integer, Long> partOffsets = KafkaUtil.getBeginningOffsets(
+                    brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions, computeResource);
             partitionIdToOffset.putAll(partOffsets);
         }
         if (endPartitions.size() > 0) {
-            Map<Integer, Long> partOffsets =
-                    KafkaUtil.getLatestOffsets(brokerList, topic, ImmutableMap.copyOf(properties), endPartitions, warehouseId);
+            Map<Integer, Long> partOffsets = KafkaUtil.getLatestOffsets(
+                    brokerList, topic, ImmutableMap.copyOf(properties), endPartitions, computeResource);
             partitionIdToOffset.putAll(partOffsets);
         }
     }

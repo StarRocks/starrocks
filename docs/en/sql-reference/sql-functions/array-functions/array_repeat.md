@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # array_repeat
 
-## Description
-
-Returns an array containing a given element repeated a specified number of times.
+`array_repeat` returns an array containing a given element repeated a specified number of times.
 
 ## Syntax
 

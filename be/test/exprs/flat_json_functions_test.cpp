@@ -44,7 +44,10 @@ namespace starrocks {
 
 class FlatJsonQueryTestFixture2
         : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>,
-                                                     std::string, std::string>> {};
+                                                     std::string, std::string>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonQueryTestFixture2, flat_json_query) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -144,7 +147,10 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonQueryTest, FlatJsonQueryTestFixture2,
 // clang-format on
 
 class FlatJsonQueryErrorTestFixture
-        : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string>> {};
+        : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonQueryErrorTestFixture, json_query) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -203,7 +209,10 @@ INSTANTIATE_TEST_SUITE_P(
 
 class FlatJsonExistsTestFixture2
         : public ::testing::TestWithParam<
-                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, bool>> {};
+                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, bool>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonExistsTestFixture2, flat_json_exists_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -283,7 +292,10 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonExistsTest, FlatJsonExistsTestFixture2,
 
 class FlatJsonLengthTestFixture2
         : public ::testing::TestWithParam<
-                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, int>> {};
+                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, int>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonLengthTestFixture2, flat_json_length_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -341,7 +353,10 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonLengthTest, FlatJsonLengthTestFixture2,
 
 class FlatJsonKeysTestFixture2
         : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::vector<std::string>,
-                                                     std::vector<LogicalType>, std::string>> {};
+                                                     std::vector<LogicalType>, std::string>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonKeysTestFixture2, json_keys) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -416,6 +431,7 @@ using GetJsonXXXParam = std::tuple<std::string, std::string, std::vector<std::st
 class FlatGetJsonXXXTestFixture2 : public ::testing::TestWithParam<GetJsonXXXParam> {
 public:
     StatusOr<Columns> setup() {
+        config::enable_json_flat_complex_type = true;
         _ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context());
         auto ints = JsonColumn::create();
         ColumnBuilder<TYPE_VARCHAR> builder(1);
@@ -453,6 +469,7 @@ public:
     }
 
     void tear_down() {
+        config::enable_json_flat_complex_type = false;
         ASSERT_TRUE(JsonFunctions::native_json_path_close(
                             _ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
@@ -580,7 +597,11 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, FlatGetJsonXXXTestFixture2,
 
 class FlatJsonDeriverPaths
         : public ::testing::TestWithParam<
-                  std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>>> {};
+                  std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>>> {
+public:
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonDeriverPaths, flat_json_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());

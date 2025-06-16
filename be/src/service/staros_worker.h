@@ -90,8 +90,10 @@ private:
     struct CacheValue {
         std::weak_ptr<std::string> key;
         std::shared_ptr<FileSystem> fs;
+        int64_t created_time_sec;
 
-        CacheValue(const std::weak_ptr<std::string>& key, const std::shared_ptr<FileSystem>& fs) : key(key), fs(fs) {}
+        CacheValue(const std::weak_ptr<std::string>& key, const std::shared_ptr<FileSystem>& fs)
+                : key(key), fs(fs), created_time_sec(MonotonicSeconds()) {}
     };
 
     // This function can be made static perfectly. The only reason to make it `virtual`
@@ -138,6 +140,7 @@ private:
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
+extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
 void shutdown_staros_worker();
 void update_staros_starcache();

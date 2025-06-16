@@ -949,7 +949,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "TABLE: t1_par\n" +
-                    "     PARTITION PREDICATES: 9: par_col IS NOT NULL, 10: par_date >= '2020-01-01', " +
+                    "     PARTITION PREDICATES: 10: par_date >= '2020-01-01', " +
                     "10: par_date < '2020-01-05'\n" +
                     "     partitions=6/6");
             PlanTestBase.assertContains(plan, "TABLE: t2_par\n" +
@@ -972,7 +972,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "TABLE: t1_par\n" +
-                    "     PARTITION PREDICATES: 9: par_col IS NOT NULL, 10: par_date >= '2020-01-05', " +
+                    "     PARTITION PREDICATES: 10: par_date >= '2020-01-05', " +
                     "10: par_date < '2020-01-06'\n" +
                     "     partitions=1/7");
             // TODO: multi-column partitions cannot prune partitions.
@@ -997,7 +997,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             // TODO: non-ref base table's update will refresh all the materialized views' partitions.
             PlanTestBase.assertContains(plan, "TABLE: t1_par\n" +
-                    "     PARTITION PREDICATES: 9: par_col IS NOT NULL, 10: par_date >= '2020-01-01', 10: par_date < " +
+                    "     PARTITION PREDICATES: 10: par_date >= '2020-01-01', 10: par_date < " +
                     "'2020-01-06'\n" +
                     "     partitions=7/7");
             // TODO: multi-column partitions cannot prune partitions.
@@ -1085,7 +1085,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                     "     rollup: test_partition_prune_tbl1");
             PlanTestBase.assertContains(plan, "     TABLE: test_partition_prune_tbl2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 4: k1 IS NOT NULL\n" +
+                    "     PREDICATES: 4: k1 >= '2020-10-01', 4: k1 < '2020-12-15'\n" +
                     "     partitions=1/1");
         }
 
@@ -1103,10 +1103,11 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: test_partition_prune_tbl1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 1: k1 IS NOT NULL");
+                    "     PREDICATES: 1: k1 >= '2020-10-01', 1: k1 < '2020-12-15'\n" +
+                    "     partitions=5/5");
             PlanTestBase.assertContains(plan, "     TABLE: test_partition_prune_tbl2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 4: k1 IS NOT NULL\n" +
+                    "     PREDICATES: 4: k1 >= '2020-10-01', 4: k1 < '2020-12-15'\n" +
                     "     partitions=1/1");
         }
 
@@ -1126,7 +1127,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                     "     rollup: test_partition_prune_tbl1");
             PlanTestBase.assertContains(plan, "     TABLE: test_partition_prune_tbl2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 4: k1 IS NOT NULL\n" +
+                    "     PREDICATES: 4: k1 >= '2020-10-01', 4: k1 < '2020-12-15'\n" +
                     "     partitions=1/1");
         }
 

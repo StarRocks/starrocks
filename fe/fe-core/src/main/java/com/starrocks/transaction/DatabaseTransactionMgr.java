@@ -75,6 +75,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -175,7 +176,7 @@ public class DatabaseTransactionMgr {
                                  TransactionState.LoadJobSourceType sourceType,
                                  long callbackId,
                                  long timeoutSecond,
-                                 long warehouseId)
+                                 ComputeResource computeResource)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
         Preconditions.checkNotNull(coordinator);
@@ -184,14 +185,15 @@ public class DatabaseTransactionMgr {
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
+        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
                 coordinator, callbackId, timeoutSecond * 1000);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
-        transactionState.setWarehouseId(warehouseId);
-        transactionState.setUseCombinedTxnLog(combinedTxnLog);
+        transactionState.setComputeResource(computeResource);
+        transactionState.setUseCombinedTxnLog(combinedTxnLog || fileBundling);
         transactionState.writeLock();
         try {
             writeLock();
@@ -601,12 +603,11 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-        // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.ABORTED);
-        boolean txnOperated = false;
-
         transactionState.writeLock();
+        boolean txnOperated = false;
         try {
+            // before state transform
+            transactionState.beforeStateTransform(TransactionStatus.ABORTED);
             writeLock();
             try {
                 txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
@@ -1250,6 +1251,23 @@ public class DatabaseTransactionMgr {
                                             physicalPartition.getVisibleVersion() + 1);
                                     transactionState.setErrorMsg(errMsg);
                                     hasError = true;
+                                }
+
+                                // collect unknown replicas
+                                long tabletId = tablet.getId();
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                    long replicaId = replica.getId();
+                                    long backendId = replica.getBackendId();
+
+                                    if (errorReplicaIds.contains(replicaId)) {
+                                        continue;
+                                    }
+
+                                    if (transactionState.tabletCommitInfosContainsReplica(tabletId, backendId, replicaId)) {
+                                        continue;
+                                    }
+
+                                    transactionState.addUnknownReplica(replicaId);
                                 }
                             }
                         }
@@ -1904,7 +1922,14 @@ public class DatabaseTransactionMgr {
     }
 
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        // Locks are held to ensure that updates of visible version in the same batch are atomic,
+        // so that intermediate versions cannot be seen.
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
+                List.of(transactionStateBatch.getTableId()),
+                LockType.WRITE);
         writeLock();
+
         try {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             transactionStateBatch.replaySetTransactionStatus();
@@ -1914,6 +1939,8 @@ public class DatabaseTransactionMgr {
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {
             writeUnlock();
+            locker.unLockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
+                    List.of(transactionStateBatch.getTableId()), LockType.WRITE);
         }
     }
 

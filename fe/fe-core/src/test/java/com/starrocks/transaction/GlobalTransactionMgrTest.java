@@ -54,6 +54,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -67,7 +68,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -100,7 +100,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -385,7 +384,7 @@ public class GlobalTransactionMgrTest {
         Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
-                new KafkaTaskInfo(UUID.randomUUID(), routineLoadJob, 20000, System.currentTimeMillis(),
+                new KafkaTaskInfo(UUIDUtil.genUUID(), routineLoadJob, 20000, System.currentTimeMillis(),
                         partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -488,7 +487,7 @@ public class GlobalTransactionMgrTest {
         Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
-                new KafkaTaskInfo(UUID.randomUUID(), routineLoadJob, 20000, System.currentTimeMillis(),
+                new KafkaTaskInfo(UUIDUtil.genUUID(), routineLoadJob, 20000, System.currentTimeMillis(),
                         partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -800,7 +799,7 @@ public class GlobalTransactionMgrTest {
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         imageWriter.setOutputStream(dos);
         masterTransMgr.saveTransactionStateV2(imageWriter);
         dos.close();
@@ -1061,7 +1060,7 @@ public class GlobalTransactionMgrTest {
     @Test
     public void testGetLabelStatus() throws Exception {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
-        String label = UUID.randomUUID().toString();
+        String label = UUIDUtil.genUUID().toString();
         TransactionStateSnapshot state1 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
         Assert.assertNotNull(state1);
         Assert.assertEquals(TransactionStatus.UNKNOWN, state1.getStatus());

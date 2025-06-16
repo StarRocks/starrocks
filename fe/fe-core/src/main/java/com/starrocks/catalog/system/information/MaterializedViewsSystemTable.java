@@ -13,20 +13,64 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Pair;
+import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowMaterializedViewStatus;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.thrift.TGetTablesParams;
+import com.starrocks.thrift.TListMaterializedViewStatusResult;
+import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.thrift.TUserIdentity;
+import org.apache.commons.lang3.NotImplementedException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+import org.apache.thrift.meta_data.FieldValueMetaData;
 
-import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
-import static com.starrocks.catalog.system.SystemTable.builder;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
-public class MaterializedViewsSystemTable {
+import static com.starrocks.thrift.TTableType.MATERIALIZED_VIEW;
+
+public class MaterializedViewsSystemTable extends SystemTable {
     public static final String NAME = "materialized_views";
 
-    public static SystemTable create() {
-        return new SystemTable(SystemId.MATERIALIZED_VIEWS_ID,
+    private static final Logger LOG = LogManager.getLogger(MaterializedViewsSystemTable.class);
+    private static final SystemTable INSTANCE = new MaterializedViewsSystemTable();
+
+    public MaterializedViewsSystemTable() {
+        super(SystemId.MATERIALIZED_VIEWS_ID,
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
@@ -57,5 +101,232 @@ public class MaterializedViewsSystemTable {
                         .column("QUERY_REWRITE_STATUS", ScalarType.createVarcharType(64))
                         .column("CREATOR", ScalarType.createVarchar(64))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
+    }
+
+    public static SystemTable create() {
+        return new MaterializedViewsSystemTable();
+    }
+
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS =
+            Collections.unmodifiableSet(new TreeSet<>(String.CASE_INSENSITIVE_ORDER) {
+                {
+                    add("TABLE_SCHEMA");
+                    add("TABLE_NAME");
+                }
+            });
+
+    @Override
+    public boolean supportFeEvaluation(ScalarOperator predicate) {
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (conjuncts.isEmpty()) {
+            return true;
+        }
+        if (!isEmptyOrOnlyEqualConstantOps(conjuncts)) {
+            return false;
+        }
+        return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
+    }
+
+    @Override
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+
+        ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
+        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCurrent_user_ident(userIdentity);
+        params.setDb(context.getDatabase());
+        params.setType(MATERIALIZED_VIEW);
+        for (ScalarOperator conjunct : conjuncts) {
+            BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
+            ColumnRefOperator columnRef = binary.getChild(0).cast();
+            String name = columnRef.getName();
+            ConstantOperator value = binary.getChild(1).cast();
+            switch (name.toUpperCase()) {
+                case "TABLE_NAME":
+                    params.setTable_name(value.getVarchar());
+                    break;
+                case "TABLE_SCHEMA":
+                    params.setDb(value.getVarchar());
+                    break;
+                default:
+                    throw new NotImplementedException("unsupported column: " + name);
+            }
+        }
+
+        try {
+            TListMaterializedViewStatusResult result = query(params, context);
+            return result.getMaterialized_views().stream().map(this::infoToScalar).collect(Collectors.toList());
+        } catch (Exception e) {
+            LOG.warn("Failed to query materialized views", e);
+            // Return empty result if query failed
+            return Lists.newArrayList();
+        }
+    }
+
+    private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(
+            "materialized_view_id", "id",
+            "table_schema", "database_name",
+            "table_name", "name",
+            "materialized_view_definition", "text",
+            "table_rows", "rows"
+    );
+
+    private List<ScalarOperator> infoToScalar(TMaterializedViewStatus status) {
+        List<ScalarOperator> result = Lists.newArrayList();
+        for (Column column : INSTANCE.getBaseSchema()) {
+            String name = column.getName().toLowerCase();
+            if (ALIAS_MAP.containsKey(name)) {
+                name = ALIAS_MAP.get(name);
+            }
+            TMaterializedViewStatus._Fields field = TMaterializedViewStatus._Fields.findByName(name);
+            Preconditions.checkArgument(field != null, "Unknown field: " + name);
+            FieldValueMetaData meta = TMaterializedViewStatus.metaDataMap.get(field).valueMetaData;
+            Object obj = status.getFieldValue(field);
+            Type valueType = thriftToScalarType(meta.type);
+            if (valueType.isStringType() && obj == null) {
+                obj = ""; // Convert null string to empty string
+            }
+            ConstantOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
+            scalar = mayCast(scalar, column.getType());
+            result.add(scalar);
+        }
+        return result;
+    }
+
+    public static TListMaterializedViewStatusResult query(TGetTablesParams params,
+                                                          ConnectContext context) throws TException {
+        LOG.debug("get list table request: {}", params);
+        PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        if (params.isSetPattern()) {
+            matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
+        }
+
+        // database privs should be checked in analysis phrase
+        long limit = params.isSetLimit() ? params.getLimit() : -1;
+        if (params.isSetCurrent_user_ident()) {
+            context.setAuthInfoFromThrift(params.getCurrent_user_ident());
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
+        Preconditions.checkState(params.isSetType() && MATERIALIZED_VIEW.equals(params.getType()));
+        return listMaterializedViewStatus(limit, matcher, context, params);
+    }
+
+    // list MaterializedView table match pattern
+    private static TListMaterializedViewStatusResult listMaterializedViewStatus(
+            long limit,
+            PatternMatcher matcher,
+            ConnectContext context,
+            TGetTablesParams params) {
+        TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
+        List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
+        result.setMaterialized_views(tablesResult);
+        String dbName = params.getDb();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            LOG.warn("database not exists: {}", dbName);
+            return result;
+        }
+
+        listMaterializedViews(limit, matcher, context, params).stream()
+                .map(s -> s.toThrift())
+                .forEach(t -> tablesResult.add(t));
+        return result;
+    }
+
+    private static void filterAsynchronousMaterializedView(
+            PatternMatcher matcher,
+            ConnectContext context,
+            String dbName,
+            MaterializedView mv,
+            TGetTablesParams params,
+            List<MaterializedView> result) {
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(mv.getName())) {
+            return;
+        }
+
+        try {
+            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, mv);
+        } catch (AccessDeniedException e) {
+            return;
+        }
+
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        if (!PatternMatcher.matchPattern(params.getPattern(), mv.getName(), matcher, caseSensitive)) {
+            return;
+        }
+        result.add(mv);
+    }
+
+    private static void filterSynchronousMaterializedView(
+            OlapTable olapTable,
+            PatternMatcher matcher,
+            TGetTablesParams params,
+            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
+        // synchronized materialized view metadata size should be greater than 1.
+        if (olapTable.getVisibleIndexMetas().size() <= 1) {
+            return;
+        }
+
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(olapTable.getName())) {
+            return;
+        }
+
+        List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
+        long baseIdx = olapTable.getBaseIndexId();
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+            if (baseIdx == mvMeta.getIndexId()) {
+                continue;
+            }
+
+            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                    matcher, caseSensitive)) {
+                continue;
+            }
+            singleTableMVs.add(Pair.create(olapTable, mvMeta));
+        }
+    }
+
+    private static List<ShowMaterializedViewStatus> listMaterializedViews(
+            long limit,
+            PatternMatcher matcher,
+            ConnectContext context,
+            TGetTablesParams params) {
+        String dbName = params.getDb();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        List<MaterializedView> materializedViews = com.google.common.collect.Lists.newArrayList();
+        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = com.google.common.collect.Lists.newArrayList();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                if (table.isMaterializedView()) {
+                    filterAsynchronousMaterializedView(matcher, context, dbName,
+                            (MaterializedView) table, params, materializedViews);
+                } else if (table.getType() == Table.TableType.OLAP) {
+                    filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
+                } else {
+                    // continue
+                }
+
+                // check limit
+                int mvSize = materializedViews.size() + singleTableMVs.size();
+                if (limit > 0 && mvSize >= limit) {
+                    break;
+                }
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
 }

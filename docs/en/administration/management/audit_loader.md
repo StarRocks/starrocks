@@ -51,16 +51,10 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
-PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+PARTITION BY date_trunc('day', `timestamp`)
 PROPERTIES (
-  "dynamic_partition.time_unit" = "DAY",
-  "dynamic_partition.start" = "-30",       -- Keep the audit logs from the latest 30 days. You can adjust this value based on you business demand.
-  "dynamic_partition.end" = "3",
-  "dynamic_partition.prefix" = "p",
-  "dynamic_partition.buckets" = "3",
-  "dynamic_partition.enable" = "true",
-  "replication_num" = "3"                 -- Keep three replicas of audit logs. It is recommended to keep three replicas in a production environment.
+  "replication_num" = "1",
+  "partition_live_number"="30"
 );
 ```
 

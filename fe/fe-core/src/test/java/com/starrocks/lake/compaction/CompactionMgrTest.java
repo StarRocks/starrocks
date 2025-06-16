@@ -61,39 +61,39 @@ public class CompactionMgrTest {
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
 
-        Set<Long> excludeTables = new HashSet<>();
+        Set<Long> excludeIds = new HashSet<>();
         for (int i = 1; i <= Config.lake_compaction_simple_selector_threshold_versions - 1; i++) {
             compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis(),
                                                     Quantiles.compute(Lists.newArrayList(1d)));
             compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis(),
                                                     Quantiles.compute(Lists.newArrayList(1d)));
-            Assert.assertEquals(0, compactionManager.choosePartitionsToCompact(excludeTables).size());
+            Assert.assertEquals(0, compactionManager.choosePartitionsToCompact(excludeIds).size());
         }
         compactionManager.handleLoadingFinished(partition1, Config.lake_compaction_simple_selector_threshold_versions,
                 System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
-        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
+        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(excludeIds);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition1, compactionList.get(0).getPartition());
 
         compactionManager.handleLoadingFinished(partition2, Config.lake_compaction_simple_selector_threshold_versions,
                 System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
 
-        compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
+        compactionList = compactionManager.choosePartitionsToCompact(excludeIds);
         Assert.assertEquals(2, compactionList.size());
 
-        compactionList = compactionManager.choosePartitionsToCompact(Collections.singleton(partition1), excludeTables);
+        compactionList = compactionManager.choosePartitionsToCompact(Collections.singleton(partition1), excludeIds);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition2, compactionList.get(0).getPartition());
 
         compactionManager.enableCompactionAfter(partition1, 5000);
         compactionManager.enableCompactionAfter(partition2, 5000);
-        compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
+        compactionList = compactionManager.choosePartitionsToCompact(excludeIds);
         Assert.assertEquals(0, compactionList.size());
 
         compactionManager.enableCompactionAfter(partition1, 0);
         compactionManager.enableCompactionAfter(partition2, 0);
         compactionManager.removePartition(partition1);
-        compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
+        compactionList = compactionManager.choosePartitionsToCompact(excludeIds);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition2, compactionList.get(0).getPartition());
     }
@@ -150,10 +150,10 @@ public class CompactionMgrTest {
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition20, compactionList.get(0).getPartition());
 
-        Set<Long> excludeTables = new HashSet<>();
-        excludeTables.add(tableId2);
-        compactionList = compactionManager.choosePartitionsToCompact(new HashSet<>(), excludeTables);
-        // tableId2 is filtered by excludeTables
+        Set<Long> excludeIds = new HashSet<>();
+        excludeIds.add(tableId2);
+        compactionList = compactionManager.choosePartitionsToCompact(new HashSet<>(), excludeIds);
+        // tableId2 is filtered by excludeIds
         Assert.assertEquals(0, compactionList.size());
     }
 
@@ -191,8 +191,8 @@ public class CompactionMgrTest {
         PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition);
         Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, statistics.getPriority());
 
-        Set<Long> excludeTables = new HashSet<>();
-        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
+        Set<Long> excludeIds = new HashSet<>();
+        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(excludeIds);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition, compactionList.get(0).getPartition());
         Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, compactionList.get(0).getPriority());

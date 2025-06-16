@@ -135,4 +135,44 @@ PARALLEL_TEST(PhmapTest, lazy_emplace_fail) {
     ASSERT_EQ(i, j);
 }
 
+PARALLEL_TEST(PhmapTest, iterate) {
+    phmap::parallel_flat_hash_map<int32_t, int32_t> map;
+    for (int i = 0; i <= 100; i++) {
+        map.insert({i, i});
+    }
+    int sum = 0;
+    map.for_each([&](const auto& pair) { sum += pair.second; });
+    ASSERT_EQ(sum, 5050);
+    map.for_each_m([&](auto& pair) { pair.second++; });
+    sum = 0;
+    map.for_each([&](const auto& pair) { sum += pair.second; });
+    ASSERT_EQ(sum, 5151);
+
+    sum = 0;
+    for (int i = 0; i < map.subcnt(); i++) {
+        map.with_submap(i, [&](const auto& submap) {
+            for (const auto& pair : submap) {
+                sum += pair.second;
+            }
+        });
+    }
+    ASSERT_EQ(sum, 5151);
+    for (int i = 0; i < map.subcnt(); i++) {
+        map.with_submap_m(i, [&](auto& submap) {
+            for (auto& pair : submap) {
+                pair.second--;
+            }
+        });
+    }
+    sum = 0;
+    for (int i = 0; i < map.subcnt(); i++) {
+        map.with_submap(i, [&](const auto& submap) {
+            for (const auto& pair : submap) {
+                sum += pair.second;
+            }
+        });
+    }
+    ASSERT_EQ(sum, 5050);
+}
+
 } // namespace starrocks

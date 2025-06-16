@@ -192,6 +192,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     }
 
     static constexpr bool has_single_null_key = false;
+    bool has_null_key = false;
     ResultVector results;
     std::vector<size_t> hashes;
 };
@@ -382,6 +383,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     }
 
     static constexpr bool has_single_null_key = false;
+    bool has_null_key = false;
     ResultVector results;
     std::vector<KeyType> cache;
 };
@@ -621,6 +623,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     }
 
     static constexpr bool has_single_null_key = false;
+    bool has_null_key = false;
 
     Buffer<uint32_t> slice_sizes;
     size_t max_one_row_size = 8;
@@ -742,6 +745,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     }
 
     static constexpr bool has_single_null_key = false;
+    bool has_null_key = false;
 
     Buffer<uint32_t> slice_sizes;
     std::unique_ptr<MemPool> _mem_pool;

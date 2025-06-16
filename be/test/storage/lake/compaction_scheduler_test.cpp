@@ -50,14 +50,14 @@ protected:
 TEST_F(LakeCompactionSchedulerTest, test_task_queue) {
     CompactionScheduler::WrapTaskQueues queue(10);
     auto ctx = std::make_unique<CompactionTaskContext>(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
-                                                       false /* force_base_compaction */, nullptr);
+                                                       false /* force_base_compaction */, false, nullptr);
     queue.set_target_size(5);
     ASSERT_EQ(5, queue.target_size());
     queue.put_by_txn_id(ctx->txn_id, ctx);
 
     std::vector<std::unique_ptr<CompactionTaskContext>> v;
     auto ctx2 = std::make_unique<CompactionTaskContext>(101 /* txn_id */, 102 /* tablet_id */, 1 /* version */,
-                                                        false /* force_base_compaction */, nullptr);
+                                                        false /* force_base_compaction */, false, nullptr);
     v.push_back(std::move(ctx2));
     queue.put_by_txn_id(101 /* txn_id */, v);
 }
@@ -212,7 +212,7 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
-                                  false /* force_base_compaction */, cb);
+                                  false /* force_base_compaction */, false /* skip_write_txnlog */, cb);
         cb->update_status(Status::Aborted("aborted for test"));
         EXPECT_FALSE(compaction_should_cancel(&ctx).ok());
     }
@@ -223,7 +223,7 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
         config::lake_compaction_check_valid_interval_minutes = -1;
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
-                                  false /* force_base_compaction */, cb);
+                                  false /* force_base_compaction */, false /* skip_write_txnlog */, cb);
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
         config::lake_compaction_check_valid_interval_minutes = check_interval;
     }
@@ -234,7 +234,7 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
         config::lake_compaction_check_valid_interval_minutes = 24 * 60; // set to a big value
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
-                                  false /* force_base_compaction */, cb);
+                                  false /* force_base_compaction */, false /* skip_write_txnlog */, cb);
 
         cb->set_last_check_time(time(nullptr));
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
@@ -273,6 +273,29 @@ TEST_F(LakeCompactionSchedulerTest, test_issue44136) {
     _compaction_scheduler.abort(txn_id);
 
     latch->wait();
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    auto request = CompactRequest{};
+    auto response = CompactResponse{};
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(/*1 minute=*/60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    request.set_skip_write_txnlog(true);
+    auto cb = ::google::protobuf::NewCallback(notify, latch);
+    TEST_ENABLE_ERROR_POINT("VerticalCompactionTask::execute::1", Status::IOError("injected error"));
+    TEST_ENABLE_ERROR_POINT("HorizontalCompactionTask::execute::1", Status::IOError("injected error"));
+    TEST_ENABLE_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1", Status::IOError("injected error"));
+    SyncPoint::GetInstance()->EnableProcessing();
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+    TEST_DISABLE_ERROR_POINT("VerticalCompactionTask::execute::1");
+    TEST_DISABLE_ERROR_POINT("HorizontalCompactionTask::execute::1");
+    TEST_DISABLE_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1");
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::lake

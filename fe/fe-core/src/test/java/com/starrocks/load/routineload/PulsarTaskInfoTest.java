@@ -15,12 +15,12 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.Maps;
+import com.starrocks.common.util.UUIDUtil;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Map;
-import java.util.UUID;
 
 public class PulsarTaskInfoTest {
 
@@ -31,7 +31,7 @@ public class PulsarTaskInfoTest {
         Map<String, Long> offsets1 = Maps.newHashMap();
         offsets1.put("0", 101L);
         offsets1.put("1", 102L);
-        PulsarTaskInfo task1 = new PulsarTaskInfo(UUID.randomUUID(), routineLoadJob, 1000,
+        PulsarTaskInfo task1 = new PulsarTaskInfo(UUIDUtil.genUUID(), routineLoadJob, 1000,
                 2000, Arrays.asList("0", "1"), offsets1, 3000);
 
         Map<String, Long> offsets2 = Maps.newHashMap();

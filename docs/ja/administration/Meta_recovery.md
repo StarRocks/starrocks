@@ -44,7 +44,7 @@ UNKNOWN Operation Type xxx
    ALTER SYSTEM CREATE IMAGE;
    ```
 
-6. 新しいイメージファイルがすべての FE ノードのディレクトリ **meta/image** に転送された後、すべての FE 設定ファイルから設定 `ignore_unknown_log_id = true` を削除し、FE ノードを再起動します。
+6. 新しいイメージファイルがすべての FE ノードのディレクトリ **meta/image** に転送された後、すべての FE 設定ファイルから設定 `metadata_ignore_unknown_operation_type= true` を削除し、FE ノードを再起動します。
 
 ### メタデータの破損
 
@@ -719,4 +719,4 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
 - [bdbje_reset_election_group](./management/FE_configuration.md#bdbje_reset_election_group)
 - [metadata_enable_recovery_mode](./management/FE_configuration.md#metadata_enable_recovery_mode)
-- [ignore_unknown_log_id](./management/FE_configuration.md#ignore_unknown_log_id)
+- [metadata_ignore_unknown_operation_type](./management/FE_configuration.md#metadata_ignore_unknown_operation_type)

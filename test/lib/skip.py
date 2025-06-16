@@ -29,7 +29,6 @@ skip_res_cmd = [
     "select connection_id();",
     ".*explain costs select.*",
     "rand()",
-    "show stats meta",
     "SHOW RESOURCES",
     "show alter table column",
     "select db_id, table_id, column_name,.* from _statistics_.column_statistics.*",

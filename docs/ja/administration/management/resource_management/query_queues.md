@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# Query queues
+# クエリキュー
 
 このトピックでは、StarRocks におけるクエリキューの管理方法について説明します。
 

@@ -190,7 +190,7 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_other_join_conjunct_ctxs, state));
 
     HashTableParam param;
-    _init_hash_table_param(&param);
+    _init_hash_table_param(&param, state);
     _ht.create(param);
 
     _output_probe_column_count = _ht.get_output_probe_column_count();
@@ -199,7 +199,7 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
+void HashJoinNode::_init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->build_row_desc = &child(1)->row_desc();
@@ -212,6 +212,8 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->probe_output_slots = _output_slots;
     param->enable_late_materialization = _enable_late_materialization;
     param->enable_partition_hash_join = _enable_partition_hash_join;
+    param->column_view_concat_rows_limit = runtime_state->column_view_concat_rows_limit();
+    param->column_view_concat_bytes_limit = runtime_state->column_view_concat_bytes_limit();
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -481,7 +483,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
-                          _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization,
+                          _output_slots, _output_slots, _distribution_mode, _enable_late_materialization,
                           _enable_partition_hash_join, _is_skew_join);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 

@@ -202,6 +202,18 @@ void BackendInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcCo
 }
 
 template <typename T>
+void BackendInternalServiceImpl<T>::get_load_replica_status(google::protobuf::RpcController* controller,
+                                                            const starrocks::PLoadReplicaStatusRequest* request,
+                                                            starrocks::PLoadReplicaStatusResult* response,
+                                                            google::protobuf::Closure* done) {
+    VLOG_RPC << "load replica status, load_id=" << print_id(request->load_id()) << ", txn_id=" << request->txn_id()
+             << ", index_id=" << request->index_id();
+    ;
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->get_load_replica_status(
+            static_cast<brpc::Controller*>(controller), request, response, done);
+}
+
+template <typename T>
 void BackendInternalServiceImpl<T>::load_diagnose(google::protobuf::RpcController* controller,
                                                   const starrocks::PLoadDiagnoseRequest* request,
                                                   starrocks::PLoadDiagnoseResult* response,

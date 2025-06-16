@@ -38,7 +38,7 @@ public interface StatisticStorage {
     default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
-    default void refreshMultiColumnStatistics(Long tableId) {
+    default void refreshMultiColumnStatistics(Long tableId, boolean isSync) {
     }
 
     default void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {

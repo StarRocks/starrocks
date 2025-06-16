@@ -1,0 +1,45 @@
+-- name: test_query_history @sequential
+create table t1 (
+    k1 int,
+    k2 int,
+    k3 string
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 
+select s1, s1 % 1000, repeat('a', 128) FROM TABLE(generate_series(1, 100)) s(s1);
+-- result:
+-- !result
+truncate table _statistics_.query_history;
+-- result:
+-- !result
+select count(1) from _statistics_.query_history;
+-- result:
+0
+-- !result
+set global enable_query_history=true;
+-- result:
+-- !result
+set global query_history_load_interval_seconds=0;
+-- result:
+-- !result
+select count(1) from t1;
+-- result:
+100
+-- !result
+select sleep(2);
+-- result:
+1
+-- !result
+select count(1) from _statistics_.query_history where sql_digest like "%count%"; 
+
+set global enable_query_history=false;
+-- result:
+1
+-- !result
+set global query_history_load_interval_seconds=900;
+-- result:
+-- !result

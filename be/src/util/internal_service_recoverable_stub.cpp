@@ -138,6 +138,14 @@ void PInternalService_RecoverableStub::tablet_writer_add_segment(
     _stub->tablet_writer_add_segment(controller, request, response, closure);
 }
 
+void PInternalService_RecoverableStub::get_load_replica_status(google::protobuf::RpcController* controller,
+                                                               const PLoadReplicaStatusRequest* request,
+                                                               PLoadReplicaStatusResult* response,
+                                                               google::protobuf::Closure* done) {
+    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
+    _stub->get_load_replica_status(controller, request, response, closure);
+}
+
 void PInternalService_RecoverableStub::load_diagnose(::google::protobuf::RpcController* controller,
                                                      const ::starrocks::PLoadDiagnoseRequest* request,
                                                      ::starrocks::PLoadDiagnoseResult* response,
@@ -174,6 +182,13 @@ void PInternalService_RecoverableStub::process_dictionary_cache(
         ::starrocks::PProcessDictionaryCacheResult* response, ::google::protobuf::Closure* done) {
     auto closure = new RecoverableClosure(shared_from_this(), controller, done);
     _stub->process_dictionary_cache(controller, request, response, closure);
+}
+
+void PInternalService_RecoverableStub::fetch_datacache(::google::protobuf::RpcController* controller,
+                                                       const ::starrocks::PFetchDataCacheRequest* request,
+                                                       ::starrocks::PFetchDataCacheResponse* response,
+                                                       ::google::protobuf::Closure* done) {
+    _stub->fetch_datacache(controller, request, response, nullptr);
 }
 
 } // namespace starrocks

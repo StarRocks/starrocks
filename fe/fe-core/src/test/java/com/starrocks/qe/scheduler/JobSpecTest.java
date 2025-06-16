@@ -383,7 +383,7 @@ public class JobSpecTest extends SchedulerTestBase {
         DefaultCoordinator coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
-                execMemLimit, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                execMemLimit, WarehouseManager.DEFAULT_RESOURCE);
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.
@@ -406,7 +406,7 @@ public class JobSpecTest extends SchedulerTestBase {
         coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
-                execMemLimit, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                execMemLimit, WarehouseManager.DEFAULT_RESOURCE);
         jobSpec = coordinator.getJobSpec();
 
         Assert.assertEquals(TCompressionType.LZ4, jobSpec.getQueryOptions().getLoad_transmission_compression_type());

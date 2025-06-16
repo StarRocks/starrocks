@@ -14,16 +14,25 @@
 
 package com.starrocks.connector.iceberg.rest;
 
+import org.apache.iceberg.rest.auth.OAuth2Properties;
+
 import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.JWT;
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
+
 public class OAuth2SecurityConfig {
-    private SecurityEnum security = SecurityEnum.NONE;
+
+    private IcebergRESTCatalog.Security security = NONE;
     private String credential;
     private String scope;
     private String token;
     private URI serverUri;
+    private String audience;
+    private boolean tokenRefreshEnabled = OAuth2Properties.TOKEN_REFRESH_ENABLED_DEFAULT;
 
     // The type of security to use (default: NONE). OAUTH2 requires either a token or credential. Example: OAUTH2
     public static String SECURITY = "security";
@@ -37,11 +46,13 @@ public class OAuth2SecurityConfig {
     // The endpoint to retrieve access token from OAuth2 Server
     public static String SERVER_URI = "oauth2.server-uri";
 
-    public SecurityEnum getSecurity() {
+    public static String OAUTH2_AUDIENCE = "oauth2.audience";
+
+    public IcebergRESTCatalog.Security getSecurity() {
         return security;
     }
 
-    public OAuth2SecurityConfig setSecurity(SecurityEnum security) {
+    public OAuth2SecurityConfig setSecurity(IcebergRESTCatalog.Security security) {
         this.security = security;
         return this;
     }
@@ -82,6 +93,15 @@ public class OAuth2SecurityConfig {
         return this;
     }
 
+    public Optional<String> getAudience() {
+        return Optional.ofNullable(audience);
+    }
+
+    public OAuth2SecurityConfig setAudience(String audience) {
+        this.audience = audience;
+        return this;
+    }
+
     // OAuth2 requires a credential or token
     public boolean credentialOrTokenPresent() {
         return credential != null || token != null;
@@ -91,25 +111,39 @@ public class OAuth2SecurityConfig {
     public boolean scopePresentOnlyWithCredential() {
         return !(token != null && scope != null);
     }
+
+    public Optional<Boolean> isTokenRefreshEnabled() {
+        return Optional.of(tokenRefreshEnabled);
+    }
+
+    public OAuth2SecurityConfig setTokenRefreshEnabled(Boolean tokenRefreshEnabled) {
+        this.tokenRefreshEnabled = tokenRefreshEnabled;
+        return this;
+    }
 }
 
 class OAuth2SecurityConfigBuilder {
     public static OAuth2SecurityConfig build(final Map<String, String> properties) {
-        SecurityEnum security = SecurityEnum.NONE;
         String strSecurity = properties.get(OAuth2SecurityConfig.SECURITY);
-        if (strSecurity != null && strSecurity.equalsIgnoreCase(OAuth2SecurityConfig.SECURITY_OAUTH2)) {
-            security = SecurityEnum.OAUTH2;
+
+        if (strSecurity == null) {
+            strSecurity = NONE.name();
         }
 
-        if (security == SecurityEnum.NONE) {
+        if (strSecurity.equals(NONE.name())) {
             return new OAuth2SecurityConfig();
+        } else if (strSecurity.equals(JWT.name())) {
+            return new OAuth2SecurityConfig().setSecurity(JWT);
         }
 
         OAuth2SecurityConfig config = new OAuth2SecurityConfig();
-        config = config.setSecurity(SecurityEnum.OAUTH2)
+        config = config.setSecurity(OAUTH2)
                 .setCredential(properties.get(OAuth2SecurityConfig.OAUTH2_CREDENTIAL))
                 .setScope(properties.get(OAuth2SecurityConfig.OAUTH2_SCOPE))
-                .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN));
+                .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN))
+                .setAudience(properties.get(OAuth2SecurityConfig.OAUTH2_AUDIENCE))
+                .setTokenRefreshEnabled(Boolean.valueOf(properties.get(OAuth2Properties.TOKEN_REFRESH_ENABLED)));
+
         String serverUri = properties.get(OAuth2SecurityConfig.SERVER_URI);
         if (serverUri != null) {
             config = config.setServerUri(URI.create(serverUri));
@@ -123,4 +157,3 @@ class OAuth2SecurityConfigBuilder {
         return config;
     }
 }
-

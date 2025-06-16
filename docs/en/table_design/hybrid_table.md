@@ -3,7 +3,12 @@ displayed_sidebar: docs
 sidebar_position: 60
 ---
 
-# [Preview] Hybrid row-column storage
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
+# Hybrid row-column storage
+
+
+<Beta />
 
 As an OLAP database, StarRocks originally stores data in the columnar storage, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports storing data in the hybrid row-column storage where data is stored in both row-by-row and column-by-column fashions. This hybrid row-column storage is well suited for various scenario such as primary key-based high-concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row-column storage supports [prepared statements](../sql-reference/sql-statements/prepared_statement.md), which enhances query performance and security.
 
@@ -21,7 +26,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - Storage method: Data is stored in a column-by-column fashion.
 
-  ![img](../_assets/table_design/hybrid_table.png)
+  ![img](../_assets/table_design/columnar_table.png)
 
 - Scenarios: Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.</li></ul>
 

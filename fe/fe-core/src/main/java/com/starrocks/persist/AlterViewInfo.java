@@ -20,12 +20,8 @@ package com.starrocks.persist;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
@@ -42,6 +38,8 @@ public class AlterViewInfo implements Writable {
     private List<Column> newFullSchema;
     @SerializedName(value = "comment")
     private String comment;
+    @SerializedName(value = "security")
+    private boolean security;
 
     public AlterViewInfo() {
         // for persist
@@ -56,6 +54,12 @@ public class AlterViewInfo implements Writable {
         this.newFullSchema = newFullSchema;
         this.sqlMode = sqlMode;
         this.comment = comment;
+    }
+
+    public AlterViewInfo(long dbId, long tableId, boolean security) {
+        this.dbId = dbId;
+        this.tableId = tableId;
+        this.security = security;
     }
 
     public long getDbId() {
@@ -80,6 +84,10 @@ public class AlterViewInfo implements Writable {
 
     public String getComment() {
         return comment;
+    }
+
+    public boolean getSecurity() {
+        return security;
     }
 
     @Override
@@ -107,12 +115,5 @@ public class AlterViewInfo implements Writable {
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 inlineViewDef.equalsIgnoreCase(otherInfo.getInlineViewDef()) && sqlMode == otherInfo.getSqlMode() &&
                 newFullSchema.equals(otherInfo.getNewFullSchema()) && commentEqual;
-    }
-
-
-
-    public static AlterViewInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AlterViewInfo.class);
     }
 }

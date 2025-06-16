@@ -117,6 +117,22 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_hash(FunctionContext* context, const
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_hash64(FunctionContext* context, const starrocks::Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+    for (int row = 0; row < size; ++row) {
+        BitmapValue bitmap;
+        if (!viewer.is_null(row)) {
+            auto slice = viewer.value(row);
+            uint64_t hash_value = HashUtil::xx_hash3_64(slice.data, slice.size, HashUtil::XXHASH3_64_SEED);
+            bitmap.add(hash_value);
+        }
+        builder.append(&bitmap);
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_count(FunctionContext* context, const starrocks::Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 

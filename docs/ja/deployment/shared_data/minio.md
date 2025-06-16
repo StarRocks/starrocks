@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Use MinIO for shared-data
+# 共有データに MinIO を使用する
 
 import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'

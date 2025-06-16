@@ -26,6 +26,8 @@ import com.starrocks.statistic.sample.TabletStats;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
+
 public class PartitionSampler {
     public static final double HIGH_WEIGHT_READ_RATIO = 0.01;
     public static final double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.1;
@@ -60,7 +62,7 @@ public class PartitionSampler {
                                    com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
         for (Long partitionId : partitions) {
             Partition p = table.getPartition(partitionId);
-            if (p == null || !p.hasData()) {
+            if (p == null || !p.hasData() || p.getName().startsWith(SHADOW_PARTITION_PREFIX)) {
                 continue;
             }
 

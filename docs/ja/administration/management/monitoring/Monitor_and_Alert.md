@@ -320,9 +320,9 @@ Grafana を Prometheus サービスと統合するには、次の設定を変更
 
 1. StarRocks バージョンに基づいて対応するダッシュボードテンプレートをダウンロードします。
 
-   - [StarRocks-2.4.0 以降のダッシュボードテンプレート](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24-new.json)
-   - [共有データダッシュボードテンプレート - General](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-General.json)
-   - [共有データダッシュボードテンプレート - Starlet](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-Starlet.json)
+   - [全アーキテクチャのダッシュボードテンプレート](https://releases.starrocks.io/resources/Dashboard-All-2.4.json)
+   - [共有データクラスタのダッシュボードテンプレート - General](https://releases.starrocks.io/resources/Dashboard-Shared-data-General-3.5.json)
+   - [共有データクラスタのダッシュボードテンプレート - Starlet](https://releases.starrocks.io/resources/Dashboard-Shared-data-Starlet-3.5.json)
 
    > **注意**
    >

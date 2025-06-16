@@ -8,8 +8,6 @@ unlisted: true
 > *- When you write new function docs, please provide complete example data so users can test it, including the CREATE TABLE, INSERT/LOAD data examples.*
 > *- This article uses `CONVERT_TZ` as an example to illustrate the requirements for writing function documentation.*
 
-## Description
-
 Converts a datetime value from one time zone to another.
 
 This function is supported from v2.0.

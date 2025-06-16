@@ -490,6 +490,8 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
                 *result = PARSE_FAILURE;
                 return 0;
             }
+        } else {
+            break;
         }
     }
 

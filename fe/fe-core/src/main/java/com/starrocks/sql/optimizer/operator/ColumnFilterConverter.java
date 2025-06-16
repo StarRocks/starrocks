@@ -197,7 +197,21 @@ public class ColumnFilterConverter {
         }
 
         if (predicate.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
-            predicate = SPMFunctions.revertSPMFunctions(predicate);
+            if (predicate.getChildren().stream().skip(1).noneMatch(SPMFunctions::canRevert2ScalarOperator)) {
+                return;
+            }
+            ScalarOperator clone = predicate.clone();
+            List<ScalarOperator> newChildren = Lists.newArrayList();
+            for (ScalarOperator child : clone.getChildren()) {
+                if (!SPMFunctions.isSPMFunctions(child)) {
+                    newChildren.add(child);
+                } else {
+                    newChildren.addAll(SPMFunctions.revertSPMFunctions(child));
+                }
+            }
+            clone.getChildren().clear();
+            clone.getChildren().addAll(newChildren);
+            predicate = clone;
         }
 
         if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {

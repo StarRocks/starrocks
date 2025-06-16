@@ -34,12 +34,12 @@
 
 package com.starrocks.http.action;
 
-import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
@@ -138,7 +138,7 @@ public class HaAction extends WebBaseAction {
 
     private void appendImageInfo(StringBuilder buffer) {
         try {
-            Storage storage = new Storage(Config.meta_dir + "/image");
+            Storage storage = new Storage(MetaHelper.getImageFileDir(true));
             buffer.append("<h2>Checkpoint Info</h2>");
             buffer.append("<pre>");
             buffer.append("<p>last checkpoint version:" + storage.getImageJournalId() + "</p>");

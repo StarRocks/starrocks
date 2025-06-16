@@ -112,18 +112,20 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             // bucket-shuffle join
             querys.add("select * from colocate1 l join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
             // intersect
-            querys.add("select k1, k2 from colocate1 l intersect select k1, k2 from colocate2 r;");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ k1, k2 from colocate1 l intersect " +
+                    "select k1, k2 from colocate2 r;");
             querys.add("select k1 from colocate1 l intersect select k1 from colocate2 r;");
             // union all
             querys.add("select k1 from colocate1 l union all select k1 from colocate2 r");
             querys.add("select distinct k1 from (select k1 from colocate1 l union all select k1 from colocate2 r) t;");
             // unoin
             querys.add("select k1 from colocate1 l union select k1 from colocate2 r");
-            querys.add("select k1,k2 from colocate1 l union select k1,k2 from colocate2 r");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ k1,k2 from colocate1 l " +
+                    "union select k1,k2 from colocate2 r");
             // except
             querys.add("select distinct k1 from (select k1 from colocate1 l except select k1 from colocate2 r) t;");
-            querys.add(
-                    "select distinct k1,k2 from (select k1,k2 from colocate1 l except select k1,k2 from colocate2 r) t;");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ distinct k1,k2 " +
+                    "from (select k1,k2 from colocate1 l except select k1,k2 from colocate2 r) t;");
             // physical limit
             querys.add(
                     "select distinct k1 from (select k1 from colocate1 l union all select k1 from colocate2 r limit 10) t;");

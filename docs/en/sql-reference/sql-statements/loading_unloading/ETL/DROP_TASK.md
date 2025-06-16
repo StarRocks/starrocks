@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP TASK
 
-## Description
-
-Drops an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TASK.md). This feature has been supported since StarRocks v2.5.7.
+DROP TASK drops an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TASK.md). This feature has been supported since StarRocks v2.5.7.
 
 > **NOTE**
 >

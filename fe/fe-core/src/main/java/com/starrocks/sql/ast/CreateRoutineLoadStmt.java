@@ -697,13 +697,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (Strings.isNullOrEmpty(kafkaBrokerList)) {
             throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + " is a required property");
         }
-        String[] kafkaBrokerList = this.kafkaBrokerList.split(",");
-        for (String broker : kafkaBrokerList) {
-            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
-                throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + ":" + broker
-                        + " not match pattern " + ENDPOINT_REGEX);
-            }
-        }
+        validateKafkaBrokerList(kafkaBrokerList);
 
         // check topic
         kafkaTopic = Strings.nullToEmpty(dataSourceProperties.get(KAFKA_TOPIC_PROPERTY)).replaceAll(" ", "");
@@ -826,6 +820,23 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         // check kafka_default_offsets
         if (customKafkaProperties.containsKey(KAFKA_DEFAULT_OFFSETS)) {
             getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
+        }
+    }
+
+    public static void validateKafkaBrokerList(String brokerList) throws AnalysisException {
+        if (Strings.isNullOrEmpty(brokerList)) {
+            throw new AnalysisException("kafka_broker_list cannot be empty");
+        }
+
+        String cleanBrokerList = brokerList.replaceAll(" ", "");
+        String[] brokers = cleanBrokerList.split(",");
+
+        for (String broker : brokers) {
+            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
+                throw new AnalysisException(
+                    String.format("%s: %s does not match pattern %s",
+                        KAFKA_BROKER_LIST_PROPERTY, broker, ENDPOINT_REGEX));
+            }
         }
     }
 

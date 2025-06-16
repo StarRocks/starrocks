@@ -121,6 +121,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         if (replace_seg.first < rowset->segment_encryption_metas_size()) {
             rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
         }
+        rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());
@@ -374,6 +375,11 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
                 it++;
             }
         }
+
+        if (_tablet_meta->historical_schemas().count(_tablet_meta->schema().id()) <= 0) {
+            auto& item = (*_tablet_meta->mutable_historical_schemas())[_tablet_meta->schema().id()];
+            item.CopyFrom(_tablet_meta->schema());
+        }
     }
 
     VLOG(2) << fmt::format(
@@ -511,7 +517,7 @@ void MetaFileBuilder::_sstable_meta_clean_after_alter_type() {
     }
 }
 
-Status MetaFileBuilder::finalize(int64_t txn_id) {
+Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata) {
     auto version = _tablet_meta->version();
 
     // Finalize delete vectors by updating their metadata and writing them to disk
@@ -520,8 +526,13 @@ Status MetaFileBuilder::finalize(int64_t txn_id) {
     // Clean up SSTable metadata after an alter operation that changes the persistent index type
     _sstable_meta_clean_after_alter_type();
 
-    // Persist the updated tablet metadata
-    RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
+    if (skip_write_tablet_metadata) {
+        // Put metadata into cache only.
+        (void)_tablet.tablet_mgr()->cache_tablet_metadata(_tablet_meta);
+    } else {
+        // Persist the updated tablet metadata
+        RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
+    }
 
     // Update the primary index data version in the update manager
     _update_mgr->update_primary_index_data_version(_tablet, version);

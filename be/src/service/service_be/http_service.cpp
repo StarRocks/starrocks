@@ -34,6 +34,7 @@
 
 #include "http_service.h"
 
+#include "cache/datacache.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
@@ -63,12 +64,11 @@
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
-#include "runtime/load_path_mgr.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
-HttpServiceBE::HttpServiceBE(CacheEnv* cache_env, ExecEnv* env, int port, int num_threads)
+HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
           _ev_http_server(new EvHttpServer(port, num_threads)),
@@ -263,7 +263,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/query_cache/{action}", query_cache_action);
     _http_handlers.emplace_back(query_cache_action);
 
-    auto* datacache_action = new DataCacheAction(_cache_env->block_cache());
+    auto* datacache_action = new DataCacheAction(_cache_env->local_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
     _http_handlers.emplace_back(datacache_action);
 

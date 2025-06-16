@@ -197,7 +197,6 @@ public class Pipe implements GsonPostProcessable {
             pipeSource.poll();
         } catch (Throwable e) {
             recordPipeError("poll from source failed: " + e.getMessage());
-            changeState(State.ERROR, true);
         }
     }
 

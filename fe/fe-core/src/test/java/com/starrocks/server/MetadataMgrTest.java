@@ -433,7 +433,7 @@ public class MetadataMgrTest {
     public void testGetMetadataTable() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            boolean tableExists(String dbName, String tableName) {
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
                 return true;
             }
         };

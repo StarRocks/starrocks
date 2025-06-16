@@ -340,7 +340,7 @@ To achieve these goals, you must consider the following aspects when creating a 
 
 - **Refresh granularity**
 
-  You can use the property `partition_refresh_number` to specify the granularity of each refresh operation. `partition_refresh_number` controls the maximum number of partitions to be refreshed in a refresh task when a refresh is triggered. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. The partitions are refreshed in chronological order from the least recent partition to the most recent partition (excluding partitions created dynamically for the future). The default value of `partition_refresh_number` is `-1`, indicating the refresh task will not be split.
+  You can use the property `partition_refresh_number` to specify the granularity of each refresh operation. `partition_refresh_number` controls the maximum number of partitions to be refreshed in a refresh task when a refresh is triggered. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. The partitions are refreshed in chronological order from the least recent partition to the most recent partition (excluding partitions created dynamically for the future). When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
 
 - **Materialization scope**
 

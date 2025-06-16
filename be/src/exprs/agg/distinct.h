@@ -72,7 +72,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void serialize(uint8_t* dst) const {
         phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
-        set.dump(output);
+        [[maybe_unused]] auto err = set.dump(output);
         DCHECK(output.length() == set.dump_bound());
     }
 
@@ -80,10 +80,10 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
         auto old_size = set.size();
         if (old_size == 0) {
-            set.load(input);
+            [[maybe_unused]] auto err = set.load(input);
         } else {
             MyHashSet set_src;
-            set_src.load(input);
+            [[maybe_unused]] auto err = set_src.load(input);
             set.merge(set_src);
         }
     }

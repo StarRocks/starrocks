@@ -719,7 +719,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 >
 > The connector uses [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
 > function to convert data of the `TINYINT`, `SMALLINT`, `INTEGER`, and `BIGINT` types in Spark to the `BITMAP` type in StarRocks, and uses
-> [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) function for other Spark data types.
+> [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) or [`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) function for other Spark data types.
 
 ### Load data into columns of HLL type
 

@@ -35,6 +35,11 @@ Status LimitOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     } while (num_consume_rows && !_limit.compare_exchange_strong(old_limit, old_limit - num_consume_rows));
 
     if (num_consume_rows != chunk->num_rows()) {
+        // In case of multi cast exchange chunks could be used in multiple pipelines with different limits and should
+        // not be updated in place.
+        if (!_limit_chunk_in_place) {
+            _cur_chunk = chunk->clone_unique();
+        }
         _cur_chunk->set_num_rows(num_consume_rows);
     }
 

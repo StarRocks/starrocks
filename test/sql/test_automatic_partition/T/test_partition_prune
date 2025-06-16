@@ -93,3 +93,21 @@ insert into ts values('20200101',1,'cd');
 insert into ts values('200301',1,'cd');
 insert into ts values('20200401',1,'cd');
 explain select * from ts where dt>20200201;
+
+-- name: test_equal_prune
+create table ts (
+	dt string,
+	id bigint)
+partition by substring(dt, 1, 4);
+
+insert into ts values('20200101', 1);
+insert into ts values('20200201', 1);
+insert into ts values('20210101', 1);
+insert into ts values('20220101', 1);
+
+show partitions from ts order by PartitionName;
+
+explain select * from ts where dt > '20200101';
+
+explain select * from ts where dt = '20200101';
+explain select * from ts where dt = '20220101';

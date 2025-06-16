@@ -20,8 +20,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.ListUtils;
@@ -35,11 +37,21 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.StringJoiner;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
+import static com.starrocks.statistic.StatsConstants.FULL_ONCE_TIMES;
+import static com.starrocks.statistic.StatsConstants.FULL_SCHEDULE_TIMES;
+import static com.starrocks.statistic.StatsConstants.SAMPLE_ONCE_TIMES;
+import static com.starrocks.statistic.StatsConstants.SAMPLE_SCHEDULE_TIMES;
 
 public class BasicStatsMeta implements Writable {
+    private static final List<String> STATS_COUNTER_KEYS = List.of(
+            SAMPLE_ONCE_TIMES, SAMPLE_SCHEDULE_TIMES, FULL_ONCE_TIMES, FULL_SCHEDULE_TIMES
+    );
+
     @SerializedName("dbId")
     private long dbId;
 
@@ -78,6 +90,9 @@ public class BasicStatsMeta implements Writable {
     // TODO: use ColumnId
     @SerializedName("columnStats")
     private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
+
+    @SerializedName("tabletStatsReportTime")
+    private LocalDateTime tabletStatsReportTime = LocalDateTime.MIN;
 
     // Used for deserialization
     public BasicStatsMeta() {
@@ -148,11 +163,30 @@ public class BasicStatsMeta implements Writable {
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+        TableHealthyMetrics metrics = getTableHealthyMetrics(table);
+        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        double updateRatio;
+        // 1. If none updated partitions, health is 1
+        // 2. If there are few updated partitions, the health only to calculated on rows
+        // 3. If there are many updated partitions, the health needs to be calculated based on partitions
+        if (tableUpdateTime.isBefore(tabletStatsReportTime) && metrics.unhealthyPartitionCount == 0) {
+            return 1;
+        } else if (metrics.unhealthyPartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
+            updateRatio = (metrics.updatePartitionRowCountForCalc * 1.0) / metrics.tableRowCount;
+        } else {
+            double rowUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.tableRowCount;
+            double partitionUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.totalPartitionCount;
+            updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
+        }
+        return 1 - Math.min(updateRatio, 1.0);
+    }
 
+    public TableHealthyMetrics getTableHealthyMetrics(Table table) {
         long tableRowCount = 1L;
-        long cachedTableRowCount = 1L;
+        long cachedTableRowCount = isInitJobMeta() ? 0L : 1L;
         long updatePartitionRowCount = 0L;
-        long updatePartitionCount = 0L;
+        long unhealthyPartitionCount = 0L;
+        long unhealthyPartitionRowCount = 0L;
 
         Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), table.getPartitions());
@@ -161,31 +195,23 @@ public class BasicStatsMeta implements Writable {
                 .filter(p -> !(p.getName().startsWith(SHADOW_PARTITION_PREFIX)))
                 .collect(Collectors.toSet());
         long totalPartitionCount = allPartitions.size();
+        long unhealthyPartitionDataSize = 0L;
         for (Partition partition : allPartitions) {
             tableRowCount += partition.getRowCount();
             Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
             cachedTableRowCount += statistic.orElse(0L);
 
             if (!StatisticUtils.isPartitionStatsHealthy(partition, this, statistic.orElse(0L))) {
-                updatePartitionCount++;
+                unhealthyPartitionCount++;
+                unhealthyPartitionRowCount += partition.getRowCount();
+                unhealthyPartitionDataSize += partition.getDataSize();
             }
         }
-        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount + deltaRows, totalRows) - cachedTableRowCount);
+        updatePartitionRowCount = Math.max(isInitJobMeta() ? 0L : 1L,
+                Math.max(tableRowCount + deltaRows, totalRows) - cachedTableRowCount);
 
-        double updateRatio;
-        // 1. If none updated partitions, health is 1
-        // 2. If there are few updated partitions, the health only to calculated on rows
-        // 3. If there are many updated partitions, the health needs to be calculated based on partitions
-        if (updatePartitionCount == 0) {
-            return 1;
-        } else if (updatePartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
-            updateRatio = (updatePartitionRowCount * 1.0) / tableRowCount;
-        } else {
-            double rowUpdateRatio = (updatePartitionRowCount * 1.0) / tableRowCount;
-            double partitionUpdateRatio = (updatePartitionCount * 1.0) / totalPartitionCount;
-            updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
-        }
-        return 1 - Math.min(updateRatio, 1.0);
+        return new TableHealthyMetrics(tableRowCount, cachedTableRowCount, totalPartitionCount, unhealthyPartitionCount,
+                unhealthyPartitionRowCount, unhealthyPartitionDataSize, updatePartitionRowCount, deltaRows);
     }
 
     public long getTotalRows() {
@@ -199,6 +225,18 @@ public class BasicStatsMeta implements Writable {
     public void increaseDeltaRows(Long delta) {
         totalRows += delta;
         deltaRows += delta;
+    }
+
+    public void increaseStatsCollectionCount(AnalyzeStatus status) {
+        StatsConstants.AnalyzeType analyzeType = status.getType();
+        StatsConstants.ScheduleType scheduleType = status.getScheduleType();
+        String key = analyzeType == StatsConstants.AnalyzeType.SAMPLE
+                ? (scheduleType == StatsConstants.ScheduleType.ONCE ? SAMPLE_ONCE_TIMES : SAMPLE_SCHEDULE_TIMES)
+                : (scheduleType == StatsConstants.ScheduleType.ONCE ? FULL_ONCE_TIMES : FULL_SCHEDULE_TIMES);
+
+        properties.compute(key, (k, v) ->
+                ((v == null ? 0 : Integer.parseInt(v)) + 1) % Integer.MAX_VALUE + ""
+        );
     }
 
     public boolean isInitJobMeta() {
@@ -217,11 +255,27 @@ public class BasicStatsMeta implements Writable {
     }
 
     public void setProperties(Map<String, String> properties) {
-        this.properties = properties;
+        Map<String, String> mergedProperties = new ConcurrentHashMap<>(properties);
+
+        if (this.properties != null) {
+            STATS_COUNTER_KEYS.stream()
+                    .filter(this.properties::containsKey)
+                    .forEach(key -> mergedProperties.put(key, this.properties.get(key)));
+        }
+
+        this.properties = mergedProperties;
     }
 
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public void updateTabletStatsReportTime() {
+        this.tabletStatsReportTime = LocalDateTime.now();
+    }
+
+    public LocalDateTime getTabletStatsReportTime() {
+        return tabletStatsReportTime;
     }
 
     public void setAnalyzeType(StatsConstants.AnalyzeType analyzeType) {
@@ -242,8 +296,10 @@ public class BasicStatsMeta implements Writable {
         if (MapUtils.isEmpty(columnStatsMetaMap)) {
             return "";
         }
+
         return columnStatsMetaMap.values().stream()
-                .map(ColumnStatsMeta::simpleString).collect(Collectors.joining(","));
+                .map(c -> c.simpleString(false))
+                .collect(Collectors.joining(","));
     }
 
     public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
@@ -257,5 +313,45 @@ public class BasicStatsMeta implements Writable {
     public BasicStatsMeta clone() {
         String json = GsonUtils.GSON.toJson(this);
         return GsonUtils.GSON.fromJson(json, BasicStatsMeta.class);
+    }
+
+    public static class TableHealthyMetrics {
+        public long tableRowCount;
+        public long tableRowCountInStatistics;
+        public long totalPartitionCount;
+        public long unhealthyPartitionCount;
+        public long unhealthyPartitionRowCount;
+        public long unhealthyPartitionDataSize;
+        public long updatePartitionRowCountForCalc;
+        public long deltaRowCount;
+
+        public TableHealthyMetrics(long tableRowCount, long tableRowCountInStatistics,
+                                   long totalPartitionCount, long unhealthyPartitionCount,
+                                   long unhealthyPartitionRowCount, long unhealthyPartitionDataSize,
+                                   long updatePartitionRowCountForCalc, long deltaRowCount) {
+            this.tableRowCount = tableRowCount;
+            this.tableRowCountInStatistics = tableRowCountInStatistics;
+            this.totalPartitionCount = totalPartitionCount;
+            this.unhealthyPartitionCount = unhealthyPartitionCount;
+            this.unhealthyPartitionRowCount = unhealthyPartitionRowCount;
+            this.unhealthyPartitionDataSize = unhealthyPartitionDataSize;
+            this.updatePartitionRowCountForCalc = updatePartitionRowCountForCalc;
+            this.deltaRowCount = deltaRowCount;
+
+        }
+
+        @Override
+        public String toString() {
+            return new StringJoiner(", ", "[", "]")
+                    .add("tableRowCount=" + tableRowCount)
+                    .add("tableRowCountInStatistics=" + tableRowCountInStatistics)
+                    .add("totalPartitionCount=" + totalPartitionCount)
+                    .add("unhealthyPartitionCount=" + unhealthyPartitionCount)
+                    .add("unhealthyPartitionRowCount=" + unhealthyPartitionRowCount)
+                    .add("unhealthyPartitionDataSize=" + new ByteSizeValue(unhealthyPartitionDataSize).getKb() + "KB")
+                    .add("updatePartitionRowCountForCalc=" + updatePartitionRowCountForCalc)
+                    .add("deltaRowCount=" + deltaRowCount)
+                    .toString();
+        }
     }
 }

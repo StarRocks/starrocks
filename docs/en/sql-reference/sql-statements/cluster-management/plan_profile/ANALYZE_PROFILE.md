@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ANALYZE PROFILE
 
-## Description
-
-Analyzes a specific query profile on a per-fragment basis, and displays it in a tree structure. For more information about query profile, see [Query Profile Overview](../../../../administration/query_profile_overview.md).
+ANALYZE PROFILE analyzes a specific query profile on a per-fragment basis, and displays it in a tree structure. For more information about query profile, see [Query Profile Overview](../../../../administration/query_profile_overview.md).
 
 This feature is supported from v3.1 onwards.
 

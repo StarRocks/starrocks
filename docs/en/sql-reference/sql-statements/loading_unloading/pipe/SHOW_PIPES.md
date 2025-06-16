@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW PIPES
 
-## Description
-
-Lists the pipes stored in a specified database or in the current database in use. This command is supported from v3.2 onwards.
+SHOW PIPES lists the pipes stored in a specified database or in the current database in use. This command is supported from v3.2 onwards.
 
 ## Syntax
 

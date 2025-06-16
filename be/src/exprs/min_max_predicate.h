@@ -47,8 +47,8 @@ public:
     CppType get_max_value() const { return _max_value; }
 
     StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
-        const ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
-        size_t size = col->size();
+        const ColumnPtr& col = ptr->get_column_by_slot_id(_slot_id);
+        const size_t size = col->size();
 
         BooleanColumn::MutablePtr result = BooleanColumn::create(size, 1);
         uint8_t* res = result->get_data().data();
@@ -73,29 +73,38 @@ public:
         //   1. memcpy filter -> res
         //   2. res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
         // but they can not be compiled into SIMD instructions.
-        if (col->is_nullable() && col->has_null()) {
-            auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
-            uint8_t* __restrict__ null_data = tmp->null_column_data().data();
-            CppType* __restrict__ data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
-            for (int i = 0; i < size; i++) {
-                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
-            }
 
-            if (_has_null) {
-                for (int i = 0; i < size; i++) {
-                    res[i] = res[i] | null_data[i];
+        // Use lambdas to make the compiler to better analyze code within smaller scopes, thereby ensuring vectorization.
+        auto check_range = [](uint8_t* __restrict__ local_res, const CppType* __restrict__ local_values,
+                              const size_t local_size, const CppType min_value, const CppType max_value) {
+            for (int i = 0; i < local_size; i++) {
+                local_res[i] = (local_values[i] >= min_value) & (local_values[i] <= max_value);
+            }
+        };
+        auto merge_null = [](uint8_t* __restrict__ local_res, const uint8_t* __restrict__ local_null_data,
+                             const size_t local_size, const bool local_has_null) {
+            if (local_has_null) {
+                for (int i = 0; i < local_size; i++) {
+                    local_res[i] = local_res[i] | local_null_data[i];
                 }
             } else {
-                for (int i = 0; i < size; i++) {
-                    res[i] = res[i] & !null_data[i];
+                for (int i = 0; i < local_size; i++) {
+                    local_res[i] = local_res[i] & !local_null_data[i];
                 }
             }
+        };
+
+        if (col->is_nullable() && col->has_null()) {
+            const auto* tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
+
+            const CppType* data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
+            check_range(res, data, size, _min_value, _max_value);
+
+            const uint8_t* null_data = tmp->null_column_data().data();
+            merge_null(res, null_data, size, _has_null);
         } else {
-            const CppType* __restrict__ data =
-                    ColumnHelper::get_data_column_by_type<Type>(col.get())->get_data().data();
-            for (int i = 0; i < size; i++) {
-                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
-            }
+            const CppType* data = ColumnHelper::get_data_column_by_type<Type>(col.get())->get_data().data();
+            check_range(res, data, size, _min_value, _max_value);
         }
 
         // NOTE(yan): filter can be used optionally.

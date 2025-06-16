@@ -221,19 +221,18 @@ bool CompactionManager::check_compaction_disabled(const CompactionCandidate& can
 }
 
 bool CompactionManager::_check_compaction_disabled(const CompactionCandidate& candidate) {
+    auto table_id = candidate.tablet->belonged_table_id();
     if (candidate.type == CompactionType::BASE_COMPACTION &&
-        _table_to_disable_deadline_map.find(candidate.tablet->tablet_meta()->table_id()) !=
-                _table_to_disable_deadline_map.end()) {
-        int64_t deadline = _table_to_disable_deadline_map[candidate.tablet->tablet_meta()->table_id()];
+        _table_to_disable_deadline_map.find(table_id) != _table_to_disable_deadline_map.end()) {
+        int64_t deadline = _table_to_disable_deadline_map[table_id];
         if (deadline > 0 && UnixSeconds() < deadline) {
             return true;
         } else {
             // disable compaction deadline has passed, remove it from map
-            _table_to_disable_deadline_map.erase(candidate.tablet->tablet_meta()->table_id());
+            _table_to_disable_deadline_map.erase(table_id);
             // check if the tablet should compact now after the deadline
             update_tablet_async(candidate.tablet);
-            LOG(INFO) << "remove disable table compaction, table_id:" << candidate.tablet->tablet_meta()->table_id()
-                      << ", deadline:" << deadline;
+            LOG(INFO) << "remove disable table compaction, table_id:" << table_id << ", deadline:" << deadline;
         }
     }
     return false;

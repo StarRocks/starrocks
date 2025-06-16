@@ -245,6 +245,8 @@ public class SelectStmtTest {
         starRocksAssert.query(sql).explainQuery();
         sql = "select current_timestamp";
         starRocksAssert.query(sql).explainQuery();
+        sql = "select current_timestamp(6)";
+        starRocksAssert.query(sql).explainQuery();
         sql = "select current_time()";
         starRocksAssert.query(sql).explainQuery();
         sql = "select current_time";
@@ -321,8 +323,11 @@ public class SelectStmtTest {
 
     private void assertNoCastStringAsStringInPlan(String sql) throws Exception {
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second;
-        List<ScalarOperator> operators = execPlan.getPhysicalPlan().getInputs().stream().flatMap(input ->
-                input.getOp().getProjection().getColumnRefMap().values().stream()).collect(Collectors.toList());
+        List<ScalarOperator> operators = execPlan.getPhysicalPlan().getInputs().stream()
+                .filter(input -> input.getOp().getProjection() != null &&
+                        input.getOp().getProjection().getColumnRefMap() != null)
+                .flatMap(input -> input.getOp().getProjection().getColumnRefMap().values().stream())
+                .collect(Collectors.toList());
         Assert.assertTrue(operators.stream().noneMatch(op -> (op instanceof CastOperator) &&
                 op.getType().isStringType() &&
                 op.getChild(0).getType().isStringType()));

@@ -31,8 +31,8 @@ public:
     // Insert object to cache, the `ptr` is the object pointer.
     // size: the size of the value.
     // charge: the actual memory size allocated for this value.
-    virtual Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
-                          ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options = nullptr) = 0;
+    virtual Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
+                          ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) = 0;
 
     // Lookup object from cache, the `handle` wraps the object pointer.
     // As long as the handle object is not destroyed and the user does not manully call the `handle->release()`

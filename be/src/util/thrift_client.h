@@ -35,6 +35,7 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "util/thrift_server.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -68,6 +69,10 @@ public:
     // Set the send timeout
     void set_send_timeout(int ms) { _socket->setSendTimeout(ms); }
 
+    void update_active_time();
+
+    bool is_active();
+
 protected:
     ThriftClientImpl(const std::string& ipaddress, int port)
             : _ipaddress(ipaddress), _port(port), _socket(new apache::thrift::transport::TSocket(ipaddress, port)) {}
@@ -83,6 +88,7 @@ private:
     std::shared_ptr<apache::thrift::transport::TSocket> _socket;
     std::shared_ptr<apache::thrift::transport::TTransport> _transport;
     std::shared_ptr<apache::thrift::protocol::TBinaryProtocol> _protocol;
+    size_t _last_active_time{};
 };
 
 // Utility client to a Thrift server. The parameter type is the

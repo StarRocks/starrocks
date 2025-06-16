@@ -30,9 +30,9 @@ SchemaScanner::ColumnDesc SchemaFeTabletSchedulesScanner::_s_columns[] = {
         {"PRIORITY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"TABLET_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
-        {"SCHEDULE_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
-        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"SCHEDULE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"CLONE_SRC", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CLONE_DEST", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CLONE_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
@@ -74,7 +74,14 @@ Status SchemaFeTabletSchedulesScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     RETURN_IF_ERROR(SchemaHelper::get_tablet_schedules(_ss_state, request, &response));
     _infos.swap(response.tablet_schedules);
-    return Status::OK();
+    return SchemaScanner::start(state);
+}
+
+Status SchemaFeTabletSchedulesScanner::TEST_start(RuntimeState* state, const std::vector<TTabletSchedule>& infos) {
+    _cur_idx = 0;
+    _infos = infos;
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    return SchemaScanner::start(state);
 }
 
 Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
@@ -121,15 +128,33 @@ Status SchemaFeTabletSchedulesScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 8: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.create_time);
+                if (info.create_time > 0) {
+                    DateTimeValue v;
+                    v.from_unixtime(static_cast<int64_t>(info.create_time), _runtime_state->timezone_obj());
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&v);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
                 break;
             }
             case 9: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.schedule_time);
+                if (info.schedule_time > 0) {
+                    DateTimeValue v;
+                    v.from_unixtime(static_cast<int64_t>(info.schedule_time), _runtime_state->timezone_obj());
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&v);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
                 break;
             }
             case 10: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.finish_time);
+                if (info.finish_time > 0) {
+                    DateTimeValue v;
+                    v.from_unixtime(static_cast<int64_t>(info.finish_time), _runtime_state->timezone_obj());
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&v);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
                 break;
             }
             case 11: {

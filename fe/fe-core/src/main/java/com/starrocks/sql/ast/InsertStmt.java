@@ -61,6 +61,7 @@ public class InsertStmt extends DmlStmt {
     private List<Long> targetPartitionIds = Lists.newArrayList();
     private List<String> targetColumnNames;
     private boolean usePartialUpdate = false;
+    private boolean autoIncrementPartialUpdate = false;
     private QueryStatement queryStatement;
     private String label = null;
     private String targetBranch = null;
@@ -265,6 +266,14 @@ public class InsertStmt extends DmlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public void setAutoIncrementPartialUpdate() {
+        this.autoIncrementPartialUpdate = true;
+    }
+
+    public boolean autoIncrementPartialUpdate() {
+        return this.autoIncrementPartialUpdate;
     }
 
     public void setUsePartialUpdate() {

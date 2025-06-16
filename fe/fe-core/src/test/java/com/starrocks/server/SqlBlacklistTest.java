@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.persist.DeleteSqlBlackLists;
@@ -40,7 +41,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
@@ -62,7 +62,7 @@ public class SqlBlacklistTest {
         sqlBlackList = new SqlBlackList();
         connectContext = UtFrameUtils.createDefaultCtx();
         editLog = Mockito.mock(EditLog.class);
-        connectContext.setQueryId(UUID.randomUUID());
+        connectContext.setQueryId(UUIDUtil.genUUID());
     }
 
     @Test

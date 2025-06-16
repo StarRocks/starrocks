@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -55,12 +56,12 @@ public class WarehouseTest {
 
         new MockUp<WarehouseManager>() {
             @Mock
-            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+            public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
                 return null;
             }
         };
         try {
-            warehouseManager.getComputeNodeAssignedToTablet(0L, new LakeTablet(0));
+            warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, new LakeTablet(0));
             Assert.fail();
         } catch (ErrorReportException e) {
             Assert.assertTrue(e.getMessage().contains("No alive backend or compute node in warehouse"));

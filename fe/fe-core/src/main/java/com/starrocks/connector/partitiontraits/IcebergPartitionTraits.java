@@ -22,6 +22,7 @@ import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionInfo;
@@ -138,6 +139,18 @@ public class IcebergPartitionTraits extends DefaultTraits {
         Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
         return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
                 plusSeconds(extraSeconds), Clock.systemDefaultZone().getZone())).orElse(null);
+    }
+
+    @Override
+    public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
+        PartitionKey partitionKey = super.createPartitionKeyWithType(values, types);
+        for (int i = 0; i < types.size(); i++) {
+            LiteralExpr exprValue = partitionKey.getKeys().get(i);
+            if (exprValue.getType().isDecimalV3()) {
+                exprValue.setType(types.get(i)); //keep the precision and scale.
+            }
+        }
+        return partitionKey;
     }
 }
 
