@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.StatementBase;
 import io.trino.sql.tree.CreateTableAsSelect;
+import io.trino.sql.tree.DropTable;
 import io.trino.sql.tree.Explain;
 import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.Query;
@@ -40,7 +41,12 @@ public class TrinoParserUtils {
         String trimmedQuery = query.trim();
         Statement statement = TrinoParser.parse(trimmedQuery);
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
+<<<<<<< HEAD
                 || statement instanceof CreateTableAsSelect) {
+=======
+                || statement instanceof CreateTableAsSelect || statement instanceof Insert
+                || statement instanceof DropTable) {
+>>>>>>> 4e1d1a01cd ([BugFix] Make it compatible with Trino dialect when dropping a hive table (#38829))
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
             throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
