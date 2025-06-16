@@ -399,7 +399,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);
     }
 
-    if (tablet_schema.__isset.distribution_key_column_ids) {
+    if (tablet_schema.__isset.distribution_key_column_names) {
         for (const auto& col_name : tablet_schema.distribution_key_column_names) {
             schema->add_distribution_key_column_names(col_name);
         }
