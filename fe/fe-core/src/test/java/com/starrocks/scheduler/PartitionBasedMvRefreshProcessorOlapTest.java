@@ -568,15 +568,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         };
         try {
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
+            executeInsertSql(connectContext, insertSql);
             MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), "mv_without_partition"));
+                    .getTable(testDb.getFullName(), "mv1"));
             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(taskRun);
         } catch (Exception e) {
             e.printStackTrace();
         }
-
         Assert.assertEquals(1, retryExecutorIds.size());
     }
 
