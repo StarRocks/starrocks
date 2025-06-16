@@ -58,7 +58,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "FROM `$dbName`.`$tableName` $sampleClause " +
                     "WHERE $columnName is not null " +
                     "GROUP BY $columnName " +
-                    "ORDER BY count($columnName) desc limit $topN ) t";
+                    "ORDER BY count($columnName) desc, $columnName limit $topN ) t";
 
     public HistogramStatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
                                          StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
