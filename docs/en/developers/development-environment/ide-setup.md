@@ -79,7 +79,7 @@ sudo apt update
 ```
 
 ```bash
-sudo apt install gcc g++ maven openjdk-17-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build
+sudo apt install gcc g++ maven openjdk-17-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build curl
 ```
 
 Setup `JAVA_HOME` env
