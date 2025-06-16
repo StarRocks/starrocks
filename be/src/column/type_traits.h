@@ -42,6 +42,11 @@ template <>
 inline constexpr bool IsInt128<int128_t> = true;
 
 template <typename T>
+constexpr bool IsInt256 = false;
+template <>
+inline constexpr bool IsInt256<int256_t> = true;
+
+template <typename T>
 constexpr bool IsSlice = false;
 template <>
 inline constexpr bool IsSlice<Slice> = true;

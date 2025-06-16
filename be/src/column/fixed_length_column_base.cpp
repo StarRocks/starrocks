@@ -399,6 +399,8 @@ std::string FixedLengthColumnBase<T>::get_name() const {
         return "timestamp";
     } else if constexpr (IsInt128<T>) {
         return "int128";
+    } else if constexpr (IsInt256<T>) {
+        return "int256";
     } else if constexpr (std::is_floating_point_v<T>) {
         return "float-" + std::to_string(sizeof(T));
     } else {

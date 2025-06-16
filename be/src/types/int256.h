@@ -153,10 +153,12 @@ public:
 
     /// Constructor from floating point types
     /// @param value Floating point value to convert (truncated to integer)
-    constexpr int256_t(float value)
-            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
-    constexpr int256_t(double value)
-            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
+    explicit int256_t(float value);
+    explicit int256_t(double value);
+    // constexpr int256_t(float value)
+    //         : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
+    // constexpr int256_t(double value)
+    //         : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
 
     // =============================================================================
     // Type Conversion Operators
@@ -590,6 +592,18 @@ constexpr int256_t INT256_MAX{
 constexpr int256_t INT256_MIN{
         static_cast<int128_t>(static_cast<uint128_t>(1) << 127), // high: -2^127
         static_cast<uint128_t>(0)                                // low:  0
+};
+
+/// Constant value 1 for int256_t
+constexpr int256_t INT256_ONE{
+        static_cast<int128_t>(0), // high: 0
+        static_cast<uint128_t>(1) // low:  1
+};
+
+/// Constant value -1 for int256_t
+constexpr int256_t INT256_NEGATIVE_ONE{
+        static_cast<int128_t>(-1), // high: -1 (all bits set)
+        static_cast<uint128_t>(-1) // low:  all bits set (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
 };
 
 // =============================================================================
