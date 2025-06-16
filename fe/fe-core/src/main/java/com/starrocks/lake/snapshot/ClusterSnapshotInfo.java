@@ -15,15 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Table;
 
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ClusterSnapshotInfo {
@@ -110,62 +102,5 @@ public class ClusterSnapshotInfo {
             return null;
         }
         return physicalPartInfo.indexInfos.get(indexId);
-    }
-
-    public static Builder newBuilder() {
-        return new Builder();
-    }
-
-    public static class Builder {
-        public Builder() {
-        }
-
-        public ClusterSnapshotInfo build(List<Database> dbs) {
-            Map<Long, DatabaseSnapshotInfo> dbInfos = new HashMap<>();
-            for (Database db : dbs) {
-                dbInfos.put(db.getId(), this.build(db));
-            }
-            return new ClusterSnapshotInfo(dbInfos);
-        }
-
-        private DatabaseSnapshotInfo build(Database db) {
-            Map<Long, TableSnapshotInfo> tableInfos = new HashMap<>();
-            for (Table table : db.getTables()) {
-                if (table.isCloudNativeTableOrMaterializedView()) {
-                    tableInfos.put(table.getId(), this.build((OlapTable) table));
-                }
-            }
-            return new DatabaseSnapshotInfo(db.getId(), tableInfos);
-        }
-
-        private TableSnapshotInfo build(OlapTable table) {
-            Map<Long, PartitionSnapshotInfo> partInfos = new HashMap<>();
-            for (Partition partition : table.getPartitions()) {
-                partInfos.put(partition.getId(), this.build(partition));
-            }
-            return new TableSnapshotInfo(table.getId(), partInfos);
-        }
-
-        private PartitionSnapshotInfo build(Partition partition) {
-            Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos = new HashMap<>();
-            for (PhysicalPartition physicalPart : partition.getSubPartitions()) {
-                physicalPartInfos.put(physicalPart.getId(), this.build(physicalPart));
-            }
-            return new PartitionSnapshotInfo(partition.getId(), physicalPartInfos);
-        }
-
-        private PhysicalPartitionSnapshotInfo build(PhysicalPartition physicalPart) {
-            Map<Long, MaterializedIndexSnapshotInfo> indexInfos = new HashMap<>();
-            List<MaterializedIndex> indexes = physicalPart.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-            for (MaterializedIndex index : indexes) {
-                indexInfos.put(index.getId(), this.build(index));
-            }
-            return new PhysicalPartitionSnapshotInfo(
-                    physicalPart.getId(), physicalPart.getVisibleVersion(), indexInfos);
-        }
-
-        private MaterializedIndexSnapshotInfo build(MaterializedIndex index) {
-            return new MaterializedIndexSnapshotInfo(index.getId());
-        }
     }
 }

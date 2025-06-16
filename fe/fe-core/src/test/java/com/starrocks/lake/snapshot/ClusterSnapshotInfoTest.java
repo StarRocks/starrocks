@@ -79,7 +79,7 @@ public class ClusterSnapshotInfoTest {
             clusterSnapshotInfo = new ClusterSnapshotInfo(dbInfos);
             Assert.assertTrue(clusterSnapshotInfo.isEmpty());
             clusterSnapshotInfo =
-                ClusterSnapshotInfo.newBuilder().build(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
+                SnapshotInfoHelper.buildClusterSnapshotInfo(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
             Assert.assertTrue(!clusterSnapshotInfo.isEmpty());
         }
         for (Table tbl : dbTest.getTables()) {
