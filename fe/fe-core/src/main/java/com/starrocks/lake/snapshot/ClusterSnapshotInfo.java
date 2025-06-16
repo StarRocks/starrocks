@@ -27,19 +27,11 @@ import java.util.List;
 import java.util.Map;
 
 public class ClusterSnapshotInfo {
-    // tree struct begin from db
     @SerializedName(value = "dbInfos")
     private Map<Long, DatabaseSnapshotInfo> dbInfos;
 
-    public ClusterSnapshotInfo() {
-        this.dbInfos = new HashMap<>();
-    }
-
-    public void rebuildInfo(List<Database> dbs) {
-        // always clear infos before rebuild
-        dbInfos.clear();
-        ClusterSnapshotInfoVisitor visitor = new ClusterSnapshotInfoVisitor();
-        this.dbInfos = visitor.visit(dbs);
+    public ClusterSnapshotInfo(Map<Long, DatabaseSnapshotInfo> dbInfos) {
+        this.dbInfos = dbInfos;
     }
 
     public boolean isEmpty() {
@@ -120,117 +112,60 @@ public class ClusterSnapshotInfo {
         return physicalPartInfo.indexInfos.get(indexId);
     }
 
-    private static class ClusterSnapshotInfoVisitor {
-        public ClusterSnapshotInfoVisitor() {
+    public static Builder newBuilder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        public Builder() {
         }
 
-        public Map<Long, DatabaseSnapshotInfo> visit(List<Database> dbs) {
+        public ClusterSnapshotInfo build(List<Database> dbs) {
             Map<Long, DatabaseSnapshotInfo> dbInfos = new HashMap<>();
             for (Database db : dbs) {
-                dbInfos.put(db.getId(), this.visit(db));
+                dbInfos.put(db.getId(), this.build(db));
             }
-            return dbInfos;
+            return new ClusterSnapshotInfo(dbInfos);
         }
 
-        private DatabaseSnapshotInfo visit(Database db) {
+        private DatabaseSnapshotInfo build(Database db) {
             Map<Long, TableSnapshotInfo> tableInfos = new HashMap<>();
             for (Table table : db.getTables()) {
                 if (table.isCloudNativeTableOrMaterializedView()) {
-                    tableInfos.put(table.getId(), this.visit((OlapTable) table));
+                    tableInfos.put(table.getId(), this.build((OlapTable) table));
                 }
             }
             return new DatabaseSnapshotInfo(db.getId(), tableInfos);
         }
 
-        private TableSnapshotInfo visit(OlapTable table) {
+        private TableSnapshotInfo build(OlapTable table) {
             Map<Long, PartitionSnapshotInfo> partInfos = new HashMap<>();
             for (Partition partition : table.getPartitions()) {
-                partInfos.put(partition.getId(), this.visit(partition));
+                partInfos.put(partition.getId(), this.build(partition));
             }
             return new TableSnapshotInfo(table.getId(), partInfos);
         }
 
-        private PartitionSnapshotInfo visit(Partition partition) {
+        private PartitionSnapshotInfo build(Partition partition) {
             Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos = new HashMap<>();
             for (PhysicalPartition physicalPart : partition.getSubPartitions()) {
-                physicalPartInfos.put(physicalPart.getId(), this.visit(physicalPart));
+                physicalPartInfos.put(physicalPart.getId(), this.build(physicalPart));
             }
             return new PartitionSnapshotInfo(partition.getId(), physicalPartInfos);
         }
 
-        private PhysicalPartitionSnapshotInfo visit(PhysicalPartition physicalPart) {
+        private PhysicalPartitionSnapshotInfo build(PhysicalPartition physicalPart) {
             Map<Long, MaterializedIndexSnapshotInfo> indexInfos = new HashMap<>();
             List<MaterializedIndex> indexes = physicalPart.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex index : indexes) {
-                indexInfos.put(index.getId(), this.visit(index));
+                indexInfos.put(index.getId(), this.build(index));
             }
             return new PhysicalPartitionSnapshotInfo(
                     physicalPart.getId(), physicalPart.getVisibleVersion(), indexInfos);
         }
 
-        private MaterializedIndexSnapshotInfo visit(MaterializedIndex index) {
+        private MaterializedIndexSnapshotInfo build(MaterializedIndex index) {
             return new MaterializedIndexSnapshotInfo(index.getId());
-        }
-    }
-
-    private static class DatabaseSnapshotInfo {
-        @SerializedName(value = "dbId")
-        public long dbId;
-        @SerializedName(value = "tableInfos")
-        public Map<Long, TableSnapshotInfo> tableInfos;
-
-        public DatabaseSnapshotInfo(long dbId, Map<Long, TableSnapshotInfo> tableInfos) {
-            this.dbId = dbId;
-            this.tableInfos = tableInfos;
-        }
-    }
-
-    private static class TableSnapshotInfo {
-        @SerializedName(value = "tableId")
-        public long tableId;
-        @SerializedName(value = "partInfos")
-        public Map<Long, PartitionSnapshotInfo> partInfos;
-
-        public TableSnapshotInfo(long tableId, Map<Long, PartitionSnapshotInfo> partInfos) {
-            this.tableId = tableId;
-            this.partInfos = partInfos;
-        }
-    }
-
-    private static class PartitionSnapshotInfo {
-        @SerializedName(value = "partitionId")
-        public long partitionId;
-        @SerializedName(value = "physicalPartInfos")
-        public Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos;
-
-        public PartitionSnapshotInfo(long partitionId, Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos) {
-            this.partitionId = partitionId;
-            this.physicalPartInfos = physicalPartInfos;
-        }
-    }
-
-    private static class PhysicalPartitionSnapshotInfo {
-        @SerializedName(value = "physicalPartitionId")
-        public long physicalPartitionId;
-        @SerializedName(value = "version")
-        public long version;
-        @SerializedName(value = "indexInfos")
-        public Map<Long, MaterializedIndexSnapshotInfo> indexInfos;
-
-        public PhysicalPartitionSnapshotInfo(long physicalPartId, long visibleVersion,
-                                             Map<Long, MaterializedIndexSnapshotInfo> indexInfos) {
-            this.physicalPartitionId = physicalPartId;
-            this.version = visibleVersion;
-            this.indexInfos = indexInfos;
-        }
-    }
-
-    private static class MaterializedIndexSnapshotInfo {
-        @SerializedName(value = "indexId")
-        public long indexId;
-
-        public MaterializedIndexSnapshotInfo(long indexId) {
-            this.indexId = indexId;
         }
     }
 }

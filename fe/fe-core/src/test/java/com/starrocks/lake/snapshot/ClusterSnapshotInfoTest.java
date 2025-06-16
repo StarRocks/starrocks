@@ -29,7 +29,9 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ClusterSnapshotInfoTest {
     @BeforeClass
@@ -72,10 +74,12 @@ public class ClusterSnapshotInfoTest {
         };
 
         ClusterSnapshotInfo clusterSnapshotInfo = null;
+        Map<Long, DatabaseSnapshotInfo> dbInfos = new HashMap<>();
         {
-            clusterSnapshotInfo = new ClusterSnapshotInfo();
+            clusterSnapshotInfo = new ClusterSnapshotInfo(dbInfos);
             Assert.assertTrue(clusterSnapshotInfo.isEmpty());
-            clusterSnapshotInfo.rebuildInfo(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
+            clusterSnapshotInfo =
+                ClusterSnapshotInfo.newBuilder().build(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
             Assert.assertTrue(!clusterSnapshotInfo.isEmpty());
         }
         for (Table tbl : dbTest.getTables()) {
