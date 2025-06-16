@@ -69,6 +69,10 @@ public class EditLogEPack extends EditLog {
         logEdit(OperationTypeEPack.OP_UNSET_PASSWORD_POLICY, unsetPasswordPolicyLog);
     }
 
+    public void logManualClusterSnapshotLog(ManualClusterSnapshotLog info) {
+        logEdit(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, info);
+    }
+
     @Override
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
@@ -110,6 +114,11 @@ public class EditLogEPack extends EditLog {
                 }
                 case OperationTypeEPack.OP_UNSET_PASSWORD_POLICY: {
                     globalStateMgr.getSecurityPolicyManager().setGlobalPasswordPolicy(-1);
+                    break;
+                }
+                case OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG: {
+                    ManualClusterSnapshotLog log = (ManualClusterSnapshotLog) journal.data();
+                    //(TODO): impl by next pr
                     break;
                 }
                 default: {

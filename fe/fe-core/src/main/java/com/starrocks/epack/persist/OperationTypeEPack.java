@@ -46,4 +46,7 @@ public class OperationTypeEPack extends OperationType {
     // Grant Role to Group
     //public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
     //public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
+
+    // Manual Cluster Snapshot
+    public static final short OP_MANUAL_CLUSTER_SNAPSHOT_LOG = 20601;
 }

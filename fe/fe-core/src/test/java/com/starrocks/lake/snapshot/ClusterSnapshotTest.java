@@ -25,6 +25,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.epack.persist.EditLogEPack;
+import com.starrocks.epack.persist.ManualClusterSnapshotLog;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
@@ -63,7 +65,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class ClusterSnapshotTest {
     @Mocked
-    private EditLog editLog;
+    private EditLogEPack editLog;
 
     private StarOSAgent starOSAgent = new StarOSAgent();
 
@@ -92,6 +94,15 @@ public class ClusterSnapshotTest {
                 minTimes = 0;
                 result = new Delegate() {
                     public void logClusterSnapshotLog(ClusterSnapshotLog log) {
+                    }
+                };
+            }
+
+            {
+                editLog.logManualClusterSnapshotLog((ManualClusterSnapshotLog) any);
+                minTimes = 0;
+                result = new Delegate() {
+                    public void logManualClusterSnapshotLog(ManualClusterSnapshotLog log) {
                     }
                 };
             }
@@ -453,5 +464,38 @@ public class ClusterSnapshotTest {
         Config.automated_cluster_snapshot_interval_seconds = oldValue;
 
         Assert.assertTrue(beginTime != endTime);
+    }
+
+    @Test
+    public void testManualClusterSnapshotMetaBasic() {
+        ManualClusterSnapshotJob manualJob =
+                new ManualClusterSnapshotJob(1, "testSnapshot", "default_sv", System.currentTimeMillis());
+        Assert.assertTrue(manualJob instanceof ManualClusterSnapshotJob);
+        manualJob.setState(ClusterSnapshotJobState.FINISHED);
+        Assert.assertTrue(manualJob.getCreatedTimeMs() <= manualJob.getFinishedTimeMs());
+        manualJob.logJob();
+
+        ManualClusterSnapshotJobRequest req = new ManualClusterSnapshotJobRequest("snapshotName", "sv");
+        Assert.assertTrue(req.getSnapshotName().equals("snapshotName"));
+        Assert.assertTrue(req.getStorageVolumeName().equals("sv"));
+        Assert.assertTrue(req.toManualClusterSnapshotJob() != null);
+
+        ManualClusterSnapshotLog log = null;
+        log = new ManualClusterSnapshotLog();
+        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.NONE);
+        log.setAddManualRequest(req);
+        Assert.assertTrue(log.getManualSnapshotJobRequest().getSnapshotName().equals("snapshotName"));
+        Assert.assertTrue(log.getManualSnapshotJobRequest().getStorageVolumeName().equals("sv"));
+        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.ADD_MANUAL_REQUEST);
+
+        log = new ManualClusterSnapshotLog();
+        log.setDropManualJob("snapshotName");
+        Assert.assertTrue(log.getDropClusterSnapshotName().equals("snapshotName"));
+        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.DROP_MANUAL_JOB);
+
+        log = new ManualClusterSnapshotLog();
+        log.setSnapshotJob(manualJob);
+        Assert.assertTrue(log.getManualSnapshotJob() != null);
+        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.UPDATE_SNAPSHOT_JOB);
     }
 }

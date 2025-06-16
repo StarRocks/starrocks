@@ -40,6 +40,7 @@ import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.persist.DropFailoverGroupLog;
 import com.starrocks.epack.persist.DropPasswordPolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
+import com.starrocks.epack.persist.ManualClusterSnapshotLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.persist.SetPasswordPolicyLog;
@@ -117,6 +118,7 @@ public class EditLogDeserializer {
             .put(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, UpdateFailoverGroupLog.class)
             .put(OperationTypeEPack.OP_MV_CHANGE, MVChangeLog.class)
             .put(OperationTypeEPack.OP_RECOMMENDATIONS_TASK_STATUS_CHANGE, RecommendationsTaskStatus.class)
+            .put(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, ManualClusterSnapshotLog.class)
 
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)
             .put(OperationType.OP_SAVE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)
