@@ -30,6 +30,7 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -65,6 +66,7 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -78,6 +80,8 @@ import static com.starrocks.scheduler.TaskRun.MV_ID;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
+
+    int retryNum = 0;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -328,7 +332,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             // base table partition rename
             testBaseTablePartitionRename(taskRun);
 
-            testRefreshWithFailure(testDb, materializedView, taskRun);
+         //   testRefreshWithFailure(testDb, materializedView, taskRun);
+            testRefreshWithRetry(taskRun);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail(e.getMessage());
@@ -543,6 +548,37 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         MaterializedView.BasePartitionInfo newP0PartitionInfo = baseTableVisibleVersionMap2.get(tbl1.getId()).get("p0");
         Assert.assertEquals(3, newP0PartitionInfo.getVersion());
     }
+
+    private void testRefreshWithRetry(TaskRun taskRun)
+            throws Exception {
+        List<TUniqueId> retryExecutorIds = new ArrayList<>();
+        // insert new data into tbl1's p0 partition
+        // update base table tbl1's p0 version to 3
+        String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
+        connectContext.getSessionVariable().getQueryDebugOptions().setMaxRefreshMaterializedViewRetryNum(2);
+        executeInsertSql(connectContext, insertSql);
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
+            @Mock
+            private void doRefreshMaterializedView(TaskRunContext context,
+                                                   IMaterializedViewMetricsEntity mvEntity)  {
+                if (retryNum < 1) {
+                    retryNum++;
+                    throw new RuntimeException("do refresh failed at first time");
+                }
+                TUniqueId executionId = taskRun.getRunCtx().getExecutionId();
+                retryExecutorIds.add(executionId);
+                throw new RuntimeException("do refresh failed at second time");
+            }
+        };
+        try {
+            initAndExecuteTaskRun(taskRun);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        Assert.assertEquals(1, retryExecutorIds.size());
+    }
+
 
     public void testBaseTablePartitionRename(TaskRun taskRun)
             throws Exception {
