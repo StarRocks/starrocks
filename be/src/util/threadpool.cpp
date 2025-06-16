@@ -422,6 +422,8 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
         _num_threads_pending_start++;
     }
 
+    TEST_SYNC_POINT_CALLBACK("ThreadPool::do_submit:replace_task", &r);
+
     Task task;
     task.runnable = std::move(r);
     task.submit_time = submit_time;
