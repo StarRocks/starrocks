@@ -279,13 +279,7 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
     }
 
     SharedTabletMetadataPB shared_meta;
-<<<<<<< HEAD
-    auto& first_meta = tablet_metas.begin()->second;
-    const int64_t schema_id = first_meta.schema().id();
-    shared_meta.set_schema_id(schema_id);
-=======
     auto partition_location = tablet_metadata_root_location(tablet_metas.begin()->first);
->>>>>>> ad08b125aa ([BugFix] Fix aggregate publish failed when lake table has rollup (#59873))
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
     for (auto& [tablet_id, meta] : tablet_metas) {
         (*shared_meta.mutable_tablet_to_schema())[tablet_id] = meta.schema().id();
