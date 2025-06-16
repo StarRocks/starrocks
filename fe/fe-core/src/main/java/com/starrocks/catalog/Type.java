@@ -1283,7 +1283,8 @@ public abstract class Type implements Cloneable {
                             scalarType.getScale());
                 } else if (scalarType.getType() == TPrimitiveType.DECIMAL32 ||
                         scalarType.getType() == TPrimitiveType.DECIMAL64 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL128) {
+                        scalarType.getType() == TPrimitiveType.DECIMAL128 ||
+                        scalarType.getType() == TPrimitiveType.DECIMAL256) {
                     Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
                     type = ScalarType.createDecimalV3Type(
                             PrimitiveType.fromThrift(scalarType.getType()),
@@ -1446,6 +1447,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return t.decimalPrecision();
             default:
                 return null;
@@ -1478,6 +1480,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return t.decimalScale();
             default:
                 return null;
@@ -1512,6 +1515,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return this;
             case FUNCTION:
                 return FUNCTION;
@@ -1586,6 +1590,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return this;
             default:
                 return Type.INVALID;
@@ -1640,6 +1645,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 // precision + (scale > 0 ? 1 : 0) + (unsigned_flag || !precision ? 0 : 1));
                 ScalarType decimalType = (ScalarType) this;
                 int length = decimalType.getScalarPrecision();
@@ -1690,6 +1696,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return ((ScalarType) this).getScalarScale();
             case FLOAT:
             case DOUBLE:

@@ -33,7 +33,8 @@ namespace starrocks {
 TYPE_GUARD(Decimal32Guard, is_decimal32, int32_t)
 TYPE_GUARD(Decimal64Guard, is_decimal64, int64_t)
 TYPE_GUARD(Decimal128Guard, is_decimal128, int128_t)
-TYPE_GUARD(DecimalGuard, is_decimal, int32_t, int64_t, int128_t)
+TYPE_GUARD(Decimal256Guard, is_decimal256, int256_t)
+TYPE_GUARD(DecimalGuard, is_decimal, int32_t, int64_t, int128_t, int256_t)
 
 template <typename ST>
 struct unsigned_type {
@@ -230,6 +231,8 @@ public:
             // std::abs(value)<1.0 -> 0: Acceptable
             // std::abs(value)>=1.0 -> 0 or different sign: Overflow!!
             return std::abs(value) >= From(1) && (*dec_value == To(0) || ((value < From(0)) ^ (*dec_value < To(0))));
+        } else if constexpr (is_decimal256<To>) {
+            return false;
         } else {
             static_assert(is_decimal<To>, "invalid decimal type");
         }

@@ -153,10 +153,12 @@ public:
 
     /// Constructor from floating point types
     /// @param value Floating point value to convert (truncated to integer)
-    constexpr int256_t(float value)
-            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
-    constexpr int256_t(double value)
-            : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
+    explicit int256_t(float value);
+    explicit int256_t(double value);
+    // constexpr int256_t(float value)
+    //         : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
+    // constexpr int256_t(double value)
+    //         : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
 
     // =============================================================================
     // Type Conversion Operators
