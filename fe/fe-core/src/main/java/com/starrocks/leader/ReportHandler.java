@@ -1222,6 +1222,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                                         olapTable.getCopiedIndexes(), indexMeta.getSchema()))
                                             .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                                             .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                                            .setDistributionKeyColumnIds(olapTable.getDistributionKeyColumnIds())
                                             .build().toTabletSchema();
                                     CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                             .setNodeId(backendId)
