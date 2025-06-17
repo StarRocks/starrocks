@@ -1474,7 +1474,11 @@ public final class MetricRepo {
                 Collectors.groupingBy(RoutineLoadJob::getWarehouseId)
         );
 
+<<<<<<< HEAD
         List<LeaderAwareGaugeMetric<Long>> routineLoadLags = new ArrayList<>();
+=======
+        List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
+>>>>>>> 3379f8b2967 ([BugFix] Fix starrocks_fe_routine_load_max_lag_of_partition metric in multi-warehouse case (backport #59924) (#59989))
 
         // get all partitions offset in a batch api
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
