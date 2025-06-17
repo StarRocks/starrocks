@@ -1668,8 +1668,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The total number of error rows encountered during data loading by all Routine Load jobs.
-<<<<<<< HEAD
-=======
 
 ### starrocks_fe_routine_load_max_lag_of_partition
 
@@ -1680,4 +1678,3 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The number of times blacklisted sql have been intercepted.
->>>>>>> fe73d8d9fa ([Doc] Add routine load offset lag metric and configuration doc (#59923))
