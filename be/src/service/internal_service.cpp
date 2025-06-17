@@ -545,7 +545,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         if (cancel_query_ctx) {
             // cancel query_id
-            query_ctx->cancel(Status::Cancelled(reason_string), true);
+            query_ctx->cancel(Status::Cancelled(reason_string));
         } else {
             // cancel fragment
             auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
@@ -554,7 +554,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                         "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
                         print_id(tid));
             } else {
-                fragment_ctx->cancel(Status::Cancelled(reason_string), true);
+                fragment_ctx->cancel(Status::Cancelled(reason_string));
             }
         }
     } else {
