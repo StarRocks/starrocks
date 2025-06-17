@@ -904,4 +904,34 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     }
 }
 
+TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
+    expr_node.case_expr.has_case_expr = false;
+    expr_node.case_expr.has_else_expr = false;
+
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_BOOLEAN));
+
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);
+
+    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+    array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
+    array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
+    auto array_expr0 = MockExpr(type_arr_int, array0);
+
+    auto when0 = MockVectorizedExpr<TYPE_BOOLEAN>(expr_node, 3, false);
+
+    expr->_children.push_back(&when0);       // when1
+    expr->_children.push_back(&array_expr0); // then1
+
+    {
+        Chunk chunk;
+        chunk.append_column(array0, 1);
+        ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+        ASSERT_EQ(ptr->size(), 3);
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_TRUE(ptr->is_null(j));
+        }
+    }
+}
+
 } // namespace starrocks
