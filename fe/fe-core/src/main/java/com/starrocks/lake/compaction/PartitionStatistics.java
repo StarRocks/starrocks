@@ -99,12 +99,12 @@ public class PartitionStatistics {
         return punishFactor;
     }
 
-    private void adjustPunishFactor(Quantiles newCompactionScore) {
+    private void adjustPunishFactor(Quantiles newCompactionScore, boolean isPartialSuccess) {
         if (compactionScore != null && newCompactionScore != null) {
-            if (compactionScore.getMax() == newCompactionScore.getMax()) {
+            if (compactionScore.getMax() == newCompactionScore.getMax() && isPartialSuccess) {
                 // this means partial compaction succeeds, need increase punish factor,
                 // so that other partitions' compaction can proceed.
-                // max interval will be CompactionScheduler.MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS * punishFactor
+                // max interval will be Config.lake_compaction_interval_ms_on_success * punishFactor
                 punishFactor = Math.min(punishFactor * 2, 360);
             } else {
                 punishFactor = 1;
@@ -119,8 +119,8 @@ public class PartitionStatistics {
     }
 
     // should only called by compaction
-    public void setCompactionScoreAndAdjustPunishFactor(@Nullable Quantiles compactionScore) {
-        adjustPunishFactor(compactionScore);
+    public void setCompactionScoreAndAdjustPunishFactor(@Nullable Quantiles compactionScore, boolean isPartialSuccess) {
+        adjustPunishFactor(compactionScore, isPartialSuccess);
         setCompactionScore(compactionScore);
     }
 
