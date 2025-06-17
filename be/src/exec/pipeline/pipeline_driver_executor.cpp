@@ -185,7 +185,7 @@ void GlobalDriverExecutor::_worker_thread() {
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
-                query_ctx->cancel(status, false);
+                query_ctx->cancel(status);
                 runtime_state->set_is_cancelled(true);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
