@@ -37,6 +37,7 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -99,26 +100,57 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-
-                HttpServerHandlerMetrics metrics = HttpServerHandlerMetrics.getInstance();
-                long startTime = System.currentTimeMillis();
-                try {
-                    metrics.handlingRequestsNum.increase(1L);
-                    action.handleRequest(req);
-                } finally {
-                    long latency = System.currentTimeMillis() - startTime;
-                    metrics.handlingRequestsNum.increase(-1L);
-                    metrics.requestHandleLatencyMs.update(latency);
-                    if (latency >= Config.http_slow_request_threshold_ms) {
-                        LOG.warn("receive slow http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
-                                WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
-                                startTime, latency);
-                    }
+                if (action.supportAsyncHandler()) {
+                    handleActionAsync(req);
+                } else {
+                    handleActionSync(req);
                 }
             }
         } finally {
             ReferenceCountUtil.release(msg);
         }
+    }
+
+    private void handleActionSync(BaseRequest request) {
+        RequestWatch watch = new RequestWatch(request);
+        try {
+            action.handleRequest(request);
+        } catch (Exception e) {
+            handleException(request, e);
+        } finally {
+            watch.finish();
+        }
+    }
+
+    private void handleActionAsync(BaseRequest request) {
+        RequestWatch watch = new RequestWatch(request);
+        // HttpServerHandler.channelRead will release the request object finally. To ensure
+        // the request object can be accessed in the async executor safely, retain the request.
+        ReferenceCountUtil.retain(request.getRequest());
+        try {
+            GlobalStateMgr.getServingState().getHttpAsyncExecutor().submit(() -> {
+                try {
+                    action.handleRequest(request);
+                } catch (Exception e) {
+                    handleException(request, e);
+                } finally {
+                    // For synchronous handling, HttpServerHandler.channelReadComplete will flush the buffer
+                    // automatically, but for asynchronous handling, need to flush the buffer manually.
+                    request.getContext().flush();
+                    watch.finish();
+                    ReferenceCountUtil.release(request.getRequest());
+                }
+            });
+        } catch (Exception exception) {
+            handleException(request, exception);
+            watch.finish();
+            ReferenceCountUtil.release(request.getRequest());
+        }
+    }
+
+    private void handleException(BaseRequest request, Exception exception) {
+        writeResponse(request.getContext(), HttpResponseStatus.INTERNAL_SERVER_ERROR,
+            String.format("failed to handler request, error: %s:%s ", exception.getClass(), exception.getMessage()));
     }
 
     @Override
@@ -178,5 +210,33 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         return action;
+    }
+
+    private static class RequestWatch {
+        private final BaseRequest request;
+        private final long startTime;
+
+        public RequestWatch(BaseRequest request) {
+            this.request = request;
+            this.startTime = System.currentTimeMillis();
+            HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(1L);
+        }
+
+        public void finish() {
+            long latency = System.currentTimeMillis() - startTime;
+            HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(-1L);
+            HttpServerHandlerMetrics.getInstance().requestHandleLatencyMs.update(latency);
+            if (latency >= Config.http_slow_request_threshold_ms) {
+                String uri;
+                try {
+                    uri = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
+                } catch (Exception e) {
+                    uri = "failed to sanitize uri, error: " + e.getMessage();
+                }
+                LOG.warn("receive slow http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
+                        uri, Thread.currentThread().getId(), startTime, latency);
+            }
+        }
+
     }
 }

@@ -119,6 +119,12 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+    // Whether to support to handle the request asynchronously, that is,
+    // handle it in a separate thread pool instead of netty workers.
+    public boolean supportAsyncHandler() {
+        return true;
+    }
+
     public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException;
 
     protected void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
