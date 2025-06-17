@@ -862,6 +862,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return columnId;
     }
 
+    public void setColumnId(ColumnId cId) {
+        this.columnId = ColumnId.create(cId.getId());
+    }
+
     public void setUniqueId(int colUniqueId) {
         this.uniqueId = colUniqueId;
     }
