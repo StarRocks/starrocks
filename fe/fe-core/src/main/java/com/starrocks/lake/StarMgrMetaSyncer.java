@@ -34,6 +34,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeAggregator;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -96,14 +97,22 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     public static void dropTabletAndDeleteShard(ComputeResource computeResource,
-                                                List<Long> shardIds, StarOSAgent starOSAgent) {
+                                                List<Long> shardIds, StarOSAgent starOSAgent,
+                                                boolean isFileBundling) {
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
+        long pickBackendId = -1;
         // group shards by be
         for (long shardId : shardIds) {
             try {
-                long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, computeResource.getWorkerGroupId());
-                shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
+                if (isFileBundling) {
+                    if (pickBackendId == -1) {
+                        pickBackendId = LakeAggregator.chooseAggregatorNode(computeResource).getId();
+                    }
+                } else {
+                    pickBackendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, computeResource.getWorkerGroupId());
+                }
+                shardIdsByBeMap.computeIfAbsent(pickBackendId, k -> Sets.newHashSet()).add(shardId);
             } catch (StarRocksException ignored1) {
                 // ignore error
             }
@@ -209,6 +218,16 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                           tableId.longValue());
                 continue;
             }
+            boolean isFileBundling = false;
+            // Get OlapTable from tableId
+            OlapTable table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableId);
+            if (table != null) {
+                isFileBundling = table.isFileBundling();
+            } else {
+                // if table is null, it means the table has been dropped, it is safe to regard it as file bundling
+                LOG.debug("table with id: {} is null, treat it as file bundling", tableId);
+                isFileBundling = true;
+            }
 
             long createTimeTs = Long.parseLong(entry.getValue().getPropertiesOrDefault("createTime", "0"));
             if (createTimeTs == 0) {
@@ -217,7 +236,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
 
             if (createTimeTs < creationExpireTime) {
-                cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup);
+                cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup, isFileBundling);
             }
         }
 
@@ -228,7 +247,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     @VisibleForTesting
-    void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+    void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup,
+            boolean isFileBundling) {
         try {
             List<Long> shardIds = starOSAgent.listShard(groupId);
             if (shardIds.isEmpty()) {
@@ -241,7 +261,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             } else {
                 // drop meta and data
                 long start = System.currentTimeMillis();
-                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent);
+                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, isFileBundling);
                 LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
                         groupId, (System.currentTimeMillis() - start));
             }
@@ -410,7 +430,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 try {
                     List<Long> shardIds = new ArrayList<>();
                     shardIds.addAll(entry.getValue());
-                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent);
+                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, table.isFileBundling());
                 } catch (Exception e) {
                     // ignore exception
                     LOG.info(e.getMessage());
