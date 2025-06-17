@@ -2252,7 +2252,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否收集 Routine Load 进程的指标。请注意，将此项目设置为 `true` 会调用 Kafka API 来获取 Partition 的最新 Offset。
+- 描述：是否收集 Routine Load Partition Offset Lag 的指标。请注意，将此项目设置为 `true` 会调用 Kafka API 来获取 Partition 的最新 Offset。
 - 引入版本：-
 
 ##### min_routine_load_lag_for_metrics
