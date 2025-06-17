@@ -514,6 +514,14 @@ public class SharedDataStorageVolumeMgrTest {
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSharedKey());
         Assert.assertEquals("sas_token",
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSasToken());
+
+        Config.cloud_native_storage_type = "GS";
+        Config.gcp_gcs_use_compute_engine_service_account = "true";
+        Config.gcp_gcs_path = "gs://gs_path";
+        sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertEquals(true, sv.getCloudConfiguration().toFileStoreInfo().getGsFsInfo().getUseComputeEngineServiceAccount());
     }
 
     @Test
