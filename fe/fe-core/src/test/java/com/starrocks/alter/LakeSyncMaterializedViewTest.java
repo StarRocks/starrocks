@@ -275,7 +275,11 @@ public class LakeSyncMaterializedViewTest {
         Assert.assertTrue(tbl1 != null);
         Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv2"));
 
+<<<<<<< HEAD
         // sync_mv1 already existed in the tbl1
+=======
+        // sync_mv2 already existed in the tbl1
+>>>>>>> 29036483b6 ([UT] Fix unstable ut (#59963))
         sql = "create materialized view sync_mv2 as select k1, sum(v1) from tbl1 group by k1;";
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
@@ -301,7 +305,11 @@ public class LakeSyncMaterializedViewTest {
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
         Assert.assertTrue(tbl1 != null);
         Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv3"));
+<<<<<<< HEAD
         // sync_mv1 already existed in tbl1
+=======
+        // sync_mv3 already existed in tbl1
+>>>>>>> 29036483b6 ([UT] Fix unstable ut (#59963))
         sql = "create materialized view sync_mv3 as select k1, sum(v1) from tbl3 group by k1;";
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
