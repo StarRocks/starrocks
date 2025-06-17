@@ -23,7 +23,9 @@
 
 namespace starrocks {
 /*
- * ColumnHashModulusPredicate is used to evaluate 
+ * ColumnHashModulusPredicate is used to evaluate a chunk of data as following:
+ * 1. Compute the hash value of the specified columns.
+ * 2. Check if the hash value modulo a given modulus equals a specified remainder.
 */
 class ColumnHashModulusPredicate {
 public:
