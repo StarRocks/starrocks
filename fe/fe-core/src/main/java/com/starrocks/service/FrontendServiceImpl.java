@@ -2283,7 +2283,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        if (txnState.getPartitionNameToTPartition().size() > Config.max_partitions_in_one_batch) {
+        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
                                     "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
@@ -2398,7 +2398,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (String partitionName : partitionColNames) {
             // get partition info from snapshot
-            TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition().get(partitionName);
+            TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition(olapTable.getId()).get(partitionName);
             if (tPartition != null) {
                 partitions.add(tPartition);
                 for (TOlapTableIndexTablets index : tPartition.getIndexes()) {
@@ -2538,7 +2538,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
-        txnState.getPartitionNameToTPartition().put(partition.getName(), tPartition);
+        txnState.getPartitionNameToTPartition(olapTable.getId()).put(partition.getName(), tPartition);
     }
 
     @Override
