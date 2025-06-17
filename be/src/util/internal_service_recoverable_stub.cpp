@@ -154,25 +154,6 @@ void PInternalService_RecoverableStub::tablet_writer_add_segment(
     stub()->tablet_writer_add_segment(controller, request, response, closure);
 }
 
-<<<<<<< HEAD
-=======
-void PInternalService_RecoverableStub::get_load_replica_status(google::protobuf::RpcController* controller,
-                                                               const PLoadReplicaStatusRequest* request,
-                                                               PLoadReplicaStatusResult* response,
-                                                               google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    stub()->get_load_replica_status(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::load_diagnose(::google::protobuf::RpcController* controller,
-                                                     const ::starrocks::PLoadDiagnoseRequest* request,
-                                                     ::starrocks::PLoadDiagnoseResult* response,
-                                                     ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    stub()->load_diagnose(controller, request, response, closure);
-}
-
->>>>>>> 9dc1a6931c ([BugFix] Fix InternalService_RecoverableStub race conditon (#59933))
 void PInternalService_RecoverableStub::transmit_runtime_filter(::google::protobuf::RpcController* controller,
                                                                const ::starrocks::PTransmitRuntimeFilterParams* request,
                                                                ::starrocks::PTransmitRuntimeFilterResult* response,
@@ -203,14 +184,4 @@ void PInternalService_RecoverableStub::process_dictionary_cache(
     stub()->process_dictionary_cache(controller, request, response, closure);
 }
 
-<<<<<<< HEAD
-=======
-void PInternalService_RecoverableStub::fetch_datacache(::google::protobuf::RpcController* controller,
-                                                       const ::starrocks::PFetchDataCacheRequest* request,
-                                                       ::starrocks::PFetchDataCacheResponse* response,
-                                                       ::google::protobuf::Closure* done) {
-    stub()->fetch_datacache(controller, request, response, nullptr);
-}
-
->>>>>>> 9dc1a6931c ([BugFix] Fix InternalService_RecoverableStub race conditon (#59933))
 } // namespace starrocks
