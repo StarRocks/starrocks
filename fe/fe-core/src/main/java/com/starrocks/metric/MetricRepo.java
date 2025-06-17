@@ -768,6 +768,8 @@ public final class MetricRepo {
                 Collectors.groupingBy(RoutineLoadJob::getWarehouseId)
         );
 
+        List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
+
         // get all partitions offset in a batch api
         for (Map.Entry<Long, List<RoutineLoadJob>> entry : kafkaJobsMp.entrySet()) {
             long warehouseId = entry.getKey();
@@ -798,8 +800,6 @@ public final class MetricRepo {
                 LOG.warn("get batch offsets failed", e);
                 return;
             }
-
-            List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
 
             for (int i = 0; i < kafkaJobs.size(); i++) {
                 KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) kafkaJobs.get(i);
@@ -833,9 +833,9 @@ public final class MetricRepo {
                     routineLoadLags.add(metric);
                 }
             }
-
-            GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
         }
+
+        GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
