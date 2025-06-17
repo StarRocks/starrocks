@@ -26,10 +26,10 @@ namespace starrocks {
 class PInternalService_RecoverableStub : public PInternalService,
                                          public std::enable_shared_from_this<PInternalService_RecoverableStub> {
 public:
-    PInternalService_RecoverableStub(const butil::EndPoint& endpoint);
+    PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
     ~PInternalService_RecoverableStub();
 
-    Status reset_channel(const std::string& protocol = "", int64_t next_connection_group = 0);
+    Status reset_channel(int64_t next_connection_group = 0);
 
     std::shared_ptr<starrocks::PInternalService_Stub> stub() const {
         std::shared_lock l(_mutex);
@@ -91,6 +91,7 @@ private:
     const butil::EndPoint _endpoint;
     std::atomic<int64_t> _connection_group = 0;
     mutable std::shared_mutex _mutex;
+    std::string _protocol;
 
     GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(PInternalService_RecoverableStub);
 };
