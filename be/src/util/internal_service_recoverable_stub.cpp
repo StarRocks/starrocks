@@ -32,7 +32,7 @@ public:
     void Run() override {
         auto* cntl = static_cast<brpc::Controller*>(_controller);
         if (cntl->Failed() && cntl->ErrorCode() == EHOSTDOWN) {
-            auto st = _stub->reset_channel("", _next_connection_group);
+            auto st = _stub->reset_channel(_next_connection_group);
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to reset channel: " << st.to_string();
             }
@@ -48,12 +48,13 @@ private:
     int64_t _next_connection_group;
 };
 
-PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::EndPoint& endpoint)
-        : _endpoint(endpoint) {}
+PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::EndPoint& endpoint,
+                                                                   std::string protocol)
+        : _endpoint(endpoint), _protocol(std::move(protocol)) {}
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
 
-Status PInternalService_RecoverableStub::reset_channel(const std::string& protocol, int64_t next_connection_group) {
+Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_group) {
     if (next_connection_group == 0) {
         next_connection_group = _connection_group.load() + 1;
     }
@@ -63,9 +64,10 @@ Status PInternalService_RecoverableStub::reset_channel(const std::string& protoc
     }
     brpc::ChannelOptions options;
     options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-    if (protocol == "http") {
-        options.protocol = protocol;
-    } else {
+    if (!_protocol.empty()) {
+        options.protocol = _protocol;
+    }
+    if (_protocol != "http") {
         // http does not support these.
         options.connection_type = config::brpc_connection_type;
         options.connection_group = std::to_string(next_connection_group);
