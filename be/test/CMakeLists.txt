@@ -508,6 +508,7 @@ set(EXEC_FILES
         ./util/uuid_generator_test.cpp
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
+        ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/bit_packing_test.cpp
         ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
