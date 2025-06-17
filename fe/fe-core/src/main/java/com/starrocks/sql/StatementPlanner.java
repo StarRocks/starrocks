@@ -528,10 +528,6 @@ public class StatementPlanner {
             if (!(stmt instanceof InsertStmt)) {
                 throw UnsupportedException.unsupportedException("External OLAP table only supports insert statement");
             }
-
-            if (((InsertStmt) stmt).isTransactionBegin()) {
-                return;
-            }
             // sync OLAP external table meta here,
             // because beginRemoteTransaction will use the dbId and tableId as request param.
             ExternalOlapTable tbl = MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) targetTable);
@@ -551,7 +547,6 @@ public class StatementPlanner {
                     tbl.getSourceTableHost(),
                     tbl.getSourceTablePort(),
                     authenticateParams);
-            ((InsertStmt) stmt).setTransactionBegin(true);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
