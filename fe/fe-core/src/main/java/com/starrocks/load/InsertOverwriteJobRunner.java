@@ -456,7 +456,7 @@ public class InsertOverwriteJobRunner {
                         // wait a little bit even if txnState is finished
                         Thread.sleep(200);
                     } while (txnState.isRunning() && --waitTimes > 0);
-                    tmpPartitionNames = txnState.getCreatedPartitionNames();
+                    tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
                     job.setTmpPartitionIds(tmpPartitionNames.stream()
                             .map(name -> targetTable.getPartition(name, true).getId())
                             .collect(Collectors.toList()));
@@ -547,7 +547,7 @@ public class InsertOverwriteJobRunner {
                         if (txnState == null) {
                             throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
                         }
-                        tmpPartitionNames = txnState.getCreatedPartitionNames();
+                        tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
                         job.setTmpPartitionIds(tmpPartitionNames.stream()
                                 .map(name -> targetTable.getPartition(name, true).getId())
                                 .collect(Collectors.toList()));
