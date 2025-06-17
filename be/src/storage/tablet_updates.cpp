@@ -71,6 +71,7 @@
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -3969,6 +3970,12 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         LOG(INFO) << err_msg_header << "link_from finish tablet:" << _tablet.tablet_id()
                   << " detail_msg: " << task_detail_msg;
     });
+
+    scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
+    Trace* trace = trace_gurad.get();
+    TRACE_TO(trace, "link_from tablet:$0", _tablet.tablet_id());
+    TRACE_TO(trace, "start to link_from tablet:$0", _tablet.tablet_id());
+
     if (_tablet.tablet_state() != TABLET_NOTREADY) {
         string msg = strings::Substitute(
                 "$0 tablet state is not TABLET_NOTREADY, link_from is not allowed tablet_id:$1 tablet_state:$2",
