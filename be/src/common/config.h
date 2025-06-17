@@ -999,7 +999,8 @@ CONF_String(starlet_cache_dir, "");
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
 CONF_Int32(starlet_cache_check_interval, "900");
 // Cache backend cache evictor interval (in seconds)
-CONF_mInt32(starlet_cache_evict_interval, "60");
+// not used any more, set to 2^31-1
+CONF_mInt32(starlet_cache_evict_interval, "2147483647");
 // Cache will start evict cache files if free space belows this value(percentage)
 CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 // Cache will stop evict cache files if free space is above this value(percentage)
