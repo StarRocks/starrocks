@@ -20,7 +20,6 @@
 #include "common/status.h"
 #include "storage/tablet_schema.h"
 
-
 namespace starrocks {
 /*
  * ColumnHashModulusPredicate is used to evaluate a chunk of data as following:
