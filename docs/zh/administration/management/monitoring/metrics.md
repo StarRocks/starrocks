@@ -1668,6 +1668,11 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：所有 Routine Load 作业导入错误数据的总行数。
 
+### starrocks_fe_routine_load_max_lag_of_partition
+
+- 单位：-
+- 描述：每个 Routine Load 作业最大的 Kafka Partition Offset Lag。只有当 FE 配置 `enable_routine_load_lag_metrics` 为 `true` 并且 Offset Lag 大于等于 FE 配置 `min_routine_load_lag_for_metrics` 时才会收集。`enable_routine_load_lag_metrics` 默认为 `false`，`min_routine_load_lag_for_metrics` 默认为 `10000`。
+
 ### starrocks_fe_sql_block_hit_count
 
 - 单位：个
