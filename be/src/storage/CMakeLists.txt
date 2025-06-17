@@ -270,7 +270,8 @@ set(STORAGE_FILES
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
-    index/vector/tenann/tenann_index_utils.cpp)
+    index/vector/tenann/tenann_index_utils.cpp
+    column_hash_modulus_predicate.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

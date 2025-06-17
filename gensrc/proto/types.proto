@@ -181,6 +181,18 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
+message ColumnHashModulusPredicatePB {
+    enum ColumnHashTypePB {
+        UNKNOWN = 0;
+        CRC32 = 1;
+    }
+
+    optional ColumnHashTypePB type = 1;
+    optional int64 modulus = 2;
+    optional int64 remainder = 3;
+    repeated string hash_column_names = 4;
+}
+
 message IndexValueWithVerPB {
     // will be set after mvcc support
     optional int64 version = 1;

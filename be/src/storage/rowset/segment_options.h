@@ -21,6 +21,7 @@
 #include "column/datum.h"
 #include "fs/fs.h"
 #include "runtime/global_dict/types.h"
+#include "storage/column_hash_modulus_predicate.h"
 #include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
 #include "storage/options.h"
@@ -61,6 +62,8 @@ public:
     RuntimeFilterPredicates runtime_filter_preds;
 
     DisjunctivePredicates delete_predicates;
+
+    ColumnHashModulusPredicate column_hash_modulus_predicate;
 
     // used for updatable tablet to get delvec
     std::shared_ptr<DelvecLoader> delvec_loader;
