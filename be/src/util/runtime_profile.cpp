@@ -41,6 +41,7 @@
 #include <queue>
 #include <utility>
 
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
@@ -337,7 +338,7 @@ RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& n
     void* mem = _counter_pool.allocate(sizeof(Counter));
     Counter* counter = new (mem) Counter(type, strategy, 0);
     if (isUniqueMetric) {
-        counter->_strategy.display_threshold = 50;
+        counter->_strategy.display_threshold = config::counter_display_threshold;
     }
 
     _counter_map[name] = std::make_pair(counter, parent_name);
@@ -368,14 +369,14 @@ void RuntimeProfile::add_child(std::shared_ptr<RuntimeProfile> child, bool inden
         add_child_unlock(child.get(), indent, ++pos);
     }
 
-    _childre_holder.emplace_back(std::move(child));
+    // _childre_holder.emplace_back(std::move(child));
 }
 
-void RuntimeProfile::reserve_child_holder(size_t child_num) {
-    DCHECK(child_num > 0);
-    std::lock_guard<std::mutex> l(_children_lock);
-    _childre_holder.reserve(child_num);
-}
+// void RuntimeProfile::reserve_child_holder(size_t child_num) {
+//     DCHECK(child_num > 0);
+//     std::lock_guard<std::mutex> l(_children_lock);
+//     _childre_holder.reserve(child_num);
+// }
 
 RuntimeProfile* RuntimeProfile::get_child(const std::string& name) {
     std::lock_guard<std::mutex> l(_children_lock);

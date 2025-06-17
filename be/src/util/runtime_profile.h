@@ -396,7 +396,7 @@ public:
 
     void add_child(std::shared_ptr<RuntimeProfile> child, bool indent, RuntimeProfile* location);
 
-    void reserve_child_holder(size_t child_num);
+    // void reserve_child_holder(size_t child_num);
 
     // Creates a new child profile with the given 'name'.
     // If 'prepend' is true, prepended before other child profiles, otherwise appended
@@ -706,7 +706,7 @@ private:
 
     std::string get_children_name_string();
 
-    // 用于分配 counter 对象的内存池
+    // used for alloc counter's memory
     CounterMemoryPool _counter_pool;
 };
 
