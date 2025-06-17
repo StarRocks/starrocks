@@ -29,11 +29,7 @@ public:
     PInternalService_RecoverableStub(const butil::EndPoint& endpoint);
     ~PInternalService_RecoverableStub();
 
-<<<<<<< HEAD
-    Status reset_channel();
-=======
-    Status reset_channel(const std::string& protocol = "", int64_t next_connection_group = 0);
->>>>>>> 9dc1a6931c ([BugFix] Fix InternalService_RecoverableStub race conditon (#59933))
+    Status reset_channel(int64_t next_connection_group = 0);
 
     std::shared_ptr<starrocks::PInternalService_Stub> stub() const {
         std::shared_lock l(_mutex);

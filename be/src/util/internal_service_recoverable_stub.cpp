@@ -22,19 +22,15 @@ class RecoverableClosure : public ::google::protobuf::Closure {
 public:
     RecoverableClosure(std::shared_ptr<starrocks::PInternalService_RecoverableStub> stub,
                        ::google::protobuf::RpcController* controller, ::google::protobuf::Closure* done)
-<<<<<<< HEAD
-            : _stub(stub), _controller(controller), _done(done) {}
-=======
             : _stub(std::move(stub)),
               _controller(controller),
               _done(done),
               _next_connection_group(_stub->connection_group() + 1) {}
->>>>>>> 9dc1a6931c ([BugFix] Fix InternalService_RecoverableStub race conditon (#59933))
 
     void Run() override {
         auto* cntl = static_cast<brpc::Controller*>(_controller);
         if (cntl->Failed() && cntl->ErrorCode() == EHOSTDOWN) {
-            auto st = _stub->reset_channel("", _next_connection_group);
+            auto st = _stub->reset_channel(_next_connection_group);
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to reset channel: " << st.to_string();
             }
@@ -55,13 +51,7 @@ PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() {}
 
-<<<<<<< HEAD
-Status PInternalService_RecoverableStub::reset_channel() {
-    std::lock_guard<std::mutex> l(_mutex);
-    brpc::ChannelOptions options;
-    options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-=======
-Status PInternalService_RecoverableStub::reset_channel(const std::string& protocol, int64_t next_connection_group) {
+Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_group) {
     if (next_connection_group == 0) {
         next_connection_group = _connection_group.load() + 1;
     }
@@ -71,17 +61,9 @@ Status PInternalService_RecoverableStub::reset_channel(const std::string& protoc
     }
     brpc::ChannelOptions options;
     options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-    if (protocol == "http") {
-        options.protocol = protocol;
-    } else {
-        // http does not support these.
-        options.connection_type = config::brpc_connection_type;
-        options.connection_group = std::to_string(next_connection_group);
-    }
->>>>>>> 9dc1a6931c ([BugFix] Fix InternalService_RecoverableStub race conditon (#59933))
     options.max_retry = 3;
     options.connection_type = config::brpc_connection_type;
-    options.connection_group = std::to_string(_connection_group++);
+    options.connection_group = std::to_string(next_connection_group);
     std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
     if (channel->Init(_endpoint, &options)) {
         LOG(WARNING) << "Fail to init channel " << _endpoint;
@@ -165,25 +147,6 @@ void PInternalService_RecoverableStub::tablet_writer_add_segment(
     stub()->tablet_writer_add_segment(controller, request, response, closure);
 }
 
-<<<<<<< HEAD
-=======
-void PInternalService_RecoverableStub::get_load_replica_status(google::protobuf::RpcController* controller,
-                                                               const PLoadReplicaStatusRequest* request,
-                                                               PLoadReplicaStatusResult* response,
-                                                               google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    stub()->get_load_replica_status(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::load_diagnose(::google::protobuf::RpcController* controller,
-                                                     const ::starrocks::PLoadDiagnoseRequest* request,
-                                                     ::starrocks::PLoadDiagnoseResult* response,
-                                                     ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    stub()->load_diagnose(controller, request, response, closure);
-}
-
->>>>>>> 9dc1a6931c ([BugFix] Fix InternalService_RecoverableStub race conditon (#59933))
 void PInternalService_RecoverableStub::transmit_runtime_filter(::google::protobuf::RpcController* controller,
                                                                const ::starrocks::PTransmitRuntimeFilterParams* request,
                                                                ::starrocks::PTransmitRuntimeFilterResult* response,
@@ -207,21 +170,4 @@ void PInternalService_RecoverableStub::execute_command(::google::protobuf::RpcCo
     stub()->execute_command(controller, request, response, closure);
 }
 
-<<<<<<< HEAD
-=======
-void PInternalService_RecoverableStub::process_dictionary_cache(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PProcessDictionaryCacheRequest* request,
-        ::starrocks::PProcessDictionaryCacheResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    stub()->process_dictionary_cache(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::fetch_datacache(::google::protobuf::RpcController* controller,
-                                                       const ::starrocks::PFetchDataCacheRequest* request,
-                                                       ::starrocks::PFetchDataCacheResponse* response,
-                                                       ::google::protobuf::Closure* done) {
-    stub()->fetch_datacache(controller, request, response, nullptr);
-}
-
->>>>>>> 9dc1a6931c ([BugFix] Fix InternalService_RecoverableStub race conditon (#59933))
 } // namespace starrocks
