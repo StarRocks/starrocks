@@ -17,9 +17,9 @@
 #include <string>
 #include <vector>
 
+#include "common/status.h"
 #include "storage/tablet_schema.h"
 
-#include "common/status.h"
 
 namespace starrocks {
 /*
@@ -29,9 +29,12 @@ namespace starrocks {
 */
 class ColumnHashModulusPredicate {
 public:
-    static StatusOr<ColumnHashModulusPredicate> create(const ColumnHashModulusPredicatePB& column_hash_modulus_predicate_pb);
-    static Status get_column_ids(const ColumnHashModulusPredicate& pred, const TabletSchemaCSPtr& tablet_schema, std::set<ColumnId>* column_ids);
-    static Status get_column_ids(const ColumnHashModulusPredicate& pred, const Schema& schema, std::set<ColumnId>* column_ids);
+    static StatusOr<ColumnHashModulusPredicate> create(
+            const ColumnHashModulusPredicatePB& column_hash_modulus_predicate_pb);
+    static Status get_column_ids(const ColumnHashModulusPredicate& pred, const TabletSchemaCSPtr& tablet_schema,
+                                 std::set<ColumnId>* column_ids);
+    static Status get_column_ids(const ColumnHashModulusPredicate& pred, const Schema& schema,
+                                 std::set<ColumnId>* column_ids);
 
     ColumnHashModulusPredicate();
     ~ColumnHashModulusPredicate() = default;

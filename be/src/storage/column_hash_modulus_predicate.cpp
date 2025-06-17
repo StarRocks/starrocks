@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "storage/column_hash_modulus_predicate.h"
+
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -24,7 +25,8 @@ StatusOr<ColumnHashModulusPredicate> ColumnHashModulusPredicate::create(
     return predicate;
 }
 
-Status ColumnHashModulusPredicate::get_column_ids(const ColumnHashModulusPredicate& pred, const TabletSchemaCSPtr& tablet_schema,
+Status ColumnHashModulusPredicate::get_column_ids(const ColumnHashModulusPredicate& pred,
+                                                  const TabletSchemaCSPtr& tablet_schema,
                                                   std::set<ColumnId>* column_ids) {
     std::vector<ColumnId> schema_cids(tablet_schema->columns().size());
     std::iota(schema_cids.begin(), schema_cids.end(), 0);
@@ -46,7 +48,10 @@ Status ColumnHashModulusPredicate::get_column_ids(const ColumnHashModulusPredica
 
 ColumnHashModulusPredicate::ColumnHashModulusPredicate()
         : _type(ColumnHashModulusPredicatePB::UNKNOWN),
-          _modulus(0), _remainder(0), _hash_column_names(), _inited(false) {}
+          _modulus(0),
+          _remainder(0),
+          _hash_column_names(),
+          _inited(false) {}
 
 Status ColumnHashModulusPredicate::evaluate(Chunk* chunk, uint8_t* selection) const {
     if (!_inited) {
@@ -80,7 +85,8 @@ Status ColumnHashModulusPredicate::init(const ColumnHashModulusPredicatePB& colu
     return Status::OK();
 }
 
-Status ColumnHashModulusPredicate::_check_valid_pb(const ColumnHashModulusPredicatePB& column_hash_modulus_predicate_pb) const {
+Status ColumnHashModulusPredicate::_check_valid_pb(
+        const ColumnHashModulusPredicatePB& column_hash_modulus_predicate_pb) const {
     if (column_hash_modulus_predicate_pb.type() != ColumnHashModulusPredicatePB::CRC32) {
         return Status::InternalError("column hash modulus predicate type is not CRC32");
     }
@@ -96,7 +102,6 @@ Status ColumnHashModulusPredicate::_check_valid_pb(const ColumnHashModulusPredic
     int64_t remainder = column_hash_modulus_predicate_pb.remainder();
     if (modulus <= 0 || remainder < 0 || remainder >= modulus) {
         return Status::InternalError("Invalid modulus or remainder in column hash modulus predicate");
-
     }
     return Status::OK();
 }
@@ -104,7 +109,8 @@ Status ColumnHashModulusPredicate::_check_valid_pb(const ColumnHashModulusPredic
 Status ColumnHashModulusPredicate::contains_hash_columns(const Schema& schema) const {
     for (const auto& column_name : _hash_column_names) {
         if (schema.get_field_index_by_name(column_name) == -1) {
-            return Status::NotFound("Column not found in given schema for column hash modulus predicate: col: " + column_name);
+            return Status::NotFound("Column not found in given schema for column hash modulus predicate: col: " +
+                                    column_name);
         }
     }
     return Status::OK();

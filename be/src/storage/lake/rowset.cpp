@@ -325,7 +325,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
     if (_metadata->has_column_hash_modulus_predicate()) {
         ASSIGN_OR_RETURN(seg_options.column_hash_modulus_predicate,
-                ColumnHashModulusPredicate::create(_metadata->column_hash_modulus_predicate()));
+                         ColumnHashModulusPredicate::create(_metadata->column_hash_modulus_predicate()));
         RETURN_IF_ERROR(seg_options.column_hash_modulus_predicate.contains_hash_columns(schema));
     }
 
@@ -366,7 +366,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 
     if (_metadata->has_column_hash_modulus_predicate()) {
         ASSIGN_OR_RETURN(seg_options.column_hash_modulus_predicate,
-                ColumnHashModulusPredicate::create(_metadata->column_hash_modulus_predicate()));
+                         ColumnHashModulusPredicate::create(_metadata->column_hash_modulus_predicate()));
         RETURN_IF_ERROR(seg_options.column_hash_modulus_predicate.contains_hash_columns(schema));
     }
 

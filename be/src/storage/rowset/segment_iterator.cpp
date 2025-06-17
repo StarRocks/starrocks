@@ -1722,6 +1722,7 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
 StatusOr<uint16_t> SegmentIterator::_filter_by_column_hash_modulus_predicate(Chunk* chunk, vector<rowid_t>* rowid) {
     size_t chunk_size = chunk->num_rows();
     if (chunk_size > 0 && !_opts.column_hash_modulus_predicate.empty()) {
+        // TODO: add metrics
         RETURN_IF_ERROR(_opts.column_hash_modulus_predicate.evaluate(chunk, _selection.data()));
 
         size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
@@ -1788,9 +1789,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     }
     std::set<ColumnId> column_hash_modulus_cols;
     if (!_opts.column_hash_modulus_predicate.empty()) {
-        RETURN_IF_ERROR(
-            ColumnHashModulusPredicate::get_column_ids(
-                _opts.column_hash_modulus_predicate, _schema, &column_hash_modulus_cols));
+        RETURN_IF_ERROR(ColumnHashModulusPredicate::get_column_ids(_opts.column_hash_modulus_predicate, _schema,
+                                                                   &column_hash_modulus_cols));
     }
 
     for (size_t i = 0; i < early_materialize_fields; i++) {
