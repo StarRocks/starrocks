@@ -2222,18 +2222,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-<<<<<<< HEAD
-=======
-        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
-                                    "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
-                            olapTable.getName(), Config.max_partitions_in_one_batch)));
-            result.setStatus(errorStatus);
-            return result;
-        }
-
->>>>>>> 8285e315c8 ([BugFix] Fix partition creation failure during multi-table write with in a single transaction (#59954))
         Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
 
         try {

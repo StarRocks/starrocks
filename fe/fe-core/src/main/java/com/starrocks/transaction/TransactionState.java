@@ -314,10 +314,6 @@ public class TransactionState implements Writable {
     private Map<Long, ConcurrentMap<String, TOlapTablePartition>> tableToPartitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
-<<<<<<< HEAD
-=======
-    private Map<Long, List<String>> tableToCreatedPartitionNames = Maps.newHashMap();
->>>>>>> 8285e315c8 ([BugFix] Fix partition creation failure during multi-table write with in a single transaction (#59954))
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
@@ -1072,34 +1068,13 @@ public class TransactionState implements Writable {
         return tabletIdToTTabletLocation;
     }
 
-<<<<<<< HEAD
     public void clearAutomaticPartitionSnapshot() {
-        partitionNameToTPartition.clear();
-        tabletIdToTTabletLocation.clear();
-=======
-    public List<String> getCreatedPartitionNames(long tableId) {
-        writeLock();
         try {
-            return tableToCreatedPartitionNames.computeIfAbsent(tableId, k -> new ArrayList<>());
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    public void clearAutomaticPartitionSnapshot() {
-        writeLock();
-        try {
-            tableToPartitionNameToTPartition.forEach((tableId, partitionNameToTPartition) -> {
-                List<String> createdPartitionNames = tableToCreatedPartitionNames.computeIfAbsent(
-                        tableId, k -> new ArrayList<>());
-                createdPartitionNames.addAll(partitionNameToTPartition.keySet());
-            });
             tabletIdToTTabletLocation.clear();
             tableToPartitionNameToTPartition.clear();
         } finally {
             writeUnlock();
         }
->>>>>>> 8285e315c8 ([BugFix] Fix partition creation failure during multi-table write with in a single transaction (#59954))
     }
 
     public void setIsCreatePartitionFailed(boolean v) {
