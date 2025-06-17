@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from textwrap import dedent
+import time
 
-from sqlalchemy import exc, schema as sa_schema
+from sqlalchemy import Connection, exc, schema as sa_schema
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
-from sqlalchemy.dialects.mysql.base import MySQLDDLCompiler, MySQLTypeCompiler, MySQLCompiler, MySQLIdentifierPreparer
+from sqlalchemy.dialects.mysql.base import MySQLDDLCompiler, MySQLTypeCompiler, MySQLCompiler, MySQLIdentifierPreparer, _DecodingRow
 from sqlalchemy.sql import sqltypes
 from sqlalchemy.util import topological
 from sqlalchemy import util
@@ -335,7 +337,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         text += self.define_constraint_deferrability(constraint)
         return text
 
-    def visit_set_table_comment(self, create):
+    def visit_set_table_comment(self, create, **kw):
         return "ALTER TABLE %s COMMENT=%s" % (
             self.preparer.format_table(create.element),
             self.sql_compiler.render_literal_value(
@@ -343,7 +345,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             ),
         )
 
-    def visit_drop_table_comment(self, create):
+    def visit_drop_table_comment(self, create, **kw):
         return "ALTER TABLE %s COMMENT=''" % (
             self.preparer.format_table(create.element)
         )
@@ -400,8 +402,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return server_version_info
 
     @util.memoized_property
-    def _tabledef_parser(self):
-        """return the MySQLTableDefinitionParser, generate if needed.
+    def _tabledef_parser(self) -> _reflection.StarRocksTableDefinitionParser:
+        """return the StarRocksTableDefinitionParser, generate if needed.
 
         The deferred creation ensures that the dialect has
         retrieved server version information first.
@@ -409,6 +411,74 @@ class StarRocksDialect(MySQLDialect_pymysql):
         """
         preparer = self.identifier_preparer
         return _reflection.StarRocksTableDefinitionParser(self, preparer)
+
+    def _read_from_information_schema(
+        self, connection: Connection, inf_sch_table: str, charset: str | None = None, **kwargs
+    ):
+        def escape_single_quote(s):
+            return s.replace("'", "\\'")
+        
+        st = dedent(f"""
+            SELECT * 
+            FROM information_schema.{inf_sch_table} 
+            WHERE {" AND ".join([f"{k} = '{escape_single_quote(v)}'" for k, v in kwargs.items()])}
+        """)
+        rp = None
+        try:
+            rp = connection.execution_options(
+                skip_user_error_events=False
+            ).exec_driver_sql(st)
+        except exc.DBAPIError as e:
+            if self._extract_error_code(e.orig) == 1146:
+                raise exc.NoSuchTableError(f"information_schema.{inf_sch_table}") from e
+            else:
+                raise
+        rows = [_DecodingRow(row, charset) for row in rp.mappings().fetchall()]
+        if not rows:
+            raise exc.NoSuchTableError(f"Empty response for query: '{st}'")
+        return rows
+    
+    @reflection.cache
+    def _setup_parser(self, connection: Connection, table_name: str, schema: str | None = None, **kw):
+        charset = self._connection_charset
+        parser = self._tabledef_parser
+
+        if not schema:
+            schema = connection.dialect.default_schema_name
+
+        table_rows = self._read_from_information_schema(
+            connection=connection,
+            inf_sch_table="tables",
+            charset=charset,
+            table_schema=schema,
+            table_name=table_name,
+        )
+        if len(table_rows) > 1:
+            raise exc.InvalidRequestError(
+                f"Multiple tables found with name {table_name} in schema {schema}"
+            )
+
+        table_config_rows = self._read_from_information_schema(
+            connection=connection,
+            inf_sch_table="tables_config",
+            charset=charset,
+            table_schema=schema,
+            table_name=table_name,
+        )
+        if len(table_rows) > 1:
+            raise exc.InvalidRequestError(
+                f"Multiple tables found with name {table_name} in schema {schema}"
+            )
+
+        column_rows = self._read_from_information_schema(
+            connection=connection,
+            inf_sch_table="columns",
+            charset=charset,
+            table_schema=schema,
+            table_name=table_name,
+        )
+
+        return parser.parse(table=table_rows[0], table_config=table_config_rows[0], columns=column_rows, charset=charset)
 
     def _show_table_indexes(
         self, connection, table, charset=None, full_name=None
@@ -431,43 +501,6 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 raise
         index_results = self._compat_fetchall(rp, charset=charset)
         return index_results
-
-    # This was to get indexes, but the indexes are created just Starrocks takes a while to admit to them
-    # @reflection.cache
-    # def _setup_parser(self, connection, table_name, schema=None, **kw):
-    #     charset = self._connection_charset
-    #     parser = self._tabledef_parser
-    #     full_name = ".".join(
-    #         self.identifier_preparer._quote_free_identifiers(
-    #             schema, table_name
-    #         )
-    #     )
-    #     sql = self._show_create_table(
-    #         connection, None, charset, full_name=full_name
-    #     )
-    #     indexes = []
-    #     if parser._check_view(sql):
-    #         # Adapt views to something table-like.
-    #         columns = self._describe_table(
-    #             connection, None, charset, full_name=full_name
-    #         )
-    #         sql = parser._describe_to_create(table_name, columns)
-    #     else:
-    #         indexes = self._show_table_indexes(
-    #             connection, None, charset, full_name=full_name
-    #         )
-    #     return parser.parse(sql, indexes, charset)
-
-    # @reflection.cache
-    # def get_table_comment(self, connection, table_name, schema=None, **kw):
-    #     parsed_state = self._parsed_state_or_create(
-    #         connection, table_name, schema, **kw
-    #     )
-    #     return {
-    #         "text": parsed_state.table_options.get(
-    #             "%s_comment" % self.name, None
-    #         )
-    #     }
 
     @reflection.cache
     def get_indexes(self, connection, table_name, schema=None, **kw):
