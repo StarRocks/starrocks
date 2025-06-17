@@ -25,6 +25,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -90,7 +91,10 @@ public class SysObjectDependencies {
                     }
                     // Only show tables with privilege
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
+                        ConnectContext context = new ConnectContext();
+                        context.setCurrentUserIdentity(currentUser);
+                        context.setCurrentRoleIds(currentUser);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }

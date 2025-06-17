@@ -16,7 +16,9 @@ package com.starrocks.benchmark;
 
 import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
 import com.carrotsearch.junitbenchmarks.BenchmarkRule;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -54,7 +56,8 @@ public class TaskSchedulerBench extends MVTestBase {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
-        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), isMergeRedundant,
+                Maps.newHashMap());
         executeOption.setSync(isSync);
         return executeOption;
     }

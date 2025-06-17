@@ -42,6 +42,8 @@ public:
     bool is_literal() const override { return true; }
     std::string debug_string() const override;
 
+    const ColumnPtr value() const { return _value; }
+
 private:
     // @IMPORTANT: BinaryColumnPtr's build_slice will cause multi-thread(OLAP_SCANNER) crash
     ColumnPtr _value;

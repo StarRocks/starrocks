@@ -76,7 +76,16 @@ public class WarehouseIdleChecker extends FrontendDaemon {
             if (runningJobCnt == 0
                     && lastFinishedJobTime <
                         System.currentTimeMillis() - Config.warehouse_idle_check_interval_seconds * 2000) {
-                warehouseIdleTime.putIfAbsent(wId, System.currentTimeMillis());
+                long resumeTime = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseResumeTime(wId);
+                warehouseIdleTime.compute(wId, (k, v) -> {
+                    // If this is the first time to become idle, set idleTime to now.
+                    // If resumed during an idle period, change idleTime to resumeTime.
+                    if (v == null) {
+                        return System.currentTimeMillis();
+                    } else {
+                        return v < resumeTime ? resumeTime : v;
+                    }
+                });
                 LOG.info("warehouse: {} is idle, idle start time: {}",
                         wId, TimeUtils.longToTimeString(warehouseIdleTime.get(wId)));
             } else {
@@ -118,11 +127,10 @@ public class WarehouseIdleChecker extends FrontendDaemon {
         return LAST_FINISHED_JOB_TIME.getOrDefault(wId, -1L);
     }
 
-    public IdleStatus getIdleStatus() {
+    public IdleStatus getIdleStatus(boolean showDetails) {
         runAfterCatalogReady();
 
         List<Warehouse> warehouses = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses();
-
         boolean isClusterIdle = true;
         List<IdleStatus.WarehouseStatus> statusList = new ArrayList<>(warehouses.size());
         long latestWarehouseIdleTime = -1L;
@@ -138,6 +146,35 @@ public class WarehouseIdleChecker extends FrontendDaemon {
                     warehouse.getId(), warehouse.getName(), wIdleTime != -1L, wIdleTime));
         }
 
-        return new IdleStatus(isClusterIdle, isClusterIdle ? latestWarehouseIdleTime : -1L, statusList);
+        IdleStatus idleStatus = new IdleStatus(isClusterIdle, isClusterIdle ? latestWarehouseIdleTime : -1L, statusList);
+        if (showDetails) {
+            putDetails(idleStatus);
+        }
+
+        return idleStatus;
+    }
+
+    private void putDetails(IdleStatus idleStatus) {
+        Map<Long, Long> runningStreamLoadCnt = GlobalStateMgr.getCurrentState().getStreamLoadMgr().getRunningTaskCount();
+        Map<Long, Long> runningLoadCnt = GlobalStateMgr.getCurrentState().getLoadMgr()
+                .getRunningLoadCount();
+        Map<Long, Long> runningRoutineLoadCnt = GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
+                .getRunningRoutingLoadCount();
+        Map<Long, Long> runningBackupRestoreCnt = GlobalStateMgr.getCurrentState().getBackupHandler()
+                .getRunningBackupRestoreCount();
+        Map<Long, Long> runningAlterJobCnt = GlobalStateMgr.getCurrentState().getAlterJobMgr().getRunningAlterJobCount();
+        Map<Long, Long> runningTaskCnt = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunScheduler()
+                .getAllRunnableTaskCount();
+
+        idleStatus.warehouses.forEach(wStatus -> {
+            wStatus.lastFinishedJobTime = getLastFinishedJobTime(wStatus.id);
+            wStatus.runningSqlCnt = getRunningSQLCount(wStatus.id).get();
+            wStatus.runningStreamLoadCnt = runningStreamLoadCnt.getOrDefault(wStatus.id, 0L);
+            wStatus.runningLoadCnt = runningLoadCnt.getOrDefault(wStatus.id, 0L);
+            wStatus.runningRoutineLoadCnt = runningRoutineLoadCnt.getOrDefault(wStatus.id, 0L);
+            wStatus.runningBackupRestoreCnt = runningBackupRestoreCnt.getOrDefault(wStatus.id, 0L);
+            wStatus.runningAlterJobCnt = runningAlterJobCnt.getOrDefault(wStatus.id, 0L);
+            wStatus.runningTaskCnt = runningTaskCnt.getOrDefault(wStatus.id, 0L);
+        });
     }
 }

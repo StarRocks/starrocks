@@ -20,7 +20,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
  */
 public class TaskRunHistoryTable {
 
-    public static final int INSERT_BATCH_SIZE = 128;
+    public static final int INSERT_BATCH_SIZE = 32;
     private static final int DEFAULT_RETENTION_DAYS = 7;
     public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     public static final String TABLE_NAME = "task_run_history";
@@ -152,7 +152,7 @@ public class TaskRunHistoryTable {
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
-            RepoExecutor.getInstance().executeDML(sql);
+            SimpleExecutor.getRepoExecutor().executeDML(sql);
         }
     }
 
@@ -184,7 +184,7 @@ public class TaskRunHistoryTable {
         }
         Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
         while (iterator.hasNext()) {
-            if (!TaskRun.TASK_RUN_PROPERTIES.contains(iterator.next().getKey())) {
+            if (!TaskRun.RESERVED_HISTORY_TASK_RUN_PROPERTIES.contains(iterator.next().getKey())) {
                 iterator.remove();
             }
         }
@@ -210,8 +210,14 @@ public class TaskRunHistoryTable {
             predicates.add(" task_state = " + Strings.quote(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
+        // If user explicitly specify the LIMIT in sql, we don't apply default limit
+        if (params.isSetPagination() && params.getPagination().getLimit() > 0) {
+            sql += " LIMIT " + params.getPagination().getLimit();
+        } else if (Config.task_runs_max_history_number > 0) {
+            sql += " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number;
+        }
 
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -230,7 +236,7 @@ public class TaskRunHistoryTable {
         }
 
         String sql = LOOKUP + Joiner.on(" AND ").join(predicates);
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -277,7 +283,7 @@ public class TaskRunHistoryTable {
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         String sql = sw.toString();
 
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
     }
 }

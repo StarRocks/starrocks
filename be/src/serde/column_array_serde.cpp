@@ -151,7 +151,9 @@ template <typename T, bool sorted>
 class FixedLengthColumnSerde {
 public:
     static int64_t max_serialized_size(const FixedLengthColumnBase<T>& column, const int encode_level) {
-        uint32_t size = sizeof(T) * column.size();
+        // NOTE that `serialize` and `deserialize` will store and load the size as uint32_t.
+        // If you use `serialize` and `deserialize`, please make sure that the size of the column is less than 2^32.
+        int64_t size = sizeof(T) * column.size();
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             return sizeof(uint32_t) + sizeof(uint64_t) +
                    std::max((int64_t)size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(size)));
@@ -363,7 +365,6 @@ public:
         uint32_t num_objects = 0;
         buff = read_little_endian_32(buff, &actual_version);
         buff = read_little_endian_32(buff, &num_objects);
-        CHECK_EQ(actual_version, kJsonMetaDefaultFormatVersion) << "Only format_version=1 is supported";
 
         column->reset_column();
         auto& pool = column->get_pool();
@@ -460,7 +461,7 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
-        for (const auto& field : column->fields_column()) {
+        for (auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
         return buff;

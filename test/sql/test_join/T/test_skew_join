@@ -40,6 +40,9 @@ PROPERTIES (
     "replication_num"="1"
 );
 
+set enable_optimize_skew_join_by_query_rewrite=true;
+set enable_optimize_skew_join_by_broadcast_skew_values=false;
+
 -- tinyint
 truncate table t1;
 truncate table t2;

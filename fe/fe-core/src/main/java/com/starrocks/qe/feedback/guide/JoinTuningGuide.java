@@ -25,6 +25,8 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 
+import java.util.Objects;
+
 import static com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule.JOIN_COMMUTATIVITY_MAP;
 
 public abstract class JoinTuningGuide implements TuningGuide {
@@ -34,7 +36,6 @@ public abstract class JoinTuningGuide implements TuningGuide {
     protected EstimationErrorType type;
 
     protected static final long BROADCAST_THRESHOLD = 1000000;
-
 
     protected PhysicalHashJoinOperator buildJoinOperator(PhysicalHashJoinOperator joinOperator, boolean needCommute) {
         JoinOperator joinType = joinOperator.getJoinType();
@@ -47,7 +48,9 @@ public abstract class JoinTuningGuide implements TuningGuide {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
-                joinOperator.getProjection());
+                joinOperator.getProjection(),
+                joinOperator.getSkewColumn(),
+                joinOperator.getSkewValues());
     }
 
     protected boolean isColocateJoin(OptExpression optExpression) {
@@ -96,5 +99,19 @@ public abstract class JoinTuningGuide implements TuningGuide {
         LEFT_INPUT_OVERESTIMATED,
         RIGHT_INPUT_UNDERESTIMATED,
         RIGHT_INPUT_OVERESTIMATED
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        JoinTuningGuide that = (JoinTuningGuide) o;
+        return type == that.type;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(type);
     }
 }

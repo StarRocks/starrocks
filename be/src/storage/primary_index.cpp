@@ -1106,6 +1106,11 @@ void PrimaryIndex::unload() {
     _calc_memory_usage();
 }
 
+bool PrimaryIndex::is_loaded() {
+    std::lock_guard<std::mutex> lg(_lock);
+    return _loaded && _status.ok();
+}
+
 static string int_list_to_string(const vector<uint32_t>& l) {
     string ret;
     for (size_t i = 0; i < l.size(); i++) {
@@ -1208,7 +1213,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     }
 
     OlapReaderStatistics stats;
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }

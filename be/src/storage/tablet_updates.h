@@ -107,7 +107,6 @@ struct EditVersionInfo {
 class TabletUpdates {
 public:
     friend class LocalPrimaryKeyRecover;
-    using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
@@ -247,7 +246,8 @@ public:
                         const std::string& err_msg_header = "");
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false,
-                         bool save_source_schema = false);
+                         bool save_source_schema = false, bool need_rebuild_pk_index = false,
+                         int32_t rebuild_pk_index_wait_seconds = 0);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
 
@@ -305,8 +305,7 @@ public:
     // ]
     Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<Column>>* columns, void* state,
-                             const TabletSchemaCSPtr& tablet_schema,
+                             vector<MutableColumnPtr>* columns, void* state, const TabletSchemaCSPtr& tablet_schema,
                              const std::map<string, string>* column_to_expr_value = nullptr);
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
@@ -386,6 +385,13 @@ public:
 
     void rewrite_rs_meta(bool is_fatal);
 
+    void stop_and_wait_apply_done();
+
+    Status breakpoint_check();
+    Status compaction_random(MemTracker* mem_tracker);
+
+    bool rowset_check_file_existence() const;
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -440,15 +446,14 @@ private:
                               EditVersion* commit_version);
 
     void _wait_apply_done();
-    void _stop_and_wait_apply_done();
 
-    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
+    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, const vector<uint32_t>& all_rowset_ids);
 
     int32_t _calc_compaction_level(RowsetStats* stats);
     void _calc_compaction_score(RowsetStats* stats);
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
-                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
+                      const std::vector<MutableColumnPtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                       DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema);
 
     // This method will acquire |_lock|.
@@ -524,7 +529,9 @@ private:
                                           vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
 
     bool _check_status_msg(std::string_view msg);
-    bool _is_tolerable(Status& status);
+    bool _retry_times_limit();
+    bool _is_retryable(Status& status);
+    bool _is_breakpoint(Status& status);
 
     void _reset_apply_status(const EditVersionInfo& version_info_apply);
 
@@ -590,6 +597,7 @@ private:
     std::atomic<double> _pk_index_write_amp_score{0.0};
 
     std::atomic<bool> _apply_schedule{false};
+    size_t _apply_failed_time = 0;
 };
 
 } // namespace starrocks

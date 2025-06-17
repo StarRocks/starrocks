@@ -183,6 +183,10 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         return result;
     }
 
+    public List<ColumnIdExpr> getPartitionColumnIdExprs() {
+        return partitionExprs;
+    }
+
     @Override
     public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
         List<Column> columns = MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);

@@ -42,7 +42,7 @@ public class CatalogPEntryObject implements PEntryObject {
         return id;
     }
 
-    public static CatalogPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
+    public static CatalogPEntryObject generate(List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens, should have only one, token: " + tokens);
         }
@@ -55,7 +55,7 @@ public class CatalogPEntryObject implements PEntryObject {
         if (CatalogMgr.isInternalCatalog(name)) {
             id = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
         } else {
-            Catalog catalog = mgr.getCatalogMgr().getCatalogByName(name);
+            Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(name);
             if (catalog == null) {
                 throw new PrivObjNotFoundException("cannot find catalog: " + name);
             }
@@ -93,11 +93,11 @@ public class CatalogPEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
+    public boolean validate() {
         if (id == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
             return true;
         } else {
-            return globalStateMgr.getCatalogMgr().checkCatalogExistsById(id);
+            return GlobalStateMgr.getCurrentState().getCatalogMgr().checkCatalogExistsById(id);
         }
     }
 

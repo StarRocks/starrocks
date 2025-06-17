@@ -765,7 +765,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-##### ignore_unknown_log_id
+##### metadata_ignore_unknown_operation_type
 
 - Default: false
 - Type: Boolean
@@ -1126,6 +1126,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
 - Introduced in: v3.1.10, v3.2.6
 
+##### automated_cluster_snapshot_interval_seconds
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
+- Introduced in: v3.4.2
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1204,7 +1213,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_backup_materialized_view
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -1307,27 +1316,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
 - Introduced in: v3.3.4
 
-<!--
 ##### mv_active_checker_interval_seconds
 
 - Default: 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: When the background active_checker thread is enabled, the system will periodically detect and automatically reactivate materialized views that became Inactive due to schema changes or rebuilds of their base tables (or views). This parameter controls the scheduling interval of the checker thread, in seconds. The default value is system-defined.
+- Introduced in: v3.1.6
 
-<!--
 ##### default_mv_partition_refresh_number
 
 - Default: 1
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: When a materialized view refresh involves multiple partitions, this parameter controls how many partitions are refreshed in a single batch by default.
+Starting from version 3.3.0, the system defaults to refreshing one partition at a time to avoid potential out-of-memory (OOM) issues. In earlier versions, all partitions were refreshed at once by default, which could lead to memory exhaustion and task failure. However, note that when a materialized view refresh involves a large number of partitions, refreshing only one partition at a time may lead to excessive scheduling overhead, longer overall refresh time, and a large number of refresh records. In such cases, it is recommended to adjust this parameter appropriately to improve refresh efficiency and reduce scheduling costs.
+- Introduced in: v3.3.0
 
 <!--
 ##### mv_auto_analyze_async
@@ -1797,6 +1803,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of rows to collect for a histogram.
 - Introduced in: -
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- Default: 30
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
+- Introduced in: v3.4.2
+
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - Default: 10000000
@@ -1831,15 +1846,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
-- Introduced in: v3.4.0
-
-##### connector_table_query_trigger_analyze_schedule_interval
-
-- Default: 30
-- Type: Int
-- Unit: Second
-- Is mutable: Yes
-- Description: The interval at which the Scheduler thread schedules to query-trigger ANALYZE tasks.
 - Introduced in: v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
@@ -1877,6 +1883,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description:: The execution time threshold for queries to trigger the analysis of Query Feedback.
 - Introduced in: v3.4.0
+
+##### low_cardinality_threshold
+
+- Default: 255
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Threshold of low cardinality dictionary.
+- Introduced in: v3.5.0
 
 ### Loading and unloading
 
@@ -2932,19 +2947,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.
+- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, and `ADLS2`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
-<!--
 ##### cloud_native_hdfs_url
 
 - Default: Empty string
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The URL of the HDFS storage, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks/`.
 - Introduced in: -
--->
 
 ##### aws_s3_path
 
@@ -3066,6 +3079,78 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
 - Introduced in: v3.1
+
+##### azure_adls2_endpoint
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
+- Introduced in: v3.4.1
+
+##### azure_adls2_path
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Azure Data Lake Storage Gen2 path used to store data. It consists of the file system name and the directory name, for example, `testfilesystem/starrocks`.
+- Introduced in: v3.4.1
+
+##### azure_adls2_shared_key
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Shared Key used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.1
+
+##### azure_adls2_sas_token
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.1
+
+##### azure_adls2_oauth2_use_managed_identity
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_adls2_oauth2_tenant_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_adls2_oauth2_client_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_use_native_sdk
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
+- Introduced in: v3.4.4
 
 <!--
 ##### starmgr_grpc_timeout_seconds
@@ -3228,14 +3313,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - Default: ""
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
-- Introduced in: v3.1.11
+- Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
+- Introduced in: v3.4.4
 
 ##### lake_enable_balance_tablets_between_workers
 
@@ -4775,38 +4860,59 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
 ##### mv_plan_cache_expire_interval_sec
 
 - Default: 24 * 60 * 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The valid time of materialized view plan cache (which is used for materialized view rewrite) before expiry. The default value is 1 day.
+- Introduced in: v3.2
 
-<!--
+##### mv_plan_cache_thread_pool_size
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
+- Introduced in: v3.2
+
 ##### mv_plan_cache_max_size
 
 - Default: 1000
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
+- Introduced in: v3.2
 
-<!--
+##### enable_materialized_view_concurrent_prepare
+
+- Default: true
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to prepare materialized view concurrently to improve performance.
+- Introduced in: v3.4.4
+
+##### enable_mv_query_context_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
+- Introduced in: v3.3
+
 ##### mv_query_context_cache_max_size
 
 - Default: 1000
-- Type: Long
-- Unit:
+- Type: -
+- Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum materialized view rewrite cache size during one query's lifecycle. The cache can be used to avoid repeating compute to reduce optimizer time in materialized view rewrite, but it may occupy some extra FE's memory. It can bring better performance when there are many relative materialized views (more than 10) or query is complex (with joins on multiple tables).
+- Introduced in: v3.3
 
 <!--
 ##### port_connectivity_check_interval_sec
@@ -5036,3 +5142,113 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - Introduced in: -
 -->
+
+##### mv_refresh_fail_on_filter_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
+- Introduced in: -
+
+##### mv_create_partition_batch_interval_ms
+
+- Default: 1000
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
+- Introduced in: v3.3
+
+##### max_mv_refresh_failure_retry_times
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times when materialized view fails to refresh.
+- Introduced in: v3.3.0
+
+##### max_mv_refresh_try_lock_failure_retry_times
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times of try lock when materialized view fails to refresh.
+- Introduced in: v3.3.0
+
+
+##### mv_refresh_try_lock_timeout_ms
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The default try lock timeout for materialized view refresh to try the DB lock of its base table/materialized view.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_collect_profile
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable profile in refreshing materialized view by default for all materialized views.
+- Introduced in: v3.3.0
+
+##### max_mv_task_run_meta_message_values_length
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum length for the "extra message" values (in set or map) in materialized view task run. You can set this item to avoid occupying too much meta memory.
+- Introduced in: v3.3.0
+
+##### max_mv_check_base_table_change_retry_times
+
+- Default: 10
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times for detecting base table change when refreshing materialized views.
+- Introduced in: v3.3.0
+
+##### mv_refresh_default_planner_optimize_timeout
+
+- Default: 30000
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The default timeout for the planning phase of the optimizer when refresh materialized views.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_query_rewrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
+- Introduced in: v3.3
+
+##### enable_mv_refresh_extra_prefix_logging
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable prefixes with materialized view names in logs for better debug.
+- Introduced in: v3.4.0
+
+
+##### enable_mv_post_image_reload_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
+- Introduced in: v3.5.0

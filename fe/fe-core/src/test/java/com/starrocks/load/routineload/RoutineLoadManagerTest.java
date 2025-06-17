@@ -48,6 +48,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -266,7 +267,7 @@ public class RoutineLoadManagerTest {
         nameToRoutineLoadJob.put(jobName, routineLoadJobList);
         dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
         Map<String, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
-        idToRoutineLoadJob.put(UUID.randomUUID().toString(), kafkaRoutineLoadJobWithSameName);
+        idToRoutineLoadJob.put(UUIDUtil.genUUID().toString(), kafkaRoutineLoadJobWithSameName);
 
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);

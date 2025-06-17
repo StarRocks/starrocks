@@ -160,9 +160,15 @@ public class Counter {
             if (counter.getValue() < minValue) {
                 minValue = counter.getValue();
             }
+            if (counter.getMinValue().isPresent() && counter.getMinValue().get() < minValue) {
+                minValue = counter.getMinValue().get();
+            }
 
             if (counter.getValue() > maxValue) {
                 maxValue = counter.getValue();
+            }
+            if (counter.getMaxValue().isPresent() && counter.getMaxValue().get() > maxValue) {
+                maxValue = counter.getMaxValue().get();
             }
 
             mergedValue += counter.getValue();

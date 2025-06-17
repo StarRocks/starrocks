@@ -57,7 +57,8 @@ enum TDataSinkType {
     TABLE_FUNCTION_TABLE_SINK,
     BLACKHOLE_TABLE_SINK,
     DICTIONARY_CACHE_SINK,
-    MULTI_OLAP_TABLE_SINK
+    MULTI_OLAP_TABLE_SINK,
+    SPLIT_DATA_STREAM_SINK
 }
 
 enum TResultSinkType {
@@ -147,7 +148,10 @@ struct TDataStreamSink {
   5: optional i32 dest_dop
 
   // Specify the columns which need to send
-  6: optional list<i32> output_columns;
+  6: optional list<i32> output_columns
+
+  // Specify limit on output columns
+  7: optional i64 limit;
 }
 
 struct TMultiCastDataStreamSink {
@@ -235,6 +239,7 @@ struct TOlapTableSink {
     30: optional bool ignore_out_of_partition
     31: optional binary encryption_meta;
     32: optional bool dynamic_overwrite
+    33: optional bool enable_data_file_bundling
 }
 
 struct TSchemaTableSink {
@@ -269,6 +274,12 @@ struct TTableFunctionTableSink {
     2: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+struct TSplitDataStreamSink {
+    1: optional list<TDataStreamSink> sinks;
+    2: optional list< list<TPlanFragmentDestination> > destinations;
+    3: optional list<Exprs.TExpr> splitExprs;
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -285,4 +296,5 @@ struct TDataSink {
   14: optional TDictionaryCacheSink dictionary_cache_sink
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
+  17: optional TSplitDataStreamSink split_stream_sink
 }

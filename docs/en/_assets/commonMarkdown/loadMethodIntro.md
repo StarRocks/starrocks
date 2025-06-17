@@ -1,3 +1,5 @@
+---
+---
 
 - Synchronous loading using [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../../sql-reference/sql-functions/table-functions/files.md)
 - Asynchronous loading using [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)

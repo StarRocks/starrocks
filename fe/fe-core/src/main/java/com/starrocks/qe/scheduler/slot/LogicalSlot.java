@@ -14,12 +14,26 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.plugin.AuditEvent;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TResourceLogicalSlot;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.parquet.Strings;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A logical slot represents resources which is required by a query from the {@link SlotManager}.
@@ -35,8 +49,12 @@ public class LogicalSlot {
     private final TUniqueId slotId;
     private final String requestFeName;
 
+    private final long warehouseId;
+    private Optional<String> warehouseName = Optional.empty();
+
     private final long groupId;
 
+    // est number of physical slots to require
     private final int numPhysicalSlots;
 
     private final long expiredPendingTimeMs;
@@ -51,14 +69,19 @@ public class LogicalSlot {
     private final long startTimeMs;
     private final int numFragments;
     private int pipelineDop;
+    private Optional<Integer> allocatedNumPhysicalSlots = Optional.empty();
+    private Optional<Double> queuedWaitSeconds = Optional.empty();
+    private Optional<ExtraMessage> extraMessage = Optional.empty();
 
     private State state = State.CREATED;
 
-    public LogicalSlot(TUniqueId slotId, String requestFeName, long groupId, int numPhysicalSlots,
+    public LogicalSlot(TUniqueId slotId, String requestFeName,
+                       long warehouseId, long groupId, int numPhysicalSlots,
                        long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs,
                        int numFragments, int pipelineDop) {
         this.slotId = slotId;
         this.requestFeName = requestFeName;
+        this.warehouseId = warehouseId;
         this.groupId = groupId;
         this.numPhysicalSlots = numPhysicalSlots;
         this.expiredPendingTimeMs = expiredPendingTimeMs;
@@ -79,6 +102,12 @@ public class LogicalSlot {
 
     public void onAllocate() {
         transitionState(State.REQUIRING, State.ALLOCATED);
+        if (state == State.ALLOCATED) {
+            // Record the number of physical slots allocated
+            allocatedNumPhysicalSlots = Optional.of(numPhysicalSlots);
+            // Record the time spent in the queue
+            queuedWaitSeconds = Optional.of((System.currentTimeMillis() - startTimeMs) / 1000.0);
+        }
     }
 
     public void onCancel() {
@@ -98,6 +127,7 @@ public class LogicalSlot {
         tslot.setSlot_id(slotId)
                 .setRequest_fe_name(requestFeName)
                 .setGroup_id(groupId)
+                .setWarehouse_id(warehouseId)
                 .setNum_slots(numPhysicalSlots)
                 .setExpired_pending_time_ms(expiredPendingTimeMs)
                 .setExpired_allocated_time_ms(expiredAllocatedTimeMs)
@@ -109,7 +139,8 @@ public class LogicalSlot {
     }
 
     public static LogicalSlot fromThrift(TResourceLogicalSlot tslot) {
-        return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_fe_name(), tslot.getGroup_id(), tslot.getNum_slots(),
+        return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_fe_name(), tslot.getWarehouse_id(),
+                tslot.getGroup_id(), tslot.getNum_slots(),
                 tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms(), tslot.getFe_start_time_ms(),
                 tslot.getNum_fragments(), tslot.getPipeline_dop());
     }
@@ -120,6 +151,10 @@ public class LogicalSlot {
 
     public String getRequestFeName() {
         return requestFeName;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public long getGroupId() {
@@ -174,11 +209,29 @@ public class LogicalSlot {
         this.pipelineDop = pipelineDop;
     }
 
+    public Optional<Integer> getAllocatedNumPhysicalSlots() {
+        return allocatedNumPhysicalSlots;
+    }
+
+    public double getQueuedWaitSeconds() {
+        return queuedWaitSeconds.orElse((System.currentTimeMillis() - startTimeMs) / 1000.0);
+    }
+
+    public String getWarehouseName() {
+        if (warehouseName.isEmpty()) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+            this.warehouseName = Optional.of(warehouse.getName());
+        }
+        return warehouseName.orElse("");
+    }
+
     @Override
     public String toString() {
         return "LogicalSlot{" +
                 "slotId=" + DebugUtil.printId(slotId) +
                 ", requestFeName='" + requestFeName + '\'' +
+                ", warehouseId=" + warehouseId +
                 ", groupId=" + groupId +
                 ", numPhysicalSlots=" + numPhysicalSlots +
                 ", expiredPendingTimeMs=" + TimeUtils.longToTimeString(expiredPendingTimeMs) +
@@ -206,6 +259,19 @@ public class LogicalSlot {
             return this == RELEASED || this == CANCELLED;
         }
 
+        // Put RUNNING State at first
+        private static final Map<State, Integer> SORT_ORDER = Map.of(
+                ALLOCATED, 1,
+                REQUIRING, 2,
+                CREATED, 3,
+                CANCELLED, 4,
+                RELEASED, 5
+        );
+
+        public int getSortOrder() {
+            return SORT_ORDER.getOrDefault(this, SORT_ORDER.size());
+        }
+
         public String toQueryStateString() {
             switch (this) {
                 case CREATED:
@@ -219,6 +285,169 @@ public class LogicalSlot {
                     return "FINISHED";
                 default:
                     return "UNKNOWN";
+            }
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(slotId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        LogicalSlot that = (LogicalSlot) obj;
+        return Objects.equals(slotId, that.slotId);
+    }
+
+    public static class ExtraMessage {
+        // to avoid too long query string, use a trimmed string
+        private static final int QUERY_TRIM_LENGTH = 16;
+
+        private final String query;
+        private final long queryStartTime;
+        private final long queryEndTime;
+        private final long queryDuration;
+
+        @SerializedName("QueryState")
+        private final QueryState.MysqlStateType queryState;
+        @SerializedName("PlanMemCostBytes")
+        private final long planMemCostBytes;
+        @SerializedName("MemCostBytes")
+        private final long memCostBytes;
+        @SerializedName("PredictMemBytes")
+        private final long predictMemBytes;
+
+        public ExtraMessage(ConnectContext connectContext) {
+            this.query = getOriginalStmt(connectContext);
+            this.queryStartTime = getQueryStartTime(connectContext);
+            // this is the time when the query is finished
+            this.queryEndTime = System.currentTimeMillis();
+            this.queryDuration = getQueryDuration(connectContext);
+            if (connectContext != null && connectContext.getState() != null) {
+                this.queryState = connectContext.getState().getStateType();
+            } else {
+                this.queryState = QueryState.MysqlStateType.OK;
+            }
+            this.planMemCostBytes = getPlanMemCostBytes(connectContext);
+            this.memCostBytes = getMemCostBytes(connectContext);
+            this.predictMemBytes = getPredictMemBytes(connectContext);
+        }
+
+        private String getOriginalStmt(ConnectContext connectContext) {
+            if (connectContext == null) {
+                return "";
+            }
+            StmtExecutor executor = connectContext.getExecutor();
+            if (executor == null) {
+                return "";
+            }
+            String originalStmt = executor.getOriginStmtInString();
+            // only substring when the length is greater than QUERY_TRIM_LENGTH
+            if (!Strings.isNullOrEmpty(originalStmt) && originalStmt.length() > QUERY_TRIM_LENGTH) {
+                originalStmt = originalStmt.trim().substring(0, QUERY_TRIM_LENGTH);
+            }
+            return originalStmt;
+        }
+
+        private long getQueryStartTime(ConnectContext connectContext) {
+            if (connectContext == null) {
+                return 0;
+            }
+            return connectContext.getStartTime();
+        }
+
+        private long getQueryDuration(ConnectContext connectContext) {
+            if (connectContext == null) {
+                return 0;
+            }
+            long endTime = getQueryEndTime();
+            long result = endTime - connectContext.getStartTime();
+            return result <= 0 ? 0 : result;
+        }
+
+        private long getPlanMemCostBytes(ConnectContext connectContext) {
+            if (connectContext == null || connectContext.getAuditEventBuilder() == null) {
+                return 0;
+            }
+            AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+            return (long) auditEvent.planMemCosts;
+        }
+
+        private long getMemCostBytes(ConnectContext connectContext) {
+            if (connectContext == null || connectContext.getAuditEventBuilder() == null) {
+                return 0;
+            }
+            AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+            return auditEvent.memCostBytes;
+        }
+
+        private long getPredictMemBytes(ConnectContext connectContext) {
+            if (connectContext == null || connectContext.getAuditEventBuilder() == null) {
+                return 0;
+            }
+            AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+            return auditEvent.predictMemBytes;
+        }
+
+        public long getPlanMemCostBytes() {
+            return planMemCostBytes;
+        }
+
+        public String getQuery() {
+            return query;
+        }
+
+        public long getQueryDuration() {
+            return queryDuration;
+        }
+
+        public long getQueryEndTime() {
+            return queryEndTime;
+        }
+
+        public long getQueryStartTime() {
+            return queryStartTime;
+        }
+
+        public QueryState.MysqlStateType getQueryState() {
+            return queryState;
+        }
+
+        public long getMemCostBytes() {
+            return memCostBytes;
+        }
+
+        public long getPredictMemBytes() {
+            return predictMemBytes;
+        }
+    }
+
+    public void setExtraMessage(ExtraMessage extraMessage) {
+        this.extraMessage = Optional.of(extraMessage);
+    }
+
+    public Optional<ExtraMessage> getExtraMessage() {
+        return extraMessage;
+    }
+
+    public static class ConnectContextListener implements ConnectContext.Listener {
+        private final LogicalSlot logicalSlot;
+        public ConnectContextListener(LogicalSlot logicalSlot) {
+            this.logicalSlot = logicalSlot;
+        }
+
+        @Override
+        public void onQueryFinished(ConnectContext context) {
+            if (Config.max_query_queue_history_slots_number > 0 && this.logicalSlot != null) {
+                LogicalSlot.ExtraMessage extraMessage = new LogicalSlot.ExtraMessage(context);
+                this.logicalSlot.setExtraMessage(extraMessage);
             }
         }
     }

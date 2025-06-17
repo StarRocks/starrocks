@@ -55,6 +55,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
@@ -66,6 +68,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -117,8 +122,12 @@ public abstract class AlterJobV2 implements Writable {
     protected long timeoutMs = -1;
     @SerializedName(value = "warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    // no needs to persistent
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected Span span;
+
+    protected Future<Boolean> publishVersionFuture = null;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -192,8 +201,9 @@ public abstract class AlterJobV2 implements Writable {
         this.finishedTimeMs = finishedTimeMs;
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+        this.warehouseId = computeResource.getWarehouseId();
     }
 
     public void createConnectContextIfNeeded() {
@@ -231,6 +241,15 @@ public abstract class AlterJobV2 implements Writable {
 
         // create connectcontext
         createConnectContextIfNeeded();
+        // check & acquire resource
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        try {
+            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        } catch (Exception e) {
+            LOG.warn("failed to acquire cn resource for job {}", jobId, e);
+            return;
+        }
 
         try {
             while (true) {
@@ -304,7 +323,7 @@ public abstract class AlterJobV2 implements Writable {
                 return false;
             } else {
                 // table is stable, set is to ROLLUP and begin altering.
-                LOG.info("table {} is stable, start job{}, type {}", tableId, jobId, type);
+                LOG.info("table {} is stable, start job {}, type {}", tableId, jobId, type);
                 if (type == JobType.ROLLUP) {
                     tbl.setState(OlapTableState.ROLLUP);
                 } else if (type == JobType.OPTIMIZE) {
@@ -332,6 +351,30 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void getInfo(List<List<Comparable>> infos);
 
     public abstract void replay(AlterJobV2 replayedJob);
+
+    protected boolean lakePublishVersion() {
+        return true;
+    }
+
+    protected boolean publishVersion() {
+        if (publishVersionFuture == null) {
+            Callable<Boolean> task = () -> {
+                return lakePublishVersion();
+            };
+            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            return false;
+        } else {
+            if (publishVersionFuture.isDone()) {
+                try {
+                    return publishVersionFuture.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
 
     private void finishHook() {
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);

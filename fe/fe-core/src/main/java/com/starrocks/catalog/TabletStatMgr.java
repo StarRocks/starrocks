@@ -62,7 +62,7 @@ import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -97,6 +97,17 @@ public class TabletStatMgr extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        // update interval
+        if (getInterval() != Config.tablet_stat_update_interval_second * 1000) {
+            setInterval(Config.tablet_stat_update_interval_second * 1000);
+        }
+
+        // for testing statistic behavior
+        if (!Config.enable_sync_tablet_stats) {
+            return;
+        }
+
+        acquireBackgroundComputeResource();
         updateLocalTabletStat();
         updateLakeTabletStat();
 
@@ -243,7 +254,9 @@ public class TabletStatMgr extends FrontendDaemon {
     private void adjustStatUpdateRows(long tableId, long totalRowCount) {
         BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
         if (meta != null) {
-            meta.setUpdateRows(totalRowCount);
+            meta.setTotalRows(totalRowCount);
+            meta.resetDeltaRows();
+            meta.updateTabletStatsReportTime();
         }
     }
 
@@ -287,7 +300,7 @@ public class TabletStatMgr extends FrontendDaemon {
             LOG.debug("Skipped tablet stat collection of partition {}", snapshot.debugName());
             return null;
         }
-        return new CollectTabletStatJob(snapshot);
+        return new CollectTabletStatJob(snapshot, computeResource);
     }
 
     private void updateLakeTableTabletStat(@NotNull Database db, @NotNull OlapTable table) {
@@ -332,8 +345,9 @@ public class TabletStatMgr extends FrontendDaemon {
         private final Map<Long, Tablet> tablets;
         private long collectStatTime = 0;
         private List<Future<TabletStatResponse>> responseList;
+        private final ComputeResource computeResource;
 
-        CollectTabletStatJob(PartitionSnapshot snapshot) {
+        CollectTabletStatJob(PartitionSnapshot snapshot, ComputeResource computeResource) {
             this.dbName = Objects.requireNonNull(snapshot.dbName, "dbName is null");
             this.tableName = Objects.requireNonNull(snapshot.tableName, "tableName is null");
             this.partitionId = snapshot.partitionId;
@@ -342,6 +356,7 @@ public class TabletStatMgr extends FrontendDaemon {
             for (Tablet tablet : snapshot.tablets) {
                 this.tablets.put(tablet.getId(), tablet);
             }
+            this.computeResource = computeResource;
         }
 
         void execute() {
@@ -354,12 +369,10 @@ public class TabletStatMgr extends FrontendDaemon {
         }
 
         private void sendTasks() {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
             for (Tablet tablet : tablets.values()) {
-                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Warehouse warehouse = manager.getBackgroundWarehouse();
-                ComputeNode node = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
-
+                ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
                 if (node == null) {
                     LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
                     return;

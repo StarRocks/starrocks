@@ -77,10 +77,12 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
@@ -703,6 +705,42 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR, VARCHAR},
+                              returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR, VARCHAR},
+                              returnType = VARCHAR, isMonotonic = true)
+    })
+    public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral, ConstantOperator timezone)
+            throws AnalysisException {
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+        }
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value),
+                TimeUtils.getOrSystemTimeZone(timezone.getVarchar()).toZoneId()));
+        return dateFormat(dl, fmtLiteral);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "curtime", argTypes = {}, returnType = TIME),
+            @ConstantFunction(name = "current_time", argTypes = {}, returnType = TIME)
+    })
+    public static ConstantOperator curTime() {
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        double second = startTime.getHour() * 3600D + startTime.getMinute() * 60D + startTime.getSecond();
+        return ConstantOperator.createTime(second);
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME),
             @ConstantFunction(name = "current_timestamp", argTypes = {}, returnType = DATETIME),
             @ConstantFunction(name = "localtime", argTypes = {}, returnType = DATETIME),
@@ -715,7 +753,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(startTime);
     }
 
-    @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME),
+            @ConstantFunction(name = "current_timestamp", argTypes = {INT}, returnType = DATETIME)
+    })
     public static ConstantOperator now(ConstantOperator fsp) throws AnalysisException {
         int fspVal = fsp.getInt();
         if (fspVal == 0) {
@@ -1285,15 +1326,13 @@ public class ScalarOperatorFunctions {
         if (split.isNull()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
-        final StringBuilder resultBuilder = new StringBuilder();
-        for (int i = 0; i < values.length - 1; i++) {
-            if (values[i].isNull()) {
-                continue;
-            }
-            resultBuilder.append(values[i].getVarchar()).append(split.getVarchar());
-        }
-        resultBuilder.append(values[values.length - 1].getVarchar());
-        return ConstantOperator.createVarchar(resultBuilder.toString());
+        String separator = split.getVarchar();
+        return ConstantOperator.createVarchar(
+                Arrays.stream(values)
+                        .filter(v -> !v.isNull())
+                        .map(ConstantOperator::getVarchar)
+                        .collect(Collectors.joining(separator))
+        );
     }
 
     @ConstantFunction(name = "version", argTypes = {}, returnType = VARCHAR)

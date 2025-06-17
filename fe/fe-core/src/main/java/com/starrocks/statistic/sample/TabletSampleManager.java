@@ -25,13 +25,15 @@ import com.starrocks.statistic.StatsConstants;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
+
 public class TabletSampleManager {
 
-    private static double HIGH_WEIGHT_READ_RATIO = 0.001;
+    private static double HIGH_WEIGHT_READ_RATIO = 0.005;
 
-    private static double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.01;
+    private static double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.1;
 
-    private static double MEDIUM_LOW_WEIGHT_READ_RATIO = 0.1;
+    private static double MEDIUM_LOW_WEIGHT_READ_RATIO = 0.2;
 
     private static double LOW_WEIGHT_READ_RATIO = 0.8;
 
@@ -40,6 +42,8 @@ public class TabletSampleManager {
     private static long MEDIUM_HIGH_WEIGHT_ROWS_THRESHOLD = 1000000L;
 
     private static long MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD = 100000L;
+
+    public static long MAX_ROW_COUNT_BY_BLOCK_SAMPLE = 1000000000;
 
     private final SampleTabletSlot highWeight;
 
@@ -84,7 +88,7 @@ public class TabletSampleManager {
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
             for (Partition logicalPartition : olapTable.getPartitions()) {
-                if (!logicalPartition.hasData()) {
+                if (!logicalPartition.hasData() || logicalPartition.getName().startsWith(SHADOW_PARTITION_PREFIX)) {
                     continue;
                 }
                 for (PhysicalPartition physicalPartition : logicalPartition.getSubPartitions()) {
@@ -98,7 +102,7 @@ public class TabletSampleManager {
                             mediumHighWeight.addTabletStats(tabletStats);
                         } else if (rowCount >= MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD) {
                             mediumLowWeight.addTabletStats(tabletStats);
-                        } else {
+                        } else if (rowCount > 0) {
                             lowWeight.addTabletStats(tabletStats);
                         }
                     }
@@ -107,7 +111,7 @@ public class TabletSampleManager {
         }
     }
 
-    public SampleInfo generateSampleInfo(String dbName, String tableName) {
+    public SampleInfo generateSampleInfo() {
         List<TabletStats> highWeightTablets = highWeight.sampleTabletStats();
         List<TabletStats> mediumHighWeightTablets = mediumHighWeight.sampleTabletStats();
         List<TabletStats> mediumLowWeightTablets = mediumLowWeight.sampleTabletStats();

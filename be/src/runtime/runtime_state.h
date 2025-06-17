@@ -45,7 +45,7 @@
 #include <vector>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/datacache_utils.h"
+#include "cache/datacache_utils.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -389,6 +389,9 @@ public:
     int64_t max_spill_read_buffer_bytes_per_driver() const {
         return _spill_options.has_value() ? _spill_options->max_spill_read_buffer_bytes_per_driver : INT64_MAX;
     }
+    int64_t spill_hash_join_probe_op_max_bytes() const {
+        return _spill_options.has_value() ? _spill_options->spill_hash_join_probe_op_max_bytes : 1LL << 31;
+    }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
@@ -396,6 +399,20 @@ public:
 
     bool enable_hyperscan_vec() const {
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
+    }
+
+    long column_view_concat_rows_limit() const {
+        return _query_options.__isset.column_view_concat_rows_limit ? _query_options.column_view_concat_rows_limit
+                                                                    : -1L;
+    }
+
+    long column_view_concat_bytes_limit() const {
+        return _query_options.__isset.column_view_concat_bytes_limit ? _query_options.column_view_concat_bytes_limit
+                                                                     : -1L;
+    }
+
+    bool enable_column_view() const {
+        return column_view_concat_bytes_limit() > 0 || column_view_concat_rows_limit() > 0;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
@@ -508,6 +525,20 @@ public:
 
     bool enable_event_scheduler() const { return _enable_event_scheduler; }
     void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
+
+    bool enable_join_runtime_filter_pushdown() const {
+        return _query_options.__isset.enable_join_runtime_filter_pushdown &&
+               _query_options.enable_join_runtime_filter_pushdown;
+    }
+
+    bool enable_join_runtime_bitset_filter() const {
+        return _query_options.__isset.enable_join_runtime_bitset_filter &&
+               _query_options.enable_join_runtime_bitset_filter;
+    }
+
+    bool lower_upper_support_utf8() const {
+        return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
+    }
 
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 

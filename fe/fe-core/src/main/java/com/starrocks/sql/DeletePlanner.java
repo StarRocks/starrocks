@@ -109,7 +109,7 @@ public class DeletePlanner {
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
                     table.enableReplicatedStorage(), false, false,
-                    session.getCurrentWarehouseId());
+                    session.getCurrentComputeResource());
             execPlan.getFragments().get(0).setSink(dataSink);
 
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -117,8 +117,8 @@ public class DeletePlanner {
             session.getSessionVariable().setUseComputeNodes(0);
             OlapTableSink olapTableSink = (OlapTableSink) dataSink;
             TableName catalogDbTable = deleteStatement.getTableName();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
-                    catalogDbTable.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, catalogDbTable.getCatalog(), catalogDbTable.getDb());
             try {
                 olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
                 olapTableSink.complete();

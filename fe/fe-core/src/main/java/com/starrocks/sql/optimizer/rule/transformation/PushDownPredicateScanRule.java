@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
+import com.starrocks.sql.optimizer.rewrite.TimeDriftConstraint;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -48,6 +49,7 @@ public class PushDownPredicateScanRule extends TransformationRule {
             OperatorType.LOGICAL_DELTALAKE_SCAN,
             OperatorType.LOGICAL_FILE_SCAN,
             OperatorType.LOGICAL_PAIMON_SCAN,
+            OperatorType.LOGICAL_ODPS_SCAN,
             OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
             OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
             OperatorType.LOGICAL_KUDU_SCAN,
@@ -84,6 +86,9 @@ public class PushDownPredicateScanRule extends TransformationRule {
         predicates = scalarOperatorRewriter.rewrite(predicates,
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
         predicates = Utils.transTrue2Null(predicates);
+
+        predicates = TimeDriftConstraint.tryAddDerivedPredicates(predicates, logicalScanOperator.getTable(),
+                logicalScanOperator.getColumnNameToColRefMap());
 
         // clone a new scan operator and rewrite predicate.
         Operator.Builder builder = OperatorBuilderFactory.build(logicalScanOperator);

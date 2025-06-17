@@ -14,286 +14,47 @@
 
 package com.starrocks.qe.scheduler.slot;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Queues;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.common.Config;
-import com.starrocks.qe.GlobalVariable;
-import com.starrocks.rpc.ThriftConnectionPool;
-import com.starrocks.rpc.ThriftRPCRequestExecutor;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Frontend;
-import com.starrocks.thrift.TFinishSlotRequirementRequest;
-import com.starrocks.thrift.TFinishSlotRequirementResponse;
-import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.metric.MetricVisitor;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.compress.utils.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-/**
- * Manage all the slots in the leader FE. It queues, allocates or releases each slot requirement.
- * <p> A query is related to a slot requirement. There are a total of {@link GlobalVariable#getQueryQueueConcurrencyLimit()} slots
- * and {@link ResourceGroup#getConcurrencyLimit()} slots for a group. If there are not free slots
- * or the resource usage (CPU and Memory) exceeds the limit, the coming query will be queued.
- * <p> The allocated slot to a query will be released, if any following condition occurs:
- * <ul>
- *     <li> The query is finished or cancelled and sends the release RPC to the slot manager.
- *     <li> The slot manager finds that the query is timeout.
- *     <li> The slot manager finds that the frontend where the query is started is dead or restarted.
- * </ul>
- * <p> The slot manager is only running in the leader FE. The following diagram indicates the control flow.
- * <pre>{@code
- *                         ┌─────────────────────────────────────┐
- *                         │            SlotManager              │
- *                         └──────▲─┬───────────────────▲────────┘
- *  Leader FE                     │ │Notify requirement │
- *                  Require slots │ │finished           │Release slot
- *  ------------------------------│-│-------------------│---------------------
- *                         ┌──────┴─▼───────────────────┴────────┐
- *                         │            SlotProvider             │
- *                         └──────▲─┬───────────────────▲────────┘
- *                                │ │Notify requirement │
- *  Follower FE     Require slots │ │finished           │Release slots
- *                                │ │                   │
- *                         ┌──────┴─▼───────────────────┴────────┐
- *                         │            Coordinator              │
- *                         └─────────────────────────────────────┘
- *
- *
- * }</pre>
- *
- * @see SlotProvider
- * @see ResourceUsageMonitor
- */
-public class SlotManager {
+public class SlotManager extends BaseSlotManager {
     private static final Logger LOG = LogManager.getLogger(SlotManager.class);
 
-    private static final int MAX_PENDING_REQUESTS = 1_000_000;
-
-    /**
-     * All the data members except {@code requests} and {@link SlotTracker#getSlots()} by {@link #slotTracker} are only accessed
-     * by the thread {@link #requestWorker}.
-     * Others outside can do nothing, but add a request to {@code requests} or retrieve a view of all the running and queued
-     * slots.
-     */
-    private final BlockingQueue<Runnable> requests = Queues.newLinkedBlockingDeque(MAX_PENDING_REQUESTS);
     private final RequestWorker requestWorker = new RequestWorker();
-
-    private final AtomicBoolean started = new AtomicBoolean();
-    private final Executor responseExecutor = Executors.newFixedThreadPool(Config.slot_manager_response_thread_pool_size,
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("slot-mgr-res-%d").build());
-
-    private final Map<String, Set<TUniqueId>> requestFeNameToSlotIds = new HashMap<>();
-
-    private final SlotSelectionStrategy slotSelectionStrategy;
-
-    /**
-     * The lifecycle of a slot is managed by the slot tracker.
-     *
-     * <pre>{@code
-     * CREATED -(1)-> REQUIRED -(2)-> ALLOCATED -(3)-> RELEASED
-     *                  │                                  ▲
-     *                  └─────────────────(3)──────────────┘
-     * }</pre>
-     *
-     * <ul>
-     * <li> (1) {@link SlotTracker#requireSlot}: the slot is into required state and is waiting for allocation.
-     * <li> (2) {@link SlotSelectionStrategy#peakSlotsToAllocate}: select proper slots to allocate,
-     * {@link SlotTracker#allocateSlot}: the slot is into allocated state and the related query is notified to be started.
-     * <li> (3) {@link SlotTracker#releaseSlot}: the slot is released and will be removed from the slot tracker.
-     * </ul>
-     */
     private final SlotTracker slotTracker;
 
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
-        resourceUsageMonitor.registerResourceAvailableListener(this::notifyResourceUsageAvailable);
-
-        if (Config.enable_query_queue_v2) {
-            this.slotSelectionStrategy = new SlotSelectionStrategyV2();
-        } else {
-            this.slotSelectionStrategy = new DefaultSlotSelectionStrategy(
-                    resourceUsageMonitor::isGlobalResourceOverloaded, resourceUsageMonitor::isGroupResourceOverloaded);
-        }
-
-        this.slotTracker = new SlotTracker(ImmutableList.of(slotSelectionStrategy, new SlotListenerForPipelineDriverAllocator()));
+        super(resourceUsageMonitor);
+        this.slotTracker = new SlotTracker(resourceUsageMonitor);
     }
 
-    public void start() {
-        if (started.compareAndSet(false, true)) {
-            requestWorker.start();
-        }
-    }
-
-    public void requireSlotAsync(LogicalSlot slot) {
-        requests.add(() -> handleRequireSlotTask(slot));
-    }
-
-    public void releaseSlotAsync(TUniqueId slotId) {
-        requests.add(() -> handleReleaseSlotTask(slotId));
-    }
-
-    public void notifyFrontendDeadAsync(String feName) {
-        requests.add(() -> handleFrontendDeadTask(feName));
-    }
-
-    public void notifyFrontendRestartAsync(String feName, long startMs) {
-        requests.add(() -> handleFrontendRestart(feName, startMs));
-    }
-
-    public void notifyResourceUsageAvailable() {
-        // The request does nothing but wake up the request worker to check whether resource usage becomes available.
-        requests.add(() -> {
-        });
-    }
-
+    @Override
     public List<LogicalSlot> getSlots() {
-        return new ArrayList<>(slotTracker.getSlots());
+        return slotTracker.getSlots().stream().collect(Collectors.toList());
     }
 
-    private void handleRequireSlotTask(LogicalSlot slot) {
-        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(slot.getRequestFeName());
-        if (frontend == null) {
-            slot.onCancel();
-            LOG.warn("[Slot] SlotManager receives a slot requirement with unknown FE [slot={}]", slot);
-            return;
-        }
-        if (slot.getFeStartTimeMs() < frontend.getStartTime()) {
-            slot.onCancel();
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Collections.singletonList(String.format("FeStartTime is not the latest [val=%s] [latest=%s]",
-                    slot.getFeStartTimeMs(), frontend.getStartTime())));
-            finishSlotRequirementToEndpoint(slot, status);
-            LOG.warn("[Slot] SlotManager receives a slot requirement with old FeStartTime [slot={}] [newFeStartMs={}]",
-                    slot, frontend.getStartTime());
-            return;
-        }
-
-        boolean ok = slotTracker.requireSlot(slot);
-        if (ok) {
-            requestFeNameToSlotIds.computeIfAbsent(slot.getRequestFeName(), k -> new HashSet<>())
-                    .add(slot.getSlotId());
-        } else {
-            slot.onCancel();
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            String errMsg = String.format("Resource is not enough and the number of pending queries exceeds capacity [%d], " +
-                            "you could modify the session variable [%s] to make more query can be queued",
-                    GlobalVariable.getQueryQueueMaxQueuedQueries(), GlobalVariable.QUERY_QUEUE_MAX_QUEUED_QUERIES);
-            status.setError_msgs(Collections.singletonList(errMsg));
-            finishSlotRequirementToEndpoint(slot, status);
-        }
+    @Override
+    public SlotTracker getSlotTracker(long warehouseId) {
+        return slotTracker;
     }
 
-    private void handleReleaseSlotTask(TUniqueId slotId) {
-        LogicalSlot slot = slotTracker.releaseSlot(slotId);
-        if (slot != null) {
-            Set<TUniqueId> slotIds = requestFeNameToSlotIds.get(slot.getRequestFeName());
-            if (slotIds != null) {
-                slotIds.remove(slotId);
-            }
-        }
+    @Override
+    public void doStart() {
+        requestWorker.start();
     }
 
-    private void handleFrontendDeadTask(String feName) {
-        Set<TUniqueId> slotIds = requestFeNameToSlotIds.get(feName);
-        if (slotIds == null) {
-            return;
-        }
-
-        LOG.warn("[Slot] The frontend [{}] becomes dead, and its pending and allocated slots will be released", feName);
-        List<TUniqueId> copiedSlotIds = new ArrayList<>(slotIds);
-        copiedSlotIds.forEach(this::handleReleaseSlotTask);
-    }
-
-    private void handleFrontendRestart(String feName, long startMs) {
-        Set<TUniqueId> slotIds = requestFeNameToSlotIds.get(feName);
-        if (slotIds == null) {
-            return;
-        }
-
-        LOG.warn("[Slot] The frontend [{}] restarts [startMs={}], " +
-                "and its pending and allocated slots with less startMs will be released", feName, startMs);
-
-        slotIds.stream().filter(slotId -> {
-            LogicalSlot slot = slotTracker.getSlot(slotId);
-            if (slot == null) {
-                return false;
-            }
-            return slot.getFeStartTimeMs() < startMs;
-        }).collect(Collectors.toList()).forEach(this::handleReleaseSlotTask);
-    }
-
-    private void finishSlotRequirementToEndpoint(LogicalSlot slot, TStatus status) {
-        responseExecutor.execute(() -> {
-            TFinishSlotRequirementRequest request = new TFinishSlotRequirementRequest();
-            request.setStatus(status);
-            request.setSlot_id(slot.getSlotId());
-            request.setPipeline_dop(slot.getPipelineDop());
-
-            Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(slot.getRequestFeName());
-            if (fe == null) {
-                LOG.warn("[Slot] try to send finishSlotRequirement RPC to the unknown frontend [slot={}]", slot);
-                releaseSlotAsync(slot.getSlotId());
-                return;
-            }
-
-            TNetworkAddress feEndpoint = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
-            try {
-                TFinishSlotRequirementResponse res = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        feEndpoint,
-                        client -> client.finishSlotRequirement(request));
-                TStatus resStatus = res.getStatus();
-                if (resStatus.getStatus_code() != TStatusCode.OK) {
-                    LOG.warn("[Slot] failed to finish slot requirement [slot={}] [err={}]", slot, resStatus);
-                    if (status.getStatus_code() == TStatusCode.OK) {
-                        releaseSlotAsync(slot.getSlotId());
-                    }
-                }
-            } catch (Exception e) {
-                LOG.warn("[Slot] failed to finish slot requirement [slot={}]:", slot, e);
-                if (status.getStatus_code() == TStatusCode.OK) {
-                    releaseSlotAsync(slot.getSlotId());
-                }
-            }
-        });
-    }
-
-    private static class SlotListenerForPipelineDriverAllocator implements SlotTracker.Listener {
-        private final PipelineDriverAllocator pipelineDriverAllocator = new PipelineDriverAllocator();
-
-        @Override
-        public void onRequireSlot(LogicalSlot slot) {
-            // Do nothing.
-        }
-
-        @Override
-        public void onAllocateSlot(LogicalSlot slot) {
-            pipelineDriverAllocator.allocate(slot);
-        }
-
-        @Override
-        public void onReleaseSlot(LogicalSlot slot) {
-            pipelineDriverAllocator.release(slot);
-        }
+    @Override
+    public void collectWarehouseMetrics(MetricVisitor visitor) {
+        // do nothing
     }
 
     private class RequestWorker extends Thread {
@@ -306,13 +67,13 @@ public class SlotManager {
             if (!expiredSlots.isEmpty()) {
                 LOG.warn("[Slot] expired slots [{}]", expiredSlots);
             }
-            expiredSlots.forEach(slot -> handleReleaseSlotTask(slot.getSlotId()));
+            expiredSlots.forEach(slot -> handleReleaseSlotTask(slot));
 
             return tryAllocateSlots();
         }
 
         private boolean tryAllocateSlots() {
-            Collection<LogicalSlot> slotsToAllocate = slotSelectionStrategy.peakSlotsToAllocate(slotTracker);
+            Collection<LogicalSlot> slotsToAllocate = slotTracker.peakSlotsToAllocate();
             slotsToAllocate.forEach(this::allocateSlot);
             return !slotsToAllocate.isEmpty();
         }
@@ -328,7 +89,6 @@ public class SlotManager {
             List<Runnable> newTasks = Lists.newArrayList();
             Runnable newTask;
             for (; ; ) {
-
                 try {
                     newTask = null;
                     long minExpiredTimeMs = slotTracker.getMinExpiredTimeMs();
@@ -363,9 +123,7 @@ public class SlotManager {
                 } catch (Exception e) {
                     LOG.warn("[Slot] RequestWorker throws unexpected error", e);
                 }
-
             }
         }
     }
-
 }

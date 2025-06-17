@@ -39,6 +39,7 @@
 #include <string_view>
 
 #include "agent/master_info.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/utils.h"
@@ -69,6 +70,10 @@ static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, st
                                    int64_t deadline);
 
 Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
+    if (process_exit_in_progress()) {
+        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
+    }
+
     StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
 // submit this params
 #ifndef BE_TEST
@@ -76,6 +81,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     ctx->start_write_data_nanos = MonotonicNanos();
     LOG(INFO) << "begin to execute job. label=" << ctx->label << ", txn_id: " << ctx->txn_id
               << ", query_id=" << print_id(ctx->put_result.params.params.query_id);
+    // Once this is added into FragmentMgr, the fragment will be counted during graceful exit.
     auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
             ctx->put_result.params,
             [ctx](PlanFragmentExecutor* executor) {

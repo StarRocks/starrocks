@@ -139,6 +139,8 @@ public:
     void attach_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _observable.add_observer(state, observer);
     }
+    void detach_observer() { _observable.detach_observers(); }
+
     auto defer_notify() {
         return DeferOp([query_ctx = _query_ctx, this]() {
             if (auto ctx = query_ctx.lock()) {

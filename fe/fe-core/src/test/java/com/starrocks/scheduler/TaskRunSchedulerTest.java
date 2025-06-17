@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
@@ -77,7 +78,8 @@ public class TaskRunSchedulerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
-        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), isMergeRedundant,
+                Maps.newHashMap());
         executeOption.setSync(isSync);
         executeOption.setPriority(priority);
         return executeOption;

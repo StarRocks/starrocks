@@ -52,6 +52,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.FailMsg;
+import com.starrocks.load.routineload.TxnStatusChangeReason;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
@@ -237,9 +238,22 @@ public abstract class BulkLoadJob extends LoadJob {
         return failInfos;
     }
 
+    /**
+     * Not retryable cases
+     * 1. already retry too many times
+     * 2. Cancel type is USER_CANCEL
+     * 3. BE parses data error, such as invalid json
+     */
+    protected boolean isRetryable(FailMsg failMsg) {
+        TxnStatusChangeReason reason = TxnStatusChangeReason.fromString(failMsg.getMsg());
+        return retryTime > 0
+                && failMsg.getCancelType() != FailMsg.CancelType.USER_CANCEL
+                && reason != TxnStatusChangeReason.PARSE_ERROR;
+    }
+
     @Override
     public void onTaskFailed(long taskId, FailMsg failMsg) {
-        boolean timeoutFailure = false;
+        boolean needRetry = false;
         writeLock();
         try {
             // check if job has been completed
@@ -251,20 +265,19 @@ public abstract class BulkLoadJob extends LoadJob {
                 return;
             }
 
-            if (!failMsg.getMsg().contains("timeout") || failMsg.getCancelType() == FailMsg.CancelType.USER_CANCEL) {
+            needRetry = isRetryable(failMsg);
+            if (!needRetry) {
                 unprotectedExecuteCancel(failMsg, true);
                 logFinalOperation();
-            } else {
-                timeoutFailure = true;
             }
         } finally {
             writeUnlock();
         }
 
-        // For timeout failure, should abort the transaction and retry as soon as possible
-        if (timeoutFailure) {
+        // For retryable failure, should abort the transaction and retry as soon as possible
+        if (needRetry) {
             try {
-                LOG.debug("Loading task with timeout failure try to abort transaction, " +
+                LOG.debug("Loading task with retryable failure try to abort transaction, " +
                                 "job_id: {}, task_id: {}, txn_id: {}, task fail message: {}",
                         id, taskId, transactionId, failMsg.getMsg());
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(

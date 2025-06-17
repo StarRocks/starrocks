@@ -49,8 +49,6 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
@@ -89,6 +87,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -152,13 +151,13 @@ public class AnalyzerUtils {
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by time_slice
     public static final Set<String> TIME_SLICE_SUPPORTED_PARTITION_FORMAT =
             ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by mv date_trunc
     public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "week", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "week", "month", "year");
 
     public static final String DEFAULT_PARTITION_NAME_PREFIX = "p";
 
@@ -229,8 +228,7 @@ public class AnalyzerUtils {
 
         if (fn != null) {
             try {
-                Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, fn,
-                        PrivilegeType.USAGE);
+                Authorizer.checkFunctionAction(context, db, fn, PrivilegeType.USAGE);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -248,8 +246,7 @@ public class AnalyzerUtils {
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
             try {
-                Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        fn, PrivilegeType.USAGE);
+                Authorizer.checkGlobalFunctionAction(context, fn, PrivilegeType.USAGE);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -402,7 +399,7 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             return visit(node.getQueryStatement());
         }
 
@@ -579,9 +576,9 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             ctes.add(node.getResolveTableName());
-            return super.visitSubquery(node, context);
+            return super.visitSubqueryRelation(node, context);
         }
 
         @Override
@@ -1148,7 +1145,7 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             subQueryRelations.put(node.getResolveTableName(), node);
             return visit(node.getQueryStatement());
         }
@@ -1168,7 +1165,7 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             // no recursive
             subQueryRelations.put(node.getResolveTableName(), node);
             return null;
@@ -1328,18 +1325,10 @@ public class AnalyzerUtils {
         }
     }
 
-    public static PartitionMeasure checkAndGetPartitionMeasure(
-            Map<ColumnId, Column> idToColumn,
-            ExpressionRangePartitionInfo expressionRangePartitionInfo)
+    public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
             throws AnalysisException {
         long interval = 1;
         String granularity;
-        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs(idToColumn);
-
-        if (partitionExprs.size() != 1) {
-            throw new AnalysisException("automatic partition only support one expression partitionExpr.");
-        }
-        Expr expr = partitionExprs.get(0);
         if (!(expr instanceof FunctionCallExpr)) {
             throw new AnalysisException("automatic partition only support FunctionCallExpr");
         }
@@ -1380,16 +1369,38 @@ public class AnalyzerUtils {
     }
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+                                                                              PartitionDesc partitionDesc,
+                                                                              List<List<String>> partitionValues,
+                                                                              boolean isTemp,
+                                                                              String partitionNamePrefix)
+            throws AnalysisException {
+        if (partitionDesc instanceof ExpressionPartitionDesc) {
+            ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+            PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
+                    (ExpressionRangePartitionInfo) partitionInfo);
+        } else {
+            throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
+        }
+    }
+
+    public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                               List<List<String>> partitionValues,
                                                                               boolean isTemp,
                                                                               String partitionNamePrefix)
             throws AnalysisException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            PartitionMeasure measure = checkAndGetPartitionMeasure(olapTable.getIdToColumn(),
-                    (ExpressionRangePartitionInfo) partitionInfo);
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+            if (partitionExprs.size() != 1) {
+                throw new AnalysisException("automatic partition only support one expression partitionExpr.");
+            }
+            Expr expr = partitionExprs.get(0);
+            PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    (ExpressionRangePartitionInfo) partitionInfo);
+                    expressionRangePartitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -1542,12 +1553,12 @@ public class AnalyzerUtils {
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
-                        beginTime = beginTime.withDayOfMonth(1);
+                        beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                         partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
-                        beginTime = beginTime.withDayOfYear(1);
+                        beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                         partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
@@ -1572,6 +1583,7 @@ public class AnalyzerUtils {
                     partitionColNames.add(partitionName);
                 }
             } catch (AnalysisException e) {
+                LOG.warn("failed to analyse partition value", e);
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
@@ -1711,7 +1723,8 @@ public class AnalyzerUtils {
                     if (expr instanceof FunctionCallExpr) {
                         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                         if (containsNonDeterministicFunction(functionCallExpr)) {
-                            nonDeterministicFunctionOpt = Optional.of(functionCallExpr.getFnName().getFunction());
+                            nonDeterministicFunctionOpt =
+                                    Optional.ofNullable(functionCallExpr.getFnName()).map(FunctionName::getFunction);
                             return null;
                         }
                     }
@@ -1923,5 +1936,28 @@ public class AnalyzerUtils {
             }
         }
         return expr;
+    }
+
+    public static boolean isGranularityGreater(String g1, String g2) {
+        Map<String, Integer> orderMap = Map.of(
+                "minute", 0,
+                "hour", 1,
+                "day", 2,
+                "month", 3,
+                "year", 4
+        );
+
+        if (g1 == null || g2 == null) {
+            return false;
+        }
+
+        Integer order1 = orderMap.get(g1.toLowerCase());
+        Integer order2 = orderMap.get(g2.toLowerCase());
+
+        if (order1 == null || order2 == null) {
+            return false;
+        }
+
+        return order1 > order2;
     }
 }

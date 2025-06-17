@@ -134,7 +134,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
         List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING);
         TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
 
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
                 sampleInfo);
@@ -240,9 +240,9 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testHiveHistogramStatisticsSQLWithStruct() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0", "subfield_db",
+        Table t0 = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(connectContext, "hive0", "subfield_db",
                 "subfield");
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("hive0", "subfield_db");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "subfield_db");
 
         List<String> columnNames = Lists.newArrayList("col_struct.c0", "col_struct.c1.c11");
         ExternalHistogramStatisticsCollectJob hiveHistogramStatisticsCollectJob = new ExternalHistogramStatisticsCollectJob(
@@ -303,7 +303,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 continue;
             }
             TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
-            SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
+            SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
             String sql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
                     Lists.newArrayList(new PrimitiveTypeColumnStats(column.getName(), column.getType())),
                     tabletSampleManager);

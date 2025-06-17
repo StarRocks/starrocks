@@ -26,6 +26,8 @@ import com.starrocks.statistic.sample.TabletStats;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
+
 public class PartitionSampler {
     public static final double HIGH_WEIGHT_READ_RATIO = 0.01;
     public static final double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.1;
@@ -56,10 +58,11 @@ public class PartitionSampler {
         return partitionSampleMaps.get(pid);
     }
 
-    public void classifyPartitions(Table table, List<Long> partitions) {
+    public void classifyPartitions(Table table, List<Long> partitions,
+                                   com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
         for (Long partitionId : partitions) {
             Partition p = table.getPartition(partitionId);
-            if (p == null || !p.hasData()) {
+            if (p == null || !p.hasData() || p.getName().startsWith(SHADOW_PARTITION_PREFIX)) {
                 continue;
             }
 
@@ -69,8 +72,12 @@ public class PartitionSampler {
             TabletSampler low = new TabletSampler(lowRatio, maxSize);
 
             for (Tablet tablet : p.getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
-                long rowCount = tablet.getFuzzyRowCount();
-                if (rowCount <= 0) {
+                Long rowCount = tablet.getFuzzyRowCount();
+                if (rowCount <= 0 && partitionTabletRowCounts != null && !partitionTabletRowCounts.isEmpty()) {
+                    rowCount = partitionTabletRowCounts.get(partitionId, tablet.getId());
+                }
+
+                if (rowCount == null || rowCount <= 0) {
                     continue;
                 }
                 if (rowCount >= HIGH_WEIGHT_ROWS_THRESHOLD) {
@@ -134,7 +141,8 @@ public class PartitionSampler {
         return sampleRows;
     }
 
-    public static PartitionSampler create(Table table, List<Long> partitions, Map<String, String> properties) {
+    public static PartitionSampler create(Table table, List<Long> partitions, Map<String, String> properties,
+                                          com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
         double highSampleRatio = Double.parseDouble(properties.getOrDefault(StatsConstants.HIGH_WEIGHT_SAMPLE_RATIO, "0.5"));
         double mediumHighRatio =
                 Double.parseDouble(properties.getOrDefault(StatsConstants.MEDIUM_HIGH_WEIGHT_SAMPLE_RATIO, "0.5"));
@@ -144,7 +152,7 @@ public class PartitionSampler {
         int maxSize = Integer.parseInt(properties.getOrDefault(StatsConstants.MAX_SAMPLE_TABLET_NUM, "5000"));
 
         PartitionSampler sampler = new PartitionSampler(highSampleRatio, mediumHighRatio, mediumLowRatio, lowRatio, maxSize);
-        sampler.classifyPartitions(table, partitions);
+        sampler.classifyPartitions(table, partitions, partitionTabletRowCounts);
         return sampler;
     }
 

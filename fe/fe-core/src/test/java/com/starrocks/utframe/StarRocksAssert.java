@@ -67,6 +67,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -132,7 +133,6 @@ import com.starrocks.thrift.TFunctionBinaryType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -183,7 +183,7 @@ public class StarRocksAssert {
         DropDbStmt dropDbStmt =
                     (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database if exists `" + dbName + "`;", ctx);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(ctx, dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         } catch (MetaNotFoundException e) {
             if (!dropDbStmt.isSetIfExists()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_DB_DROP_EXISTS, dbName);
@@ -760,7 +760,7 @@ public class StarRocksAssert {
     public StarRocksAssert dropDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
                     (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database " + dbName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(ctx, dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         return this;
     }
 

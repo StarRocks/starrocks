@@ -12,42 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.StarRocksFE;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
-import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -71,6 +69,9 @@ public class AuthenticationMgr {
     @SerializedName(value = "m")
     private Map<String, UserProperty> userNameToProperty = new HashMap<>();
 
+    @SerializedName("gp")
+    protected Map<String, GroupProvider> nameToGroupProviderMap = new ConcurrentHashMap<>();
+
     @SerializedName("sim")
     protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
 
@@ -84,21 +85,6 @@ public class AuthenticationMgr {
     private boolean isLoaded = false;
 
     public AuthenticationMgr() {
-        // default plugin
-        AuthenticationProviderFactory.installPlugin(
-                PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
-        AuthenticationProviderFactory.installPlugin(
-                KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
-
-        AuthenticationProviderFactory.installPlugin(OpenIdConnectAuthenticationProvider.PLUGIN_NAME,
-                new OpenIdConnectAuthenticationProvider(
-                        Config.oidc_jwks_url,
-                        Config.oidc_principal_field,
-                        Config.oidc_required_issuer,
-                        Config.oidc_required_audience));
-
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
@@ -107,7 +93,7 @@ public class AuthenticationMgr {
         } catch (AuthenticationException e) {
             throw new RuntimeException("should not happened!", e);
         }
-        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString());
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
@@ -177,21 +163,6 @@ public class AuthenticationMgr {
     }
 
     /**
-     * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
-     * but some external system, like LDAP, return default max connection number
-     * @param currUserIdentity user identity of current connection
-     * @return max connection number of the user
-     */
-    public long getMaxConn(UserIdentity currUserIdentity) {
-        if (currUserIdentity.isEphemeral()) {
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
-        } else {
-            String userName = currUserIdentity.getUser();
-            return getMaxConn(userName);
-        }
-    }
-
-    /**
      * Get max connection number based on plain username, the user should be an internal user,
      * if the user doesn't exist in SR, it will throw an exception.
      * @param userName plain username saved in SR
@@ -200,7 +171,7 @@ public class AuthenticationMgr {
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            throw new SemanticException("Unknown user: " + userName);
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
@@ -238,78 +209,6 @@ public class AuthenticationMgr {
         } finally {
             readUnlock();
         }
-    }
-
-    private UserIdentity checkPasswordForNative(
-            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                getBestMatchedUserIdentity(remoteUser, remoteHost);
-        if (matchedUserIdentity == null) {
-            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-        } else {
-            try {
-                AuthenticationProvider provider =
-                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        matchedUserIdentity.getValue());
-                return matchedUserIdentity.getKey();
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
-                        remoteUser, remoteHost, e.getMessage());
-            }
-        }
-
-        return null;
-    }
-
-    protected UserIdentity checkPasswordForNonNative(
-            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString, String authMechanism) {
-        SecurityIntegration securityIntegration =
-                nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
-        if (securityIntegration == null) {
-            LOG.info("'{}' authentication mechanism not found", authMechanism);
-        } else {
-            try {
-                AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
-                        securityIntegration);
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        userAuthenticationInfo);
-                // the ephemeral user is identified as 'username'@'auth_mechanism'
-                UserIdentity authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
-                return authenticatedUser;
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
-                        remoteUser, remoteHost, securityIntegration, e.getMessage());
-            }
-        }
-
-        return null;
-    }
-
-    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        String[] authChain = Config.authentication_chain;
-        UserIdentity authenticatedUser = null;
-        for (String authMechanism : authChain) {
-            if (authenticatedUser != null) {
-                break;
-            }
-
-            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
-            } else {
-                authenticatedUser = checkPasswordForNonNative(
-                        remoteUser, remoteHost, remotePasswd, randomString, authMechanism);
-            }
-        }
-
-        return authenticatedUser;
-    }
-
-    public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
-        return checkPassword(remoteUser, remoteHost,
-                remotePasswd.getBytes(StandardCharsets.UTF_8), null);
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {
@@ -564,54 +463,6 @@ public class AuthenticationMgr {
         return userToAuthenticationInfo;
     }
 
-    private Class<?> authClazz = null;
-    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
-    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
-
-    public boolean isSupportKerberosAuth() {
-        if (!Config.enable_authentication_kerberos) {
-            LOG.error("enable_authentication_kerberos need to be set to true");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_principal.isEmpty()) {
-            LOG.error("authentication_kerberos_service_principal must be set in config");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
-            LOG.error("authentication_kerberos_service_key_tab must be set in config");
-            return false;
-        }
-
-        if (authClazz == null) {
-            try {
-                File jarFile = new File(KRB5_AUTH_JAR_PATH);
-                if (!jarFile.exists()) {
-                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
-                    return false;
-                } else {
-                    ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[] {
-                                    jarFile.toURL()
-                            },
-                            getClass().getClassLoader()
-                    );
-                    authClazz = Class.forName(AuthenticationMgr.KRB5_AUTH_CLASS_NAME, true, loader);
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to load {}", AuthenticationMgr.KRB5_AUTH_CLASS_NAME, e);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public Class<?> getAuthClazz() {
-        return authClazz;
-    }
-
     public void saveV2(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
@@ -658,6 +509,17 @@ public class AuthenticationMgr {
         this.isLoaded = true;
         this.userNameToProperty = ret.userNameToProperty;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+
+        this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
+        this.nameToGroupProviderMap = ret.nameToGroupProviderMap;
+
+        for (Map.Entry<String, GroupProvider> entry : nameToGroupProviderMap.entrySet()) {
+            try {
+                entry.getValue().init();
+            } catch (Exception e) {
+                LOG.error("failed to init group provider", e);
+            }
+        }
     }
 
     public UserProperty getUserProperty(String userName) {
@@ -756,5 +618,47 @@ public class AuthenticationMgr {
     public void replayDropSecurityIntegration(String name)
             throws DdlException {
         dropSecurityIntegration(name, true);
+    }
+
+    // ---------------------------------------- Group Provider Statement --------------------------------------
+
+    public void createGroupProviderStatement(CreateGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
+        groupProvider.init();
+        this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_CREATE_GROUP_PROVIDER,
+                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
+    }
+
+    public void replayCreateGroupProvider(String name, Map<String, String> properties) {
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(name, properties);
+        try {
+            groupProvider.init();
+            this.nameToGroupProviderMap.put(name, groupProvider);
+        } catch (DdlException e) {
+            LOG.error("Failed to create group provider '{}'", name, e);
+        }
+    }
+
+    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
+        groupProvider.destory();
+
+        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
+                new GroupProviderLog(stmt.getName(), null));
+    }
+
+    public void replayDropGroupProvider(String name) {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
+        groupProvider.destory();
+    }
+
+    public List<GroupProvider> getAllGroupProviders() {
+        return new ArrayList<>(nameToGroupProviderMap.values());
+    }
+
+    public GroupProvider getGroupProvider(String name) {
+        return nameToGroupProviderMap.get(name);
     }
 }

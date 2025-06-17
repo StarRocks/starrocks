@@ -19,6 +19,9 @@
 #include <memory>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/test_cache_utils.h"
+#include "cache/datacache.h"
+#include "cache/starcache_engine.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -26,6 +29,7 @@
 #include "exec/jni_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
@@ -52,7 +56,6 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
-    Status _init_datacache(size_t mem_size, const std::string& engine);
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
@@ -84,17 +87,6 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
     _runtime_state->set_fragment_ctx(fragment_context);
-}
-
-Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
-    BlockCache* cache = BlockCache::instance();
-    CacheOptions cache_options;
-    cache_options.mem_space_size = mem_size;
-    cache_options.block_size = starrocks::config::datacache_block_size;
-    cache_options.enable_checksum = starrocks::config::datacache_checksum_enable;
-    cache_options.max_concurrent_inserts = 1500000;
-    cache_options.engine = engine;
-    return cache->init(cache_options);
 }
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {
@@ -1682,13 +1674,13 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ASSERT_TRUE(status.ok()) << status.message();
 
         // build runtime filter.
-        RuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, LogicalType::TYPE_BIGINT, 0);
-        f->get_bloom_filter()->init(10);
+        RuntimeFilter* f = RuntimeFilterHelper::create_runtime_bloom_filter(&_pool, LogicalType::TYPE_BIGINT, 0);
+        f->get_membership_filter()->init(10);
         ColumnPtr column = ColumnHelper::create_column(tuple_desc->slots()[0]->type(), false);
         auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
         c->append(tc.max_value);
         c->append(tc.min_value);
-        ASSERT_OK(RuntimeFilterHelper::fill_runtime_bloom_filter(column, LogicalType::TYPE_BIGINT, f, 0, false));
+        ASSERT_OK(RuntimeFilterHelper::fill_runtime_filter(column, LogicalType::TYPE_BIGINT, f, 0, false));
 
         ASSERT_OK(rf_probe_desc.init(0, &probe_expr_ctx));
         rf_probe_desc.set_runtime_filter(f);
@@ -2051,9 +2043,9 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* param = _create_param(small_file, range, tuple_desc);
 #if defined(WITH_STARCACHE)
-        status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
-        ASSERT_TRUE(status.ok()) << status.message();
-        param->datacache_options.enable_datacache = true;
+        auto cache_options = TestCacheUtils::create_simple_options(config::datacache_block_size, 50 * MB);
+        auto block_cache = TestCacheUtils::create_cache(cache_options);
+        DataCache::GetInstance()->set_block_cache(block_cache);
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
@@ -3177,7 +3169,7 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    param->iceberg_schema = &schema;
+    param->lake_schema = &schema;
 
     _debug_rows_per_call = 10;
     Status status = scanner->init(_runtime_state, *param);

@@ -48,11 +48,15 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -112,8 +116,10 @@ public class LeaderOpExecutor {
 
     public void execute() throws Exception {
         forward();
-        LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
-        ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+            LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
+            ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        }
 
         if (result.state != null) {
             MysqlStateType state = MysqlStateType.fromString(result.state);
@@ -135,6 +141,14 @@ public class LeaderOpExecutor {
             TAuditStatistics tAuditStatistics = result.getAudit_statistics();
             if (ctx.getExecutor() != null) {
                 ctx.getExecutor().setQueryStatistics(AuditStatisticsUtil.toProtobuf(tAuditStatistics));
+            }
+        }
+
+        // Put the result of leader execution into the connectContext of the current follower
+        // to mark the transaction being executed in the current connection
+        if (parsedStmt instanceof BeginStmt || parsedStmt instanceof CommitStmt || parsedStmt instanceof RollbackStmt) {
+            if (result.isSetTxn_id()) {
+                ctx.setTxnId(result.getTxn_id());
             }
         }
     }
@@ -264,6 +278,8 @@ public class LeaderOpExecutor {
         if (setStmt != null) {
             params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
         }
+
+        params.setTxn_id(ctx.getTxnId());
 
         params.setWarehouse_id(ctx.getCurrentWarehouseId());
 

@@ -38,6 +38,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.ast.PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
+
 
 /**
  * {@code PListCell} means a list partition's multiple values.
@@ -60,17 +62,28 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
 
     public PListCell(List<List<String>> items) {
         Objects.requireNonNull(items);
-        this.partitionItems = items;
+        this.partitionItems = items.stream()
+                .map(item -> item.stream().map(this::adjustPartitionNullValue).collect(Collectors.toList()))
+                .collect(Collectors.toList());
     }
 
     // single value with single partition column cell
     public PListCell(String item) {
         Objects.requireNonNull(item);
-        this.partitionItems = ImmutableList.of(ImmutableList.of(item));
+        this.partitionItems = ImmutableList.of(ImmutableList.of(adjustPartitionNullValue(item)));
     }
 
     public List<List<String>> getPartitionItems() {
         return partitionItems;
+    }
+
+    // If the partition value is null, we should use STARROCKS_DEFAULT_PARTITION_VALUE instead of null.
+    private String adjustPartitionNullValue(String val) {
+        if (val == null || val.equalsIgnoreCase("null")) {
+            return STARROCKS_DEFAULT_PARTITION_VALUE;
+        } else {
+            return val;
+        }
     }
 
     @Override

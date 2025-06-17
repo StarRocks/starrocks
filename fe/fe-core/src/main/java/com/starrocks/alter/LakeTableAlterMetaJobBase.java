@@ -62,6 +62,7 @@ import javax.validation.constraints.NotNull;
 
 public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(LakeTableAlterMetaJobBase.class);
+
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
     @SerializedName(value = "watershedGtid")
@@ -72,6 +73,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
     private AgentBatchTask batchTask = null;
+    private boolean isFileBundling = false;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
@@ -131,6 +133,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
+    protected abstract boolean enableFileBundling();
+
+    protected abstract boolean disableFileBundling();
+
     @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
         // do nothing
@@ -186,7 +192,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         if (!publishVersion()) {
-            LOG.info("publish version failed, will retry later. jobId={}", jobId);
             return;
         }
 
@@ -238,6 +243,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
+            isFileBundling = table.isFileBundling();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -255,7 +261,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return true;
     }
 
-    boolean publishVersion() {
+    protected boolean lakePublishVersion() {
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = watershedTxnId;
@@ -263,12 +269,26 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
+            // there are two scenario we should use aggregate_publish
+            // 1. this task is change `file_bundling` to true
+            // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
+            //    to false.
+            boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
+                List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                            warehouseId);
+                    if (!useAggregatePublish) {
+                        Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                                computeResource, false);
+                    } else {
+                        tablets.addAll(index.getTablets());
+                    }
+                }
+                if (useAggregatePublish) {
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
+                                null, null, computeResource, null);
                 }
             }
             return true;
@@ -328,9 +348,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : tablets) {
-            Long backendId = warehouseManager.getComputeNodeId(warehouseId, (LakeTablet) tablet);
+            Long backendId = warehouseManager.getComputeNodeId(computeResource, (LakeTablet) tablet);
             if (backendId == null) {
                 throw new AlterCancelException("no alive node");
             }
@@ -406,6 +426,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
+            if (enableFileBundling() || disableFileBundling()) {
+                partition.setMetadataSwitchVersion(commitVersion);
+            }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
                     jobId, partition.getId(), commitVersion);

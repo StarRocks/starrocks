@@ -24,11 +24,11 @@ namespace starrocks {
 class MinMaxPredicateTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _rf.bloom_filter().init(100);
+        _rf.membership_filter().init(100);
         _rf.insert(10);
         _rf.insert(20);
 
-        _nullable_rf.bloom_filter().init(100);
+        _nullable_rf.membership_filter().init(100);
         _nullable_rf.insert(10);
         _nullable_rf.insert(20);
         _nullable_rf.insert_null();
@@ -38,8 +38,8 @@ public:
     }
 
 protected:
-    ComposedRuntimeFilter<TYPE_INT> _rf;
-    ComposedRuntimeFilter<TYPE_INT> _nullable_rf;
+    ComposedRuntimeBloomFilter<TYPE_INT> _rf;
+    ComposedRuntimeBloomFilter<TYPE_INT> _nullable_rf;
     ObjectPool _pool;
     ChunkPtr _chunk;
     ColumnPtr _column;

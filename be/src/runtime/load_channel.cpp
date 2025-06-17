@@ -37,7 +37,10 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "common/tracer.h"
 #include "fmt/format.h"
+#include "runtime/diagnose_daemon.h"
+#include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
@@ -88,6 +91,8 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _profile_report_count = ADD_COUNTER(_profile, "ProfileReportCount", TUnit::UNIT);
     _profile_report_timer = ADD_TIMER(_profile, "ProfileReportTime");
     _profile_serialized_size = ADD_COUNTER(_profile, "ProfileSerializedSize", TUnit::BYTES);
+    _open_request_count = ADD_COUNTER(_profile, "OpenRequestCount", TUnit::UNIT);
+    _open_request_pending_timer = ADD_TIMER(_profile, "OpenRequestPendingTime");
 }
 
 LoadChannel::~LoadChannel() {
@@ -109,11 +114,15 @@ void LoadChannel::set_profile_config(const PLoadChannelProfileConfig& config) {
     }
 }
 
-void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
-                       PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+void LoadChannel::open(const LoadChannelOpenContext& open_context) {
+    int64_t start_time_ns = MonotonicNanos();
+    COUNTER_UPDATE(_open_request_count, 1);
+    COUNTER_UPDATE(_open_request_pending_timer, (start_time_ns - open_context.receive_rpc_time_ns));
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
-    ClosureGuard done_guard(done);
+    ClosureGuard done_guard(open_context.done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
@@ -154,6 +163,8 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
     }
+    int64_t cost_ms = (MonotonicNanos() - start_time_ns) / 1000000;
+    _check_and_log_timeout_rpc("tablet writer open", cost_ms, request.timeout_ms());
 }
 
 void LoadChannel::_add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
@@ -243,27 +254,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
 
     report_profile(response, config::pipeline_print_profile);
-
-    // log profile if rpc timeout
-    if (total_time_us > timeout_ms * 1000) {
-        // update profile
-        auto channels = _get_all_channels();
-        for (auto& channel : channels) {
-            channel->update_profile();
-        }
-
-        std::stringstream ss;
-        _root_profile->pretty_print(&ss);
-        if (timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds) {
-            LOG(WARNING) << "tablet writer add chunk timeout. txn_id=" << _txn_id << ", cost=" << total_time_us / 1000
-                         << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
-        } else {
-            // reduce slow log print frequency if the log job is small batch and high frequency
-            LOG_EVERY_N(WARNING, 10) << "tablet writer add chunk timeout. txn_id=" << _txn_id
-                                     << ", cost=" << total_time_us / 1000 << "ms, timeout=" << timeout_ms
-                                     << "ms, profile=" << ss.str();
-        }
-    }
+    _check_and_log_timeout_rpc("tablet writer add chunk", total_time_us / 1000, timeout_ms);
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -433,8 +424,58 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     if (!should_report) {
         return;
     }
-
     _last_report_time_ns.store(now);
+    Status status = _update_and_serialize_profile(result->mutable_load_channel_profile(), print_profile);
+    if (!status.ok()) {
+        result->clear_load_channel_profile();
+    }
+}
+
+void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request,
+                           PLoadDiagnoseResult* result) {
+    if (request->has_profile() && request->profile()) {
+        Status st = _update_and_serialize_profile(result->mutable_profile_data(), config::pipeline_print_profile);
+        result->mutable_profile_status()->set_status_code(st.code());
+        result->mutable_profile_status()->add_error_msgs(st.to_string());
+        if (!st.ok()) {
+            result->clear_profile_data();
+        }
+        LOG(INFO) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                  << ", status: " << st;
+    }
+    if (request->has_stack_trace() && request->stack_trace()) {
+        DiagnoseRequest stack_trace_request;
+        stack_trace_request.type = DiagnoseType::STACK_TRACE;
+        stack_trace_request.context =
+                fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
+        Status st = ExecEnv::GetInstance()->diagnose_daemon()->diagnose(stack_trace_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                         << ", status: " << st;
+        }
+        result->mutable_stack_trace_status()->set_status_code(st.code());
+        result->mutable_stack_trace_status()->add_error_msgs(st.to_string());
+        VLOG(2) << "load channel diagnose stack trace, " << stack_trace_request.context << ", status: " << st;
+    }
+}
+
+void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
+                                          PLoadReplicaStatusResult* response) {
+    TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(get_tablets_channel(key).get());
+    if (local_tablets_channel == nullptr) {
+        for (int64_t tablet_id : request->tablet_ids()) {
+            auto replica_status = response->add_replica_statuses();
+            replica_status->set_tablet_id(tablet_id);
+            replica_status->set_state(LoadReplicaStatePB::NOT_PRESENT);
+            replica_status->set_message("can't find local tablets channel");
+        }
+        return;
+    }
+    local_tablets_channel->get_load_replica_status(remote_ip, request, response);
+}
+
+Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {
     COUNTER_UPDATE(_profile_report_count, 1);
     SCOPED_TIMER(_profile_report_timer);
 
@@ -460,9 +501,33 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     if (!st.ok()) {
         LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
                    << ", status: " << st;
-        return;
+        return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
     }
     COUNTER_UPDATE(_profile_serialized_size, len);
-    result->set_load_channel_profile((char*)buf, len);
+    result->append((char*)buf, len);
+    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    return Status::OK();
+}
+
+void LoadChannel::_check_and_log_timeout_rpc(const std::string& rpc_name, int64_t cost_ms, int64_t timeout_ms) {
+    if (cost_ms <= timeout_ms) {
+        return;
+    }
+    // update profile
+    auto channels = _get_all_channels();
+    for (auto& channel : channels) {
+        channel->update_profile();
+    }
+
+    std::stringstream ss;
+    _root_profile->pretty_print(&ss);
+    if (timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds * 1000) {
+        LOG(WARNING) << rpc_name << " timeout. txn_id=" << _txn_id << ", cost=" << cost_ms
+                     << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+    } else {
+        // reduce slow log print frequency if the log job is small batch and high frequency
+        LOG_EVERY_N(WARNING, 10) << rpc_name << " timeout. txn_id=" << _txn_id << ", cost=" << cost_ms
+                                 << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+    }
 }
 } // namespace starrocks

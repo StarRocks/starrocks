@@ -106,6 +106,26 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto& partial_bloom_filter_build_params = _join_builder->get_runtime_bloom_filter_build_params();
     auto& partial_bloom_filters = _join_builder->get_runtime_bloom_filters();
 
+    // for skew join's boradcast site, we need key column for runtime filter
+    bool is_skew_broadcast_join =
+            _join_builder->is_skew_join() && _distribution_mode == TJoinDistributionMode::BROADCAST;
+    std::vector<Columns> keyColumns;
+    std::vector<bool> null_safe;
+    std::vector<TypeDescriptor> type_descs;
+    if (is_skew_broadcast_join) {
+        keyColumns.reserve(partial_bloom_filter_build_params.size());
+        null_safe.reserve(partial_bloom_filter_build_params.size());
+        type_descs.reserve(partial_bloom_filter_build_params.size());
+        for (auto& param : partial_bloom_filter_build_params) {
+            if (UNLIKELY(!param.has_value())) {
+                return Status::InternalError("skew join build rf failed");
+            }
+            keyColumns.emplace_back(param.value().columns);
+            null_safe.emplace_back(param.value().eq_null);
+            type_descs.emplace_back(param.value()._type_descriptor);
+        }
+    }
+
     auto mem_tracker = state->query_ctx()->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
@@ -132,7 +152,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 }
             }
         }
-        RuntimeBloomFilterList bloom_filters(partial_bloom_filters.begin(), partial_bloom_filters.end());
+        RuntimeMembershipFilterList bloom_filters(partial_bloom_filters.begin(), partial_bloom_filters.end());
         runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
                                             std::make_unique<RuntimeFilterCollector>(in_filter_lists));
         state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
@@ -160,13 +180,21 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                                             if (desc->runtime_filter() == nullptr) {
                                                 return total;
                                             }
-                                            return desc->runtime_filter()->get_bloom_filter()->bf_alloc_size();
+                                            return desc->runtime_filter()->get_membership_filter()->bf_alloc_size();
                                         });
                 COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
             }
 
-            // publish runtime bloom-filters
-            state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            // publish runtime bloom
+            if (is_skew_broadcast_join) {
+                // for skew join's broadcast join, we only publish local in/bloom runtime filter, and send key columns to rf coordinator
+                // and rf coordinator will merge key column with shuffle join's bloom filter instance
+                state->runtime_filter_port()->publish_runtime_filters_for_skew_broadcast_join(bloom_filters, keyColumns,
+                                                                                              null_safe, type_descs);
+            } else {
+                state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            }
+
             // move runtime filters into RuntimeFilterHub.
             runtime_filter_hub()->set_collector(_plan_node_id,
                                                 std::make_unique<RuntimeFilterCollector>(std::move(in_filters)));

@@ -40,7 +40,7 @@ FieldPtr Field::convert_to(LogicalType to_type) const {
     return new_field;
 }
 
-ColumnPtr Field::create_column() const {
+MutableColumnPtr Field::create_column() const {
     return ChunkHelper::column_from_field(*this);
 }
 

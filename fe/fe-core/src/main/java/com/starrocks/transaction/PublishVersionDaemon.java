@@ -66,6 +66,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -478,7 +479,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        boolean useAggregatePublish = Config.enable_file_bundling;
+        ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -498,9 +500,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return false;
             }
 
+            useAggregatePublish = table.isFileBundling();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
-                warehouseId = txnState.getWarehouseId();
+                computeResource = txnState.getComputeResource();
                 List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
                 for (MaterializedIndex index : indexes) {
                     if (!index.visibleForTransaction(txnState.getTransactionId())) {
@@ -535,7 +538,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Utils.publishLogVersionBatch(publishShadowTablets,
                         txnInfos.subList(index, txnInfos.size()),
                         versions.subList(index, versions.size()),
-                        warehouseId);
+                        computeResource);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
@@ -544,9 +547,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
-                Utils.publishVersionBatch(publishTablets, txnInfos,
-                        startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                        warehouseId);
+                if (!useAggregatePublish) {
+                    Utils.publishVersionBatch(publishTablets, txnInfos,
+                            startVersion - 1, endVersion, compactionScores, nodeToTablets,
+                            computeResource, null);
+                } else {
+                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion, 
+                            compactionScores, nodeToTablets, computeResource, null);
+                }
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -767,12 +775,13 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
-        long warehouseId = txnState.getWarehouseId();
+        ComputeResource computeResource = txnState.getComputeResource();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        boolean useAggregatePublish = Config.enable_file_bundling;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -781,6 +790,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
                 return true;
             }
+            useAggregatePublish = table.isFileBundling();
             long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
@@ -813,15 +823,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
-                Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, warehouseId);
+                Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
+                // Used to collect statistics when the partition is first imported
+                Map<Long, Long> tabletRowNums = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        warehouseId);
+                        computeResource, tabletRowNums, useAggregatePublish);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
+                if (!tabletRowNums.isEmpty()) {
+                    partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().putAll(tabletRowNums);
+                }
             }
             return true;
         } catch (Throwable e) {

@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,8 +33,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.xnio.StreamConnection;
-
-import java.util.UUID;
 
 public class KillQueryHandleTest {
 
@@ -60,7 +59,7 @@ public class KillQueryHandleTest {
         Assert.assertTrue(ctx1.isKilled());
         Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     public static ConnectContext getConnectContext() {
@@ -86,7 +85,7 @@ public class KillQueryHandleTest {
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
@@ -99,7 +98,7 @@ public class KillQueryHandleTest {
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
         Assert.assertEquals("Unknown query id: xxx", ctx.getState().getErrorMessage());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
@@ -133,7 +132,7 @@ public class KillQueryHandleTest {
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
         Assert.assertEquals("query xxx not found", ctx.getState().getErrorMessage());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
@@ -143,9 +142,9 @@ public class KillQueryHandleTest {
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Connection refused"));
+        Assert.assertTrue(ctx.getState().getErrorMessage().contains("ConnectException"));
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
@@ -167,7 +166,7 @@ public class KillQueryHandleTest {
         Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to Unknown error x",
                 ctx.getState().getErrorMessage());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
@@ -182,7 +181,7 @@ public class KillQueryHandleTest {
         Assert.assertTrue(ctx1.isKilled());
         Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     private ConnectContext prepareConnectContext(StreamConnection connection) {
@@ -196,8 +195,7 @@ public class KillQueryHandleTest {
         ctx1.setQualifiedUser("root");
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
-        ctx1.setQueryId(UUID.randomUUID());
-        ctx1.setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
+        ctx1.setQueryId(UUIDUtil.genUUID());
 
         ExecuteEnv.getInstance().getScheduler().registerConnection(ctx1);
         return ctx1;
@@ -205,7 +203,6 @@ public class KillQueryHandleTest {
 
     private ConnectContext kill(String queryId, boolean forward) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        ctx.setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
         // reset state
         ctx.getState().reset();
         ctx.setForwardTimes(0);

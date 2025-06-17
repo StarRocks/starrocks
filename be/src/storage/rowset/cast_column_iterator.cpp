@@ -32,7 +32,7 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);
     auto column_ref = _obj_pool->add(new ColumnRef(&slot_desc));
     CHECK(column != nullptr) << "source type=" << source_type;
-    _source_chunk.append_column(column, slot_id);
+    _source_chunk.append_column(std::move(column), slot_id);
     _cast_expr = VectorizedCastExprFactory::from_type(source_type, target_type, column_ref, _obj_pool.get(), false);
     CHECK(_cast_expr != nullptr) << "Fail to create cast expr for source type=" << source_type
                                  << " target type=" << target_type;
@@ -75,6 +75,12 @@ Status CastColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
     RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column.get()));
     do_cast(values);
     return Status::OK();
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> CastColumnIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                        Column* dst) {
+    auto source_column = _source_chunk.get_column_by_index(0);
+    return _parent->get_io_range_vec(range, source_column.get());
 }
 
 } // namespace starrocks

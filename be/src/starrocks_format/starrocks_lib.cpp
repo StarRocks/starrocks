@@ -22,10 +22,12 @@
 
 #include "common/config.h"
 #include "fs/fs_s3.h"
+#include "runtime/exec_env.h"
 #include "runtime/time_types.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_define.h"
+#include "util/mem_info.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::lake {
@@ -56,9 +58,13 @@ void starrocks_format_initialize(void) {
 
         Aws::InitAPI(aws_sdk_options);
 
+        MemInfo::init();
         date::init_date_cache();
 
         TimezoneUtils::init_time_zones();
+
+        auto ge_init_stat = GlobalEnv::GetInstance()->init();
+        CHECK(ge_init_stat.ok()) << "init global env error";
 
         auto lake_location_provider = std::make_shared<FixedLocationProvider>("");
         _lake_tablet_manager = new lake::TabletManager(lake_location_provider, config::lake_metadata_cache_limit);

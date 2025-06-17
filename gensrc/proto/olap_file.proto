@@ -274,6 +274,13 @@ message BinlogConfigPB {
     optional int64 binlog_max_size = 4;
 }
 
+message FlatJsonConfigPB {
+    optional bool flat_json_enable = 1;
+    optional double flat_json_null_factor = 2;
+    optional double flat_json_sparsity_factor = 3;
+    optional int64 flat_json_max_column_max = 4;
+}
+
 message TabletMetaPB {
     optional int64 table_id = 1;               // ?
     optional int64 partition_id = 2;           // ?
@@ -305,6 +312,7 @@ message TabletMetaPB {
     optional int32 primary_index_cache_expire_sec = 61 [default = 0];
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     optional TabletSchemaPB source_schema = 70;
+    optional FlatJsonConfigPB flat_json_config = 80;
 }
 
 message OLAPIndexHeaderMessage {

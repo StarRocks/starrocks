@@ -406,7 +406,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectContext ctx = initMockContext(mockChannel(pingPacket), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
-        processor.loop();
+        processor.loopForTest();
         Assert.assertEquals(MysqlCommand.COM_PING, myContext.getCommand());
         Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
         Assert.assertFalse(myContext.isKilled());
@@ -600,7 +600,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectContext ctx = initMockContext(mockChannel(null), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
-        processor.loop();
+        processor.loopForTest();
         Assert.assertTrue(myContext.isKilled());
     }
 

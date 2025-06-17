@@ -21,9 +21,9 @@
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
+#include "util/bloom_filter.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 
@@ -74,7 +74,8 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_3,
     PERSISTENT_INDEX_VERSION_4,
     PERSISTENT_INDEX_VERSION_5,
-    PERSISTENT_INDEX_VERSION_6
+    PERSISTENT_INDEX_VERSION_6,
+    PERSISTENT_INDEX_VERSION_7
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -242,7 +243,7 @@ public:
     virtual Status load_wals(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // load snapshot
-    virtual bool load_snapshot(phmap::BinaryInputArchive& ar) = 0;
+    virtual Status load_snapshot(phmap::BinaryInputArchive& ar) = 0;
 
     // load according meta
     virtual Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) = 0;
@@ -250,7 +251,7 @@ public:
     // get dump total size of hashmaps of shards
     virtual size_t dump_bound() = 0;
 
-    virtual bool dump(phmap::BinaryOutputArchive& ar) = 0;
+    virtual Status dump(phmap::BinaryOutputArchive& ar) = 0;
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
@@ -280,6 +281,10 @@ public:
     virtual size_t memory_usage() = 0;
 
     virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
+
+    virtual void set_mutable_index_format_version(uint32_t ver) = 0;
+
+    virtual Status completeness_check(phmap::BinaryInputArchive& ar) = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
@@ -366,14 +371,14 @@ public:
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     // load snapshot
-    bool load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
+    Status load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
 
     // load according meta
     Status load(const MutableIndexMetaPB& meta);
 
     size_t dump_bound();
 
-    bool dump(phmap::BinaryOutputArchive& ar, std::set<uint32_t>& dumped_shard_idxes);
+    Status dump(phmap::BinaryOutputArchive& ar, std::set<uint32_t>& dumped_shard_idxes);
 
     Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type);
 
@@ -407,6 +412,8 @@ public:
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
+
+    Status check_snapshot_file(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes);
 
 private:
     friend class PersistentIndex;
@@ -857,7 +864,7 @@ private:
     Status _build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, std::unique_ptr<Column> pk_column);
+    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, MutableColumnPtr pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);
@@ -892,6 +899,8 @@ private:
 
     // Calculate total memory usage after index been modified.
     void _calc_memory_usage();
+
+    size_t _get_encoded_fixed_size(const Schema& schema);
 
 protected:
     // index storage directory

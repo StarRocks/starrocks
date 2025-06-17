@@ -1295,7 +1295,7 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select cast(cast(id_datetime as string) as date) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(CAST(8: id_datetime AS VARCHAR(65533)) AS DATE)");
+        assertContains(plan, "CAST(8: id_datetime AS DATE)");
 
         sql = "select cast(cast(t1d as int) as boolean) from test_all_type;";
         plan = getFragmentPlan(sql);
@@ -1978,5 +1978,60 @@ public class ExpressionTest extends PlanTestBase {
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assert.assertNotNull(func);
         Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
+    }
+
+    @Test
+    public void testFoldLike() throws Exception {
+        String sql = "select 'abcdefg' like '%cd%'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : TRUE");
+
+        sql = "select 'abcdefg' like '%%%%cd%%%%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : TRUE");
+
+        sql = "select 'abcdefg' like '%_cd%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : 'abcdefg' LIKE '%_cd%'");
+
+        sql = "select 'abcdefg' like '%sdfd%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : FALSE");
+
+        sql = "select 'abcdefg' like '%cd_f%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : 'abcdefg' LIKE '%cd_f%'");
+
+        sql = "select 'abcdefg' like '%cd%f%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : 'abcdefg' LIKE '%cd%f%'");
+
+        sql = "select 'abcdefg' like 'ab%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : TRUE");
+
+        sql = "select 'abcdefg' like '_ab%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : 'abcdefg' LIKE '_ab%'");
+
+        sql = "select 'abcdefg' like 'ab_%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : 'abcdefg' LIKE 'ab_%'");
+
+        sql = "select 'abcdefg' like 'ab%%%%'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : TRUE");
+
+        sql = "select 'abcdefg' like '%efg'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : TRUE");
+
+        sql = "select 'abcdefg' like '%e_g'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : 'abcdefg' LIKE '%e_g'");
+
+        sql = "select 'abcdefg' like '%%%%efg'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : TRUE");
     }
 }

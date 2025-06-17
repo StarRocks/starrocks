@@ -20,9 +20,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuse;
@@ -251,5 +254,114 @@ public class ScalarOperatorsReuseTest {
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
         assertEquals(commonSubScalarOperators.size(), 1);
 
+    }
+
+    private ScalarOperator generateCompoundPredicateOperator(ColumnRefOperator columnRefOperator,
+                                                             int orNum) {
+        ScalarOperator result = columnRefOperator;
+        for (int i = 0; i < orNum; i++) {
+            result = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                    result, ConstantOperator.createInt(i));
+        }
+        return result;
+    }
+
+    @Test
+    public void testScalarOperatorDepth() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
+        ScalarOperator or1 = generateCompoundPredicateOperator(column1, Config.max_scalar_operator_optimize_depth - 1);
+        ScalarOperator or2 = generateCompoundPredicateOperator(column2, Config.max_scalar_operator_optimize_depth - 1);
+        Assert.assertEquals(0, column1.getDepth());
+        Assert.assertEquals(0, column2.getDepth());
+        Assert.assertEquals(Config.max_scalar_operator_optimize_depth - 1, or1.getDepth());
+        Assert.assertEquals(Config.max_scalar_operator_optimize_depth - 1, or2.getDepth());
+
+        ColumnRefOperator arg = columnRefFactory.create("x", ScalarType.INT, true, true);
+        Assert.assertEquals(0, arg.getDepth());
+        CallOperator multi = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(arg, ConstantOperator.createInt(2)));
+        Assert.assertEquals(1, multi.getDepth());
+
+        CallOperator multi1 = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(arg, ConstantOperator.createInt(2)));
+        Assert.assertEquals(1, multi1.getDepth());
+        CallOperator add1 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(multi, multi1));
+        Assert.assertEquals(2, add1.getDepth());
+
+        CallOperator add3 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(multi, or1));
+        Assert.assertEquals(Config.max_scalar_operator_optimize_depth, add3.getDepth());
+    }
+
+    @Test
+    public void testScalarOperatorIncrDepth() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        Assert.assertEquals(0, column1.getDepth());
+
+        ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
+        Assert.assertEquals(0, column1.getDepth());
+
+        // mock construct
+        column1.incrDepth(column2);
+        Assert.assertEquals(1, column1.getDepth());
+
+        column1.incrDepth(column2, column2);
+        Assert.assertEquals(2, column1.getDepth());
+
+        column1.incrDepth(ImmutableList.of(column2, column2));
+        Assert.assertEquals(3, column1.getDepth());
+    }
+
+    @Test
+    public void testCaseWhenWithTooManyChildren1() {
+        final int prev = Config.max_scalar_operator_flat_children;
+        Config.max_scalar_operator_flat_children = 0;
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
+        ScalarOperator or1 = generateCompoundPredicateOperator(column1, Config.max_scalar_operator_optimize_depth - 1);
+        ScalarOperator or2 = generateCompoundPredicateOperator(column2, Config.max_scalar_operator_optimize_depth - 1);
+
+        CaseWhenOperator cwo1 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+                Lists.newArrayList(or1, ConstantOperator.createInt(0), or2, ConstantOperator.createInt(1)));
+        CaseWhenOperator cwo2 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+                Lists.newArrayList(or1, ConstantOperator.createInt(2), or2, ConstantOperator.createInt(3)));
+
+        List<ScalarOperator> oldOperators = Lists.newArrayList(cwo1, cwo2);
+        List<ScalarOperator> newOperators = ScalarOperatorsReuse.rewriteOperators(oldOperators, columnRefFactory);
+        Assert.assertEquals(newOperators.size(), 2);
+
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
+        Assert.assertTrue(commonSubScalarOperators.size() == Config.max_scalar_operator_optimize_depth - 1);
+        Config.max_scalar_operator_flat_children = prev;
+    }
+
+    @Test
+    public void testCaseWhenWithTooManyChildren2() {
+        final int prev = Config.max_scalar_operator_flat_children;
+        Config.max_scalar_operator_flat_children = 0;
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
+        ScalarOperator or1 = generateCompoundPredicateOperator(column1, 2000);
+        ScalarOperator or2 = generateCompoundPredicateOperator(column2, 2000);
+
+        CaseWhenOperator cwo1 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+                Lists.newArrayList(or1, ConstantOperator.createInt(0), or2, ConstantOperator.createInt(1)));
+        CaseWhenOperator cwo2 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+                Lists.newArrayList(or1, ConstantOperator.createInt(2), or2, ConstantOperator.createInt(3)));
+
+        List<ScalarOperator> oldOperators = Lists.newArrayList(cwo1, cwo2);
+        try {
+            List<ScalarOperator> newOperators = ScalarOperatorsReuse.rewriteOperators(oldOperators, columnRefFactory);
+            Assert.assertEquals(newOperators.size(), 2);
+            for (int i = 0; i < newOperators.size(); i++) {
+                Assert.assertTrue(newOperators.get(i).equals(oldOperators.get(i)));
+            }
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        Config.max_scalar_operator_flat_children = prev;
     }
 }

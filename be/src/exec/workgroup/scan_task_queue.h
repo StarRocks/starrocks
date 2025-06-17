@@ -26,6 +26,7 @@
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/blocking_priority_queue.hpp"
+#include "util/defer_op.h"
 #include "util/race_detect.h"
 #include "util/runtime_profile.h"
 
@@ -52,6 +53,9 @@ struct YieldContext {
     void set_finished() {
         yield_point = total_yield_point_cnt = 0;
         task_context_data.reset();
+    }
+    auto defer_finished() {
+        return CancelableDefer([this]() { set_finished(); });
     }
 
     std::any task_context_data;

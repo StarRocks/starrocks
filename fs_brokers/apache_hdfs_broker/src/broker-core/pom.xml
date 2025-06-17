@@ -117,12 +117,6 @@ under the License.
             </exclusions>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/log4j/log4j -->
-        <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->
         <dependency>
             <groupId>org.apache.zookeeper</groupId>
@@ -133,6 +127,12 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <artifactId>avro</artifactId>
+                    <groupId>org.apache.avro</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -156,6 +156,12 @@ under the License.
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.avro/avro/ -->
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/junit/junit -->

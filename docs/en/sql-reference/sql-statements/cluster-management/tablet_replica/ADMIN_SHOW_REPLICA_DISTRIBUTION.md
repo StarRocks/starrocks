@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN SHOW REPLICA DISTRIBUTION
 
-## Description
-
-This statement is used to show the distribution status of a table or a partition replica.
+ADMIN SHOW REPLICA DISTRIBUTION is used to show the distribution status of a table or a partition replica.
 
 :::tip
 

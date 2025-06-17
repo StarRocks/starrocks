@@ -79,6 +79,9 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         // get column id
         _collect_context.seg_collecter_params.cids.emplace_back(index);
 
+        // low cardinality threshold
+        _collect_context.seg_collecter_params.low_cardinality_threshold = read_params.low_card_threshold;
+
         // get result slot id
         _collect_context.result_slot_ids.emplace_back(it.first);
 

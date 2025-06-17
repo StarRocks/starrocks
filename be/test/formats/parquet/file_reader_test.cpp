@@ -21,6 +21,9 @@
 #include <set>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/test_cache_utils.h"
+#include "cache/object_cache/starcache_module.h"
+#include "cache/starcache_engine.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -32,6 +35,7 @@
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
+#include "formats/parquet/parquet_block_split_bloom_filter.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
@@ -42,6 +46,7 @@
 #include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
+#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
@@ -57,7 +62,7 @@ public:
     void TearDown() override {}
 
 protected:
-    using Int32RF = ComposedRuntimeFilter<TYPE_INT>;
+    using Int32RF = ComposedRuntimeBloomFilter<TYPE_INT>;
 
     StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
 
@@ -348,6 +353,7 @@ protected:
             TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_UNKNOWN_DESC);
     const TypeDescriptor TYPE_UNKNOWN_INTARRAY_MAP_DESC =
             TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_INT_ARRAY_DESC);
+    const TypeDescriptor TYPE_VARCHAR_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC);
 };
 
 StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(SlotId slot_id) {
@@ -414,6 +420,8 @@ HdfsScannerContext* FileReaderTest::_create_scan_context(Utils::SlotDesc* slot_d
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = _create_scan_range(file_path, scan_length);
+    ctx->parquet_bloom_filter_enable = true;
+    ctx->parquet_page_index_enable = true;
     return ctx;
 }
 
@@ -805,7 +813,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
 
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->get_bloom_filter()->init(10);
+    rf->get_membership_filter()->init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {
@@ -838,10 +846,10 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
                                     {"col3", TYPE_INT_DESC, 3},        {"col4", TYPE_INT_DESC, 4},
                                     {"col5", TYPE_INT_DESC, 5},        {""}};
 
-    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_INT>());
+    auto* rf = _pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->bloom_filter().init(10);
+    rf->membership_filter().init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {
@@ -1064,7 +1072,7 @@ THdfsScanRange* FileReaderTest::_create_scan_range(const std::string& file_path,
 
 void FileReaderTest::_append_column_for_chunk(LogicalType column_type, ChunkPtr* chunk) {
     auto c = ColumnHelper::create_column(TypeDescriptor::from_logical_type(column_type), true);
-    (*chunk)->append_column(c, (*chunk)->num_columns());
+    (*chunk)->append_column(std::move(c), (*chunk)->num_columns());
 }
 
 ChunkPtr FileReaderTest::_create_chunk() {
@@ -1106,7 +1114,7 @@ ChunkPtr FileReaderTest::_create_required_array_chunk() {
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
 
     auto c = ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true);
-    chunk->append_column(c, chunk->num_columns());
+    chunk->append_column(std::move(c), chunk->num_columns());
     return chunk;
 }
 
@@ -1449,7 +1457,7 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     auto c = ColumnHelper::create_column(TYPE_INT_ARRAY_ARRAY_DESC, true);
-    chunk->append_column(c, chunk->num_columns());
+    chunk->append_column(std::move(c), chunk->num_columns());
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(chunk->num_rows(), 5);
@@ -1501,9 +1509,9 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     auto c = ColumnHelper::create_column(TYPE_CHAR_INT_MAP_DESC, true);
-    chunk->append_column(c, chunk->num_columns());
+    chunk->append_column(std::move(c), chunk->num_columns());
     auto c_map1 = ColumnHelper::create_column(TYPE_VARCHAR_INT_MAP_DESC, true);
-    chunk->append_column(c_map1, chunk->num_columns());
+    chunk->append_column(std::move(c_map1), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok()) << status.message();
@@ -1534,11 +1542,11 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     auto c = ColumnHelper::create_column(TYPE_VARCHAR_INT_MAP_DESC, true);
-    chunk->append_column(c, chunk->num_columns());
+    chunk->append_column(std::move(c), chunk->num_columns());
     auto c_map_map = ColumnHelper::create_column(type_map_map, true);
-    chunk->append_column(c_map_map, chunk->num_columns());
+    chunk->append_column(std::move(c_map_map), chunk->num_columns());
     auto c_map_array = ColumnHelper::create_column(TYPE_VARCHAR_INTARRAY_MAP_DESC, true);
-    chunk->append_column(c_map_array, chunk->num_columns());
+    chunk->append_column(std::move(c_map_array), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
@@ -1822,11 +1830,11 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     auto c = ColumnHelper::create_column(TYPE_VARCHAR_UNKNOWN_MAP_DESC, true);
-    chunk->append_column(c, chunk->num_columns());
+    chunk->append_column(std::move(c), chunk->num_columns());
     auto c_map_map = ColumnHelper::create_column(type_map_map, true);
-    chunk->append_column(c_map_map, chunk->num_columns());
+    chunk->append_column(std::move(c_map_map), chunk->num_columns());
     auto c_map_array = ColumnHelper::create_column(type_map_array, true);
-    chunk->append_column(c_map_array, chunk->num_columns());
+    chunk->append_column(std::move(c_map_array), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
@@ -2529,7 +2537,7 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
             {""},
     };
     auto ctx = _create_scan_context(slot_descs, min_max_slots, filepath);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(TExprOpcode::GE, 2, 5, &t_conjuncts);
@@ -2823,7 +2831,11 @@ TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     // RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
     ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[3], nullptr, tuple_desc, _runtime_state, ctx);
-
+    for (const auto& [cid, col_children] : ctx->predicate_tree.root().col_children_map()) {
+        for (const auto& child : col_children) {
+            std::cout << "pred type" << child.col_pred()->type() << "pred" << child.debug_string() << std::endl;
+        }
+    }
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(1, file_reader->_group_reader_param.stats->parquet_filtered_row_groups);
@@ -2836,6 +2848,420 @@ TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
         total_row_nums += chunk->num_rows();
     }
     EXPECT_EQ(0, total_row_nums);
+}
+
+TEST_F(FileReaderTest, bloom_filter_reader) {
+    const std::string bloom_filter_file = "./be/test/formats/parquet/test_data/sample.parquet";
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_BOOLEAN_DESC}, {"c1", TYPE_VARCHAR_DESC}, {""}};
+    auto file_reader = _create_file_reader(bloom_filter_file);
+    auto ctx = _create_file_random_read_context(bloom_filter_file, slot_descs);
+    Status status = file_reader->init(ctx);
+    //auto chunk = std::make_shared<Chunk>();
+    // chunk->append_column(ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true), chunk->num_columns());
+    // chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    // status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(file_reader->get_file_metadata() != nullptr);
+    std::cout << "bloom filter meta info,"
+              << " offset is set:"
+              << file_reader->get_file_metadata()
+                         ->t_metadata()
+                         .row_groups[0]
+                         .columns[1]
+                         .meta_data.__isset.bloom_filter_offset
+              << " offset:"
+              << file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset
+              << " length is set:"
+              << file_reader->get_file_metadata()
+                         ->t_metadata()
+                         .row_groups[0]
+                         .columns[1]
+                         .meta_data.__isset.bloom_filter_length
+              << " length:"
+              << file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_length
+              << std::endl;
+    std::vector<char> buffer;
+    buffer.resize(256);
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset,
+            buffer.data(), 256);
+    uint32_t header_len = 256;
+    tparquet::BloomFilterHeader header;
+    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
+    std::cout << "bloom filter header info, header length:" << header_len;
+    EXPECT_EQ(header_len, 18);
+    header.printTo(std::cout);
+    std::cout << std::endl;
+
+    buffer.resize(header.numBytes + 1);
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset +
+                    header_len,
+            buffer.data(), header.numBytes);
+
+    ParquetBlockSplitBloomFilter bloom_filter;
+
+    bloom_filter.init(buffer.data(), header.numBytes + 1, Hasher::HashStrategy::XXHASH64, 0);
+
+    ASSERT_TRUE(bloom_filter.test_bytes("A", 1));
+    ASSERT_TRUE(bloom_filter.test_bytes("D", 1));
+    ASSERT_FALSE(bloom_filter.test_bytes("AB", 2));
+}
+
+TEST_F(FileReaderTest, bloom_filter_reader_test_not_hit) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+
+    const std::string file = "./be/test/formats/parquet/test_data/sample.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"a_bool", TYPE_BOOLEAN_DESC}, {"a_str", TYPE_VARCHAR_DESC}, {""}};
+    //auto ctx = _create_file_random_read_context(file, slot_descs);
+
+    auto ctx = _create_scan_context(slot_descs, slot_descs, file);
+
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::append_string_conjunct(TExprOpcode::EQ, 1, "2", &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+
+    // attr_value = '2'
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 1, "2", &ctx->conjunct_ctxs_by_slot[1]);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], nullptr, tuple_desc, _runtime_state, ctx);
+    // --------------finish init context---------------
+    auto file_reader = _create_file_reader(file);
+    ASSERT_OK(file_reader->init(ctx));
+
+    EXPECT_EQ(file_reader->row_group_size(), 0);
+}
+
+TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+
+    const std::string file = "./be/test/formats/parquet/test_data/sample.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"a_bool", TYPE_BOOLEAN_DESC}, {"a_str", TYPE_VARCHAR_DESC}, {""}};
+    //auto ctx = _create_file_random_read_context(file, slot_descs);
+
+    auto ctx = _create_scan_context(slot_descs, slot_descs, file);
+
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::append_string_conjunct(TExprOpcode::EQ, 1, "A", &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+
+    // attr_value = '2'
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 1, "A", &ctx->conjunct_ctxs_by_slot[1]);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], nullptr, tuple_desc, _runtime_state, ctx);
+    // --------------finish init context---------------
+    auto file_reader = _create_file_reader(file);
+    ASSERT_OK(file_reader->init(ctx));
+
+    EXPECT_EQ(file_reader->row_group_size(), 1);
+}
+
+TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_1.parquet";
+    auto file_reader = _create_file_reader(bloom_filter_file);
+    auto ctx = _create_file_random_read_context(bloom_filter_file, slot_descs);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(file_reader->get_file_metadata() != nullptr);
+    std::vector<char> buffer;
+    buffer.resize(256);
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset,
+            buffer.data(), 256);
+    uint32_t header_len = 256;
+    tparquet::BloomFilterHeader header;
+    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
+    std::cout << "bloom filter header info, header length:" << header_len;
+    EXPECT_EQ(header_len, 18);
+    header.printTo(std::cout);
+    std::cout << std::endl;
+
+    buffer.resize(header.numBytes + 1);
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset +
+                    header_len,
+            buffer.data(), header.numBytes);
+
+    ParquetBlockSplitBloomFilter bloom_filter;
+    bloom_filter.init(buffer.data(), header.numBytes + 1, Hasher::HashStrategy::XXHASH64, 0);
+    int32_t v = 1;
+    char buf[4];
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_TRUE(bloom_filter.test_bytes(buf, 4));
+    v = 10000;
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_TRUE(bloom_filter.test_bytes(buf, 4));
+    v = 1000000000;
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_FALSE(bloom_filter.test_bytes(buf, 4));
+}
+
+TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop2) {
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TYPE_VARCHAR_DESC}, {"myInteger", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_2.parquet";
+
+    auto ctx = _create_scan_context(slot_descs, slot_descs, bloom_filter_file);
+
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::append_int_conjunct(TExprOpcode::EQ, 1, 6, &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    _create_int_conjunct_ctxs(TExprOpcode::EQ, 1, 6, &ctx->conjunct_ctxs_by_slot[1]);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(bloom_filter_file);
+    //auto ctx = _create_file_random_read_context(bloom_filter_file, slot_descs);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(file_reader->get_file_metadata() != nullptr);
+    std::vector<char> buffer;
+    buffer.resize(256);
+    std::cout << "bloom filter offset: "
+              << file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset
+              << "bloom filter length: "
+              << file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_length
+              << std::endl;
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset,
+            buffer.data(), 256);
+    uint32_t header_len = 256;
+    tparquet::BloomFilterHeader header;
+    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
+    std::cout << "bloom filter header info, header length:" << header_len;
+    EXPECT_EQ(header_len, 18);
+    header.printTo(std::cout);
+    std::cout << std::endl;
+
+    buffer.resize(header.numBytes + 1);
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset +
+                    header_len,
+            buffer.data(), header.numBytes);
+
+    ParquetBlockSplitBloomFilter bloom_filter;
+    auto& col_meta = file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data;
+    if (col_meta.__isset.statistics && col_meta.statistics.__isset.null_count) {
+        if (col_meta.statistics.null_count > 0) {
+            buffer.back() = 1;
+        } else {
+            buffer.back() = 0;
+        }
+    } else if (file_reader->group_readers().at(0)->get_column_reader(1)->get_column_parquet_field()->is_nullable) {
+        buffer.back() = 1; //set has null as default, to avoid `column is null` to filter the group.
+    } else {
+        buffer.back() = 0;
+    }
+
+    bloom_filter.init(buffer.data(), header.numBytes + 1, Hasher::HashStrategy::XXHASH64, 0);
+    for (const auto& [cid, col_children] : ctx->predicate_tree.root().col_children_map()) {
+        for (const auto& child : col_children) {
+            std::cout << "pred" << child.debug_string() << std::endl;
+            ASSERT_TRUE(child.col_pred()->support_original_bloom_filter());
+            ASSERT_FALSE(child.col_pred()->original_bloom_filter(&bloom_filter));
+        }
+    }
+    int32_t v = 3;
+    char buf[4];
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_TRUE(bloom_filter.test_bytes(buf, 4));
+    ASSERT_TRUE(bloom_filter.test_bytes(reinterpret_cast<const char*>(&v), sizeof(v)));
+    v = 10000;
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_FALSE(bloom_filter.test_bytes(buf, 4));
+    ASSERT_FALSE(bloom_filter.test_bytes(reinterpret_cast<const char*>(&v), sizeof(v)));
+    v = 1000000000;
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_FALSE(bloom_filter.test_bytes(buf, 4));
+    ASSERT_FALSE(bloom_filter.test_bytes(reinterpret_cast<const char*>(&v), sizeof(v)));
+}
+
+TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop3) {
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TYPE_VARCHAR_DESC}, {"myInteger", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_2.parquet";
+
+    auto ctx = _create_scan_context(slot_descs, slot_descs, bloom_filter_file);
+
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::append_int_conjunct(TExprOpcode::EQ, 1, 6, &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    _create_int_conjunct_ctxs(TExprOpcode::EQ, 1, 6, &ctx->conjunct_ctxs_by_slot[1]);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(bloom_filter_file);
+    //auto ctx = _create_file_random_read_context(bloom_filter_file, slot_descs);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(file_reader->get_file_metadata() != nullptr);
+    std::vector<char> buffer;
+    buffer.resize(256);
+    std::cout << "bloom filter offset: "
+              << file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset
+              << "bloom filter length: "
+              << file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_length
+              << std::endl;
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset,
+            buffer.data(), 256);
+    uint32_t header_len = 256;
+    tparquet::BloomFilterHeader header;
+    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
+    std::cout << "bloom filter header info, header length:" << header_len;
+    EXPECT_EQ(header_len, 18);
+    header.printTo(std::cout);
+    std::cout << std::endl;
+
+    buffer.resize(header.numBytes + 1);
+    file_reader->_file->read_at_fully(
+            file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data.bloom_filter_offset +
+                    header_len,
+            buffer.data(), header.numBytes);
+
+    ParquetBlockSplitBloomFilter bloom_filter;
+    auto& col_meta = file_reader->get_file_metadata()->t_metadata().row_groups[0].columns[1].meta_data;
+    if (col_meta.__isset.statistics && col_meta.statistics.__isset.null_count) {
+        if (col_meta.statistics.null_count > 0) {
+            buffer.back() = 1;
+        } else {
+            buffer.back() = 0;
+        }
+    } else if (file_reader->group_readers().at(0)->get_column_reader(1)->get_column_parquet_field()->is_nullable) {
+        buffer.back() = 1; //set has null as default, to avoid `column is null` to filter the group.
+    } else {
+        buffer.back() = 0;
+    }
+
+    bloom_filter.init(buffer.data(), header.numBytes + 1, Hasher::HashStrategy::XXHASH64, 0);
+
+    for (const auto& [cid, col_children] : ctx->predicate_tree.root().col_children_map()) {
+        for (const auto& child : col_children) {
+            std::cout << "pred" << child.debug_string() << std::endl;
+            ASSERT_TRUE(child.col_pred()->support_original_bloom_filter());
+            ASSERT_FALSE(child.col_pred()->original_bloom_filter(&bloom_filter));
+        }
+    }
+    int32_t v = 3;
+    char buf[4];
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_TRUE(bloom_filter.test_bytes(buf, 4));
+    ASSERT_TRUE(bloom_filter.test_bytes(reinterpret_cast<const char*>(&v), sizeof(v)));
+    v = 10000;
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_FALSE(bloom_filter.test_bytes(buf, 4));
+    ASSERT_FALSE(bloom_filter.test_bytes(reinterpret_cast<const char*>(&v), sizeof(v)));
+    v = 1000000000;
+    std::memcpy(buf, &v, sizeof(v));
+    ASSERT_FALSE(bloom_filter.test_bytes(buf, 4));
+    ASSERT_FALSE(bloom_filter.test_bytes(reinterpret_cast<const char*>(&v), sizeof(v)));
+}
+
+TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop4) {
+    TypeDescriptor type_struct = TypeDescriptor::create_struct_type(
+            {"col_long", "col_double"},
+            {TYPE_BIGINT_DESC, TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)});
+
+    // tuple desc
+    Utils::SlotDesc slot_descs[] = {
+            {"col_bool", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)},
+            {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"col_float", TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT)},
+            {"col_struct", type_struct},
+            {"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+            {"col_date", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
+            //{"col_decimal32", TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32)},
+            {""},
+    };
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/data_with_page_index_and_bloom_filter.parquet";
+
+    std::vector<std::string> subfield_path({"col_long"});
+    std::vector<ExprContext*> expr_ctxs;
+
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0 = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::BIGINT, TExprOpcode::EQ);
+    node0.__set_is_monotonic(true);
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SUBFIELD_EXPR;
+    node1.is_nullable = true;
+    node1.type = gen_type_desc(TPrimitiveType::BIGINT);
+    node1.num_children = 1;
+    node1.used_subfield_names = subfield_path;
+    node1.__isset.used_subfield_names = true;
+    node1.__set_is_monotonic(true);
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::SLOT_REF;
+    node2.type = type_struct.to_thrift();
+    node2.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 3;
+    t_slot_ref.tuple_id = 0;
+    node2.__set_slot_ref(t_slot_ref);
+    node2.is_nullable = true;
+    node2.__set_is_monotonic(true);
+    nodes.emplace_back(node2);
+
+    TExprNode node3;
+    node3.node_type = TExprNodeType::INT_LITERAL;
+    node3.type = gen_type_desc(TPrimitiveType::BIGINT);
+    node3.num_children = 0;
+    TIntLiteral int_literal;
+    int_literal.value = 20;
+    node3.__set_int_literal(int_literal);
+    node3.is_nullable = false;
+    node3.__set_is_monotonic(true);
+    nodes.emplace_back(node3);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr));
+    ASSERT_OK(Expr::prepare(expr_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, _runtime_state));
+
+    auto ctx = _create_scan_context(slot_descs, slot_descs, bloom_filter_file);
+    ctx->conjunct_ctxs_by_slot.insert({3, expr_ctxs});
+
+    // ParquetUTBase::append_int_conjunct(TExprOpcode::EQ, 2, 6, &t_conjuncts);
+    // ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    // _create_int_conjunct_ctxs(TExprOpcode::EQ, 2, 6, &ctx->conjunct_ctxs_by_slot[1]);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[3], nullptr, tuple_desc, _runtime_state, ctx);
+    for (const auto& [cid, col_children] : ctx->predicate_tree.root().col_children_map()) {
+        for (const auto& child : col_children) {
+            std::cout << "pred type" << child.col_pred()->type() << "pred" << child.debug_string() << std::endl;
+        }
+    }
+    auto file_reader = _create_file_reader(bloom_filter_file);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(file_reader->get_file_metadata() != nullptr);
+    EXPECT_EQ(file_reader->row_group_size(), 0);
 }
 
 TEST_F(FileReaderTest, TestReadRoundByRound) {
@@ -2922,25 +3348,22 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    std::unique_ptr<BlockCache> cache(new BlockCache);
-    CacheOptions options;
-    options.mem_space_size = 100 * 1024 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.engine = "starcache";
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
+    auto local_cache = std::make_shared<StarCacheEngine>();
+    ASSERT_OK(local_cache->init(options));
+    auto starcache_module = std::make_shared<StarCacheModule>(local_cache->starcache_instance());
+    auto cache = std::make_shared<StoragePageCache>(starcache_module.get());
 
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file1_path), _mock_datacache_options());
     file_reader->_cache = cache.get();
 
-    // first init, populcate footer cache
+    // first init, populate footer cache
     auto* ctx = _create_file1_base_context();
     ctx->stats->footer_cache_read_count = 0;
     ctx->stats->footer_cache_write_count = 0;
-    status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(file_reader->init(ctx));
     ASSERT_EQ(ctx->stats->footer_cache_read_count, 0);
     ASSERT_EQ(ctx->stats->footer_cache_write_count, 1);
 
@@ -3750,7 +4173,7 @@ TEST_F(FileReaderTest, low_rows_reader_empty_not_null) {
 }
 
 TEST_F(FileReaderTest, low_rows_reader_filter_group) {
-    const std::string small_page_file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
+    const std::string file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
 
     Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
 
@@ -3771,17 +4194,135 @@ TEST_F(FileReaderTest, low_rows_reader_filter_group) {
     ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::EQ, 1, "a", &t_conjuncts);
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
-    auto ctx = _create_file_random_read_context(small_page_file, slot_descs);
+    auto ctx = _create_file_random_read_context(file, slot_descs);
     ctx->conjunct_ctxs_by_slot.insert({1, expr_ctxs});
     ctx->global_dictmaps = &dict_map;
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     tuple_desc->decoded_slots()[1]->type().type = TYPE_VARCHAR;
     ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], nullptr, tuple_desc, _runtime_state, ctx);
 
-    auto file_reader = _create_file_reader(small_page_file);
+    auto file_reader = _create_file_reader(file);
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(file_reader->row_group_size(), 0);
+}
+
+TEST_F(FileReaderTest, plain_string_decode) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC},
+                                    {"c1", TYPE_INT_DESC},
+                                    {"c2", TYPE_VARCHAR_DESC},
+                                    {"c3", TYPE_VARCHAR_ARRAY_DESC},
+                                    {""}};
+
+    std::set<int32_t> in_oprands{1, 100};
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
+    std::vector<ExprContext*> expr_ctxs;
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+    auto ctx = _create_file_random_read_context(file, slot_descs);
+    ctx->conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(file);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 2) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 100, '1', ['1',NULL,'0']]");
+            ASSERT_EQ(chunk->debug_row(1), "[100, 1, NULL, NULL]");
+        }
+    }
+
+    EXPECT_EQ(2, total_row_nums);
+}
+
+TEST_F(FileReaderTest, test_filter_to_dict_decoder) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string file_path = "./be/test/formats/parquet/test_data/big_string_dict_with_plain_code.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC},
+                                    {"c1", TYPE_INT_DESC},
+                                    {"c2", TYPE_VARCHAR_DESC},
+                                    {"c3", TYPE_VARCHAR_ARRAY_DESC},
+                                    {""}};
+
+    std::set<int32_t> in_oprands{1, 100};
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
+    std::vector<ExprContext*> expr_ctxs;
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+    auto ctx = _create_file_random_read_context(file_path, slot_descs);
+    ctx->conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(file_path);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 2) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 100000, '0000000001', ['1','','0']]");
+            ASSERT_EQ(chunk->debug_row(1), "[100, 99901, '', []]");
+        }
+    }
+
+    EXPECT_EQ(2, total_row_nums);
+}
+
+TEST_F(FileReaderTest, test_data_page_v2) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+
+    const std::string file_path = "./be/test/formats/parquet/test_data/data_page_v2_test.parquet";
+    Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"name", TYPE_VARCHAR_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file_path, slot_descs);
+    auto file_reader = _create_file_reader(file_path);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        // for (int i = 0; i < chunk->num_rows(); i++) {
+        //     std::cout << chunk->debug_row(i) << std::endl;
+        // }
+        if (chunk->num_rows() == 4) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 'a']");
+            ASSERT_EQ(chunk->debug_row(1), "[2, 'b']");
+            ASSERT_EQ(chunk->debug_row(2), "[3, 'c']");
+            ASSERT_EQ(chunk->debug_row(3), "[4, 'd']");
+        }
+    }
+    EXPECT_EQ(4, total_row_nums);
 }
 
 } // namespace starrocks::parquet

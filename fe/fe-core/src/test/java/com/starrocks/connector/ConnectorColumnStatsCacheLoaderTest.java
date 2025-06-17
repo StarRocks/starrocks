@@ -81,9 +81,9 @@ public class ConnectorColumnStatsCacheLoaderTest {
 
         new MockUp<StatisticsUtils>() {
             @Mock
-            public Table getTableByUUID(String tableUUID) {
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
                 return connectContext.getGlobalStateMgr().getMetadataMgr().
-                        getTable("hive0", "tpch", "region");
+                        getTable(connectContext, "hive0", "tpch", "region");
             }
 
         };
@@ -139,9 +139,9 @@ public class ConnectorColumnStatsCacheLoaderTest {
 
         new MockUp<StatisticsUtils>() {
             @Mock
-            public Table getTableByUUID(String tableUUID) {
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
                 return connectContext.getGlobalStateMgr().getMetadataMgr().
-                        getTable("hive0", "tpch", "region");
+                        getTable(connectContext, "hive0", "tpch", "region");
             }
 
         };
@@ -204,9 +204,9 @@ public class ConnectorColumnStatsCacheLoaderTest {
 
         new MockUp<StatisticsUtils>() {
             @Mock
-            public Table getTableByUUID(String tableUUID) {
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
                 return connectContext.getGlobalStateMgr().getMetadataMgr().
-                        getTable("hive0", "partitioned_db", "t1_par");
+                        getTable(connectContext, "hive0", "partitioned_db", "t1_par");
             }
 
         };
@@ -237,9 +237,9 @@ public class ConnectorColumnStatsCacheLoaderTest {
     public void testConvert2ColumnStatistics() {
         new MockUp<StatisticsUtils>() {
             @Mock
-            public Table getTableByUUID(String tableUUID) {
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
                 return connectContext.getGlobalStateMgr().getMetadataMgr().
-                        getTable("hive0", "partitioned_db", "t1");
+                        getTable(connectContext, "hive0", "partitioned_db", "t1");
             }
         };
         ConnectorColumnStatsCacheLoader cachedStatisticStorage =
@@ -252,6 +252,7 @@ public class ConnectorColumnStatsCacheLoaderTest {
 
         ConnectorTableColumnStats columnStatistic =
                 Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics",
+                        connectContext,
                         "hive0.partitioned_db.t1.1234",
                         statisticData);
         Assert.assertEquals(123, columnStatistic.getColumnStatistic().getMaxValue(), 0.001);

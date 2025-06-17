@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStats;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TExplainLevel;
@@ -119,6 +120,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected float avgRowSize;
 
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
+
+    protected Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
     // For vector query engine
     // case 1: If agg node hash outer join child
@@ -483,6 +486,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             outputBuilder.append(prefix).append("* ").append(key.getName());
             outputBuilder.append("-->").append(value).append("\n");
         });
+
+        if (!multiColumnCombinedStats.isEmpty()) {
+            outputBuilder.append(prefix).append("multi-column statistics: \n");
+            multiColumnCombinedStats.forEach((columns, stats) -> {
+                String columnNames = columns.stream()
+                        .map(ColumnRefOperator::getName)
+                        .collect(Collectors.joining(", "));
+
+                outputBuilder.append(prefix).append("* [").append(columnNames).append("]-->").append(stats).append("\n");
+            });
+        }
+
         return outputBuilder.toString();
     }
 
@@ -575,6 +590,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         avgRowSize = (float) statistics.getColumnStatistics().values().stream().
                 mapToDouble(columnStatistic -> columnStatistic.getAverageRowSize()).sum();
         columnStatistics = statistics.getColumnStatistics();
+        multiColumnCombinedStats = statistics.getMultiColumnCombinedStats();
     }
 
     public ExprSubstitutionMap getOutputSmap() {

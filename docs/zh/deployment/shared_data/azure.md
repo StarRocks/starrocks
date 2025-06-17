@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# 基于 Azure Blob 部署
+# 基于 Azure 部署
 
 import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
@@ -36,7 +36,9 @@ run_mode = shared_data
 cloud_native_meta_port = <meta_port>
 ```
 
-#### 通过 Shared Key 访问 Azure Blob
+**Azure Blob Storage**
+
+- 通过 Shared Key 访问 Azure Blob
 
 ```Properties
 run_mode = shared_data
@@ -52,7 +54,7 @@ azure_blob_endpoint = <endpoint_url>
 azure_blob_shared_key = <shared_key>
 ```
 
-#### 通过共享访问签名（SAS）访问 Azure Blob
+- 通过共享访问签名（SAS）访问 Azure Blob
 
 ```Properties
 run_mode = shared_data
@@ -71,6 +73,44 @@ azure_blob_sas_token = <sas_token>
 > **注意**
 >
 > 创建 Azure Blob Storage Account 时必须禁用分层命名空间。
+
+**Azure Data Lake Storage Gen2**
+
+- 通过 Shared Key 访问 Azure Data Lake Storage Gen2
+
+  ```Properties
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = ADLS2
+
+  # 例如 testfilesystem/starrocks
+  azure_adls2_path = <file_system_name>/<dir_name>
+
+  # 例如 https://test.dfs.core.windows.net
+  azure_adls2_endpoint = <endpoint_url>
+
+  azure_adls2_shared_key = <shared_key>
+  ```
+
+- 通过共享访问签名（SAS）访问 Azure Data Lake Storage Gen2
+
+  ```Properties
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = ADLS2
+
+  # 例如 testfilesystem/starrocks
+  azure_adls2_path = <file_system_name>/<dir_name>
+
+  # 例如 https://test.dfs.core.windows.net
+  azure_adls2_endpoint = <endpoint_url>
+
+  azure_adls2_sas_token = <sas_token>
+  ```
+
+> **注意**
+>
+> 不支持 Azure Data Lake Storage Gen1。
 
 ### FE 配置说明
 
@@ -133,6 +173,22 @@ Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。
 
 访问 Azure Blob Storage 的共享访问签名（SAS）。
 
+#### azure_adls2_path
+
+用于存储数据的 Azure Data Lake Storage Gen2 路径，由文件系统名称和路径名称组成，如 `testfilesystem/starrocks`。
+
+#### azure_adls2_endpoint
+
+Azure Data Lake Storage Gen2 的链接地址，如 `https://test.dfs.core.windows.net`。
+
+#### azure_adls2_shared_key
+
+访问 Azure Data Lake Storage Gen2 的 Shared Key。
+
+#### azure_adls2_sas_token
+
+访问 Azure Data Lake Storage Gen2 的共享访问签名（SAS）。
+
 > **注意**
 >
 > 成功创建存算分离集群后，您只能修改与安全凭证相关的配置项。如果您更改了原有存储路径相关的配置项，则在此之前创建的数据库和表将变为只读，您无法向其中导入数据。
@@ -159,6 +215,19 @@ PROPERTIES
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;
+```
+
+以下示例使用 SAS 认证为 Azure Data Lake Storage Gen2 文件系统 `testfilesystem` 创建存储卷 `adls2`，并禁用该存储卷：
+
+```SQL
+CREATE STORAGE VOLUME adls2
+    TYPE = ADLS2
+    LOCATIONS = ("adls2://testfilesystem/starrocks")
+    PROPERTIES (
+        "enabled" = "false",
+        "azure.adls2.endpoint" = "<endpoint_url>",
+        "azure.adls2.sas_token" = "<sas_token>"
+    );
 ```
 
 <SharedDataUse />

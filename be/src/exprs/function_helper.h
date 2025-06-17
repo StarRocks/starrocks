@@ -33,7 +33,7 @@ public:
      */
     static inline const ColumnPtr& get_data_column_of_nullable(const ColumnPtr& ptr) {
         if (ptr->is_nullable()) {
-            return down_cast<NullableColumn*>(ptr.get())->data_column();
+            return down_cast<const NullableColumn*>(ptr.get())->data_column();
         }
         return ptr;
     }
@@ -60,7 +60,7 @@ public:
      */
     static inline const ColumnPtr& get_data_column_of_const(const ColumnPtr& ptr) {
         if (ptr->is_constant()) {
-            return down_cast<ConstColumn*>(ptr.get())->data_column();
+            return down_cast<const ConstColumn*>(ptr.get())->data_column();
         }
         return ptr;
     }
@@ -74,14 +74,14 @@ public:
      * @param v1 
      * @param v2 
      */
-    static NullColumnPtr union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2);
+    static NullColumn::MutablePtr union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2);
 
     static void union_produce_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2,
                                               NullColumnPtr* produce_null_column);
 
     static void union_produce_nullable_column(const ColumnPtr& v1, NullColumnPtr* produce_null_column);
 
-    static NullColumnPtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
+    static NullColumn::MutablePtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
 
     // merge a column and null_column and generate a column with null values.
     static ColumnPtr merge_column_and_null_column(ColumnPtr&& column, NullColumnPtr&& null_column);
@@ -104,5 +104,24 @@ public:
             }                                \
         }                                    \
     } while (false)
+
+#define PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1)     \
+    do {                                                                \
+        if (c0->only_null() || c1->only_null()) {                       \
+            return ColumnHelper::create_const_null_column(c0->size());  \
+        }                                                               \
+        if (c0->has_null() || c1->has_null()) {                         \
+            has_null = true;                                            \
+            null_flags = FunctionHelper::union_nullable_column(c0, c1); \
+        } else {                                                        \
+            null_flags = NullColumn::create();                          \
+            null_flags->reserve(c0->size());                            \
+            null_flags->append_default(c0->size());                     \
+        }                                                               \
+        c0 = FunctionHelper::get_data_column_of_const(c0);              \
+        c1 = FunctionHelper::get_data_column_of_const(c1);              \
+        c0 = FunctionHelper::get_data_column_of_nullable(c0);           \
+        c1 = FunctionHelper::get_data_column_of_nullable(c1);           \
+    } while (0)
 
 } // namespace starrocks

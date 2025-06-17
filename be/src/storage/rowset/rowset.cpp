@@ -137,6 +137,30 @@ void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
     make_visible_extra(v);
 }
 
+/**
+ * Checks if all files associated with this rowset exist on disk.
+ * 
+ * This method verifies the existence of: All segment files
+ * 
+ * If any file is missing, it logs a warning message with the expected path
+ * and tablet ID, then returns false.
+ * 
+ * @return true if all associated files exist, false otherwise
+ */
+bool Rowset::check_file_existence() {
+    for (int i = 0; i < num_segments(); ++i) {
+        std::string seg_path = segment_file_path(_rowset_path, rowset_id(), i);
+        if (!fs::path_exist(seg_path)) {
+            LOG(WARNING) << "Segment file does not exist. Expected path: " << seg_path
+                         << ". This might occur if the file was deleted or not generated correctly. "
+                         << "Tablet ID: " << _rowset_meta->tablet_id();
+            return false;
+        }
+    }
+    // All files were found successfully.
+    return true;
+}
+
 void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id) {
     _rowset_meta->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
     make_commit(version, rowset_seg_id);
@@ -714,6 +738,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.pred_tree = options.pred_tree;
+    seg_options.runtime_filter_preds = options.runtime_filter_preds;
     seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
@@ -727,6 +752,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.use_vector_index = options.use_vector_index;
     seg_options.vector_search_option = options.vector_search_option;
     seg_options.sample_options = options.sample_options;
+    seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
 
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
@@ -838,6 +864,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     if (chunk_size > 0) {
         seg_options.chunk_size = chunk_size;
     }
+    seg_options.read_by_generated_column_adding = (dcg_meta != nullptr);
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;
@@ -1032,8 +1059,9 @@ Status Rowset::verify() {
             }
         }
     } else {
-        // non-overlapping segments will return one iterator, so segment idx is unknown
-        if (iters.size() != 1) {
+        if (iters.empty()) {
+            st = Status::OK();
+        } else if (iters.size() != 1) {
             st = Status::Corruption("non-overlapping segments should return one iterator");
         } else {
             st = is_ordered(iters[0], is_pk_ordered);

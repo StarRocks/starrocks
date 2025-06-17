@@ -14,7 +14,17 @@ This function is a synonym of the [now()](./now.md) function.
 
 ```Haskell
 DATETIME CURRENT_TIMESTAMP()
+DATETIME CURRENT_TIMESTAMP(INT p)
 ```
+
+## Parameters
+
+`p`: optional, the specified precision, that is, the number of digits to retain after seconds. It must be an INT value within the range of [1,6]. `select current_timestamp(0)` is equivalent to `select current_timestamp()`.
+
+## Return value
+
+- If `p` is not specified, this function returns a DATETIME value accurate to the second.
+- If `p` is specified, this function returns a date and time value of the specified precision.
 
 ## Examples
 

@@ -14,6 +14,9 @@
 
 package com.starrocks.load.loadv2;
 
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
+
 public class LoadErrorUtils {
 
     public static class ErrorMeta {
@@ -24,19 +27,30 @@ public class LoadErrorUtils {
             this.keywords = keywords;
             this.description = description;
         }
+
+        public String getKeywords() {
+            return keywords;
+        }
+
+        public String getDescription() {
+            return description;
+        }
     }
 
     public static final ErrorMeta BACKEND_BRPC_TIMEOUT =
             new ErrorMeta("[E1008]Reached timeout", "Backend BRPC timeout");
 
-    private static final ErrorMeta[] LOADING_TASK_TIMEOUT_ERRORS = new ErrorMeta[] {BACKEND_BRPC_TIMEOUT};
-
-    public static boolean isTimeoutFromLoadingTaskExecution(String errorMsg) {
-        for (ErrorMeta errorMeta : LOADING_TASK_TIMEOUT_ERRORS) {
-            if (errorMsg.contains(errorMeta.keywords)) {
-                return true;
-            }
+    public static boolean enableProfileAfterError(Coordinator coordinator) {
+        if (!(coordinator instanceof DefaultCoordinator defaultCoordinator)) {
+            return false;
         }
-        return false;
+        if (defaultCoordinator.getExecStatus() == null || defaultCoordinator.getExecStatus().ok()
+                || defaultCoordinator.getExecStatus().getErrorMsg() == null) {
+            return false;
+        }
+        if (!defaultCoordinator.getQueryRuntimeProfile().hasLoadChannelProfile()) {
+            return false;
+        }
+        return defaultCoordinator.getExecStatus().getErrorMsg().contains(BACKEND_BRPC_TIMEOUT.getKeywords());
     }
 }

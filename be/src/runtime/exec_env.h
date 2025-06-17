@@ -48,8 +48,8 @@
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
-// Unnecssary includes will cause compilatio very slow.
-// So please consider use forward declaraion as much as possible.
+// Unnecessary includes will cause compilation very slow.
+// So please consider use forward declaration as much as possible.
 
 namespace starrocks {
 class AgentServer;
@@ -80,7 +80,6 @@ class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
-class BlockCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -89,6 +88,7 @@ class TFileBrokerServiceClient;
 template <class T>
 class ClientCache;
 class HeartbeatFlags;
+class DiagnoseDaemon;
 
 namespace pipeline {
 class DriverExecutor;
@@ -143,6 +143,11 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+    // The value of `page_cache_mem_tracker` is manually counted and is attached to the process_mem_tracker tree.
+    // It is not based on the `ThreadLocalMemTracker`.
+    // Therefore, when counting the memory, the `MemTracker::set` interface can be used,
+    // while the consume/release interfaces cannot be used.
+    // Otherwise, it will cause problems in the memory statistics of the process.
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
@@ -157,17 +162,15 @@ public:
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
-    int64_t get_storage_page_cache_size();
-    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+
+    int64_t process_mem_limit() const { return _process_mem_tracker->limit(); }
 
 private:
     static bool _is_init;
 
     Status _init_mem_tracker();
     void _reset_tracker();
-
-    void _init_storage_page_cache();
 
     std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
@@ -289,6 +292,7 @@ public:
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
+    PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
@@ -342,13 +346,15 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
-    BlockCache* block_cache() const { return _block_cache; }
-
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
     ThreadPool* delete_file_thread_pool();
 
+    ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
+
     void try_release_resource_before_core_dump();
+
+    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
 private:
     void _wait_for_fragments_finish();
@@ -376,6 +382,7 @@ private:
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
+    PriorityThreadPool* _datacache_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
     std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
@@ -414,11 +421,12 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
+    std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
-    BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+    DiagnoseDaemon* _diagnose_daemon = nullptr;
 };
 
 template <>

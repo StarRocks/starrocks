@@ -14,8 +14,10 @@
 
 #include "agent/heartbeat_server.h"
 
+#include "common/process_exit.h"
 #include "gen_cpp/Types_types.h"
 #include "gtest/gtest.h"
+#include "service/backend_options.h"
 
 namespace starrocks {
 
@@ -50,7 +52,7 @@ TEST(HeartbeatServerTest, test_print_master_info_with_token_null) {
             "cluster_id=12345, epoch=100, token=<null>, backend_ip=192.168.1.1, "
             "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
             "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
-            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>)";
+            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>)";
 
     EXPECT_EQ(server.print_master_info(master_info), expected_output);
 }
@@ -71,9 +73,70 @@ TEST(HeartbeatServerTest, test_print_master_info_with_token_hidden) {
             "cluster_id=12345, epoch=100, token=<hidden>, backend_ip=192.168.1.1, "
             "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
             "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
-            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>)";
+            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>)";
 
     EXPECT_EQ(server.print_master_info(master_info), expected_output);
+}
+
+TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
+    HeartbeatServer server;
+    TMasterInfo master_info;
+
+    // not set node type.
+    StatusOr res = server.compare_master_info(master_info);
+    EXPECT_EQ(TStatusCode::OK, res.status().code());
+
+    BackendOptions::init(false);
+    master_info.__set_node_type(TNodeType::Backend);
+    res = server.compare_master_info(master_info);
+    EXPECT_EQ(TStatusCode::OK, res.status().code());
+
+    BackendOptions::init(true);
+    master_info.__set_node_type(TNodeType::Compute);
+    res = server.compare_master_info(master_info);
+    EXPECT_EQ(TStatusCode::OK, res.status().code());
+
+    BackendOptions::init(true);
+    master_info.__set_node_type(TNodeType::Backend);
+    res = server.compare_master_info(master_info);
+    EXPECT_EQ(TStatusCode::INTERNAL_ERROR, res.status().code());
+    EXPECT_TRUE(res.status().message().find("Unmatched node type"));
+    EXPECT_TRUE(res.status().message().find("actually CN"));
+
+    BackendOptions::init(false);
+    master_info.__set_node_type(TNodeType::Compute);
+    res = server.compare_master_info(master_info);
+    EXPECT_EQ(TStatusCode::INTERNAL_ERROR, res.status().code());
+    EXPECT_TRUE(res.status().message().find("Unmatched node type"));
+    EXPECT_TRUE(res.status().message().find("actually BE"));
+}
+
+TEST(HeartbeatServerTest, test_frontend_aware_of_exit) {
+    clear_frontend_aware_of_exit();
+    ASSERT_FALSE(is_frontend_aware_of_exit());
+
+    HeartbeatServer server;
+    {
+        THeartbeatResult result;
+        TMasterInfo info;
+        server.heartbeat(result, info);
+        EXPECT_EQ(TStatusCode::OK, result.status.status_code);
+        // service is running, no exit at all
+        ASSERT_FALSE(is_frontend_aware_of_exit());
+    }
+
+    k_starrocks_exit = true;
+    {
+        THeartbeatResult result;
+        TMasterInfo info;
+        server.heartbeat(result, info);
+        EXPECT_EQ(TStatusCode::SHUTDOWN, result.status.status_code);
+        Status status(result.status);
+        EXPECT_TRUE(status.is_shutdown());
+        // service is in shutdown, the shutdown response is replied to the frontend
+        ASSERT_TRUE(is_frontend_aware_of_exit());
+    }
+    k_starrocks_exit = false;
 }
 
 } // namespace starrocks

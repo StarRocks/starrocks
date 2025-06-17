@@ -294,12 +294,14 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
     _usage -= e->charge;
 }
 
-Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size, size_t charge,
+Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                 void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
-    auto* e = reinterpret_cast<LRUHandle*>(malloc(sizeof(LRUHandle) - 1 + key.size()));
+    size_t key_mem_size = sizeof(LRUHandle) - 1 + key.size();
+    size_t kv_mem_size = value_size + key_mem_size;
+    auto* e = reinterpret_cast<LRUHandle*>(malloc(key_mem_size));
     e->value = value;
     e->deleter = deleter;
-    e->charge = charge;
+    e->charge = kv_mem_size;
     e->key_length = key.size();
     e->hash = hash;
     e->refs = 2; // one for the returned handle, one for LRUCache.
@@ -314,13 +316,13 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
 
         // Free the space following strict LRU policy until enough space
         // is freed or the lru list is empty
-        _evict_from_lru(charge, &last_ref_list);
+        _evict_from_lru(kv_mem_size, &last_ref_list);
 
         // insert into the cache
         // note that the cache might get larger than its capacity if not enough
         // space was freed
         auto old = _table.insert(e);
-        _usage += charge;
+        _usage += kv_mem_size;
         if (old != nullptr) {
             old->in_cache = false;
             if (_unref(old)) {
@@ -427,10 +429,10 @@ bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
     return true;
 }
 
-Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t value_size, size_t charge,
+Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t value_size,
                                        void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     const uint32_t hash = _hash_slice(key);
-    return _shards[_shard(hash)].insert(key, hash, value, value_size, charge, deleter, priority);
+    return _shards[_shard(hash)].insert(key, hash, value, value_size, deleter, priority);
 }
 
 Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
@@ -470,7 +472,8 @@ size_t ShardedLRUCache::_get_stat(size_t (LRUCache::*mem_fun)() const) const {
     return n;
 }
 size_t ShardedLRUCache::get_capacity() const {
-    return _get_stat(&LRUCache::get_capacity);
+    std::lock_guard l(_mutex);
+    return _capacity;
 }
 
 void ShardedLRUCache::prune() {

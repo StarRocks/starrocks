@@ -47,50 +47,6 @@ StarRocks 跨集群数据迁移工具是社区提供的 StarRocks 数据迁移�
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
 ```
 
-### 关闭 Compaction
-
-如果数据迁移的目标集群为存算分离集群，在数据迁移之前，您需要手动关闭 Compaction，并在数据迁移完成后重新开启。
-
-1. 您可以通过以下语句查看当前集群是否开启 Compaction：
-
-   ```SQL
-   ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks';
-   ```
-
-   如果返回值为 `0` 则表示 Compaction 关闭。
-
-2. 动态关闭 Compaction：
-
-   ```SQL
-   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="0");
-   ```
-
-3. 为防止数据迁移过程中集群重启后 Compaction 自动开启，您还需要在 FE 配置文件 **fe.conf** 中添加以下配置项：
-
-   ```Properties
-   lake_compaction_max_tasks = 0
-   ```
-
-数据迁移完成后，您需要删除配置文件中的 `lake_compaction_max_tasks = 0`，并通过以下语句动态开启 Compaction：
-
-```SQL
-ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
-```
-
-### 禁用列过滤
-
-在 SCAN 阶段过滤未使用列的优化可能会导致查询被迁移的数据时发生崩溃，因此您需要在数据迁移前禁用此优化：
-
-```SQL
-SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
-```
-
-#### enable_filter_unused_columns_in_scan_stage
-
-- 描述：是否在 SCAN 阶段过滤未使用的列。
-- 默认值：true
-- 引入版本：v3.1
-
 ### 配置数据迁移（可选）
 
 您可以通过以下 FE 和 BE 参数配置数据迁移操作。通常情况下，默认配置即可满足需求。如果您想保留默认配置，可以选择跳过该步骤。
@@ -177,7 +133,7 @@ target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
 
-max_replication_data_size_per_job_in_gb=-1
+max_replication_data_size_per_job_in_gb=1024
 
 meta_job_interval_seconds=180
 meta_job_threads=4
@@ -223,7 +179,7 @@ report_interval_seconds=300
 | ddl_job_allow_drop_partition_target_only  | 迁移工具是否自动删除目标集群上在源集群中已删除的分区，保持目标集群与源集群上表的分区一致。默认为 `true`，即删除。此项您可以使用默认值。 |
 | replication_job_interval_seconds          | 迁移工具触发数据同步任务的周期，单位为秒。此项您可以使用默认值。 |
 | replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。 |
-| max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务的（分区）数据大小阈值。单位：GB。如果要迁移的数据大小超过此值，将触发多个数据同步任务。默认值为 `-1`，表示没有限制，即一个数据同步任务同步一个表的所有分区。如果要迁移的表的数据量较大，可以设置此参数来限制每个任务的数据大小。 |
+| max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务的（分区）数据大小阈值。单位：GB。如果要迁移的数据大小超过此值，将触发多个数据同步任务。默认值为 `1024`。此项您可以使用默认值。 |
 | report_interval_seconds                   | 迁移工具打印 Progress 信息的周期。单位：秒。默认值：`300`。此项您可以使用默认值。 |
 
 ### 获取集群 Token

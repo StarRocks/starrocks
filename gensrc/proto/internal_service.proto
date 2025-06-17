@@ -131,6 +131,10 @@ message PTransmitRuntimeFilterParams {
     // When merge node starts to broadcast this rf(millseconds since unix epoch).
     optional int64 broadcast_timestamp = 10;
     optional bool is_pipeline = 11;
+    // 12,13,14 only used for skew join optimization
+    optional bool is_skew_broadcast_join = 12;
+    optional PTypeDesc columnType = 13;
+    optional int32 skew_shuffle_filter_id = 14;
 };
 
 message PTransmitRuntimeFilterResult {
@@ -162,6 +166,7 @@ message PLoadChannelProfileConfig {
 message PTabletWriterOpenRequest {
     message LakeTabletParams {
         optional bool write_txn_log = 1;
+        optional bool enable_data_file_bundling = 2;
     };
 
     required PUniqueId id = 1;
@@ -308,6 +313,53 @@ message PTabletWriterCancelRequest {
 message PTabletWriterCancelResult {
 };
 
+// Sent from secondary replica to primary replica
+message PLoadReplicaStatusRequest {
+    optional PUniqueId load_id = 1;
+    optional int64 txn_id = 2;
+    optional int64 index_id = 3;
+    optional int64 sink_id = 4;
+    optional int32 node_id = 5;
+    repeated int64 tablet_ids = 6;
+}
+
+enum LoadReplicaStatePB {
+    NOT_PRESENT = 0;
+    IN_PROCESSING = 1;
+    SUCCESS = 2;
+    FAILED = 3;
+}
+
+message PLoadReplicaStatus {
+    optional int64 tablet_id = 1;
+    optional LoadReplicaStatePB state = 2;
+    optional string message = 3;
+}
+
+message PLoadReplicaStatusResult {
+    repeated PLoadReplicaStatus replica_statuses = 1;
+}
+
+message PLoadDiagnoseRequest {
+    optional PUniqueId id = 1;
+    optional int64 txn_id = 2;
+    // whether to use profile as the diagnose method.
+    // If true, will return the profile in the response
+    optional bool profile = 3;
+    // whether to use stack trace as the diagnose method.
+    optional bool stack_trace = 4;
+};
+
+message PLoadDiagnoseResult {
+    // The result of the profile
+    optional StatusPB profile_status = 1;
+    optional bytes profile_data = 2;
+    // The result of stack trace. stack trace will be performed asynchronously
+    // and stored on the target BE. The Status::OK only indicates the target
+    // receives the request and will execute it.
+    optional StatusPB stack_trace_status = 3;
+};
+
 message PExecPlanFragmentRequest {
     // describe attachment protocol: binary, compact, json
     optional string attachment_protocol = 1;
@@ -411,6 +463,17 @@ message PFetchDataResult {
     optional int64 packet_seq = 2;
     optional bool eos = 3;
     optional PQueryStatistics query_statistics = 4;
+};
+
+message PFetchDataCacheRequest {
+    optional int64 request_id = 1;
+    required bytes cache_key = 2;
+    optional int64 offset = 3;
+    optional int64 size = 4;
+};
+
+message PFetchDataCacheResponse {
+    required StatusPB status = 1;
 };
 
 message PTriggerProfileReportRequest {
@@ -676,6 +739,7 @@ service PInternalService {
     rpc exec_batch_plan_fragments(PExecBatchPlanFragmentsRequest) returns (PExecBatchPlanFragmentsResult);
     rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
     rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
+    rpc fetch_datacache(PFetchDataCacheRequest) returns (PFetchDataCacheResponse);
     rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);
     rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
@@ -693,6 +757,8 @@ service PInternalService {
     rpc tablet_writer_add_chunk_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
+    rpc load_diagnose(PLoadDiagnoseRequest) returns (PLoadDiagnoseResult);
+    rpc get_load_replica_status(PLoadReplicaStatusRequest) returns (PLoadReplicaStatusResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
     rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);

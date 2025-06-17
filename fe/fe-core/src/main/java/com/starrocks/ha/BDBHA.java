@@ -241,6 +241,7 @@ public class BDBHA implements HAProtocol {
         }
     }
 
+    @Override
     public synchronized void removeUnstableNode(String nodeName, int currentFollowerCnt) {
         unstableNodes.remove(nodeName);
         ReplicatedEnvironment replicatedEnvironment = environment.getReplicatedEnvironment();

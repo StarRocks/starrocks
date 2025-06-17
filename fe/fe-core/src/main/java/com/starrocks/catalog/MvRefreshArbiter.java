@@ -44,8 +44,9 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public class MvRefreshArbiter {
     private static final Logger LOG = LogManager.getLogger(MvRefreshArbiter.class);
 
-    public static boolean needsToRefreshTable(MaterializedView mv, Table table, boolean isQueryRewrite) {
-        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, table, true, isQueryRewrite);
+    public static boolean needsToRefreshTable(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
+                                              boolean isQueryRewrite) {
+        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, isQueryRewrite);
         if (needsToRefresh.isPresent()) {
             return needsToRefresh.get();
         }
@@ -119,6 +120,7 @@ public class MvRefreshArbiter {
      * @return Optional<Boolean> : true if needs to refresh, false if not, empty if there are some unkown results.
      */
     private static Optional<Boolean> needsToRefreshTable(MaterializedView mv,
+                                                         BaseTableInfo baseTableInfo,
                                                          Table baseTable,
                                                          boolean withMv,
                                                          boolean isQueryRewrite) {
@@ -127,8 +129,13 @@ public class MvRefreshArbiter {
             return Optional.of(false);
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
+
+            if (!mv.shouldRefreshTable(baseTableInfo.getDbName(), baseTable.name)) {
+                return Optional.of(false);
+            }
+
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, isQueryRewrite);
-            if (!baseUpdatedPartitionNames.isEmpty() && mv.shouldRefreshTable(baseTable.name)) {
+            if (!baseUpdatedPartitionNames.isEmpty()) {
                 return Optional.of(true);
             }
 

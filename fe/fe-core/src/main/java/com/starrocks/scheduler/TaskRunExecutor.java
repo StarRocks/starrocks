@@ -36,6 +36,7 @@ public class TaskRunExecutor {
      */
     public boolean executeTaskRun(TaskRun taskRun) {
         if (taskRun == null) {
+            LOG.warn("TaskRun is null, avoid execute it again");
             return false;
         }
         TaskRunStatus status = taskRun.getStatus();

@@ -47,6 +47,7 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
+    agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp
@@ -105,6 +106,7 @@ set(EXEC_FILES
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
+    avro_cpp_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -162,10 +164,15 @@ set(EXEC_FILES
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
     schema_scanner/schema_temp_tables_scanner.cpp
+    schema_scanner/schema_warehouse_metrics.cpp
+    schema_scanner/schema_warehouse_queries.cpp
     schema_scanner/schema_cluster_snapshots_scanner.cpp
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
+    schema_scanner/schema_applicable_roles_scanner.cpp
+    schema_scanner/schema_keywords_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
+    sorting/merge.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
     sorting/merge_cascade.cpp
@@ -185,6 +192,7 @@ set(EXEC_FILES
     pipeline/exchange/spillable_multi_cast_local_exchange.cpp
     pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
     pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
+    pipeline/exchange/split_local_exchange.cpp
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
@@ -292,6 +300,7 @@ set(EXEC_FILES
     pipeline/schedule/observer.cpp
     pipeline/schedule/pipeline_timer.cpp
     pipeline/wait_operator.cpp
+    pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp

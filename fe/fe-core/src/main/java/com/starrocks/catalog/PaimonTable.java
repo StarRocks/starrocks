@@ -14,9 +14,12 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.thrift.TIcebergSchema;
+import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -46,7 +49,7 @@ public class PaimonTable extends Table {
     }
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
-                       org.apache.paimon.table.Table paimonNativeTable, long createTime) {
+                       org.apache.paimon.table.Table paimonNativeTable) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
@@ -56,7 +59,6 @@ public class PaimonTable extends Table {
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
                 .collect(Collectors.toList());
-        this.createTime = createTime;
     }
 
     @Override
@@ -78,9 +80,14 @@ public class PaimonTable extends Table {
         return paimonNativeTable;
     }
 
+    // For refresh table only
+    public void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
+        this.paimonNativeTable = paimonNativeTable;
+    }
+
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, databaseName, tableName, Long.toString(createTime));
+        return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
     }
 
     @Override
@@ -96,6 +103,10 @@ public class PaimonTable extends Table {
     public Map<String, String> getProperties() {
         if (properties == null) {
             this.properties = new HashMap<>();
+            if (!paimonNativeTable.primaryKeys().isEmpty()) {
+                properties.put("primary-key", String.join(",", paimonNativeTable.primaryKeys()));
+            }
+            this.properties.putAll(paimonNativeTable.options());
         }
         return properties;
     }
@@ -135,10 +146,34 @@ public class PaimonTable extends Table {
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
         tPaimonTable.setPaimon_native_table(encodedTable);
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
+
+        // reuse TIcebergSchema directly for compatibility.
+        TIcebergSchema tPaimonSchema = new TIcebergSchema();
+        List<DataField> paimonFields = paimonNativeTable.rowType().getFields();
+        List<TIcebergSchemaField> tIcebergFields = new ArrayList<>(paimonFields.size());
+        for (DataField field : paimonFields) {
+            tIcebergFields.add(getTIcebergSchemaField(field));
+        }
+        tPaimonSchema.setFields(tIcebergFields);
+        tPaimonTable.setPaimon_schema(tPaimonSchema);
+
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
+    }
+
+    private TIcebergSchemaField getTIcebergSchemaField(DataField field) {
+        TIcebergSchemaField tPaimonSchemaField = new TIcebergSchemaField();
+        tPaimonSchemaField.setField_id(field.id());
+        tPaimonSchemaField.setName(field.name());
+        return tPaimonSchemaField;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        String uuid = getUUID();
+        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
     }
 
     @Override
@@ -153,11 +188,11 @@ public class PaimonTable extends Table {
         return catalogName.equals(that.catalogName) &&
                 databaseName.equals(that.databaseName) &&
                 tableName.equals(that.tableName) &&
-                createTime == that.createTime;
+                Objects.equals(getTableIdentifier(), that.getTableIdentifier());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogName, databaseName, tableName, createTime);
+        return Objects.hash(catalogName, databaseName, tableName, getTableIdentifier());
     }
 }

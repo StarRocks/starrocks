@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Map;
@@ -23,7 +24,9 @@ import java.util.Map;
 public class SecurityIntegrationFactory {
     private static final ImmutableSortedSet<String> SUPPORTED_AUTH_MECHANISM =
             ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
-                    .add(OIDCSecurityIntegration.TYPE)
+                    .add(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name())
+                    .add(AuthPlugin.Server.AUTHENTICATION_JWT.name())
+                    .add(AuthPlugin.Server.AUTHENTICATION_OAUTH2.name())
                     .build();
 
     public static void checkSecurityIntegrationIsSupported(String securityIntegrationType) {
@@ -34,12 +37,15 @@ public class SecurityIntegrationFactory {
 
     public static SecurityIntegration createSecurityIntegration(String name, Map<String, String> propertyMap) {
         String type = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
-
         checkSecurityIntegrationIsSupported(type);
 
         SecurityIntegration securityIntegration = null;
-        if (type.equalsIgnoreCase(OIDCSecurityIntegration.TYPE)) {
-            securityIntegration = new OIDCSecurityIntegration(name, propertyMap);
+        if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name())) {
+            securityIntegration = new SimpleLDAPSecurityIntegration(name, propertyMap);
+        } else if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_JWT.name())) {
+            securityIntegration = new JWTSecurityIntegration(name, propertyMap);
+        } else if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_OAUTH2.name())) {
+            securityIntegration = new OAuth2SecurityIntegration(name, propertyMap);
         }
         Preconditions.checkArgument(securityIntegration != null);
         return securityIntegration;

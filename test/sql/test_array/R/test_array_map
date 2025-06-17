@@ -116,3 +116,23 @@ AND array_length(array_map(x -> x + array_length(t2.arr_str), t1.arr_largeint)) 
 2	2	[3,4,5]
 3	None	[6]
 -- !result
+WITH `CTE` AS (
+    SELECT TRUE AS bool_1, TRUE AS bool_2, TRUE AS bool_3, ["a"] AS arr
+    UNION ALL
+    SELECT TRUE AS bool_1, TRUE AS bool_2, TRUE AS bool_3, ["a"] AS arr
+) SELECT ARRAY_MAP((arg)->`bool_1` AND `bool_2` AND `bool_3`, arr), ARRAY_MAP((arg)->`bool_1` AND `bool_3` AND `bool_2`, arr) FROM `CTE`;
+-- result:
+[1]	[1]
+[1]	[1]
+-- !result
+with t1 as (
+ select parse_json('[{"open_id": "aaa", "num": 1},{"open_id": "bbb", "num": 2},{"open_id": "ccc", "num": 3}]') as price_list
+),t2 as (
+ select price_list,array_map(x -> get_json_string(x,'$.open_id'), cast(price_list as array<json>)  ) as  fields
+ from t1  
+)
+select * from t2 
+where  array_contains(fields,'bbb');
+-- result:
+[{"num": 1, "open_id": "aaa"}, {"num": 2, "open_id": "bbb"}, {"num": 3, "open_id": "ccc"}]	["aaa","bbb","ccc"]
+-- !result

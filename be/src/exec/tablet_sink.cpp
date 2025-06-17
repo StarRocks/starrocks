@@ -47,6 +47,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
+#include "common/tracer.h"
 #include "config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/tablet_sink_colocate_sender.h"
@@ -102,6 +103,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _write_txn_log = table_sink.write_txn_log;
+    _enable_data_file_bundling = table_sink.enable_data_file_bundling;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
@@ -331,20 +333,22 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
         // collect all tablets belong to this rollup
         std::vector<PTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
-        std::unordered_map<int64_t, std::vector<int64_t>> tablet_to_be;
+        auto& tablet_to_be = index_id_to_tablet_be_map[index->index_id];
         for (auto& [id, part] : partitions) {
-            for (auto tablet : part->indexes[i].tablets) {
-                PTabletWithPartition tablet_info;
-                tablet_info.set_tablet_id(tablet);
+            for (auto tablet_id : part->indexes[i].tablets) {
+                auto& tablet_info = tablets.emplace_back();
+                tablet_info.set_tablet_id(tablet_id);
                 tablet_info.set_partition_id(part->id);
 
                 // setup replicas
-                auto* location = _location->find_tablet(tablet);
+                auto* location = _location->find_tablet(tablet_id);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    auto msg = fmt::format("Failed to find tablet_id {} location info", tablet_id);
                     return Status::NotFound(msg);
                 }
-                tablet_to_be.emplace(tablet, location->node_ids);
+                if (!tablet_to_be.emplace(tablet_id, location->node_ids).second) {
+                    return Status::InvalidArgument(fmt::format("Duplicated tablet_id: {}", tablet_id));
+                }
 
                 auto node_ids_size = location->node_ids.size();
                 for (size_t i = 0; i < node_ids_size; ++i) {
@@ -378,11 +382,8 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
                         }
                     }
                 }
-
-                tablets.emplace_back(std::move(tablet_info));
             }
         }
-        index_id_to_tablet_be_map.emplace(index->index_id, std::move(tablet_to_be));
 
         auto channel = std::make_unique<IndexChannel>(this, index->index_id, index->where_clause);
         RETURN_IF_ERROR(channel->init(state, tablets, false));
@@ -533,18 +534,22 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
     IndexIdToTabletBEMap index_tablet_bes_map;
     for (auto& t_part : partitions) {
         for (auto& index : t_part.indexes) {
-            std::vector<PTabletWithPartition> tablets;
+            auto& tablets = index_tablets_map[index.index_id];
+            auto& tablet_to_be = index_tablet_bes_map[index.index_id];
             // setup new partitions's tablets
-            for (auto tablet : index.tablets) {
-                PTabletWithPartition tablet_info;
-                tablet_info.set_tablet_id(tablet);
+            for (auto tablet_id : index.tablets) {
+                auto& tablet_info = tablets.emplace_back();
+                tablet_info.set_tablet_id(tablet_id);
                 // TODO: support logical materialized views;
                 tablet_info.set_partition_id(t_part.id);
 
-                auto* location = _location->find_tablet(tablet);
+                auto* location = _location->find_tablet(tablet_id);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info in incremental open", tablet);
+                    auto msg = fmt::format("Failed to find tablet_id {} location info in incremental open", tablet_id);
                     return Status::NotFound(msg);
+                }
+                if (!tablet_to_be.emplace(tablet_id, location->node_ids).second) {
+                    return Status::InvalidArgument(fmt::format("Duplicated tablet_id: {}", tablet_id));
                 }
 
                 for (auto& node_id : location->node_ids) {
@@ -556,11 +561,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
                     replica->set_host(node_info->host);
                     replica->set_port(node_info->brpc_port);
                     replica->set_node_id(node_id);
-
-                    index_tablet_bes_map[index.index_id][tablet].emplace_back(node_id);
                 }
-
-                index_tablets_map[index.index_id].emplace_back(std::move(tablet_info));
             }
         }
     }
@@ -676,7 +677,7 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
             if (_enable_automatic_partition && !_has_automatic_partition) {
                 _partition_not_exist_row_values.clear();
 
-                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_record_hashes,
                                                                     &_validate_selection, &invalid_row_indexs, _txn_id,
                                                                     &_partition_not_exist_row_values));
 
@@ -698,14 +699,14 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
                         _automatic_partition_token->wait();
                         RETURN_IF_ERROR(this->_automatic_partition_status);
                         // after the partition is created, go through the data again
-                        RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                        RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_record_hashes,
                                                                             &_validate_selection, &invalid_row_indexs,
                                                                             _txn_id, nullptr));
                     }
                 }
             } else {
                 RETURN_IF_ERROR(this->_automatic_partition_status);
-                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_record_hashes,
                                                                     &_validate_selection, &invalid_row_indexs, _txn_id,
                                                                     nullptr));
                 _has_automatic_partition = false;
@@ -760,7 +761,7 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
     SCOPED_TIMER(_ts_profile->send_data_timer);
-    return _tablet_sink_sender->send_chunk(_schema.get(), _partitions, _tablet_indexes, _validate_select_idx,
+    return _tablet_sink_sender->send_chunk(_schema.get(), _partitions, _record_hashes, _validate_select_idx,
                                            _index_id_partition_ids, chunk);
 }
 
@@ -770,7 +771,7 @@ Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
     }
     _has_auto_increment = true;
 
-    auto& slot = _output_tuple_desc->slots()[_auto_increment_slot_id];
+    SlotDescriptor* slot = _output_tuple_desc->get_slot_by_id(_auto_increment_slot_id);
     RETURN_IF_ERROR(_fill_auto_increment_id_internal(chunk, slot, _schema->table_id()));
 
     return Status::OK();
@@ -788,8 +789,8 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
         return Status::OK();
     }
 
-    ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
-    Filter filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
+    ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
+    Filter filter(NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data());
 
     Filter init_filter(chunk->num_rows(), 0);
 
@@ -817,7 +818,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     // Here we just set 0 value in this case.
     uint32 del_rows = SIMD::count_nonzero(init_filter);
     if (del_rows != 0) {
-        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))
+        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))
                                 ->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
     }
 
@@ -837,7 +838,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
             // it will be allocate in DeltaWriter.
             ids.assign(null_rows, 0);
         }
-        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))->fill_range(ids, filter));
+        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))->fill_range(ids, filter));
         break;
     }
     default:
@@ -974,7 +975,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         SlotDescriptor* desc = _output_tuple_desc->slots()[i];
-        const ColumnPtr& column_ptr = chunk->get_column_by_slot_id(desc->id());
+        ColumnPtr& column_ptr = chunk->get_column_by_slot_id(desc->id());
 
         // change validation selection value back to OK/FAILED
         // because in previous run, some validation selection value could
@@ -1015,7 +1016,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
         if (desc->is_nullable() && !column_ptr->is_nullable()) {
-            ColumnPtr new_column = NullableColumn::create(column_ptr, NullColumn::create(num_rows, 0));
+            MutableColumnPtr new_column =
+                    NullableColumn::create(std::move(column_ptr)->as_mutable_ptr(), NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
             // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
         } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
@@ -1118,6 +1120,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMAL128:
             _validate_decimal<TYPE_DECIMAL128>(state, chunk, column, desc, &_validate_selection);
             break;
+        case TYPE_DECIMAL256:
+            _validate_decimal<TYPE_DECIMAL256>(state, chunk, column, desc, &_validate_selection);
+            break;
         case TYPE_MAP: {
             column = ColumnHelper::get_data_column(column);
             auto* map = down_cast<MapColumn*>(column);
@@ -1163,10 +1168,11 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
 
             if (desc->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(column);
-                ColumnPtr new_column = NullableColumn::create(new_binary, nullable_column->null_column());
-                chunk->update_column(new_column, desc->id());
+                MutableColumnPtr new_column =
+                        NullableColumn::create(std::move(new_binary), nullable_column->null_column()->as_mutable_ptr());
+                chunk->update_column(std::move(new_column), desc->id());
             } else {
-                chunk->update_column(new_binary, desc->id());
+                chunk->update_column(std::move(new_binary), desc->id());
             }
         }
     }

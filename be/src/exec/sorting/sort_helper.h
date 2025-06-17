@@ -96,8 +96,7 @@ struct SorterComparator<T> {
 
 // TODO: reduce duplicate code
 template <class NullPred>
-static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel,
-                                                           const std::vector<ColumnPtr>& data_columns,
+static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel, const Columns& data_columns,
                                                            NullPred null_pred, const SortDesc& sort_desc,
                                                            Permutation& permutation, Tie& tie,
                                                            std::pair<int, int> range, bool build_tie, size_t limit,

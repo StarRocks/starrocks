@@ -116,11 +116,11 @@ Status StructColumnWriter::init() {
 
 Status StructColumnWriter::append(const Column& column) {
     const StructColumn* struct_column = nullptr;
-    NullColumn* null_column = nullptr;
+    const NullColumn* null_column = nullptr;
     if (is_nullable()) {
         const auto& nullable_column = down_cast<const NullableColumn&>(column);
-        struct_column = down_cast<StructColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
+        struct_column = down_cast<const StructColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         struct_column = down_cast<const StructColumn*>(&column);
     }

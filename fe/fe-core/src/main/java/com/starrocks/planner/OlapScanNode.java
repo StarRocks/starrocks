@@ -45,14 +45,19 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -77,6 +82,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -103,6 +109,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -117,6 +124,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -209,9 +217,9 @@ public class OlapScanNode extends ScanNode {
         olapTable = (OlapTable) desc.getTable();
     }
 
-    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long warehouseId) {
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, ComputeResource computeResource) {
         this(id, desc, planNodeName);
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     public Map<Long, Long> getScanPartitionVersions() {
@@ -322,7 +330,7 @@ public class OlapScanNode extends ScanNode {
                 continue;
             }
             if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
-                unUsedOutputStringColumns.add(slot.getColumn().getName());
+                unUsedOutputStringColumns.add(slot.getColumn().getColumnId().getId());
             }
         }
     }
@@ -398,15 +406,15 @@ public class OlapScanNode extends ScanNode {
     }
 
     private Collection<Long> distributionPrune(
-            MaterializedIndex table,
+            MaterializedIndex index,
             DistributionInfo distributionInfo) throws AnalysisException {
         DistributionPruner distributionPruner;
         if (DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-            distributionPruner = new HashDistributionPruner(table.getTabletIdsInOrder(),
+            distributionPruner = new HashDistributionPruner(index.getVirtualBuckets(),
+                    index.getTabletIds(),
                     MetaUtils.getColumnsByColumnIds(olapTable, info.getDistributionColumns()),
-                    columnFilters,
-                    info.getBucketNum());
+                    columnFilters);
             return distributionPruner.prune();
         } else {
             return null;
@@ -415,7 +423,8 @@ public class OlapScanNode extends ScanNode {
 
     // update TScanRangeLocations based on the latest olapTable tablet distributions,
     // this function will make sure the version of each TScanRangeLocations doesn't change.
-    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations)
+    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations,
+                                                              ComputeResource computeResource)
             throws StarRocksException {
         if (selectedPartitionIds.size() == 0) {
             throw new StarRocksException("Scan node's partition is empty");
@@ -448,7 +457,7 @@ public class OlapScanNode extends ScanNode {
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                        expectedVersion, -1, schemaHash, warehouseId);
+                        expectedVersion, -1, schemaHash, computeResource);
             } else {
                 selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         expectedVersion, -1, schemaHash);
@@ -521,8 +530,8 @@ public class OlapScanNode extends ScanNode {
         // frontend if there are many calls per request (e.g. one per partition when there are many partitions).
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
-                Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+            if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(computeResource))) {
+                Warehouse warehouse = warehouseManager.getWarehouse(computeResource.getWarehouseId());
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
         }
@@ -579,7 +588,7 @@ public class OlapScanNode extends ScanNode {
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                        visibleVersion, localBeId, schemaHash, warehouseId);
+                        visibleVersion, localBeId, schemaHash, computeResource);
             } else {
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         visibleVersion, localBeId, schemaHash);
@@ -738,7 +747,7 @@ public class OlapScanNode extends ScanNode {
                 final Collection<Long> tabletIds = distributionPrune(selectedIndex, partition.getDistributionInfo());
                 LOG.debug("distribution prune tablets: {}", tabletIds);
 
-                List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
+                List<Long> allTabletIds = selectedIndex.getTabletIds();
                 if (tabletIds != null) {
                     for (Long id : tabletIds) {
                         tablets.add(selectedIndex.getTablet(id));
@@ -1117,7 +1126,7 @@ public class OlapScanNode extends ScanNode {
     // export some tablets
     public static OlapScanNode createOlapScanNodeByLocation(
             PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList,
-            long warehouseId) {
+            ComputeResource computeResource) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
         olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
         olapScanNode.selectedPartitionNum = 1;
@@ -1125,7 +1134,7 @@ public class OlapScanNode extends ScanNode {
         olapScanNode.totalTabletsNum = 1;
         olapScanNode.isPreAggregation = false;
         olapScanNode.isFinalized = true;
-        olapScanNode.warehouseId = warehouseId;
+        olapScanNode.computeResource = computeResource;
         olapScanNode.result.addAll(locationsList);
 
         return olapScanNode;
@@ -1325,6 +1334,61 @@ public class OlapScanNode extends ScanNode {
         planNode.setConjuncts(normalizer.normalizeExprs(normalizer.getConjunctsByPlanNodeId(this)));
     }
 
+    // Partition by exprs as follows can be decomposed
+    // 1. SlotRef
+    // 2. date_trunc
+    // 3. str2date(dt, '%Y-%m-%d')
+    private boolean isDecomposablePartitionExpr(Expr expr) {
+        if (expr.getClass().equals(SlotRef.class)) {
+            return true;
+        }
+        if (!expr.getClass().equals(FunctionCallExpr.class)) {
+            return false;
+        }
+        FunctionCallExpr fcall = (FunctionCallExpr) expr;
+        String fname = fcall.getFnName().getFunction();
+        if (fname.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            return true;
+        } else if (fname.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            return expr.getChild(1).getClass().equals(StringLiteral.class) &&
+                    ((StringLiteral) expr.getChild(1)).getValue().startsWith("%Y-%m-%d");
+        } else {
+            return false;
+        }
+    }
+
+    private boolean isDecomposablePartitionInfo(PartitionInfo partitionInfo) {
+        // TODO (by satanson): predicates' decomposition
+        //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
+        //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
+        //  supported.
+        if (!partitionInfo.isRangePartition()) {
+            return false;
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        if (rangePartitionInfo.getPartitionColumnsSize() != 1) {
+            return false;
+        }
+        if (rangePartitionInfo.getClass().equals(RangePartitionInfo.class)) {
+            return true;
+        }
+
+        Predicate<List<ColumnIdExpr>> isDecomposable = exprs -> exprs.stream()
+                .map(ColumnIdExpr::getExpr)
+                .allMatch(this::isDecomposablePartitionExpr);
+
+        if (rangePartitionInfo.getClass().equals(ExpressionRangePartitionInfo.class)) {
+            ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
+            return isDecomposable.test(exprRangePartitionInfo.getPartitionColumnIdExprs());
+        }
+
+        if (rangePartitionInfo.getClass().equals(ExpressionRangePartitionInfoV2.class)) {
+            ExpressionRangePartitionInfoV2 exprRangePartitionInfo = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+            return isDecomposable.test(exprRangePartitionInfo.getPartitionColumnIdExprs());
+        }
+        return false;
+    }
+
     @Override
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         if (!normalizer.isProcessingLeftNode()) {
@@ -1335,12 +1399,8 @@ public class OlapScanNode extends ScanNode {
         }
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
-        // TODO (by satanson): predicates' decomposition
-        //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
-        //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
-        //  supported.
-        if (partitionInfo.isRangePartition() &&
-                ((RangePartitionInfo) partitionInfo).getPartitionColumnsSize() == 1) {
+
+        if (isDecomposablePartitionInfo(partitionInfo)) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             conjuncts = decomposeRangePredicates(partitionColumns, normalizer, planNode, rangePartitionInfo, conjuncts);
         } else {
@@ -1461,7 +1521,7 @@ public class OlapScanNode extends ScanNode {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex materializedIndex = physicalPartition.getIndex(selectedIndexId);
-                for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
+                for (long tabletId : materializedIndex.getTabletIds()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
                 }
                 partitionToTabletMap.put(physicalPartition.getId(), Lists.newArrayList());

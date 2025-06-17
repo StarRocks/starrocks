@@ -119,6 +119,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
 
+    public static final String PAUSE_ON_FATAL_PARSE_ERROR = "pause_on_fatal_parse_error";
+
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
     public static final String KAFKA_TOPIC_PROPERTY = "kafka_topic";
@@ -149,6 +151,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(MAX_BATCH_INTERVAL_SEC_PROPERTY)
             .add(MAX_BATCH_ROWS_PROPERTY)
             .add(MAX_BATCH_SIZE_PROPERTY)
+            .add(PAUSE_ON_FATAL_PARSE_ERROR)
             .add(FORMAT)
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
@@ -208,6 +211,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean partialUpdate = false;
     private String mergeConditionStr;
     private String partialUpdateMode = "row";
+    private boolean pauseOnFatalParseError = RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -380,6 +384,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public String getMergeConditionStr() {
         return mergeConditionStr;
+    }
+
+    public boolean isPauseOnFatalParseError() {
+        return pauseOnFatalParseError;
     }
 
     public String getFormat() {
@@ -580,6 +588,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         timezone = TimeUtils.checkTimeZoneValidAndStandardize(jobProperties.getOrDefault(LoadStmt.TIMEZONE, timezone));
 
+        pauseOnFatalParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(PAUSE_ON_FATAL_PARSE_ERROR),
+                RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR,
+                PAUSE_ON_FATAL_PARSE_ERROR + " should be a boolean");
+
         format = jobProperties.get(FORMAT);
         if (format != null) {
             if (format.equalsIgnoreCase("csv")) {
@@ -685,13 +697,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (Strings.isNullOrEmpty(kafkaBrokerList)) {
             throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + " is a required property");
         }
-        String[] kafkaBrokerList = this.kafkaBrokerList.split(",");
-        for (String broker : kafkaBrokerList) {
-            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
-                throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + ":" + broker
-                        + " not match pattern " + ENDPOINT_REGEX);
-            }
-        }
+        validateKafkaBrokerList(kafkaBrokerList);
 
         // check topic
         kafkaTopic = Strings.nullToEmpty(dataSourceProperties.get(KAFKA_TOPIC_PROPERTY)).replaceAll(" ", "");
@@ -814,6 +820,23 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         // check kafka_default_offsets
         if (customKafkaProperties.containsKey(KAFKA_DEFAULT_OFFSETS)) {
             getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
+        }
+    }
+
+    public static void validateKafkaBrokerList(String brokerList) throws AnalysisException {
+        if (Strings.isNullOrEmpty(brokerList)) {
+            throw new AnalysisException("kafka_broker_list cannot be empty");
+        }
+
+        String cleanBrokerList = brokerList.replaceAll(" ", "");
+        String[] brokers = cleanBrokerList.split(",");
+
+        for (String broker : brokers) {
+            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
+                throw new AnalysisException(
+                    String.format("%s: %s does not match pattern %s",
+                        KAFKA_BROKER_LIST_PROPERTY, broker, ENDPOINT_REGEX));
+            }
         }
     }
 

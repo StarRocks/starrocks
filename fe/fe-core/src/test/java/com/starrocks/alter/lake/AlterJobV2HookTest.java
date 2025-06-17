@@ -17,6 +17,7 @@ package com.starrocks.alter.lake;
 import com.starrocks.alter.AlterCancelException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,7 +31,7 @@ public class AlterJobV2HookTest {
     @Test
     public void testHook() {
         AlterJobV2 alterJobV2 = new MockedAlterJobV2(AlterJobV2.JobType.OPTIMIZE);
-        alterJobV2.setWarehouseId(1L);
+        alterJobV2.setComputeResource(WarehouseComputeResource.of(1L));
         alterJobV2.setJobState(AlterJobV2.JobState.RUNNING);
         long ts = System.currentTimeMillis();
         alterJobV2.cancel("failed");

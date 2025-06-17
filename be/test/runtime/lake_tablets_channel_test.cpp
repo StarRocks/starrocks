@@ -165,7 +165,7 @@ public:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        Chunk chunk({c0, c1}, _schema);
+        Chunk chunk({std::move(c0), std::move(c1)}, _schema);
         chunk.set_slot_id_to_index(0, 0);
         chunk.set_slot_id_to_index(1, 1);
         return chunk;
@@ -438,6 +438,71 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
         ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
         auto tmp_chunk = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
         ASSERT_EQ(kChunkSizePerTablet, tmp_chunk->num_rows());
+    }
+}
+
+TEST_F(LakeTabletsChannelTest, test_write_bundling_file) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+    open_request.mutable_lake_tablet_params()->set_enable_data_file_bundling(true);
+    DeferOp defer([&]() { open_request.mutable_lake_tablet_params()->set_enable_data_file_bundling(false); });
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 128;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    bool close_channel;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+    ASSERT_FALSE(close_channel);
+
+    PTabletWriterAddChunkRequest finish_request;
+    PTabletWriterAddBatchResult finish_response;
+    finish_request.set_index_id(kIndexId);
+    finish_request.set_sender_id(0);
+    finish_request.set_eos(true);
+    finish_request.set_packet_seq(1);
+    finish_request.add_partition_ids(10);
+    finish_request.add_partition_ids(11);
+
+    _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
+    ASSERT_TRUE(finish_response.status().status_code() == TStatusCode::OK);
+    ASSERT_EQ(4, finish_response.tablet_vec_size());
+    ASSERT_TRUE(close_channel);
+
+    std::vector<int64_t> finished_tablets;
+    for (auto& info : finish_response.tablet_vec()) {
+        finished_tablets.emplace_back(info.tablet_id());
+    }
+    std::sort(finished_tablets.begin(), finished_tablets.end());
+    ASSERT_EQ(10086, finished_tablets[0]);
+    ASSERT_EQ(10087, finished_tablets[1]);
+    ASSERT_EQ(10088, finished_tablets[2]);
+    ASSERT_EQ(10089, finished_tablets[3]);
+
+    for (auto tablet_id : finished_tablets) {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+        ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
+        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
+        ASSERT_EQ(1, txnlog->op_write().rowset().bundle_file_offsets_size());
     }
 }
 

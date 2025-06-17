@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -101,6 +102,7 @@ import io.trino.sql.tree.ArithmeticBinaryExpression;
 import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
+import io.trino.sql.tree.AtTimeZone;
 import io.trino.sql.tree.BetweenPredicate;
 import io.trino.sql.tree.BinaryLiteral;
 import io.trino.sql.tree.BooleanLiteral;
@@ -117,6 +119,7 @@ import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
 import io.trino.sql.tree.DoubleLiteral;
+import io.trino.sql.tree.DropTable;
 import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
 import io.trino.sql.tree.Explain;
@@ -1012,6 +1015,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitAtTimeZone(AtTimeZone node, ParseTreeContext context) {
+        Expr dt = (Expr) visit(node.getValue(), context);
+        Expr tz = (Expr) visit(node.getTimeZone(), context);
+        return new FunctionCallExpr("convert_tz", List.of(dt, new VariableExpr("time_zone"), tz));
+    }
+
+    @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
         FunctionName fnName = FunctionName.createFnName("coalesce");
@@ -1288,6 +1298,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 createTableStmt,
                 null,
                 (QueryStatement) visit(node.getQuery(), context));
+    }
+
+    @Override
+    protected ParseNode visitDropTable(DropTable node, ParseTreeContext context) {
+        boolean ifExists = node.isExists();
+        TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getTableName()));
+        return new DropTableStmt(ifExists, tableName, false, true);
     }
 
     public Type getType(DataType dataType) {

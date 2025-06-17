@@ -17,6 +17,7 @@
 
 package com.starrocks.utframe;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -25,6 +26,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,16 +42,21 @@ import java.util.Set;
  */
 public class MockedWarehouseManager extends WarehouseManager {
     private final Map<Long, List<Long>> warehouseIdToComputeNodeIds = new HashMap<>();
-    private final Set<Long> computeNodeIdSetAssignedToTablet = new HashSet<>();
+    private final List<Long> computeNodeIdSetAssignedToTablet = new ArrayList<>();
     private final Set<ComputeNode> computeNodeSetAssignedToTablet = new HashSet<>();
+    private final List<ComputeNode> aliveComputeNodes = new ArrayList<>();
 
     private Long computeNodeId = 1000L;
     private boolean throwUnknownWarehouseException = false;
 
     public MockedWarehouseManager() {
-        super();
+        this(new WarehouseComputeResourceProvider());
+    }
+
+    public MockedWarehouseManager(ComputeResourceProvider computeResourceProvider) {
+        super(computeResourceProvider);
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, List.of(1000L));
-        computeNodeIdSetAssignedToTablet.addAll(Sets.newHashSet(1000L));
+        computeNodeIdSetAssignedToTablet.addAll(Lists.newArrayList(1000L));
         computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(new ComputeNode(1000L, "127.0.0.1", 9030)));
     }
     @Override
@@ -61,6 +70,11 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
+    public boolean warehouseExists(long warehouseId) {
+        return true;
+    }
+
+    @Override
     public Warehouse getWarehouse(long warehouseId) {
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse != null) {
@@ -71,12 +85,12 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public List<Long> getAllComputeNodeIds(long warehouseId) {
+    public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
         if (throwUnknownWarehouseException) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", 1L));
         }
-        if (warehouseIdToComputeNodeIds.containsKey(warehouseId)) {
-            return warehouseIdToComputeNodeIds.get(warehouseId);
+        if (warehouseIdToComputeNodeIds.containsKey(computeResource.getWarehouseId())) {
+            return warehouseIdToComputeNodeIds.get(computeResource.getWarehouseId());
         }
         return warehouseIdToComputeNodeIds.get(DEFAULT_WAREHOUSE_ID);
     }
@@ -89,22 +103,17 @@ public class MockedWarehouseManager extends WarehouseManager {
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, computeNodeIds);
     }
 
-    @Override
-    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        return computeNodeId;
-    }
-
     public void setComputeNodeId(Long computeNodeId) {
         this.computeNodeId = computeNodeId;
     }
 
     @Override
-    public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+    public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
         return computeNodeId;
     }
 
     @Override
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
         return computeNodeIdSetAssignedToTablet;
     }
 
@@ -112,9 +121,14 @@ public class MockedWarehouseManager extends WarehouseManager {
         computeNodeIdSetAssignedToTablet.addAll(computeNodeIds);
     }
 
+
     @Override
-    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-        return computeNodeSetAssignedToTablet.iterator().next();
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
+        if (computeNodeSetAssignedToTablet.isEmpty()) {
+            return null;
+        } else {
+            return computeNodeSetAssignedToTablet.iterator().next();
+        }
     }
 
     public void setComputeNodesAssignedToTablet(Set<ComputeNode> computeNodeSet) {
@@ -129,7 +143,20 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+    public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
+        if (getAllComputeNodeIds(computeResource).isEmpty())  {
+            return Lists.newArrayList();
+        }
+        if (!aliveComputeNodes.isEmpty()) {
+            return aliveComputeNodes;
+        }
         return new ArrayList<>(computeNodeSetAssignedToTablet);
+    }
+
+    public void setAliveComputeNodes(List<ComputeNode> computeNodes) {
+        aliveComputeNodes.clear();
+        if (computeNodes != null) {
+            aliveComputeNodes.addAll(computeNodes);
+        }
     }
 }

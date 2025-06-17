@@ -94,8 +94,8 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
-        json_meta->set_is_flat(false);
         json_meta->set_has_remain(false);
+        json_meta->set_is_flat(false);
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
@@ -209,6 +209,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         opts.need_flat = config::enable_json_flat;
         opts.is_compaction = _opts.is_compaction;
+
+        if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
+            opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();
+            opts.flat_json_config = _opts.flat_json_config.get();
+        }
+
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
@@ -398,7 +404,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         _tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN &&
         chunk_num_columns + 1 == _column_writers.size()) {
         // just missing full row column, generate it and write to file
-        auto full_row_col = std::make_unique<BinaryColumn>();
+        auto full_row_col = BinaryColumn::create();
         auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
         RETURN_IF_ERROR(row_encoder->encode_chunk_to_full_row_column(*_schema_without_full_row_column, chunk,
                                                                      full_row_col.get()));
@@ -433,6 +439,10 @@ void SegmentWriter::_verify_footer() {
         CHECK(ok) << "Segment footer contains duplicate column id=" << col.unique_id() << ": " << _footer.DebugString();
     }
 #endif
+}
+
+int64_t SegmentWriter::bundle_file_offset() const {
+    return _wfile->bundle_file_offset();
 }
 
 } // namespace starrocks

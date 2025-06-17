@@ -11,114 +11,65 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.authorization;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class RBACMockedMetadataMgr extends MetadataMgr {
     private final LocalMetastore localMetastore;
-    private final IdGenerator idGenerator;
-    private final Map<String, Database> databaseSet;
-    private final Map<String, Table> tableMap;
 
     public RBACMockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
         super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
-        idGenerator = new IdGenerator();
-        this.databaseSet = new HashMap<>();
-        this.tableMap = new HashMap<>();
-    }
 
-    public void init() {
-        Database db = new Database(idGenerator.getNextId(), "db");
-        databaseSet.put("db", db);
-
-        Database db1 = new Database(idGenerator.getNextId(), "db3");
-        databaseSet.put("db1", db1);
-
-        Database db3 = new Database(idGenerator.getNextId(), "db3");
-        databaseSet.put("db3", db3);
-
-        OlapTable t0 = new OlapTable();
-        t0.setId(idGenerator.getNextId());
-        t0.setName("tbl0");
-        tableMap.put("tbl0", t0);
-
-        OlapTable t1 = new OlapTable();
-        t1.setId(idGenerator.getNextId());
-        t1.setName("tbl1");
-        tableMap.put("tbl1", t1);
-
-        OlapTable t2 = new OlapTable();
-        t2.setId(idGenerator.getNextId());
-        t2.setName("tbl2");
-        tableMap.put("tbl2", t2);
-
-        OlapTable t3 = new OlapTable();
-        t3.setId(idGenerator.getNextId());
-        t3.setName("tbl3");
-        tableMap.put("tbl3", t3);
-
-        MaterializedView mv = new MaterializedView();
-        mv.setId(idGenerator.getNextId());
-        mv.setName("mv1");
-        tableMap.put("mv1", mv);
-
-        View view = new View();
-        view.setId(idGenerator.getNextId());
-        view.setName("view1");
-        tableMap.put("view1", view);
     }
 
     @Override
-    public Database getDb(String catalogName, String dbName) {
-        return databaseSet.get(dbName);
+    public Database getDb(ConnectContext context, String catalogName, String dbName) {
+        return this.localMetastore.getDb(dbName);
     }
 
     @Override
     public Database getDb(Long databaseId) {
-        for (Database database : databaseSet.values()) {
-            if (database.getId() == databaseId) {
-                return database;
-            }
-        }
-
-        return null;
+        return this.localMetastore.getDb(databaseId);
     }
 
     @Override
-    public List<String> listDbNames(String catalogName) {
-        return new ArrayList<>(databaseSet.keySet());
+    public List<String> listDbNames(ConnectContext context, String catalogName) {
+        Map<String, Database> dbs = localMetastore.getFullNameToDb();
+        return new ArrayList<>(dbs.keySet());
     }
 
     @Override
-    public Optional<Table> getTable(TableName tableName) {
-        return Optional.ofNullable(tableMap.get(tableName.getTbl()));
+    public Optional<Table> getTable(ConnectContext context, TableName tableName) {
+        return Optional.ofNullable(localMetastore.getTable(tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
-    public Table getTable(String catalogName, String dbName, String tblName) {
-        return tableMap.get(tblName);
+    public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+        return localMetastore.getTable(dbName, tblName);
     }
 
     @Override
-    public List<String> listTableNames(String catalogName, String dbName) {
-        return new ArrayList<>(tableMap.keySet());
+    public List<String> listTableNames(ConnectContext context, String catalogName, String dbName) {
+        Database database = localMetastore.getDb(dbName);
+
+        List<Table> tables = localMetastore.getTables(database.getId());
+        return tables.stream().map(Table::getName).collect(Collectors.toList());
     }
 }

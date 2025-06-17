@@ -742,7 +742,7 @@ public class SimpleExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(Subquery node, Scope context) {
+        public Void visitSubqueryExpr(Subquery node, Scope context) {
             SimpleQueryAnalyzer queryAnalyzer = new SimpleQueryAnalyzer();
             queryAnalyzer.analyze(node.getQueryStatement());
             // Do not know the subquery type, use string as default

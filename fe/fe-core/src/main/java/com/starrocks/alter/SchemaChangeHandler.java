@@ -53,6 +53,7 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -82,6 +83,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
@@ -92,11 +94,13 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
@@ -114,6 +118,7 @@ import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
@@ -127,7 +132,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -166,6 +171,10 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
 
+        // If optimized olap table contains related mvs, set those mv state to inactive.
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()), false);
+
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
         // create job
@@ -174,7 +183,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(db.getId())
                 .withTimeoutSeconds(timeoutSecond)
-                .withWarehouse(ConnectContext.get().getCurrentWarehouseId());
+                .withComputeResource(ConnectContext.get().getCurrentComputeResource());
 
         return jobBuilder.build();
     }
@@ -779,6 +788,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // retain old column name
         modColumn.setName(oriColumn.getName());
+        modColumn.setColumnId(oriColumn.getColumnId());
         modColumn.setUniqueId(oriColumn.getUniqueId());
 
         if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
@@ -905,6 +915,28 @@ public class SchemaChangeHandler extends AlterHandler {
 
         return fastSchemaEvolution;
     }
+
+    private void processModifyColumnComment(ModifyColumnCommentClause alterClause, Database db, OlapTable olapTable,
+                                        Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+        String modifyColumnName = alterClause.getColumnName();
+        String comment = alterClause.getComment();
+        if (comment == null) {
+            throw new DdlException("Comment is null");
+        }
+        // find modified column
+        long baseIndexId = olapTable.getBaseIndexId();
+        List<Column> modIndexSchema = indexSchemaMap.get(baseIndexId);
+        // update column comment from schemaForFinding
+        Optional<Column> oneCol = modIndexSchema.stream().filter(c -> c.nameEquals(modifyColumnName, true)).findFirst();
+        if (!oneCol.isPresent()) {
+            throw new DdlException("Column[" + modifyColumnName + "] does not exists");
+        } else {
+            oneCol.get().setComment(comment);
+            ModifyColumnCommentLog log = new ModifyColumnCommentLog(db.getId(), olapTable.getId(), modifyColumnName, comment);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyColumnComment(log);
+        }
+    }
+
 
     // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
     // And reordering table schema need to provide all columns, so we use the number of columns in the alterClause to determine
@@ -1461,14 +1493,13 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            if (computeNodeIs.isEmpty()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final ConnectContext connectContext = ConnectContext.get();
+            final ComputeResource computeResource = connectContext.getCurrentComputeResource();
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                throw new DdlException("no available compute nodes:" + computeResource);
             }
-
-            dataBuilder.withWarehouse(warehouseId);
+            dataBuilder.withComputeResource(computeResource);
         }
 
         long baseIndexId = olapTable.getBaseIndexId();
@@ -1668,7 +1699,10 @@ public class SchemaChangeHandler extends AlterHandler {
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
-            if (col.isPresent() && !col.get().equals(partitionCol)) {
+            // NOTE: partition column in partition info maybe changed(eg: str2date partition table), use original
+            // table schema instead.
+            Column refPartitionCol = olapTable.getColumn(partitionCol.getName());
+            if (col.isPresent() && !col.get().equals(refPartitionCol)) {
                 throw new DdlException("Can not modify partition column[" + colName + "]. index["
                         + olapTable.getIndexNameById(alterIndexId) + "]");
             }
@@ -1720,25 +1754,25 @@ public class SchemaChangeHandler extends AlterHandler {
         // for now table's state can only be NORMAL
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
 
+        final ConnectContext connectContext = ConnectContext.get();
         // create job
         AlterJobV2Builder jobBuilder = olapTable.alterTable();
         jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(dbId)
                 .withTimeoutSeconds(Config.alter_table_timeout_second)
-                .withStartTime(ConnectContext.get().getStartTime())
+                .withStartTime(connectContext.getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds);
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            if (computeNodeIs.isEmpty()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            this.computeResource = connectContext != null ?
+                    connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                throw new DdlException("no available compute nodes:" + computeResource);
             }
-
-            jobBuilder.withWarehouse(warehouseId);
+            jobBuilder.withComputeResource(computeResource);
         }
 
         long tableId = olapTable.getId();
@@ -1902,6 +1936,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
+            } else if (alterClause instanceof ModifyColumnCommentClause) {
+                processModifyColumnComment((ModifyColumnCommentClause) alterClause, db, olapTable, indexSchemaMap);
+                return null;
             } else if (alterClause instanceof AddFieldClause) {
                 if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Add field for struct column is disable in shared-data mode, " +
@@ -2077,6 +2114,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
             boolean enablePersistentIndex = false;
             String persistentIndexType = "";
+            boolean enableFileBundling = false;
+            TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
@@ -2110,6 +2149,15 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), persistentIndexType));
                     return null;
                 }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+                enableFileBundling = PropertyAnalyzer.analyzeBooleanProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, false);
+                if (enableFileBundling == olapTable.isFileBundling()) {
+                    LOG.info(String.format("table: %s file_bundling is %s, nothing need to do",
+                            olapTable.getName(), enableFileBundling));
+                    return null;
+                }
+                metaType = TTabletMetaType.ENABLE_FILE_BUNDLING;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -2119,7 +2167,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex, persistentIndexType);
+                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -2259,6 +2307,72 @@ public class SchemaChangeHandler extends AlterHandler {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
+    }
+
+    public boolean updateFlatJsonConfigMeta(Database db, Long tableId, Map<String, String> properties,
+                                            TTabletMetaType metaType) {
+        FlatJsonConfig newFlatJsonConfig;
+        boolean hasChanged = false;
+        boolean isModifiedSuccess = true;
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (olapTable == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            if (!olapTable.containsFlatJsonConfig()) {
+                newFlatJsonConfig = new FlatJsonConfig();
+                hasChanged = true;
+            } else {
+                newFlatJsonConfig = new FlatJsonConfig(olapTable.getFlatJsonConfig());
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
+            boolean flatJsonEnabled = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+            if (flatJsonEnabled != newFlatJsonConfig.getFlatJsonEnable()) {
+                newFlatJsonConfig.setFlatJsonEnable(flatJsonEnabled);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+            double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
+            if (flatJsonNullFactor != newFlatJsonConfig.getFlatJsonNullFactor()) {
+                newFlatJsonConfig.setFlatJsonNullFactor(flatJsonNullFactor);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+            double flatJsonSparsity = PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
+            if (flatJsonSparsity != newFlatJsonConfig.getFlatJsonSparsityFactor()) {
+                newFlatJsonConfig.setFlatJsonSparsityFactor(flatJsonSparsity);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
+            if (flatJsonColumnMax != newFlatJsonConfig.getFlatJsonColumnMax()) {
+                newFlatJsonConfig.setFlatJsonColumnMax(flatJsonColumnMax);
+                hasChanged = true;
+            }
+        }
+        if (!hasChanged) {
+            LOG.info("table {} flat json config is same as the previous config, so nothing need to do", olapTable.getName());
+            return true;
+        }
+
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
+        } catch (Exception e) {
+            isModifiedSuccess = false;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        }
+
+        return isModifiedSuccess;
     }
 
     // return true means that the modification of FEMeta is successful,
@@ -2987,7 +3101,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .build();
             job.setIndexTabletSchema(indexId, indexName, schemaInfo);
         }
-        job.setWarehouseId(schemaChangeData.getWarehouseId());
+        job.setComputeResource(schemaChangeData.getComputeResource());
         return job;
     }
 
@@ -3004,7 +3118,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                 .withNewIndexSchema(schemaChangeData.getNewIndexSchema())
-                .withWarehouse(schemaChangeData.getWarehouseId())
+                .withComputeResource(schemaChangeData.getComputeResource())
                 .build();
     }
 }

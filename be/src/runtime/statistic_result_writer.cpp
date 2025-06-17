@@ -36,6 +36,9 @@ const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 const int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
 const int STATISTIC_EXTERNAL_QUERY_VERSION_V2 = 8;
 const int STATISTIC_BATCH_V5_VERSION = 9;
+const int STATISTIC_MULTI_COLUMN_VERSION = 12;
+const int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
+const int STATISTIC_PARTITION_VERSION_V2 = 20;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -137,6 +140,9 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_PARTITION_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_partition_statistic_data(version, result_columns, chunk, result.get()),
                                   "Fill partition statistic data failed");
+    } else if (version == STATISTIC_PARTITION_VERSION_V2) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_partition_statistic_data_v2(version, result_columns, chunk, result.get()),
+                                  "Fill partition statstics data failed");
     } else if (version == STATISTIC_BATCH_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_v4(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
@@ -155,6 +161,13 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V2) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v2(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
+    } else if (version == STATISTIC_MULTI_COLUMN_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_multi_columns_statistics_data(version, result_columns, chunk, result.get()),
+                                  "Fill multi columns statistic data failed");
+    } else if (version == STATISTIC_QUERY_MULTI_COLUMN_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(
+                _fill_multi_columns_statistics_data_for_query(version, result_columns, chunk, result.get()),
+                "Fill multi columns statistic data of query failed");
     }
     return result;
 }
@@ -201,12 +214,12 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const Columns
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
     BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
-    auto* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
-    auto* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
-    auto* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
-    auto* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
-    auto* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
-    auto* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
+    const auto* rowCounts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
+    const auto* dataSizes = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
+    const auto* countDistincts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
+    const auto* nullCounts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
+    const auto* maxColumn = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
+    const auto* minColumn = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -248,13 +261,13 @@ Status StatisticResultWriter::_fill_statistic_data_v2(int version, const Columns
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
     BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
-    auto* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
-    auto* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
-    auto* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
-    auto* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
-    auto* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
-    auto* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
-    auto* collectionSize = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[11].get()));
+    auto* rowCounts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
+    auto* dataSizes = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
+    auto* countDistincts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
+    auto* nullCounts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
+    auto* maxColumn = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
+    auto* minColumn = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
+    auto* collectionSize = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[11].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -289,10 +302,10 @@ Status StatisticResultWriter::_fill_statistic_histogram(int version, const Colum
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 5);
 
-    auto* dbIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
-    auto* tableIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
-    auto* nameColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
-    auto* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
+    auto* dbIds = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
+    auto* tableIds = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
+    auto* nameColumn = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
+    auto* histogramColumn = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -320,8 +333,8 @@ Status StatisticResultWriter::_fill_statistic_histogram_external(int version, co
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 3);
 
-    auto* columnName = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[1].get()));
-    auto* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[2].get()));
+    auto* columnName = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[1].get()));
+    auto* histogramColumn = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[2].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -347,8 +360,8 @@ Status StatisticResultWriter::_fill_table_statistic_data(int version, const Colu
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 3);
 
-    auto* partitionId = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
-    auto* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
+    auto* partitionId = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
+    auto* rowCounts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -473,8 +486,8 @@ Status StatisticResultWriter::_fill_partition_statistic_data(int version, const 
     /*
     SQL:
     SELECT cast(" + STATISTIC_PARTITION_VERSION + " as INT), +
-     `partition_id`, 
-    `column_name`, 
+     `partition_id`,
+     `column_name`,
     hll_cardinality(hll_union(`ndv`)) as distinct_count
     */
 
@@ -495,6 +508,51 @@ Status StatisticResultWriter::_fill_partition_statistic_data(int version, const 
         data_list[i].__set_partitionId(partition_id.value(i));
         data_list[i].__set_columnName(column_name.value(i).to_string());
         data_list[i].__set_countDistinct(distinct_count.value(i));
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_partition_statistic_data_v2(int version, const Columns& columns, const Chunk* chunk,
+                                                                TFetchDataResult* result) {
+    /*
+    SQL:
+    SELECT cast(" + STATISTIC_PARTITION_VERSION + " as INT), +
+     `partition_id`, 
+     `column_name`,
+     hll_cardinality(hll_union(`ndv`)) as distinct_count,
+     any_value(null_count),
+     any_value(row_count)
+    */
+
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 6);
+
+    // skip read version
+    auto partition_id = ColumnViewer<TYPE_BIGINT>(columns[1]);
+    auto column_name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    auto distinct_count = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto null_count = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto row_count = ColumnViewer<TYPE_BIGINT>(columns[5]);
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_partitionId(partition_id.value(i));
+        data_list[i].__set_columnName(column_name.value(i).to_string());
+        data_list[i].__set_countDistinct(distinct_count.value(i));
+        data_list[i].__set_nullCount(null_count.value(i));
+        data_list[i].__set_rowCount(row_count.value(i));
     }
 
     result->result_batch.rows.resize(num_rows);
@@ -630,6 +688,68 @@ Status StatisticResultWriter::_fill_full_statistic_query_external_v2(int version
         data_list[i].__set_max(maxColumn.value(i).to_string());
         data_list[i].__set_min(minColumn.value(i).to_string());
         data_list[i].__set_updateTime(updateTime.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_multi_columns_statistics_data(int version, const Columns& columns,
+                                                                  const Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 3);
+
+    auto column_name = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto ndv = ColumnViewer<TYPE_BIGINT>(columns[2]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_countDistinct(ndv.value(i));
+        data_list[i].__set_columnName(column_name.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_multi_columns_statistics_data_for_query(int version, const Columns& columns,
+                                                                            const Chunk* chunk,
+                                                                            TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    DCHECK(columns.size() == 5);
+
+    auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1])->get_data();
+    auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
+    BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[3]);
+    auto& countDistincts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[4])->get_data();
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_dbId(dbIds[i]);
+        data_list[i].__set_tableId(tableIds[i]);
+        data_list[i].__set_columnName(nameColumn->get_slice(i).to_string());
+        data_list[i].__set_countDistinct(countDistincts[i]);
     }
 
     result->result_batch.rows.resize(num_rows);

@@ -18,9 +18,11 @@
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "filter_condition.h"
 #include "runtime/descriptors.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/predicate_tree_params.h"
+#include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 
 namespace starrocks {
@@ -108,7 +110,8 @@ private:
     std::vector<uint8_t> _normalized_exprs;
     std::map<std::string, ColumnValueRangeType> column_value_ranges; // from conjunct_ctxs
     OlapScanKeys scan_keys;                                          // from _column_value_ranges
-    std::vector<TCondition> olap_filters;                            // from _column_value_ranges
+    std::vector<OlapCondition> olap_filters;                         // from _column_value_ranges
+    std::vector<GeneralCondition> external_filters;                  // from _column_value_ranges
     std::vector<TCondition> is_null_vector;                          // from conjunct_ctxs
 
     std::map<int, std::vector<ExprContext*>> slot_index_to_expr_ctxs; // from conjunct_ctxs
@@ -121,6 +124,9 @@ private:
     StatusOr<bool> _normalize_compound_predicate(const Expr* root_expr);
 
     Status _get_column_predicates(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
+
+    Status _build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root, PredicateParser* parser,
+                                       ColumnPredicatePtrs& col_preds_owner);
 
     friend struct ColumnRangeBuilder;
     friend class ConjunctiveTestFixture;
@@ -176,6 +182,7 @@ public:
     static Status eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
 
     StatusOr<PredicateTree> get_predicate_tree(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
+    StatusOr<RuntimeFilterPredicates> get_runtime_filter_predicates(ObjectPool* obj_pool, PredicateParser* parser);
 
     Status get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges);
 

@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -42,7 +43,6 @@ import org.junit.Test;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
 
 public class AnalyzeMgrTest {
     public static ConnectContext connectContext;
@@ -64,7 +64,8 @@ public class AnalyzeMgrTest {
 
     @Test
     public void testRefreshConnectorTableBasicStatisticsCache(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
@@ -85,7 +86,8 @@ public class AnalyzeMgrTest {
     @Test
     public void testAnalyzeMgrBasicStatsPersist() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
@@ -237,7 +239,8 @@ public class AnalyzeMgrTest {
     @Test
     public void testAnalyzeMgrHistogramStatsPersist() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         ExternalHistogramStatsMeta externalHistogramStatsMeta = new ExternalHistogramStatsMeta("hive0", "hive_db",
@@ -288,7 +291,8 @@ public class AnalyzeMgrTest {
 
     @Test
     public void testExternalAnalyzeStatusPersist() throws Exception {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
                 "hive0", "partitioned_db", "t1",
@@ -307,7 +311,8 @@ public class AnalyzeMgrTest {
 
     @Test
     public void testDropExternalAnalyzeStatus() {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
@@ -328,8 +333,7 @@ public class AnalyzeMgrTest {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(dbId, tableId,
                 Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), new HashMap<>()));
 
-        UUID uuid = UUID.randomUUID();
-        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TUniqueId requestId = UUIDUtil.genTUniqueId();
         TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
                 requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
         transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));

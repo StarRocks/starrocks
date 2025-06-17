@@ -50,7 +50,6 @@
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/json_column_writer.h"
@@ -61,6 +60,8 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
+#include "types/logical_type.h"
+#include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/rle_encoding.h"
@@ -492,7 +493,8 @@ Status ScalarColumnWriter::write_data() {
         PageFooterPB footer;
         footer.set_type(DICTIONARY_PAGE);
         footer.set_uncompressed_size(dict_body->size());
-        if (_encoding_info->type() == TYPE_CHAR || _encoding_info->type() == TYPE_VARCHAR) {
+        if (_encoding_info->type() == TYPE_CHAR || _encoding_info->type() == TYPE_VARCHAR ||
+            _encoding_info->type() == TYPE_JSON) {
             footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
         } else {
             footer.mutable_dict_page_footer()->set_encoding(BIT_SHUFFLE);
@@ -681,7 +683,6 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
-
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
             is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
@@ -854,7 +855,7 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& 
     Status st;
     if (column.is_nullable()) {
         const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
-        const auto& bin_col = down_cast<BinaryColumn&>(*data_col);
+        const auto& bin_col = down_cast<const BinaryColumn&>(*data_col);
         const auto detect_encoding = speculate_string_encoding(bin_col);
         st = _scalar_column_writer->set_encoding(detect_encoding);
     } else if (column.is_binary()) {
@@ -1019,7 +1020,7 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
     const ColumnType* numerical_col;
     if (column.is_nullable()) {
         const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
-        numerical_col = &down_cast<ColumnType&>(*data_col);
+        numerical_col = &down_cast<const ColumnType&>(*data_col);
     } else {
         numerical_col = &down_cast<const ColumnType&>(column);
     }

@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "column/chunk.h"
@@ -102,6 +103,7 @@ struct SortedRuns {
     SortedRuns(const SortedRuns& run) = default;
     SortedRuns(SortedRuns&& run) = default;
     SortedRuns(const SortedRun& run) : chunks{run} {}
+    SortedRuns& operator=(SortedRuns&& run) = default;
 
     void merge_runs(SortedRuns& runs) {
         for (auto& run : runs.chunks) {
@@ -126,6 +128,8 @@ struct SortedRuns {
     size_t num_rows() const;
     void resize(size_t size);
     SortedRun& front() { return chunks.front(); }
+    const SortedRun& front() const { return chunks.front(); }
+    const SortedRun& back() const { return chunks.back(); }
     void pop_front() { chunks.pop_front(); }
     int64_t mem_usage() const {
         int64_t res = 0;
@@ -139,6 +143,78 @@ struct SortedRuns {
     bool is_sorted(const SortDescs& sort_desc) const;
     ChunkPtr assemble() const;
     int debug_dump() const;
+};
+
+// Similar to SortedRun. The difference is that it holds a unique_ptr.
+struct MergedRun {
+    ChunkUniquePtr chunk;
+    Columns orderby;
+    size_t start_index() const { return range.first; }
+    size_t end_index() const { return range.second; }
+
+    void set_range(size_t start, size_t end) {
+        DCHECK_LE(range.first, range.second);
+        DCHECK_LT(range.second - range.first, Column::MAX_CAPACITY_LIMIT);
+        range.first = start;
+        range.second = end;
+    }
+    size_t num_rows() const {
+        DCHECK_LE(range.first, range.second);
+        DCHECK_LT(range.second - range.first, Column::MAX_CAPACITY_LIMIT);
+        return range.second - range.first;
+    }
+    bool empty() const { return range.second == range.first || chunk == nullptr; }
+
+    static StatusOr<MergedRun> build(ChunkUniquePtr&& chunk, const std::vector<ExprContext*>& exprs);
+    ChunkPtr steal_chunk(size_t size);
+
+private:
+    std::pair<uint32_t, uint32_t> range;
+};
+
+// Similar to SortedRuns.
+class MergedRuns {
+public:
+    MergedRuns& operator=(MergedRuns&& run) = default;
+
+    MergedRun& front() {
+        _num_rows.reset();
+        return _runs.front();
+    }
+    MergedRun& back() {
+        _num_rows.reset();
+        return _runs.back();
+    }
+    MergedRun& at(size_t i) {
+        _num_rows.reset();
+        return _runs[i];
+    }
+    const MergedRun& front() const { return _runs.front(); }
+    const MergedRun& back() const { return _runs.back(); }
+    const MergedRun& at(size_t i) const { return _runs[i]; }
+
+    size_t num_chunks() const { return _runs.size(); }
+    size_t num_rows() const;
+    int64_t mem_usage() const;
+    size_t empty() const { return num_rows() == 0; }
+
+    void push_back(MergedRun&& run) {
+        _num_rows.reset();
+        _runs.emplace_back(std::move(run));
+    }
+
+    void pop_front() {
+        _num_rows.reset();
+        _runs.pop_front();
+    }
+    void pop_back() {
+        _num_rows.reset();
+        _runs.pop_back();
+    }
+
+private:
+    std::deque<MergedRun> _runs;
+    mutable std::optional<size_t> _num_rows;
 };
 
 // Merge two sorted cusor
@@ -189,6 +265,7 @@ public:
     bool is_eos();
     ChunkUniquePtr try_get_next();
     Status consume_all(const ChunkConsumer& consumer);
+    Status consume_all_with_limit(const ChunkConsumer& consumer, size_t limit);
 
 private:
     std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
@@ -203,9 +280,14 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
                                    Permutation* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            std::vector<ChunkUniquePtr>& chunks, SortedRuns* output);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs, MergedRuns& left,
+                           ChunkUniquePtr&& right, size_t limit, MergedRuns* output);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
                                    const ChunkConsumer& consumer);
+Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
+                                   std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
+                                   const ChunkConsumer& consumer, size_t limit);
 
 // Merge in rowwise, which is slow and used only in benchmark
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left, const Columns& right,

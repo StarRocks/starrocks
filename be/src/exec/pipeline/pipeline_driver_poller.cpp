@@ -97,7 +97,7 @@ void PipelineDriverPoller::run_internal() {
                         driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
                     }
                     driver->fragment_ctx()->cancel(
-                            Status::TimedOut(fmt::format("Query exceeded time limit of {} seconds",
+                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds",
                                                          driver->query_ctx()->get_query_expire_seconds())));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (driver->fragment_ctx()->is_canceled()) {

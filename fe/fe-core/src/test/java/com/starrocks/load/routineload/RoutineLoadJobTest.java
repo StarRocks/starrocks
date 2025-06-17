@@ -45,6 +45,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -58,9 +59,11 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -71,7 +74,6 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class RoutineLoadJobTest {
     @Test
@@ -101,7 +103,7 @@ public class RoutineLoadJobTest {
             }
         };
 
-        String txnStatusChangeReasonString = TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
+        String txnStatusChangeReasonString = TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
@@ -144,7 +146,7 @@ public class RoutineLoadJobTest {
                 result = Lists.newArrayList();
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
-                result = UUID.randomUUID();
+                result = UUIDUtil.genUUID();
                 routineLoadMgr.getJob(anyLong);
                 minTimes = 0;
                 result = routineLoadJob;
@@ -213,7 +215,7 @@ public class RoutineLoadJobTest {
                 result = Lists.newArrayList();
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
-                result = UUID.randomUUID();
+                result = UUIDUtil.genUUID();
                 routineLoadMgr.getJob(anyLong);
                 minTimes = 0;
                 result = routineLoadJob;
@@ -247,12 +249,15 @@ public class RoutineLoadJobTest {
             PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
-                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+                    TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
+
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
 
         {
@@ -261,12 +266,15 @@ public class RoutineLoadJobTest {
                     1L, "task1", 1, 1, "http://url", "task-1", "sub-1");
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
-                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+                    TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
+
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
     }
 
@@ -277,12 +285,15 @@ public class RoutineLoadJobTest {
             KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
-                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+                    TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
+
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
 
         {
@@ -298,7 +309,8 @@ public class RoutineLoadJobTest {
             partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(1701411708410L));
             KafkaProgress kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
             Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
-
+            ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
+                    .put("pause_on_fatal_parse_error", "true");
             routineLoadJob.setPartitionOffset(0, 12345);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
@@ -306,6 +318,13 @@ public class RoutineLoadJobTest {
             //The displayed value is the actual value - 1
             Assert.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
             Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
+            Assert.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"true\""));
+
+
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
+            //The displayed value is the actual value - 1
+            Assert.assertEquals("{\"0\":\"1233\"}", loadJobInfo.getProgress());
         }
 
         {
@@ -316,6 +335,8 @@ public class RoutineLoadJobTest {
             partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(1701411708410L));
             KafkaProgress kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
             Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
+            ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
+                    .put("pause_on_fatal_parse_error", "false");
 
             routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
             // The job is set unstable due to the progress is too slow.
@@ -328,6 +349,10 @@ public class RoutineLoadJobTest {
             Assert.assertTrue(showInfo.get(16).contains(
                     "partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]"));
 
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("RUNNING", loadJobInfo.getState());
+            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
+
             partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(System.currentTimeMillis()));
             kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
             Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
@@ -337,11 +362,21 @@ public class RoutineLoadJobTest {
             Assert.assertEquals("RUNNING", showInfo.get(7));
             Assert.assertEquals("", showInfo.get(16));
 
+            loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("RUNNING", loadJobInfo.getState());
+            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
+
             // The job is set stable.
             routineLoadJob.updateSubstateStable();
             showInfo = routineLoadJob.getShowInfo();
             Assert.assertEquals("RUNNING", showInfo.get(7));
             Assert.assertEquals("", showInfo.get(16));
+            Assert.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"false\""));
+
+
+            loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("RUNNING", loadJobInfo.getState());
+            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
         }
     }
 
@@ -369,7 +404,7 @@ public class RoutineLoadJobTest {
         KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.setWarehouseId(0L);
         List<String> showInfo = routineLoadJob.getShowInfo();
-        Assert.assertEquals(22, showInfo.size());
+        Assert.assertEquals(23, showInfo.size());
         Assert.assertEquals("default_warehouse", showInfo.get(20));
 
         routineLoadJob.setWarehouseId(1L);
@@ -433,7 +468,7 @@ public class RoutineLoadJobTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       long warehouseId) throws StarRocksException {
+                                                       ComputeResource computeResource) throws StarRocksException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };
@@ -509,6 +544,7 @@ public class RoutineLoadJobTest {
         String jsonRoot = "$.RECORDS";
         String taskTimeout = "20";
         String taskConsumeTime = "3";
+        String pauseOnFatalParseError = "false";
         String originStmt = "alter routine load for db.job1 " +
                 "properties (" +
                 "   \"desired_concurrent_number\" = \"" + desiredConcurrentNumber + "\"," +
@@ -519,6 +555,7 @@ public class RoutineLoadJobTest {
                 "   \"task_consume_second\" = \"" + taskConsumeTime + "\"," +
                 "   \"task_timeout_second\" = \"" + taskTimeout + "\"," +
                 "   \"strict_mode\" = \"" + strictMode + "\"," +
+                "   \"pause_on_fatal_parse_error\" = \"" + pauseOnFatalParseError + "\"," +
                 "   \"timezone\" = \"" + timeZone + "\"," +
                 "   \"jsonpaths\" = \"" + jsonPaths + "\"," +
                 "   \"strip_outer_array\" = \"" + stripOuterArray + "\"," +
@@ -550,6 +587,7 @@ public class RoutineLoadJobTest {
         Assert.assertEquals(jsonPaths.replace("\\", ""), routineLoadJob.getJsonPaths());
         Assert.assertEquals(Boolean.parseBoolean(stripOuterArray), routineLoadJob.isStripOuterArray());
         Assert.assertEquals(jsonRoot, routineLoadJob.getJsonRoot());
+        Assert.assertEquals(Boolean.parseBoolean(pauseOnFatalParseError), routineLoadJob.isPauseOnFatalParseError());
     }
 
     @Test
@@ -598,6 +636,50 @@ public class RoutineLoadJobTest {
         Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
         Assert.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
+    }
+
+    @Test
+    public void testKafkaRoutineLoadJobValidBrokerList() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.1:9092", "topic");
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        String validStmt = "alter routine load for db.job1 " +
+                "FROM KAFKA (\"kafka_broker_list\" = \"192.168.1.2:9092,192.168.1.3:9092\")";
+        routineLoadJob.setOrigStmt(new OriginStatement(validStmt, 0));
+
+        try {
+            AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(validStmt, connectContext);
+            routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                    stmt.getDataSourceProperties(), new OriginStatement(validStmt, 0), true);
+
+            // Verify broker list was updated successfully
+            Assert.assertEquals("192.168.1.2:9092,192.168.1.3:9092", routineLoadJob.getBrokerList());
+        } catch (Exception e) {
+            Assert.fail("Valid broker list should not throw exception");
+        }
+    }
+
+    @Test
+    public void testKafkaRoutineLoadJobInvalidBrokerList() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.1:9092", "topic");
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        String invalidStmt = "alter routine load for db.job1 " +
+                "FROM KAFKA (\"kafka_broker_list\" = \"invalid_broker_format\")";
+        routineLoadJob.setOrigStmt(new OriginStatement(invalidStmt, 0));
+
+        try {
+            AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(invalidStmt, connectContext);
+            routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                    stmt.getDataSourceProperties(), new OriginStatement(invalidStmt, 0), false);
+            Assert.fail("Invalid broker list should throw DdlException");
+        } catch (Exception e) {
+            // This should trigger the catch block on line 841-842
+            Assert.assertTrue("Should contain validation error message",
+                    e.getMessage().contains("does not match pattern"));
+        }
     }
 
     @Test
@@ -754,5 +836,76 @@ public class RoutineLoadJobTest {
                 "AND (substring(`d`, 1, 5) = 'cefd') " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+    }
+
+    @Test
+    public void testPauseOnFatalParseError(@Mocked GlobalStateMgr globalStateMgr, @Injectable TransactionState transactionState,
+                                                       @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+            throws StarRocksException {
+        long txnId = 1L;
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = txnId;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = null;
+                routineLoadTaskInfo.getTxnId();
+                minTimes = 0;
+                result = txnId;
+                routineLoadTaskInfo.getId();
+                minTimes = 0;
+                result = UUIDUtil.genUUID();
+            }
+        };
+
+        new MockUp<KafkaRoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+
+            @Mock
+            RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo) {
+                return routineLoadTaskInfo;
+            }
+        };
+
+        // pauseOnFatalParseError = false
+        {
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
+                    return new RoutineLoadTaskScheduler();
+                }
+            };
+
+            List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+            routineLoadTaskInfoList.add(routineLoadTaskInfo);
+            RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+            routineLoadJob.afterAborted(transactionState, true,
+                    TxnStatusChangeReason.PARSE_ERROR.toString());
+            System.out.println(routineLoadJob.getPauseReason());
+            Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        }
+
+        // pauseOnFatalParseError = true
+        {
+            List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+            routineLoadTaskInfoList.add(routineLoadTaskInfo);
+            RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+            ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
+                    .put("pause_on_fatal_parse_error", "true");
+            routineLoadJob.afterAborted(transactionState, true,
+                    TxnStatusChangeReason.PARSE_ERROR.toString());
+            Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+            String errorMsg =
+                    "ErrorReason{errCode = 5611, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
+            Assert.assertEquals(errorMsg, routineLoadJob.getPauseReason());
+        }
     }
 }

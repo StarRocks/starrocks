@@ -18,8 +18,11 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::parquet {
+
+DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
@@ -86,16 +89,16 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type,
-                                                      const TIcebergSchemaField* iceberg_schema_field) {
+                                                      const TIcebergSchemaField* lake_schema_field) {
     // We will only set a complex type in ParquetField
     if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
         return Status::InternalError(
                 strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
                                     column_type_to_string(field->type), logical_type_to_string(col_type.type)));
     }
-    DCHECK(iceberg_schema_field != nullptr);
+    DCHECK(lake_schema_field != nullptr);
     if (field->type == ColumnType::ARRAY) {
-        const TIcebergSchemaField* element_schema = &iceberg_schema_field->children[0];
+        const TIcebergSchemaField* element_schema = &lake_schema_field->children[0];
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
                          ColumnReaderFactory::create(opts, &field->children[0], col_type.children[0], element_schema));
         if (child_reader != nullptr) {
@@ -107,16 +110,16 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
-        const TIcebergSchemaField* key_iceberg_schema = &iceberg_schema_field->children[0];
-        const TIcebergSchemaField* value_iceberg_schema = &iceberg_schema_field->children[1];
+        const TIcebergSchemaField* key_lake_schema = &lake_schema_field->children[0];
+        const TIcebergSchemaField* value_lake_schema = &lake_schema_field->children[1];
 
         if (!col_type.children[0].is_unknown_type()) {
             ASSIGN_OR_RETURN(key_reader, ColumnReaderFactory::create(opts, &(field->children[0]), col_type.children[0],
-                                                                     key_iceberg_schema));
+                                                                     key_lake_schema));
         }
         if (!col_type.children[1].is_unknown_type()) {
             ASSIGN_OR_RETURN(value_reader, ColumnReaderFactory::create(opts, &(field->children[1]),
-                                                                       col_type.children[1], value_iceberg_schema));
+                                                                       col_type.children[1], value_lake_schema));
         }
 
         if (key_reader != nullptr || value_reader != nullptr) {
@@ -126,9 +129,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         }
     } else if (field->type == ColumnType::STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
-        std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
-                                          iceberg_schema_subfield);
+        std::vector<const TIcebergSchemaField*> lake_schema_subfield(col_type.children.size());
+        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, lake_schema_field, subfield_pos,
+                                          lake_schema_subfield);
 
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
@@ -140,7 +143,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 
             ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
                              ColumnReaderFactory::create(opts, &field->children[subfield_pos[i]], col_type.children[i],
-                                                         iceberg_schema_subfield[i]));
+                                                         lake_schema_subfield[i]));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
@@ -158,6 +161,11 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,
                                                       SlotId slot_id, int64_t num_rows) {
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_reader_returns_global_dict_not_match_status, {
+        return Status::GlobalDictNotMatch(
+                fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
+    });
+
     if (ori_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
                          ColumnReaderFactory::create(
@@ -171,7 +179,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader
         }
         if (raw_reader->column_all_pages_dict_encoded()) {
             return std::make_unique<LowCardColumnReader>(*raw_reader, dict, slot_id);
-        } else if (num_rows <= DICT_DECODE_MAX_SIZE) {
+        } else if (num_rows <= dict->size()) {
             return std::make_unique<LowRowsColumnReader>(*raw_reader, dict, slot_id);
         } else {
             return Status::GlobalDictNotMatch(
@@ -233,12 +241,12 @@ void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& 
 
 void ColumnReaderFactory::get_subfield_pos_with_pruned_type(
         const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
-        const TIcebergSchemaField* iceberg_schema_field, std::vector<int32_t>& pos,
-        std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield) {
+        const TIcebergSchemaField* lake_schema_field, std::vector<int32_t>& pos,
+        std::vector<const TIcebergSchemaField*>& lake_schema_subfield) {
     // For Struct type with schema change, we need to consider a subfield not existed situation.
     // When Iceberg adds a new struct subfield, the original parquet file does not contain the newly added subfield.
     std::unordered_map<std::string, const TIcebergSchemaField*> subfield_name_2_field_schema{};
-    for (const auto& each : iceberg_schema_field->children) {
+    for (const auto& each : lake_schema_field->children) {
         std::string format_subfield_name = case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
         subfield_name_2_field_schema.emplace(format_subfield_name, &each);
     }
@@ -257,7 +265,7 @@ void ColumnReaderFactory::get_subfield_pos_with_pruned_type(
             // Below code is defensive
             DCHECK(false) << "Struct subfield name: " + format_subfield_name + " not found in iceberg schema.";
             pos[i] = -1;
-            iceberg_schema_subfield[i] = nullptr;
+            lake_schema_subfield[i] = nullptr;
             continue;
         }
 
@@ -268,12 +276,12 @@ void ColumnReaderFactory::get_subfield_pos_with_pruned_type(
             // Means newly added struct subfield not existed in an original parquet file, we put nullptr
             // column reader in children_reader, we will append the default value for this subfield later.
             pos[i] = -1;
-            iceberg_schema_subfield[i] = nullptr;
+            lake_schema_subfield[i] = nullptr;
             continue;
         }
 
         pos[i] = parquet_field_it->second;
-        iceberg_schema_subfield[i] = iceberg_it->second;
+        lake_schema_subfield[i] = iceberg_it->second;
     }
 }
 

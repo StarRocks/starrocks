@@ -59,6 +59,7 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_ANALYZE_STATUS));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RESOURCE_GROUP));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN));
+        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_COLUMN_COMMENT));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_HEARTBEAT_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_CATALOG));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_CATALOG));
@@ -140,6 +141,7 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_STORAGE_VOLUME));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_STORAGE_VOLUME));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_STORAGE_VOLUME));
+        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_PIPE));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(
                 OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
@@ -193,5 +195,6 @@ public class OperationTypeTest {
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_REPLICA_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPSERT_TRANSACTION_STATE_V2));
+        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_WAREHOUSE_INTERNAL_OP));
     }
 }

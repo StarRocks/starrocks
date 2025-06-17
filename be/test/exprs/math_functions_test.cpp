@@ -19,7 +19,9 @@
 
 #include <cmath>
 
+#include "exprs/binary_functions.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "exprs/time_functions.h"
 
 #define PI acos(-1)
 
@@ -46,8 +48,8 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
             c1->append(ints[i]);
         }
 
-        columns.emplace_back(c0);
-        columns.emplace_back(c1);
+        columns.emplace_back(std::move(c0));
+        columns.emplace_back(std::move(c1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr res = MathFunctions::truncate(ctx.get(), columns).value();
@@ -70,8 +72,8 @@ TEST_F(VecMathFunctionsTest, truncateNanTest) {
         c0->append(0);
         c1->append(1591994755);
 
-        columns.emplace_back(c0);
-        columns.emplace_back(c1);
+        columns.emplace_back(std::move(c0));
+        columns.emplace_back(std::move(c1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr res = MathFunctions::truncate(ctx.get(), columns).value();
@@ -144,11 +146,11 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         // ConstColumn
         c0_const = true;
         arg0_data_column->resize(1);
-        c0 = ConstColumn::create(arg0_data_column, arg0_values.size());
+        c0 = ConstColumn::create(std::move(arg0_data_column), arg0_values.size());
     } else {
         if (arg0_null_flags.empty()) {
             // normal Column
-            c0 = arg0_data_column;
+            c0 = std::move(arg0_data_column);
         } else {
             // NullableColumn
             c0_nullable = true;
@@ -156,7 +158,7 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
             for (int i = 0; i < arg0_values.size(); i++) {
                 null_flags->append(arg0_null_flags[i]);
             }
-            c0 = NullableColumn::create(arg0_data_column, null_flags);
+            c0 = NullableColumn::create(std::move(arg0_data_column), std::move(null_flags));
         }
     }
 
@@ -172,11 +174,11 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         // ConstColumn
         c1_const = true;
         arg1_data_column->resize(1);
-        c1 = ConstColumn::create(arg1_data_column, arg1_values.size());
+        c1 = ConstColumn::create(std::move(arg1_data_column), arg1_values.size());
     } else {
         if (arg1_null_flags.empty()) {
             // normal Column
-            c1 = arg1_data_column;
+            c1 = std::move(arg1_data_column);
         } else {
             // NullableColumn
             c1_nullable = true;
@@ -184,16 +186,16 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
             for (int i = 0; i < arg1_values.size(); i++) {
                 null_flags->append(arg1_null_flags[i]);
             }
-            c1 = NullableColumn::create(arg1_data_column, null_flags);
+            c1 = NullableColumn::create(std::move(arg1_data_column), std::move(null_flags));
         }
     }
 
-    columns.emplace_back(c0);
+    columns.emplace_back(std::move(c0));
     if (type == TYPE_ROUND) {
         c1_const = true;
         c1_nullable = false;
     } else {
-        columns.emplace_back(c1);
+        columns.emplace_back(std::move(c1));
     }
 
     FunctionContext::TypeDesc return_type;
@@ -415,8 +417,8 @@ TEST_F(VecMathFunctionsTest, RoundUpToTest) {
             tc2->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns).value();
@@ -446,8 +448,8 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithPositiveTest) {
             tc2->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns).value();
@@ -477,8 +479,8 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithNegativeTest) {
             tc2->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns).value();
@@ -505,7 +507,7 @@ TEST_F(VecMathFunctionsTest, BinTest) {
             tc1->append(i);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::bin(ctx.get(), columns).value();
@@ -545,8 +547,8 @@ TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template least<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -591,8 +593,8 @@ TEST_F(VecMathFunctionsTest, GreatestDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template greatest<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -625,7 +627,7 @@ TEST_F(VecMathFunctionsTest, PositiveDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template positive<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -658,7 +660,7 @@ TEST_F(VecMathFunctionsTest, NegativeDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template negative<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -703,8 +705,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalGeneralTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template mod<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -752,8 +754,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalBigTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template mod<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -821,9 +823,9 @@ TEST_F(VecMathFunctionsTest, Conv_intTest) {
             tc3->append(destints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
-        columns.emplace_back(tc3);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::conv_int(ctx.get(), columns).value();
@@ -924,9 +926,9 @@ TEST_F(VecMathFunctionsTest, Conv_stringTest) {
             tc3->append(destints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
-        columns.emplace_back(tc3);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::conv_string(ctx.get(), columns).value();
@@ -947,7 +949,7 @@ TEST_F(VecMathFunctionsTest, LnTest) {
         tc1->append(0);
         tc1->append(2.0);
         tc1->append(-1);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_log10 = MathFunctions::log10(ctx.get(), columns).value();
@@ -972,7 +974,7 @@ TEST_F(VecMathFunctionsTest, ExpTest) {
         tc1->append(2.0);
         tc1->append(709.0);
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns).value();
@@ -992,7 +994,7 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
         tc1->append(710.0);
         tc1->append(2.47498282E8);
         tc1->append(2.47498282E3);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns).value();
@@ -1009,14 +1011,14 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
         tc1->append(0.2);
         tc1->append(0.3);
         tc1->append(4.0);
-        binary_columns.emplace_back(tc1);
+        binary_columns.emplace_back(std::move(tc1));
 
         auto tc2 = DoubleColumn::create();
         tc2->append(0.8);
         tc2->append(0.2);
         tc2->append(0.3);
         tc2->append(1024.0);
-        binary_columns.emplace_back(tc2);
+        binary_columns.emplace_back(std::move(tc2));
 
         std::vector<bool> null_expect = {true, false, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1038,7 +1040,7 @@ TEST_F(VecMathFunctionsTest, CbrtTest) {
     tc1->append(8);
     tc1->append(3.1415);
     tc1->append(-3.1415);
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr results = MathFunctions::cbrt(ctx.get(), columns).value();
@@ -1059,7 +1061,7 @@ TEST_F(VecMathFunctionsTest, squareTest) {
         tc1->append(2.0);
         tc1->append(-1);
         tc1->append(std::nan("not a double number"));
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_square = MathFunctions::square(ctx.get(), columns).value();
@@ -1083,7 +1085,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_tinyint(ctx.get(), columns).value();
@@ -1106,7 +1108,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_smallint(ctx.get(), columns).value();
@@ -1129,7 +1131,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_int(ctx.get(), columns).value();
@@ -1154,7 +1156,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_bigint(ctx.get(), columns).value();
@@ -1179,7 +1181,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_largeint(ctx.get(), columns).value();
@@ -1202,7 +1204,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_double(ctx.get(), columns).value();
@@ -1225,7 +1227,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_float(ctx.get(), columns).value();
@@ -1252,7 +1254,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             }
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_decimalv2val(ctx.get(), columns).value();
@@ -1279,7 +1281,7 @@ TEST_F(VecMathFunctionsTest, CotTest) {
         tc1->append(0.1);
         tc1->append(0.2);
         tc1->append(0.3);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         Columns columns2;
         auto tc2 = DoubleColumn::create();
@@ -1287,7 +1289,7 @@ TEST_F(VecMathFunctionsTest, CotTest) {
         tc2->append(0.1);
         tc2->append(0.2);
         tc2->append(0.3);
-        columns2.emplace_back(tc2);
+        columns2.emplace_back(std::move((tc2)));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::cot(ctx.get(), columns).value();
@@ -1312,13 +1314,13 @@ TEST_F(VecMathFunctionsTest, Atan2Test) {
         tc1->append(0.1);
         tc1->append(0.2);
         tc1->append(0.3);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         auto tc2 = DoubleColumn::create();
         tc2->append(0.1);
         tc2->append(0.2);
         tc2->append(0.3);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::atan2(ctx.get(), columns).value();
@@ -1339,7 +1341,7 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     tc1->append(1);
     tc1->append(3.1415926);
     tc1->append(30);
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     {
         std::vector<double> result_expect = {std::sinh(-1), std::sinh(0), std::sinh(1), std::sinh(3.1415926),
@@ -1384,7 +1386,7 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
     tc1->append(-10);
     tc1->append(1.0);
     tc1->append(std::nan("not a double number"));
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     {
         std::vector<bool> null_expect = {true, false, true};
@@ -1480,13 +1482,13 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         tc1->append(std::nan("not a double number"));
         tc1->append(0.2);
         tc1->append(0.3);
-        binary_columns.emplace_back(tc1);
+        binary_columns.emplace_back(std::move(tc1));
 
         auto tc2 = DoubleColumn::create();
         tc2->append(0.8);
         tc2->append(0.2);
         tc2->append(0.3);
-        binary_columns.emplace_back(tc2);
+        binary_columns.emplace_back(std::move(tc2));
 
         std::vector<bool> null_expect = {true, false, false};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1496,6 +1498,309 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         for (size_t i = 0; i < nullable->size(); i++) {
             ASSERT_EQ(nullable->is_null(i), null_expect[i]);
         }
+    }
+}
+
+TEST_F(VecMathFunctionsTest, IcbergTransTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        Columns columns;
+        auto col1 = Int32Column::create();
+        auto col2 = Int32Column::create();
+        col1->append(123);
+        col2->append(33);
+        columns.emplace_back(std::move(col1));
+        columns.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(99, v->get_data()[0]);
+    }
+    {
+        Columns columns;
+        auto col1 = Int32Column::create();
+        auto col2 = Int32Column::create();
+        col1->append(123);
+        auto col3 = NullableColumn::create(col1, NullColumn::create(col1->size(), DATUM_NOT_NULL));
+        col3->append_nulls(1);
+        col2->append(33);
+        columns.emplace_back(std::move(col3));
+        columns.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_nullable());
+        auto v = ColumnHelper::as_column<NullableColumn>(result);
+        auto vv = ColumnHelper::as_column<Int32Column>(v->data_column());
+        ASSERT_EQ(99, vv->get_data()[0]);
+    }
+    {
+        Columns columns_const;
+        auto col1 = Int32Column::create();
+        auto col2 = Int32Column::create();
+        col1->append(123);
+        col2->append(15);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+        auto result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns_const).value();
+
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(120, v->get_data()[0]);
+    }
+
+    {
+        Columns columns;
+        auto col1 = Decimal64Column::create();
+        auto col2 = Int32Column::create();
+        col1->set_scale(2);
+        col1->set_precision(10);
+        col1->append(1565);
+        col2->append(50);
+        columns.emplace_back(std::move(col1));
+        columns.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Decimal64Column>(result);
+        ASSERT_EQ(1550, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = Decimal64Column::create();
+        auto col2 = Int32Column::create();
+        col1->set_scale(2);
+        col1->set_precision(10);
+        col1->append(-1565);
+        col2->append(13);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Decimal64Column>(result);
+        ASSERT_EQ(-1573, v->get_data()[0]);
+    }
+
+    {
+        Columns columns;
+        auto col1 = Decimal128Column::create();
+        auto col2 = Int32Column::create();
+        col1->set_scale(2);
+        col1->set_precision(20);
+        col1->append(12313);
+        col2->append(333);
+        columns.emplace_back(std::move(col1));
+        columns.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL128>(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Decimal128Column>(result);
+        ASSERT_EQ(11988, v->get_data()[0]);
+    }
+    {
+        Columns columns;
+        auto col1 = BinaryColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append("我是");
+        col2->append(1);
+        columns.emplace_back(std::move(col1));
+        columns.emplace_back(std::move(col2));
+
+        ColumnPtr result = BinaryFunctions::iceberg_truncate_binary(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<BinaryColumn>(result);
+        char c = 0xE6;
+        ASSERT_EQ(Slice(&c, 1), v->get_slice(0));
+    }
+
+    {
+        Columns columns;
+        auto col1 = Int32Column::create();
+        auto col2 = Int32Column::create();
+        col1->append(123);
+        col2->append(10);
+        columns.emplace_back(std::move(col1));
+        columns.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_bucket_int<TYPE_INT>(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(4, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = Decimal64Column::create();
+        auto col2 = Int32Column::create();
+        col1->set_scale(2);
+        col1->set_precision(10);
+        col1->append(-1565);
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(9, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = DateColumn::create();
+        col1->append(DateValue::create(2022, 2, 2));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_years_since_epoch_date(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(2022 - 1970, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = DateColumn::create();
+        col1->append(DateValue::create(1970, 2, 28));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_months_since_epoch_date(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(1, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        col1->append(TimestampValue::create(2022, 2, 2, 12, 22, 22));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_years_since_epoch_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(2022 - 1970, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        col1->append(TimestampValue::create(1970, 2, 2, 12, 22, 22));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_months_since_epoch_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(1, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        col1->append(TimestampValue::create(1970, 1, 2, 23, 22, 22));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_days_since_epoch_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(1, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = BinaryColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append("abcd");
+        col1->append_nulls(1);
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_bucket_string(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(8, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = DateColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(DateValue::create(2000, 1, 1));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_bucket_date(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(3, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(TimestampValue::create(2000, 1, 1, 12, 12, 12));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result = MathFunctions::iceberg_bucket_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = Decimal64Column::create();
+        auto col2 = Int32Column::create();
+        col1->set_scale(2);
+        col1->set_precision(4);
+        col1->append(-9999);
+        col2->append(50);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        auto result = MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>(ctx.get(), columns_const);
+        ASSERT_EQ(result.status().message(), "Truncate to decimal(4, 2) failed, because the result is overflow.");
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = Int32Column::create();
+        auto col2 = Int32Column::create();
+        col1->append(INT32_MIN);
+        col2->append(INT32_MAX);
+        auto const_col1 = ConstColumn::create(col1, 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+        auto result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns_const);
+        ASSERT_EQ(result.status().message(), "Truncate to integer failed, because the result is overflow.");
     }
 }
 

@@ -84,6 +84,7 @@ StarRocks supports the following object storage services for storage volumes:
   - AWS S3
   - GCS, OSS, OBS, COS, TOS, KS3, MinIO, and Ceph S3
 - Azure Blob Storage (Supported from v3.1.1): `azblob://<azblob_path>`
+- Azure Data Lake Storage Gen2 (Supported from v3.4.1): `adls2://<file_system_name>/<dir_name>`
 
 #### Authentication
 
@@ -97,6 +98,9 @@ StarRocks supports the following authentication methods for different object sto
 - GCS, OSS, OBS, COS, TOS, KS3, MinIO, and Ceph S3
   - Access Key pair
 - Azure Blob Storage
+  - Shared Key
+  - Shared Access Signatures (SAS)
+- Azure Data Lake Storage Gen2
   - Shared Key
   - Shared Access Signatures (SAS)
 
@@ -191,7 +195,7 @@ The following table lists the major features of Primary Key tables and their sup
 | **Feature**                   | **Supported Version(s)** | **Description**                                              |
 | ----------------------------- | ------------------------ | ------------------------------------------------------------ |
 | Primary Key tables            | v3.1.0                   |                                                              |
-| Primary Key index persistence | v3.2.0<br />v3.1.3       | <ul><li>Currently, shared-data clusters support Primary Key index persistence on local disks.</li><li>Persistence in remote storage will be supported in future releases.</li></ul> |
+| Primary Key index persistence | v3.2.0<br />v3.1.3<br />v3.3.2       |                                                              |
 | Partial Update                | v3.1.0                   | Shared-data clusters support Partial Update in Row mode from v3.1.0 onwards and in Column mode from v3.3.1 onwards. |
 | Conditional Update            | v3.1.0                   | Currently, the condition only supports 'Greater'.            |
 | Hybrid row-column storage     | ❌                        | To be supported in future releases.                          |
@@ -256,6 +260,5 @@ The following table shows the performance test results on thirteen queries and t
 - Full-text inverted index
 - Hybrid row-column storage
 - Global dictionary object
-- Generated column
 - Backup and restore
 

@@ -24,6 +24,7 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
@@ -172,7 +173,7 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     }
 
     bool is_column_with_row = false;
-    auto full_row_col = std::make_unique<BinaryColumn>();
+    auto full_row_col = BinaryColumn::create();
     if (_keys_type == PRIMARY_KEYS) {
         std::unique_ptr<Schema> schema_without_full_row_column;
         if (_vectorized_schema->field_names().back() == Schema::FULL_ROW_COLUMN) {
@@ -327,6 +328,7 @@ Status MemTable::finalize() {
 }
 
 Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) {
+    FAIL_POINT_TRIGGER_EXECUTE(load_memtable_flush, MEMTABLE_FLUSH_FP_ACTION(_sink->txn_id(), _sink->tablet_id()));
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
@@ -451,7 +453,7 @@ void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final) {
     }
 }
 
-Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes) {
+Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes) {
     size_t op_column_id = src->num_columns() - 1;
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);

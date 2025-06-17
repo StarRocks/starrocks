@@ -20,10 +20,10 @@
 #include <random>
 #include <vector>
 
+#include "bench/bench_util.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exprs/exprs_test_helper.h"
 #include "exprs/string_functions.h"
 
 namespace starrocks {
@@ -33,7 +33,7 @@ public:
     void init(size_t ratio) {
         _columns.clear();
         _ratio = ratio;
-        auto column = ExprsTestHelper::create_random_column(type_desc, _num_rows, false, false, 20);
+        auto column = BenchUtil::create_random_string_column(_num_rows, 20);
         auto binary = down_cast<BinaryColumn*>(column.get());
         Bytes& data = binary->get_bytes();
         std::random_device rd;
@@ -46,13 +46,13 @@ public:
             }
         }
         _columns.push_back(std::move(column));
-        ColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
         pattern_data->append_datum(Datum(Slice("-")));
-        auto pattern_column = ConstColumn::create(pattern_data, _num_rows);
+        auto pattern_column = ConstColumn::create(std::move(pattern_data), _num_rows);
         _columns.push_back(std::move(pattern_column));
-        ColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
         rpl_data->append_datum(Datum(Slice("")));
-        auto rpl_column = ConstColumn::create(rpl_data, _num_rows);
+        auto rpl_column = ConstColumn::create(std::move(rpl_data), _num_rows);
         _columns.push_back(std::move(rpl_column));
         _state = std::make_shared<StringFunctionsState>();
         _state->options = std::make_unique<re2::RE2::Options>();

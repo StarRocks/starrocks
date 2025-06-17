@@ -390,6 +390,10 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 // add child's output expression column
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
                     ColumnRefOperator key = entry.getKey();
+                    if (alreadyExistsColumnRefs.contains(key)) {
+                        continue;
+                    }
+
                     ColumnRefOperator newChildOutputRef = factory.create(key, key.getType(), key.isNullable());
                     newChild.add(newChildOutputRef);
                     childContext.put(newChildOutputRef, rewriter.rewrite(entry.getValue()));
@@ -542,35 +546,37 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
         public OptExpression visitLogicalTableFunction(OptExpression optExpression, Context context) {
             LogicalTableFunctionOperator tableFuncOp = optExpression.getOp().cast();
             ColumnRefSet outerColRefSet = ColumnRefSet.of();
-            List<ColumnRefOperator> outerColRefs = tableFuncOp.getOuterColRefs();
-            outerColRefSet.union(outerColRefs);
+            outerColRefSet.union(tableFuncOp.getOuterColRefs());
             Context localContext = new Context();
             Context childContext = new Context();
-            ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
-            List<ColumnRefOperator> newOuterColRefs = Lists.newArrayList();
-            ColumnRefSet allUsedColumns = ColumnRefSet.of();
+            List<ColumnRefOperator> extraOuterColRefs = Lists.newArrayList();
+
             for (Map.Entry<ScalarOperator, ColumnRefSet> entry : context.pushDownExprUseColumns.entrySet()) {
                 ScalarOperator expr = entry.getKey();
                 ColumnRefSet useColumns = entry.getValue();
-                allUsedColumns.union(useColumns);
+                ColumnRefOperator columnRef = context.pushDownExprRefsIndex.get(expr);
                 if (outerColRefSet.containsAll(useColumns)) {
-                    ColumnRefOperator columnRef = context.pushDownExprRefsIndex.get(expr);
                     childContext.put(columnRef, expr);
-                    childSubfieldOutputs.union(columnRef);
-                    newOuterColRefs.add(columnRef);
+                    extraOuterColRefs.add(columnRef);
                 } else {
-                    localContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                    localContext.put(columnRef, expr);
                 }
             }
-            newOuterColRefs.addAll(outerColRefs.stream().filter(colRef -> !allUsedColumns.contains(colRef)).collect(
-                    Collectors.toList()));
+            // remove already-existing outer column refs.
+            extraOuterColRefs = extraOuterColRefs.stream()
+                    .filter(columnRef -> !outerColRefSet.contains(columnRef)).collect(Collectors.toList());
+            ColumnRefSet childSubfieldOutputs = ColumnRefSet.of();
+            childSubfieldOutputs.union(extraOuterColRefs);
             Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+
             OptExpression result = visitChildren(optExpression, childContext);
-            if (!newOuterColRefs.isEmpty()) {
+            if (!extraOuterColRefs.isEmpty()) {
                 LogicalTableFunctionOperator.Builder newTableFuncOpBuilder =
                         (LogicalTableFunctionOperator.Builder) OperatorBuilderFactory
                                 .build(tableFuncOp)
                                 .withOperator(tableFuncOp);
+                List<ColumnRefOperator> newOuterColRefs = Lists.newArrayList(tableFuncOp.getOuterColRefs());
+                newOuterColRefs.addAll(extraOuterColRefs);
                 Operator newTableFuncOp = newTableFuncOpBuilder.setOuterColRefs(newOuterColRefs).build();
                 result = OptExpression.create(newTableFuncOp, result.getInputs());
             }

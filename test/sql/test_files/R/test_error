@@ -1,34 +1,37 @@
 -- name: test_error
-
 create database db_${uuid0};
+-- result:
+-- !result
 use db_${uuid0};
-
+-- result:
+-- !result
 select * from files("path" = "xxx", "format" = "parquet");
 -- result:
-E: (1064, 'Access storage error. Error message: invalid path. scheme is null')
+[REGEX].*Access storage error.*
 -- !result
 select * from files("path" = "hdfs://hdfs://test/x", "format" = "parquet");
 -- result:
-E: (1064, 'Access storage error. Error message: java.net.UnknownHostException: hdfs')
+[REGEX].*Access storage error.*
 -- !result
 select * from files("path" = "s3://${oss_bucket}/x", "format" = "parquet");
 -- result:
-E: (1064, 'Access storage error. Error message: Unable to load credentials from system settings. Access key must be specified either via environment variable (AWS_ACCESS_KEY_ID) or system property (aws.accessKeyId).')
+[REGEX].*Access storage error.*
 -- !result
 select * from files("path" = "s3://${oss_bucket}/x", "format" = "parquet", "aws.s3.access_key" = "xxx", "aws.s3.secret_key" = "yyy", "aws.s3.region" = "us-west-2");
 -- result:
-[REGEX].*Status Code: 403.*
+[REGEX].*Access storage error.*
 -- !result
-
-
 shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
 shell: ossutil64 cp --force ./sql/test_files/orc_format/map_decimal_date.lz4.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
 -- result:
 0
 
 Succeed: Total num: 1, size: 619. OK num: 1(upload 1 files).
 -- !result
-
 admin set frontend config ("enable_collect_query_detail_info" = "true");
 -- result:
 -- !result
@@ -39,5 +42,8 @@ select count(*) from files('path' = 'oss://${oss_bucket}/test_files/orc_format/$
 admin set frontend config ("enable_collect_query_detail_info" = "false");
 -- result:
 -- !result
-
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

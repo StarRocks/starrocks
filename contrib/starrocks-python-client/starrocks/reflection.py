@@ -96,7 +96,10 @@ class StarRocksTableDefinitionParser(object):
             if type_args:
                 type_kw["fsp"] = type_args.pop(0)
 
-        type_instance = col_type(*type_args, **type_kw)
+        if col_type.__name__ == "LARGEINT":
+            type_instance = col_type()
+        else:
+            type_instance = col_type(*type_args, **type_kw)
         return type_instance
 
     def _parse_column(self, column: _DecodingRow) -> dict:

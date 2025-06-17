@@ -196,6 +196,16 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ANALYZE_STATUS = 10017;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_MULTI_COLUMN_STATS_META = 10018;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_MULTI_COLUMN_STATS_META = 10019;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_FLAT_JSON_CONFIG = 10020;
+
+
     // workgroup 10021 ~ 10030
     @IgnorableOnReplayFailed
     public static final short OP_RESOURCE_GROUP = 10021;
@@ -265,6 +275,9 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_COMPUTE_NODE = 10202;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_UPDATE_HISTORICAL_NODE = 10210;
 
     // new operator for partition 10241 ~ 10260
     public static final short OP_ADD_PARTITION_V2 = 10241;
@@ -530,6 +543,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_COLUMN_COMMENT = 13080;
+
     // storage volume
 
     @IgnorableOnReplayFailed
@@ -543,6 +559,9 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_STORAGE_VOLUME = 13103;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_UPDATE_TABLE_STORAGE_INFOS = 13104;
 
     // Pipe operations log
     @IgnorableOnReplayFailed
@@ -593,6 +612,27 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_GROUP_PROVIDER = 13530;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_GROUP_PROVIDER = 13531;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_SPM_BASELINE_LOG = 13540;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_SPM_BASELINE_LOG = 13541;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_VIEW_SECURITY_LOG = 13542;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ENABLE_SPM_BASELINE_LOG = 13543;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DISABLE_SPM_BASELINE_LOG = 13544;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
@@ -602,6 +642,8 @@ public class OperationType {
     public static final short OP_CREATE_WAREHOUSE = 20101;
     public static final short OP_DROP_WAREHOUSE = 20102;
     public static final short OP_ALTER_WAREHOUSE = 20103;
+    // warehouse internal op
+    public static final short OP_WAREHOUSE_INTERNAL_OP = 20111;
 
     // security integration and role mapping
     public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;
@@ -630,6 +672,7 @@ public class OperationType {
                     opType != OP_CREATE_WAREHOUSE &&
                     opType != OP_DROP_WAREHOUSE &&
                     opType != OP_ALTER_WAREHOUSE &&
+                    opType != OP_WAREHOUSE_INTERNAL_OP &&
                     opType != OP_CREATE_SECURITY_INTEGRATION &&
                     opType != OP_DROP_SECURITY_INTEGRATION &&
                     opType != OP_ALTER_SECURITY_INTEGRATION) {

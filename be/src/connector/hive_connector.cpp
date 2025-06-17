@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "common/config.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
@@ -95,9 +96,11 @@ Status HiveDataSource::open(RuntimeState* state) {
                 "Invalid table type. Only hive/iceberg/hudi/delta lake/file/paimon/kudu table are supported");
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
+    bool enable_cache_select =
+            state->query_options().__isset.enable_cache_select && state->query_options().enable_cache_select;
 
     // Check that the system meets the requirements for enabling DataCache
-    if (config::datacache_enable && BlockCache::instance()->available()) {
+    if (BlockCache::instance()->available()) {
         // setup priority & ttl seconds
         int8_t datacache_priority = 0;
         int64_t datacache_ttl_seconds = 0;
@@ -108,7 +111,7 @@ Status HiveDataSource::open(RuntimeState* state) {
             datacache_ttl_seconds = state->query_options().datacache_ttl_seconds;
         }
 
-        if (state->query_options().__isset.enable_cache_select && state->query_options().enable_cache_select) {
+        if (enable_cache_select) {
             // set datacache options for cache select
             _datacache_options = DataCacheOptions{.enable_datacache = true,
                                                   .enable_cache_select = true,
@@ -131,7 +134,7 @@ Status HiveDataSource::open(RuntimeState* state) {
                 enable_populate_datacache = state->query_options().enable_populate_datacache;
             }
 
-            const bool enable_datacache_aync_populate_mode =
+            const bool enable_datacache_async_populate_mode =
                     state->query_options().__isset.enable_datacache_async_populate_mode &&
                     state->query_options().enable_datacache_async_populate_mode;
             const bool enable_datacache_io_adaptor = state->query_options().__isset.enable_datacache_io_adaptor &&
@@ -146,13 +149,16 @@ Status HiveDataSource::open(RuntimeState* state) {
                     DataCacheOptions{.enable_datacache = true,
                                      .enable_cache_select = false,
                                      .enable_populate_datacache = enable_populate_datacache,
-                                     .enable_datacache_async_populate_mode = enable_datacache_aync_populate_mode,
+                                     .enable_datacache_async_populate_mode = enable_datacache_async_populate_mode,
                                      .enable_datacache_io_adaptor = enable_datacache_io_adaptor,
                                      .modification_time = _scan_range.modification_time,
                                      .datacache_evict_probability = datacache_evict_probability,
                                      .datacache_priority = datacache_priority,
                                      .datacache_ttl_seconds = datacache_ttl_seconds};
         }
+    } else if (enable_cache_select) {
+        _no_data = true;
+        return Status::OK();
     }
 
     // Don't use datacache when priority = -1
@@ -161,10 +167,19 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scan_range.datacache_options.priority == -1) {
         _datacache_options.enable_datacache = false;
     }
-    _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
+
+    // Only support file metacache in starcache engine
+#ifdef WITH_STARCACHE
     if (state->query_options().__isset.enable_file_metacache) {
-        _use_file_metacache &= state->query_options().enable_file_metacache;
+        _use_file_metacache = state->query_options().enable_file_metacache;
     }
+    _use_file_metacache &= DataCache::GetInstance()->page_cache_available();
+
+    if (state->query_options().__isset.enable_file_pagecache) {
+        _use_file_pagecache = state->query_options().enable_file_pagecache;
+    }
+    _use_file_pagecache &= DataCache::GetInstance()->page_cache_available();
+#endif
 
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
@@ -224,7 +239,6 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
 
 Status HiveDataSource::_init_partition_values() {
     if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
-
     auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
     if (partition_desc == nullptr) {
         return Status::InternalError(
@@ -266,7 +280,7 @@ Status HiveDataSource::_init_partition_values() {
 
     if (_enable_dynamic_prune_scan_range && _runtime_filters) {
         _init_rf_counters();
-        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_bloom_filter_eval_context);
+        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_membership_filter_eval_context);
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
             return Status::OK();
@@ -428,10 +442,23 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
                 break;
             }
         }
-        if (!single_slot || slot_ids.empty()) {
+
+        bool single_field = true;
+        if (!slot_ids.empty() && single_slot) {
+            std::vector<std::vector<std::string>> subfields;
+            root_expr->get_subfields(&subfields);
+
+            for (int i = 1; i < subfields.size(); i++) {
+                if (subfields[i] != subfields[0]) {
+                    single_field = false;
+                    break;
+                }
+            }
+        }
+        if (!single_slot || slot_ids.empty() || !single_field) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
             for (SlotId slot_id : slot_ids) {
-                _slots_of_mutli_slot_conjunct.insert(slot_id);
+                _slots_of_multi_field_conjunct.insert(slot_id);
             }
             continue;
         }
@@ -519,6 +546,15 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.datacache_skip_read_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
         _profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
+        _profile.datacache_read_peer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerCounter", TUnit::UNIT, prefix);
+        _profile.datacache_read_peer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_peer_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadPeerTimer", prefix);
+        _profile.datacache_skip_read_peer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadPeerCounter", TUnit::UNIT, prefix);
+        _profile.datacache_skip_read_peer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadPeerBytes", TUnit::BYTES, prefix);
         _profile.datacache_write_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteCounter", TUnit::UNIT, prefix);
         _profile.datacache_write_bytes =
@@ -566,18 +602,18 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
 void HiveDataSource::_init_rf_counters() {
     auto* root = _runtime_profile;
-    if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
+    if (runtime_membership_filter_eval_context.join_runtime_filter_timer == nullptr) {
         static const char* prefix = "DynamicPruneScanRange";
         ADD_COUNTER(root, prefix, TUnit::NONE);
-        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
+        runtime_membership_filter_eval_context.join_runtime_filter_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
+        runtime_membership_filter_eval_context.join_runtime_filter_hash_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_input_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterInputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_output_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_output_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterOutputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_eval_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterEvaluate", TUnit::UNIT, prefix);
     }
 }
@@ -664,7 +700,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
     scanner_params.slots_in_conjunct = _slots_in_conjunct;
-    scanner_params.slots_of_mutli_slot_conjunct = _slots_of_mutli_slot_conjunct;
+    scanner_params.slots_of_multi_field_conjunct = _slots_of_multi_field_conjunct;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
@@ -686,6 +722,16 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 std::make_shared<TDeletionVectorDescriptor>(scan_range.deletion_vector_descriptor);
     }
 
+    if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
+        scanner_params.lake_schema = tbl->get_iceberg_schema();
+    }
+
+    if (dynamic_cast<const PaimonTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
+        scanner_params.lake_schema = tbl->get_paimon_schema();
+    }
+
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
         scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
     }
@@ -693,6 +739,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     // setup options for datacache
     scanner_params.datacache_options = _datacache_options;
     scanner_params.use_file_metacache = _use_file_metacache;
+    scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
@@ -744,6 +791,17 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
+        scanner_params.parquet_page_index_enable =
+                config::parquet_page_index_enable ? state->query_options().__isset.enable_parquet_reader_page_index
+                                                            ? state->query_options().enable_parquet_reader_page_index
+                                                            : true
+                                                  : false;
+        scanner_params.parquet_bloom_filter_enable =
+                config::parquet_reader_bloom_filter_enable
+                        ? state->query_options().__isset.enable_parquet_reader_bloom_filter
+                                  ? state->query_options().enable_parquet_reader_bloom_filter
+                                  : true
+                        : false;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;
@@ -797,7 +855,10 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
     do {
         RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
-        RETURN_IF_ERROR(_scanner->get_next(state, chunk));
+        Status st = _scanner->get_next(state, chunk);
+        if (!st.ok()) {
+            return _scanner->reinterpret_status(st);
+        }
     } while ((*chunk)->num_rows() == 0);
 
     // The column order of chunk is required to be invariable. In order to simplify the logic of each scanner,

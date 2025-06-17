@@ -28,10 +28,10 @@ HADOOP_SOURCE="hadoop-3.4.0"
 HADOOP_MD5SUM="2f9244ab73169cf7bc0811d932067f6b"
 
 # OPEN JDK
-JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
-JDK_NAME="java-se-8u41-ri.tar.gz"
-JDK_SOURCE="java-se-8u41-ri"
-JDK_MD5SUM="7295b5a3fb90e7aaf80df23d5eac222d"
+JDK_DOWNLOAD="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_NAME="OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_SOURCE="jdk-17.0.13+11"
+JDK_MD5SUM="6876bb460fbcf6234778a62e1f3c4ae9"
 
 # HYPERSCAN
 HYPERSCAN_DOWNLOAD="https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz"
@@ -52,7 +52,7 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux"
 JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.4.0-rc01/starcache-centos7_amd64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc1/starcache-centos7_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="f4a08a1911f5dcfbbd1ef68d765cb7d2"
+STARCACHE_MD5SUM="5515d4d83929ef477c4e48903e6cf04f"

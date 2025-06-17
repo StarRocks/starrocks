@@ -603,7 +603,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates the number of running RESTORE tasks under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse. For a shared-data cluster, this value is always `0`.
 
-### starrocks_fe_memory
+### starrocks_fe_memory_usage
 
 - Unit: Bytes or Count
 - Type: Instantaneous
@@ -1668,3 +1668,8 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The total number of error rows encountered during data loading by all Routine Load jobs.
+
+### starrocks_fe_sql_block_hit_count
+
+- Unit: Count
+- Description: The number of times blacklisted sql have been intercepted.

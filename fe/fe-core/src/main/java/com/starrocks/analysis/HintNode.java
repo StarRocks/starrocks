@@ -20,6 +20,17 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Map;
 
 public abstract class HintNode implements Comparable<HintNode>, ParseNode {
+    public static final String HINT_JOIN_BUCKET = "BUCKET";
+    public static final String HINT_JOIN_SHUFFLE = "SHUFFLE";
+    public static final String HINT_JOIN_COLOCATE = "COLOCATE";
+    public static final String HINT_JOIN_BROADCAST = "BROADCAST";
+
+    public static final String HINT_JOIN_SKEW = "SKEW";
+    public static final String HINT_JOIN_UNREORDER = "UNREORDER";
+
+    public static final String HINT_ANALYTIC_SORT = "sort";
+    public static final String HINT_ANALYTIC_HASH = "hash";
+    public static final String HINT_ANALYTIC_SKEW = "skewed";
 
     protected final NodePosition pos;
 

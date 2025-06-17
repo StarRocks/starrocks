@@ -19,6 +19,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
@@ -41,6 +42,7 @@ import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -76,7 +78,7 @@ public class RBACExecutorTest {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
 
         GlobalStateMgr.getCurrentState()
-                .setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, new DefaultAuthorizationProvider()));
+                .setAuthorizationMgr(new AuthorizationMgr(new DefaultAuthorizationProvider()));
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
 
         for (int i = 0; i < 5; i++) {
@@ -97,7 +99,7 @@ public class RBACExecutorTest {
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
 
-        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("u1", "%"));
+        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("u1", "%"), NodePosition.ZERO);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("[['u1'@'%', default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
@@ -107,7 +109,7 @@ public class RBACExecutorTest {
         grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
 
-        stmt = new ShowGrantsStmt("r1");
+        stmt = new ShowGrantsStmt("r1", GrantType.ROLE, NodePosition.ZERO);
         resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("[[r1, default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
                 "ON CATALOG default_catalog TO ROLE 'r1']]", resultSet.getResultRows().toString());
@@ -124,9 +126,9 @@ public class RBACExecutorTest {
         grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
 
-        stmt = new ShowGrantsStmt("r0");
+        stmt = new ShowGrantsStmt("r0", GrantType.ROLE, NodePosition.ZERO);
         resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertEquals("[[r0, null, GRANT 'r1', 'r2' TO  ROLE r0]," +
+        Assert.assertEquals("[[r0, null, GRANT 'r1', 'r2' TO ROLE r0]," +
                         " [r0, default_catalog, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]",
                 resultSet.getResultRows().toString());
     }
@@ -221,26 +223,26 @@ public class RBACExecutorTest {
         ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
         SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "set role r1", ctx), ctx);
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "db", "tbl0", PrivilegeType.SELECT);
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "db", "tbl1", PrivilegeType.SELECT);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke r2 from role r1", ctx), ctx);
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "db", "tbl0", PrivilegeType.SELECT);
         Assert.assertThrows(AccessDeniedException.class, () ->
-                Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                Authorizer.checkTableAction(ctx,
                         "db", "tbl1", PrivilegeType.SELECT));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke r1 from u1", ctx), ctx);
         Assert.assertThrows(AccessDeniedException.class, () ->
-                Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                Authorizer.checkTableAction(ctx,
                         "db", "tbl0", PrivilegeType.SELECT));
         Assert.assertThrows(AccessDeniedException.class, () ->
-                Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                Authorizer.checkTableAction(ctx,
                         "db", "tbl1", PrivilegeType.SELECT));
     }
 

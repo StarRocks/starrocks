@@ -52,6 +52,7 @@ public class SparkEtlJob {
     private static final String BITMAP_DICT_FUNC = "bitmap_dict";
     private static final String TO_BITMAP_FUNC = "to_bitmap";
     private static final String BITMAP_HASH = "bitmap_hash";
+    private static final String BITMAP_HASH64 = "bitmap_hash64";
     private static final String BITMAP_FROM_BINARY = "bitmap_from_binary";
 
     private String jobConfigFilePath;
@@ -116,8 +117,8 @@ public class SparkEtlJob {
                     String columnName = mappingEntry.getKey();
                     String exprStr = mappingEntry.getValue().toDescription();
                     String funcName = functions.expr(exprStr).expr().prettyName();
-                    if (funcName.equalsIgnoreCase(BITMAP_HASH)) {
-                        throw new SparkDppException("spark load not support bitmap_hash now");
+                    if (funcName.equalsIgnoreCase(BITMAP_HASH) || funcName.equalsIgnoreCase(BITMAP_HASH64)) {
+                        throw new SparkDppException("spark load not support bitmap_hash or bitmap_hash64 now");
                     }
                     if (funcName.equalsIgnoreCase(BITMAP_DICT_FUNC)) {
                         bitmapDictColumns.add(columnName.toLowerCase());

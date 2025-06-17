@@ -47,50 +47,6 @@ After the data migration is completed, you need to remove the configuration `ena
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
 ```
 
-### Disable Compaction
-
-If the target cluster for data migration is a shared-data cluster, you need to manually disable Compaction before starting the data migration and re-enable it after the data migration is completed.
-
-1. You can check whether Compaction is enabled by using the following statement:
-
-   ```SQL
-   ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks';
-   ```
-
-   If `0` is returned, it indicates that Compaction is disabled.
-
-2. Dynamically disable Compaction:
-
-   ```SQL
-   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="0");
-   ```
-
-3. To prevent Compaction from automatically enabling during the data migration process in case of cluster restart, you also need to add the following configuration item in the FE configuration file **fe.conf**:
-
-   ```Properties
-   lake_compaction_max_tasks = 0
-   ```
-
-After the data migration is completed, you need to remove the configuration `lake_compaction_max_tasks = 0` from the configuration file, and dynamically enable Compaction using the following statement:
-
-```SQL
-ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
-```
-
-### Disable column filtering
-
-The optimization for unused column filtering at the Scan stage may cause a crash during queries against the migrated data. You need to disable this optimization before data migration:
-
-```SQL
-SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
-```
-
-#### enable_filter_unused_columns_in_scan_stage
-
-* **Description**: Whether to filter unused column at the Scan stage.
-* **Default**: true
-* **Introduced in**: v3.1
-
 ### Configure Data Migration (Optional)
 
 You can configure data migration operations using the following FE and BE parameters. In most cases, the default configuration can meet your needs. If you wish to use the default configuration, you can skip this step.
@@ -177,7 +133,7 @@ target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
 
-max_replication_data_size_per_job_in_gb=-1
+max_replication_data_size_per_job_in_gb=1024
 
 meta_job_interval_seconds=180
 meta_job_threads=4
@@ -223,7 +179,7 @@ The description of the parameters is as follows:
 | ddl_job_allow_drop_partition_target_only  | Whether to allow the migration tool to delete partitions that are deleted in the source cluster to keep the partitions consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
 | replication_job_interval_seconds          | The interval, in seconds, at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
 | replication_job_batch_size                | The batch size at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
-| max_replication_data_size_per_job_in_gb   | The data size threshold at which the migration tool triggers data synchronization tasks. Unit: GB. Multiple data synchronization tasks will be triggered if the size of the partition to be migrated exceed this value. The default value is `-1`, meaning no limit is imposed, and all partitions in a table will be migrated in a single synchronization task. You can set this parameter to restrict the data size of each task if the table to be migrated has a large data volume. |
+| max_replication_data_size_per_job_in_gb   | The data size threshold at which the migration tool triggers data synchronization tasks. Unit: GB. Multiple data synchronization tasks will be triggered if the size of the partition to be migrated exceed this value. The default value is `1024`. You can use the default value for this item. |
 | report_interval_seconds                   | The time interval at which the migration tool prints the progress information. Unit: Seconds. Default value: `300`. You can use the default value for this item. |
 
 ### Obtain Cluster Token

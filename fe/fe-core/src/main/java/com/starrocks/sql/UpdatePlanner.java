@@ -140,7 +140,7 @@ public class UpdatePlanner {
                 OlapTable olapTable = (OlapTable) targetTable;
                 DataSink dataSink = new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
                         olapTable.enableReplicatedStorage(), false,
-                        olapTable.supportedAutomaticPartition(), session.getCurrentWarehouseId());
+                        olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
                 if (updateStmt.usePartialUpdate()) {
                     // using column mode partial update in UPDATE stmt
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
@@ -153,7 +153,7 @@ public class UpdatePlanner {
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
                 TableName catalogDbTable = updateStmt.getTableName();
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
                     olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
@@ -162,7 +162,8 @@ public class UpdatePlanner {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (targetTable instanceof SystemTable) {
-                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable, ConnectContext.get().getCurrentWarehouseId());
+                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable,
+                        ConnectContext.get().getCurrentComputeResource());
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());

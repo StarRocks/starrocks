@@ -61,6 +61,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
     private final int queryStartIndex;
+    private final int queryStopIndex;
     private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
@@ -96,6 +97,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<Integer, Column> generatedPartitionCols = Maps.newHashMap();
     private Map<Expr, Expr> partitionByExprToAdjustExprMap = Maps.newHashMap();
 
+    // Whether the mv is created on a partitioned table with transform function. Use list partition mv if ref base table's
+    // partition contains transform function.
+    private boolean isRefBaseTablePartitionWithTransform = false;
+
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
@@ -106,6 +111,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
+                                           int queryStopIndex,
                                            String originalDBName,
                                            NodePosition pos) {
         super(pos);
@@ -120,6 +126,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.sortKeys = sortKeys;
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
+        this.queryStopIndex = queryStopIndex;
         this.queryStatement = queryStatement;
         this.originalDBName = originalDBName;
     }
@@ -243,6 +250,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         return queryStartIndex;
     }
 
+    public int getQueryStopIndex() {
+        return queryStopIndex;
+    }
+
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
@@ -321,6 +332,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     }
     public String getOriginalDBName() {
         return originalDBName;
+    }
+
+    public boolean isRefBaseTablePartitionWithTransform() {
+        return isRefBaseTablePartitionWithTransform;
+    }
+
+    public void setRefBaseTablePartitionWithTransform(boolean refBaseTablePartitionWithTransform) {
+        isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
     }
 
     @Override

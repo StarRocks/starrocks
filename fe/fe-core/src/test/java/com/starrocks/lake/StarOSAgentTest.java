@@ -17,7 +17,6 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.CreateShardGroupInfo;
@@ -34,6 +33,7 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
+import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
@@ -44,6 +44,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -56,9 +57,9 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -365,7 +366,7 @@ public class StarOSAgentTest {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
         Assert.assertEquals(Lists.newArrayList(10L, 11L),
                 starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
-                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+                Collections.EMPTY_MAP, WarehouseManager.DEFAULT_RESOURCE));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
@@ -396,11 +397,11 @@ public class StarOSAgentTest {
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
                 .build();
         ReplicaInfo replica2 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.SECONDARY)
+                .setReplicaRole(ReplicaRole.PRIMARY)
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(2L).setWorkerState(WorkerState.ON).build())
                 .build();
         ReplicaInfo replica3 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.SECONDARY)
+                .setReplicaRole(ReplicaRole.PRIMARY)
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(3L).setWorkerState(WorkerState.OFF).build())
                 .build();
         List<ReplicaInfo> replicas = Lists.newArrayList(replica1, replica2, replica3);
@@ -451,9 +452,10 @@ public class StarOSAgentTest {
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "Failed to get primary backend. shard id: 10",
-                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
+                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
-        Assert.assertEquals(Sets.newHashSet(), getBackendIdsByShard(10L, 0));
+        Assert.assertEquals(Lists.newArrayList(),
+                starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
         workerToNode.put(1L, 10001L);
         workerToNode.put(2L, 10002L);
@@ -461,9 +463,10 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
-        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
-                getBackendIdsByShard(10L, 0));
+        Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        Assert.assertEquals(Lists.newArrayList(10001L, 10002L, 10003L),
+                starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
 
     @Test
@@ -735,41 +738,34 @@ public class StarOSAgentTest {
         new MockUp<StarClient>() {
             @Mock
             public WorkerGroupDetailInfo createWorkerGroup(String serviceId, String owner, WorkerGroupSpec spec,
-                    Map<String, String> labels, Map<String, String> properties, int replicaNumber,
-                    ReplicationType replicationType) throws StarClientException {
+                                                           Map<String, String> labels, Map<String, String> properties,
+                                                           int replicaNumber, ReplicationType replicationType,
+                                                           WarmupLevel warmupLevel) throws StarClientException {
                 return WorkerGroupDetailInfo.newBuilder().build();
             }
         };
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.createWorkerGroup("size", 1, null);
-        starosAgent.createWorkerGroup("size", 1, "sync");
-        starosAgent.createWorkerGroup("size", 1, "async");
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Unknown replication type aaa",
-                () -> starosAgent.createWorkerGroup("size", 1, "aaa"));
+        starosAgent.createWorkerGroup("size");
+        starosAgent.createWorkerGroup("size", 1);
+        starosAgent.createWorkerGroup("size", 1, ReplicationType.SYNC);
+        starosAgent.createWorkerGroup("size", 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
     }
 
     @Test
     public void testUpdateWorkerGroup() throws StarClientException, DdlException, StarRocksException {
         new MockUp<StarClient>() {
             @Mock
-            public WorkerGroupDetailInfo updateWorkerGroup(String serviceId, long groupId,
-                    Map<String, String> labels, Map<String, String> properties, int replicaNumber,
-                    ReplicationType replicationType) throws StarClientException {
+            public WorkerGroupDetailInfo updateWorkerGroup(String serviceId, long groupId, Map<String, String> labels,
+                                                           Map<String, String> properties, int replicaNumber,
+                                                           ReplicationType replicationType, WarmupLevel warmupLevel)
+                    throws StarClientException {
                 return WorkerGroupDetailInfo.newBuilder().build();
             }
         };
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.updateWorkerGroup(123, 1, null);
-        starosAgent.updateWorkerGroup(123, 1, "sync");
-        starosAgent.updateWorkerGroup(123, 1, "async");
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Unknown replication type aaa",
-                () -> starosAgent.updateWorkerGroup(123, 1, "aaa"));
-    }
-
-    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
-        return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
+        starosAgent.updateWorkerGroup(123, 1);
+        starosAgent.updateWorkerGroup(123, 1, ReplicationType.SYNC);
+        starosAgent.updateWorkerGroup(123, 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
     }
 
     @Test
@@ -789,5 +785,80 @@ public class StarOSAgentTest {
         List<Long> ids = starosAgent.listShard(999L);
         Assert.assertEquals(1, ids.size());
         Assert.assertEquals((Long) 1000L, (Long) ids.get(0));
+    }
+
+    @Test
+    public void testUpdateWorkerGroupExcepted() throws StarClientException {
+        long workerGroupId = 10086;
+        Map<String, String> properties = new HashMap<>();
+        properties.put("A", "a");
+        StarClientException expectedException = new StarClientException(StarStatus.newBuilder()
+                .setStatusCode(StatusCode.INTERNAL)
+                .setErrorMsg("Injected internal error from unit test: testUpdateWorkerGroupExcepted")
+                .build());
+        new Expectations() {
+            {
+                client.updateWorkerGroup("1", workerGroupId, null, properties, 0, ReplicationType.NO_SET,
+                        WarmupLevel.WARMUP_NOT_SET);
+                result = expectedException;
+                result = null;
+                minTimes = 2;
+                maxTimes = 2;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        // first call, exception thrown
+        Assert.assertThrows(DdlException.class, () -> starosAgent.updateWorkerGroup(workerGroupId, properties));
+        // second call, no exception
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.updateWorkerGroup(workerGroupId, properties));
+    }
+
+    @Test
+    public void testGetWorkerGroupInfoNormal() throws StarClientException {
+        long workerGroupId = 10086;
+        Map<String, String> properties = new HashMap<>();
+        properties.put("A", "a");
+        WorkerGroupDetailInfo expectedInfo = WorkerGroupDetailInfo.newBuilder()
+                .putAllProperties(properties)
+                .setGroupId(workerGroupId)
+                .build();
+
+        new Expectations() {
+            {
+                client.listWorkerGroup("1", Lists.newArrayList(workerGroupId), false);
+                result = expectedInfo;
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        List<WorkerGroupDetailInfo> infos = new ArrayList<>();
+        ExceptionChecker.expectThrowsNoException(() -> {
+            WorkerGroupDetailInfo info = starosAgent.getWorkerGroupInfo(workerGroupId);
+            infos.add(info);
+        });
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(expectedInfo.toString(), infos.get(0).toString());
+    }
+
+    @Test
+    public void testGetWorkerGroupInfoExcepted() throws StarClientException {
+        long workerGroupId = 10086;
+        StarClientException expectedException = new StarClientException(StarStatus.newBuilder()
+                .setStatusCode(StatusCode.INTERNAL)
+                .setErrorMsg("Injected internal error from unit test: testGetWorkerGroupInfoExcepted")
+                .build());
+        new Expectations() {
+            {
+                client.listWorkerGroup("1", Lists.newArrayList(workerGroupId), false);
+                result = expectedException;
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertThrows(DdlException.class, () -> starosAgent.getWorkerGroupInfo(workerGroupId));
     }
 }

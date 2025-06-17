@@ -152,10 +152,24 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected void restoreState(LakeTableAlterMetaJobBase job) {
-        this.schemaInfos = new ArrayList<>(((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos);
+        // This PR(#55282) only writes the schemaInfo once in the entire schema change job process, 
+        // but it has compatibility issues with previous versions, so it was reverted.
+        // However, since some versions include this PR, the schemaInfo may be null when upgrading from these versions.
+        List<IndexSchemaInfo> jobSchemaInfos = ((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos;
+        if (jobSchemaInfos != null && !jobSchemaInfos.isEmpty()) {
+            this.schemaInfos = new ArrayList<>(jobSchemaInfos);
+        }
     }
 
+    @Override
+    protected boolean enableFileBundling() {
+        return false;
+    }
 
+    @Override
+    protected boolean disableFileBundling() {
+        return false;
+    }
 
     private static class IndexSchemaInfo {
         @SerializedName("indexId")

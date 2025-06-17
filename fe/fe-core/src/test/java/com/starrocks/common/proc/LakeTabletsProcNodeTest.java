@@ -1,8 +1,7 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// you may not use this file except in compliance with the License. // You may obtain a copy of the License at
 //
 //     https://www.apache.org/licenses/LICENSE-2.0
 //
@@ -15,7 +14,6 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -41,6 +39,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -85,11 +84,11 @@ public class LakeTabletsProcNodeTest {
                 GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 result = agent;
 
-                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet1);
-                result = Sets.newHashSet(10000, 10001);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet1);
+                result = Lists.newArrayList(10000, 10001);
 
-                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet2);
-                result = Sets.newHashSet(10001, 10002);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet2);
+                result = Lists.newArrayList(10001, 10002);
             }
         };
 

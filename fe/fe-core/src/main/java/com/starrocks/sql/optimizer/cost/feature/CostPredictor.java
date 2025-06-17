@@ -37,8 +37,22 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public abstract class CostPredictor {
+    private static final Logger LOG = LogManager.getLogger(CostPredictor.class);
 
     public abstract long predictMemoryBytes(ExecPlan plan);
+
+    /**
+     * Try to predict memory bytes, if failed, return 0
+     */
+    public long tryPredictMemoryBytes(ExecPlan plan) {
+        try {
+            return predictMemoryBytes(plan);
+        } catch (Exception e) {
+            // Log the error or handle it appropriately
+            LOG.warn("Failed to predict memory bytes", e);
+            return 0L;
+        }
+    }
 
     public static ServiceBasedCostPredictor getServiceBasedCostPredictor() {
         return ServiceBasedCostPredictor.getInstance();
@@ -52,11 +66,10 @@ public abstract class CostPredictor {
         public static final String PREDICT_URL = "/predict_csv";
         public static final String HEALTH_URL = "/health_check";
         private static final ServiceBasedCostPredictor INSTANCE = new ServiceBasedCostPredictor();
-        private static final Logger LOG = LogManager.getLogger(ServiceBasedCostPredictor.class);
 
         private static final ScheduledExecutorService DAEMON;
-        private static final Duration HEALTH_CHECK_INTERVAL = Duration.ofSeconds(30);
-        private volatile int lastHealthCheckStatusCode = HttpStatus.SC_OK;
+        private static final Duration HEALTH_CHECK_INTERVAL = Duration.ofSeconds(Config.query_cost_predictor_healthchk_interval);
+        private volatile int lastHealthCheckStatusCode = -1;
 
         static {
             DAEMON = Executors.newSingleThreadScheduledExecutor();
@@ -84,7 +97,6 @@ public abstract class CostPredictor {
             PlanFeatures planFeatures = FeatureExtractor.extractFeatures(plan.getPhysicalPlan());
             String header = PlanFeatures.featuresHeader();
             String featureString = planFeatures.toFeatureCsv();
-
             try {
                 // Use Apache HttpClient to send the HTTP request
                 HttpPost httpPost = new HttpPost(Config.query_cost_prediction_service_address + PREDICT_URL);
@@ -95,15 +107,16 @@ public abstract class CostPredictor {
                 entity.setContentType("text/csv");
                 httpPost.setEntity(entity);
 
-                CloseableHttpResponse response = httpClient.execute(httpPost);
-                int status = response.getStatusLine().getStatusCode();
-                if (status == HttpStatus.SC_OK) {
-                    HttpEntity responseEntity = response.getEntity();
-                    String responseBody = EntityUtils.toString(responseEntity);
-                    return (long) Double.parseDouble(responseBody);
-                } else {
-                    // Handle the error
-                    throw new IOException("Failed to predict memory bytes: HTTP error code " + status);
+                try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
+                    int status = response.getStatusLine().getStatusCode();
+                    if (status == HttpStatus.SC_OK) {
+                        HttpEntity responseEntity = response.getEntity();
+                        String responseBody = EntityUtils.toString(responseEntity);
+                        return (long) Double.parseDouble(responseBody);
+                    } else {
+                        // Handle the error
+                        throw new IOException("Failed to predict memory bytes: HTTP error code " + status);
+                    }
                 }
             } catch (IOException e) {
                 // Log the error or handle it appropriately
@@ -134,8 +147,7 @@ public abstract class CostPredictor {
             }
             String address = Config.query_cost_prediction_service_address + HEALTH_URL;
             HttpGet httpGet = new HttpGet(address);
-            try {
-                CloseableHttpResponse response = httpClient.execute(httpGet);
+            try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
                 lastHealthCheckStatusCode = response.getStatusLine().getStatusCode();
                 if (lastHealthCheckStatusCode != HttpStatus.SC_OK) {
                     LOG.warn("service is not healthy, address={} status_code={}", address, lastHealthCheckStatusCode);

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
@@ -71,7 +70,8 @@ public class CacheRelaxDictManagerTest {
     }
 
     @After
-    public void tearDown() {}
+    public void tearDown() {
+    }
 
     private TResultBatch generateDictResult(int size) throws TException {
         TStatisticData sd = new TStatisticData();
@@ -103,11 +103,11 @@ public class CacheRelaxDictManagerTest {
     }
 
     @Test
-    public void  testLoader() throws ExecutionException, InterruptedException {
+    public void testLoader() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
@@ -123,11 +123,11 @@ public class CacheRelaxDictManagerTest {
     }
 
     @Test
-    public void  testLoaderError() throws ExecutionException, InterruptedException {
+    public void testLoaderError() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
@@ -143,36 +143,37 @@ public class CacheRelaxDictManagerTest {
     }
 
     @Test
-    public void  testLoaderDeserialize() throws ExecutionException, InterruptedException {
+    public void testLoaderDeserialize() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .refreshAfterWrite(1, TimeUnit.SECONDS)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
+        int size = Config.low_cardinality_threshold / 2;
         new MockUp<StmtExecutor>() {
             @Mock
             public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan)
                     throws TException {
-                return new Pair<>(List.of(generateDictResult(100)), new Status(TStatusCode.OK, "ok"));
+                return new Pair<>(List.of(generateDictResult(size)), new Status(TStatusCode.OK, "ok"));
             }
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
         Optional<ColumnDict> optionalColumnDict = future.get();
         Assert.assertFalse(optionalColumnDict.isEmpty());
-        Assert.assertEquals(100, optionalColumnDict.get().getDictSize());
+        Assert.assertEquals(size, optionalColumnDict.get().getDictSize());
         Thread.sleep(2000);
         Assert.assertTrue(dictStatistics.get(key).get().isPresent());
     }
 
     @Test
-    public void  testLoaderOversize() throws ExecutionException, InterruptedException {
+    public void testLoaderOversize() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
@@ -180,7 +181,8 @@ public class CacheRelaxDictManagerTest {
             @Mock
             public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan)
                     throws TException {
-                return new Pair<>(List.of(generateDictResult(1000)), new Status(TStatusCode.OK, "ok"));
+                int size = Config.low_cardinality_threshold + 2;
+                return new Pair<>(List.of(generateDictResult(size)), new Status(TStatusCode.OK, "ok"));
             }
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
@@ -190,7 +192,7 @@ public class CacheRelaxDictManagerTest {
 
     @Test
     public void testHasGlobalDict() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         // clear
@@ -204,7 +206,7 @@ public class CacheRelaxDictManagerTest {
 
     @Test
     public void testGlobalDict() throws InterruptedException, TException {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         // clear
@@ -212,11 +214,12 @@ public class CacheRelaxDictManagerTest {
         IRelaxDictManager manager = IRelaxDictManager.getInstance();
         manager.removeGlobalDict(tableUUID, columnName);
         Assert.assertTrue(manager.hasGlobalDict(tableUUID, columnName));
+        int size = Config.low_cardinality_threshold / 2;
         new MockUp<StmtExecutor>() {
             @Mock
             public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan)
                     throws TException {
-                return new Pair<>(List.of(generateDictResult(100)), new Status(TStatusCode.OK, "ok"));
+                return new Pair<>(List.of(generateDictResult(size)), new Status(TStatusCode.OK, "ok"));
             }
         };
         int retry = 5;
@@ -227,8 +230,8 @@ public class CacheRelaxDictManagerTest {
         }
         if (manager.getGlobalDict(tableUUID, columnName).isPresent()) {
             ColumnDict columnDict = manager.getGlobalDict(tableUUID, columnName).get();
-            Assert.assertEquals(100, columnDict.getDictSize());
-            TResultBatch resultBatch = generateDictResult(101);
+            Assert.assertEquals(size, columnDict.getDictSize());
+            TResultBatch resultBatch = generateDictResult(size + 1);
 
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             ByteBuffer buffer = resultBatch.rows.get(0);
@@ -240,12 +243,12 @@ public class CacheRelaxDictManagerTest {
             manager.updateGlobalDict(tableUUID, columnName, Optional.of(sd));
             Optional<ColumnDict> optional = manager.getGlobalDict(tableUUID, columnName);
             Assert.assertTrue(optional.isPresent());
-            Assert.assertEquals(101, optional.get().getDictSize());
+            Assert.assertEquals(size + 1, optional.get().getDictSize());
             TStatisticData nullDict = new TStatisticData();
             manager.updateGlobalDict(tableUUID, columnName, Optional.of(nullDict));
             optional = manager.getGlobalDict(tableUUID, columnName);
             Assert.assertTrue(optional.isPresent());
-            Assert.assertEquals(101, optional.get().getDictSize());
+            Assert.assertEquals(size + 1, optional.get().getDictSize());
             Assert.assertEquals(1,
                     ((CacheRelaxDictManager) manager).estimateCount().get("ExternalTableColumnDict").intValue());
             Assert.assertEquals(1, ((CacheRelaxDictManager) manager).getSamples().get(0).first.size());

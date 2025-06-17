@@ -49,7 +49,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DecommissionBackendClause;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -78,8 +77,7 @@ public class CheckDecommissionAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException, AccessDeniedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+        Authorizer.checkSystemAction(ConnectContext.get(), PrivilegeType.OPERATE);
 
         String hostPorts = request.getSingleParameter(HOST_PORTS);
         if (Strings.isNullOrEmpty(hostPorts)) {

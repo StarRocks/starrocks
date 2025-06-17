@@ -78,7 +78,8 @@ public:
                 new_columns.push_back(column);
             }
         }
-        auto result = ColumnHelper::create_column(_immediate_type, _agg_state_desc.is_result_nullable());
+        // TODO: use mutable ptr as result
+        ColumnPtr result = ColumnHelper::create_column(_immediate_type, _agg_state_desc.is_result_nullable());
         auto chunk_size = columns[0]->size();
         _function->convert_to_serialize_format(context, new_columns, chunk_size, &result);
         return result;

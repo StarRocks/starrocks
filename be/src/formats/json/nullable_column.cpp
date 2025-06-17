@@ -22,6 +22,7 @@
 #include "formats/json/struct_column.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
+#include "util/simdjson_util.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -151,7 +152,8 @@ static Status add_boolean_column(Column* column, const TypeDescriptor& type_desc
         }
 
         case simdjson::ondemand::json_type::string: {
-            std::string_view s = value->get_string();
+            faststring buffer;
+            std::string_view s = value_get_string_safe(value, &buffer);
             StringParser::ParseResult r;
             auto v = StringParser::string_to_int<int32_t>(s.data(), s.size(), &r);
             if (r != StringParser::PARSE_SUCCESS || std::isnan(v) || std::isinf(v)) {

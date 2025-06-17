@@ -124,11 +124,6 @@ public class ConnectContextTest {
         // Session variable
         Assert.assertNotNull(ctx.getSessionVariable());
 
-        // connect scheduler
-        Assert.assertNull(ctx.getConnectScheduler());
-        ctx.setConnectScheduler(connectScheduler);
-        Assert.assertNotNull(ctx.getConnectScheduler());
-
         // connection id
         ctx.setConnectionId(101);
         Assert.assertEquals(101, ctx.getConnectionId());
@@ -144,7 +139,7 @@ public class ConnectContextTest {
         Assert.assertNotNull(ctx.toThreadInfo());
         long currentTimeMillis = System.currentTimeMillis();
         List<String> row = ctx.toThreadInfo().toRow(currentTimeMillis, false);
-        Assert.assertEquals(10, row.size());
+        Assert.assertEquals(11, row.size());
         Assert.assertEquals("101", row.get(0));
         Assert.assertEquals("testUser", row.get(1));
         Assert.assertEquals("127.0.0.1:12345", row.get(2));
@@ -155,6 +150,7 @@ public class ConnectContextTest {
         Assert.assertEquals("OK", row.get(7));
         Assert.assertEquals("", row.get(8));
         Assert.assertEquals("false", row.get(9));
+        Assert.assertEquals("default_warehouse", row.get(10));
 
         // Start time
         ctx.setStartTime();
@@ -307,5 +303,59 @@ public class ConnectContextTest {
             ctx.resetErrorCode();
             Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
         }
+    }
+
+    @Test
+    public void testIsIdleLastFor() throws Exception {
+        ConnectContext context = new ConnectContext();
+        context.setCommand(MysqlCommand.COM_SLEEP);
+        context.setEndTime();
+
+        Thread.sleep(100);
+
+        Assert.assertTrue(context.isIdleLastFor(99));
+
+        context.setCommand(MysqlCommand.COM_QUERY);
+        context.setStartTime();
+        Assert.assertFalse(context.isIdleLastFor(99));
+    }
+
+    @Test
+    public void testQueryTimeoutWithPendingTime() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+
+        // query no time out
+        Assert.assertFalse(ctx.isKilled());
+
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
+        Assert.assertFalse(ctx.checkTimeout(now));
+        Assert.assertFalse(ctx.isKilled());
+
+        // Timeout without pending time
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
+        Assert.assertTrue(ctx.checkTimeout(now));
+        Assert.assertFalse(ctx.isKilled());
+
+        // Timeout with pending time
+        int pendingTimeS = 300;
+        ctx.setPendingTimeSecond(pendingTimeS);
+        Assert.assertTrue(ctx.getExecTimeout() == ctx.getSessionVariable().getQueryTimeoutS() + pendingTimeS);
+
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
+        Assert.assertFalse(ctx.checkTimeout(now));
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + pendingTimeS * 1000 + 1;
+        Assert.assertTrue(ctx.checkTimeout(now));
+
+        // Kill
+        ctx.kill(true, "query timeout");
+        Assert.assertTrue(ctx.isKilled());
+
+        // clean up
+        ctx.cleanup();
     }
 }

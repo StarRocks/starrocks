@@ -18,7 +18,6 @@ package com.starrocks.lake;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
@@ -35,13 +34,13 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
-import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
@@ -52,6 +51,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -78,6 +78,8 @@ public class StarOSAgent {
 
     public static final String SERVICE_NAME = "starrocks";
 
+    // warehouse -> worker_group
+    //  index -> worker_group_id
     public static final long DEFAULT_WORKER_GROUP_ID = 0L;
 
     protected StarClient client;
@@ -166,6 +168,15 @@ public class StarOSAgent {
         prepare();
         try {
             client.updateFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to update file store, error: " + e.getMessage());
+        }
+    }
+
+    public void replaceFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
+        try {
+            client.replaceFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
             throw new DdlException("Failed to update file store, error: " + e.getMessage());
         }
@@ -483,11 +494,12 @@ public class StarOSAgent {
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
-                                   long workerGroupId)
+                                   ComputeResource computeResource)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
         }
+        long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
@@ -615,12 +627,8 @@ public class StarOSAgent {
         return result;
     }
 
-    public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
-        return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
-    }
-
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
-        Set<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId, true);
+        List<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -632,23 +640,32 @@ public class StarOSAgent {
         return backendIds.iterator().next();
     }
 
-    public Set<Long> getAllNodeIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+    public long getPrimaryComputeNodeIdByShard(ShardInfo shardInfo) throws StarRocksException {
+        List<Long> ids = getAllNodeIdsByShard(shardInfo);
+        if (ids.isEmpty()) {
+            // If BE stops, routine load task may catch UserException during load plan,
+            // and the job state will changed to PAUSED.
+            // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
+            // when all BEs become alive.
+            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
+                    "Failed to get primary backend. shard id: " + shardInfo.getShardId());
+        }
+        return ids.iterator().next();
+    }
+
+    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
             throws StarRocksException {
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-            return getAllNodeIdsByShard(shardInfo, onlyPrimary);
+            return getAllNodeIdsByShard(shardInfo);
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }
     }
 
-    public Set<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+    private List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {
         List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
-        if (onlyPrimary) {
-            replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
-                    .collect(Collectors.toList());
-        }
-        Set<Long> nodeIds = Sets.newHashSet();
+        List<Long> nodeIds = new ArrayList<>();
         replicas.stream()
                 .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
                 .forEach(x -> x.ifPresent(nodeIds::add));
@@ -751,6 +768,10 @@ public class StarOSAgent {
                 long nodeId = entry.getValue();
                 long workerId = entry.getKey();
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node == null) {
+                    iterator.remove();
+                    continue;
+                }
                 if (node.getWorkerGroupId() == workerGroupId) {
                     iterator.remove();
                     workerToId.entrySet().removeIf(e -> e.getValue() == workerId);
@@ -759,7 +780,21 @@ public class StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size, int replicaNumber, String replicationTypeStr) throws DdlException {
+    public long createWorkerGroup(String size) throws DdlException {
+        return createWorkerGroup(size, 1);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
+        return createWorkerGroup(size, replicaNumber, ReplicationType.NO_REPLICATION);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType) throws DdlException {
+        return createWorkerGroup(size, replicaNumber, replicationType, WarmupLevel.WARMUP_NOTHING);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel)
+            throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -768,18 +803,8 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
-            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
-            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
-                replicationType = ReplicationType.NO_REPLICATION;
-            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
-                replicationType = ReplicationType.SYNC;
-            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
-                replicationType = ReplicationType.ASYNC;
-            } else {
-                throw new DdlException("Unknown replication type " + replicationTypeStr);
-            }
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap(), replicaNumber, replicationType);
+                    Collections.emptyMap(), replicaNumber, replicationType, warmupLevel);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
@@ -787,24 +812,47 @@ public class StarOSAgent {
         return result.getGroupId();
     }
 
-    public void updateWorkerGroup(long workerGroupId, int replicaNumber, String replicationTypeStr)
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        updateWorkerGroup(workerGroupId, replicaNumber, ReplicationType.NO_SET);
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType)
             throws DdlException {
+        updateWorkerGroup(workerGroupId, replicaNumber, replicationType, WarmupLevel.WARMUP_NOT_SET);
+    }
+
+    public void updateWorkerGroup(long workerGroupId, Map<String, String> properties) throws DdlException {
         prepare();
         try {
-            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
-            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
-                replicationType = ReplicationType.NO_REPLICATION;
-            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
-                replicationType = ReplicationType.SYNC;
-            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
-                replicationType = ReplicationType.ASYNC;
-            } else {
-                throw new DdlException("Unknown replication type " + replicationTypeStr);
-            }
-            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType);
+            client.updateWorkerGroup(serviceId, workerGroupId, null, properties, 0, ReplicationType.NO_SET,
+                    WarmupLevel.WARMUP_NOT_SET);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group properties. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType, warmupLevel);
         } catch (StarClientException e) {
             LOG.warn("Failed to update worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+    public WorkerGroupDetailInfo getWorkerGroupInfo(long workerGroupId) throws DdlException {
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> info =
+                    client.listWorkerGroup(serviceId, Lists.newArrayList(workerGroupId), false);
+            return info.get(0);
+        } catch (StarClientException e) {
+            String errMsg = "Failed to get worker group info (id=" + workerGroupId + "). error: " + e.getMessage();
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
         }
     }
 

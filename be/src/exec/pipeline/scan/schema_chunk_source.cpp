@@ -54,6 +54,20 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
 
     const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
+
+    // For compatibility of xxx_time column type changed from double to datetime in fe_tablet_schedules table.
+    // TODO(wyb): introduced in v4.0, can be removed in the v4.1
+    if (schema_table->schema_table_type() == TSchemaTableType::SCH_FE_TABLET_SCHEDULES) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if (slot_desc->type().type == TYPE_DOUBLE &&
+                (boost::iequals(col_name, "CREATE_TIME") || boost::iequals(col_name, "SCHEDULE_TIME") ||
+                 boost::iequals(col_name, "FINISH_TIME"))) {
+                slot_desc->type().type = TYPE_DATETIME;
+            }
+        }
+    }
+
     int slot_num = dest_slot_descs.size();
     if (src_slot_descs.empty()) {
         slot_num = 0;
@@ -116,7 +130,7 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         DCHECK(dest_slot_descs[i]->is_materialized());
         int j = _index_map[i];
         SlotDescriptor* src_slot = src_slot_descs[j];
-        ColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
         column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), src_slot->id());
     }
@@ -127,7 +141,7 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 

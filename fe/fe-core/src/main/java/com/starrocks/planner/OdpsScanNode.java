@@ -112,11 +112,13 @@ public class OdpsScanNode extends ScanNode {
                 case SIZE:
                     IndexedInputSplit split = (IndexedInputSplit) inputSplit;
                     splitInfo.put("split_index", String.valueOf(split.getSplitIndex()));
+                    hdfsScanRange.setOffset(split.getSplitIndex());
                     break;
                 case ROW_OFFSET:
                     RowRangeInputSplit split1 = (RowRangeInputSplit) inputSplit;
                     splitInfo.put("start_index", String.valueOf(split1.getRowRange().getStartIndex()));
                     splitInfo.put("num_record", String.valueOf(split1.getRowRange().getNumRecord()));
+                    hdfsScanRange.setOffset(split1.getRowRange().getStartIndex());
                     break;
                 default:
                     throw new StarRocksConnectorException(

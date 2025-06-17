@@ -65,6 +65,9 @@ public class CompactionControlScheduler {
     }
 
     public void updateTableForbiddenTimeRanges(Long tableId, String crontab) throws SchedulerException {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
         startScheduler();
         // Generate JobKey and TriggerKey based on tableId
         String jobKeyString = "job_" + tableId;

@@ -25,7 +25,7 @@
 namespace starrocks {
 
 RowSourceMaskBuffer::RowSourceMaskBuffer(int64_t tablet_id, std::string storage_root_path)
-        : _mask_column(UInt16Column::create_mutable()),
+        : _mask_column(UInt16Column::create()),
           _tablet_id(tablet_id),
           _storage_root_path(std::move(storage_root_path)) {}
 

@@ -14,14 +14,12 @@
 
 #include <benchmark/benchmark.h>
 
-#include <memory>
 #include <random>
 
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
 static const int kDictSize = 20;
 static const int kDictLength = 10;
@@ -50,7 +48,7 @@ static void BM_DictDecoder(benchmark::State& state) {
         (void)dict_decoder.set_dict(kTestChunkSize, kDictSize, &decoder);
 
         if (debug) {
-            ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+            MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
             (void)dict_decoder.get_dict_values(column.get());
             std::cout << column->debug_string() << "\n";
         }
@@ -84,7 +82,7 @@ static void BM_DictDecoder(benchmark::State& state) {
                   << ".\n";
     }
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+    MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
     for (auto _ : state) {
         state.PauseTiming();
         column->reset_column();
@@ -98,7 +96,6 @@ static void BM_DictDecoder(benchmark::State& state) {
 
 BENCHMARK(BM_DictDecoder)->DenseRange(0, 100, 10)->Unit(benchmark::kMillisecond);
 
-} // namespace parquet
-} // namespace starrocks
+} // namespace starrocks::parquet
 
 BENCHMARK_MAIN();

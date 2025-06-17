@@ -51,7 +51,7 @@ public:
                     const arrow::MemoryPool* pool)
             : ColumnConverter(arrow_type, sr_field, pool) {}
 
-    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, std::shared_ptr<Column>& column) override {
+    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, MutableColumnPtr& column) override {
         if (!column->is_nullable() && array->null_count() > 0) {
             return arrow::Status::Invalid("Column ", column->get_name(),
                                           " is non-nullable, but there are some null data in array.");
@@ -61,8 +61,9 @@ public:
         const auto& nested_array = arrow::internal::checked_pointer_cast<ArrowArrayType>(array);
         ARROW_ASSIGN_OR_RAISE(arrow::ArrayVector arrow_children_arrays, get_children_arrays(nested_array));
 
-        const auto data_column = arrow::internal::checked_pointer_cast<SrColumnType>(get_data_column(column));
-        ARROW_ASSIGN_OR_RAISE(std::vector<starrocks::ColumnPtr> sr_sub_columns, get_children_columns(data_column));
+        auto data_column = SrColumnType::static_pointer_cast(get_data_column(column.get()));
+        ARROW_ASSIGN_OR_RAISE(std::vector<starrocks::ColumnPtr> sr_sub_columns,
+                              get_children_columns(data_column.get()));
 
         if (arrow_children_arrays.size() != sr_sub_columns.size()) {
             return arrow::Status::Invalid("Can't convert nested array, the array children size(",
@@ -76,10 +77,12 @@ public:
 
         // copy data column
         for (size_t idx = 0; idx < arrow_children_arrays.size(); ++idx) {
-            ARROW_RETURN_NOT_OK(_children[idx]->toSrColumn(arrow_children_arrays[idx], sr_sub_columns[idx]));
+            auto mutable_sr_column = sr_sub_columns[idx]->as_mutable_ptr();
+            ARROW_RETURN_NOT_OK(_children[idx]->toSrColumn(arrow_children_arrays[idx], mutable_sr_column));
         }
         // for print sr sub column;
-        ARROW_ASSIGN_OR_RAISE(std::vector<starrocks::ColumnPtr> sr_sub_columns2, get_children_columns(data_column));
+        ARROW_ASSIGN_OR_RAISE(std::vector<starrocks::ColumnPtr> sr_sub_columns2,
+                              get_children_columns(data_column.get()));
 
         // copy null bitmap
         if (column->is_nullable()) {
@@ -93,6 +96,35 @@ public:
             nullable->set_has_null(true);
         }
         return arrow::Status::OK();
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const ColumnPtr& column) override {
+        // convert data column,include list:offsets, values, map: offsets, keys, values, struct: children columns.
+        const auto data_column = SrColumnType::static_pointer_cast(get_data_column(column.get()));
+        ARROW_ASSIGN_OR_RAISE(std::vector<starrocks::ColumnPtr> sr_sub_columns,
+                              get_children_columns(data_column.get()));
+
+        std::vector<std::shared_ptr<arrow::Array>> arrays;
+        arrays.resize(sr_sub_columns.size());
+        if (_children.size() < arrays.size()) {
+            return arrow::Status::Invalid("Converter size (", _children.size(), ") is less than arrow array size(",
+                                          arrays.size(), ")");
+        }
+
+        // convert children data column
+        for (size_t idx = 0; idx < arrays.size(); ++idx) {
+            ARROW_ASSIGN_OR_RAISE(arrays[idx], _children[idx]->toArrowArray(sr_sub_columns[idx]));
+        }
+
+        // convert null bitmap
+        std::shared_ptr<arrow::Buffer> null_bitmap;
+        if (column->is_nullable()) {
+            auto nullable = down_cast<const NullableColumn*>(column.get());
+            auto& null_bytes = nullable->immutable_null_column_data();
+            ARROW_ASSIGN_OR_RAISE(null_bitmap, convert_null_bitmap(null_bytes));
+        }
+
+        return make_nested_array<ArrowArrayType>(arrays, null_bitmap);
     }
 
 private:
@@ -116,13 +148,14 @@ private:
     template <class SrColumnClass, typename = std::enable_if_t<std::is_same_v<SrColumnClass, ArrayColumn> ||
                                                                std::is_same_v<SrColumnClass, MapColumn> ||
                                                                std::is_same_v<SrColumnClass, StructColumn>>>
-    arrow::Result<std::vector<ColumnPtr>> get_children_columns(const std::shared_ptr<SrColumnClass> data_column) {
+
+    arrow::Result<Columns> get_children_columns(const SrColumnClass* data_column) {
         if constexpr (std::is_same_v<SrColumnClass, ArrayColumn>) {
-            std::vector<ColumnPtr> all_sub_columns = {data_column->offsets_column(), data_column->elements_column()};
+            Columns all_sub_columns = {data_column->offsets_column(), data_column->elements_column()};
             return all_sub_columns;
         } else if constexpr (std::is_same_v<SrColumnClass, MapColumn>) {
-            std::vector<ColumnPtr> all_sub_columns = {data_column->offsets_column(), data_column->keys_column(),
-                                                      data_column->values_column()};
+            Columns all_sub_columns = {data_column->offsets_column(), data_column->keys_column(),
+                                       data_column->values_column()};
             return all_sub_columns;
         } else if constexpr (std::is_same_v<SrColumnClass, StructColumn>) {
             return data_column->fields();

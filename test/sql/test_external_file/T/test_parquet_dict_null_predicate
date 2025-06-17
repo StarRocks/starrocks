@@ -69,6 +69,6 @@ select count(*) from tpch_customer_null where c_mktsegment is null;
 
 select count(*) from tpch_customer_null where c_mktsegment is not null;
 
-select dict_merge(c_mktsegment) from tpch_customer_null;
+select dict_merge(c_mktsegment, 255) from tpch_customer_null;
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

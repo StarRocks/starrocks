@@ -77,6 +77,8 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     //print heartbeat in every minute
     LOG_EVERY_N(INFO, 12) << "get heartbeat from FE. host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
+                          << ", node type:"
+                          << (master_info.__isset.node_type ? std::to_string(master_info.node_type) : "N/A")
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
     if (master_info.encrypted != config::enable_transparent_data_encryption) {
@@ -149,6 +151,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
     }
+    if (process_exit_in_progress()) {
+        // Just assume this response can reach the frontend side.
+        set_frontend_aware_of_exit();
+    }
 }
 
 std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) const {
@@ -187,6 +193,18 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     if ((master_info.network_address.hostname == LOCALHOST)) {
         if (!(master_info.backend_ip == LOCALHOST || master_info.backend_ip == LOCALHOST_IPV6)) {
             return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
+        }
+    }
+
+    if (master_info.__isset.node_type) {
+        if (master_info.node_type == TNodeType::Backend && BackendOptions::is_cn()) {
+            LOG_EVERY_N(ERROR, 12) << "FE heartbeat with BE node type,but the node is CN,node type mismatch!";
+            return Status::InternalError("expect to be BE but actually CN,Unmatched node type!");
+        }
+
+        if (master_info.node_type == TNodeType::Compute && !BackendOptions::is_cn()) {
+            LOG_EVERY_N(ERROR, 12) << "FE heartbeat with CN node type,but the node is BE,node type mismatch!";
+            return Status::InternalError("expect to be CN but actually BE,Unmatched node type!");
         }
     }
 
@@ -240,7 +258,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
             for (auto& host : hosts) {
                 if (host.get_host_address() == ip) {
-                    BackendOptions::set_localhost(master_info.backend_ip);
+                    BackendOptions::set_localhost(master_info.backend_ip, ip);
                     set_new_localhost = true;
                     break;
                 }
@@ -250,7 +268,8 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
                 return Status::InternalError("Unmatched backend ip");
             }
 
-            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost();
+            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost()
+                      << ", new local_ip is " << BackendOptions::get_local_ip();
         }
     }
 

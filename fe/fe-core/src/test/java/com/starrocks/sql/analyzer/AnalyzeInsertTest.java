@@ -117,7 +117,7 @@ public class AnalyzeInsertTest {
 
         new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
         };
@@ -139,7 +139,7 @@ public class AnalyzeInsertTest {
         };
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -153,11 +153,15 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 minTimes = 0;
                 result = new Database();
 
                 icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
                 result = ImmutableList.of(new Column("c1", Type.INT));
                 minTimes = 0;
             }
@@ -185,7 +189,7 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -219,6 +223,10 @@ public class AnalyzeInsertTest {
                 result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
                 minTimes = 0;
 
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
+                minTimes = 0;
+
                 icebergTable.getColumn(anyString);
                 result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.INT));
                 minTimes = 0;
@@ -239,6 +247,11 @@ public class AnalyzeInsertTest {
                         new Column("p2", Type.INT));
                 minTimes = 0;
 
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.DATETIME),
+                        new Column("p2", Type.INT));
+                minTimes = 0;
+
                 icebergTable.getColumn(anyString);
                 result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.DATETIME));
                 minTimes = 0;
@@ -249,19 +262,18 @@ public class AnalyzeInsertTest {
 
                 icebergTable.getType();
                 result = Table.TableType.ICEBERG;
-                minTimes = 1;
+                minTimes = 0;
             }
         };
 
-        analyzeFail("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"",
-                "Unsupported partition column type [DATETIME] for ICEBERG table sink.");
+        analyzeSuccess("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"");
     }
 
     @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
         new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
         };

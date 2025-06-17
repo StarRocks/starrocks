@@ -54,6 +54,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
@@ -101,6 +102,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -237,14 +239,6 @@ public class AstToStringBuilder {
                 return sb;
             }
 
-            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
-                if (authOption.isPasswordPlain()) {
-                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
-                } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
-                }
-            }
-
             if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
                 sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
                 if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
@@ -254,6 +248,14 @@ public class AstToStringBuilder {
                         sb.append(" AS '");
                     }
                     sb.append(authOption.getAuthString()).append("'");
+                }
+            } else {
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
+                        sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                    } else {
+                        sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                    }
                 }
             }
             return sb;
@@ -324,8 +326,9 @@ public class AstToStringBuilder {
             } else {
                 sqlBuilder.append("FROM ");
             }
-            if (statement.getRole() != null) {
-                sqlBuilder.append(" ROLE ").append(statement.getRole());
+
+            if (statement.getGrantType().equals(GrantType.ROLE)) {
+                sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
             } else {
                 sqlBuilder.append(statement.getUserIdentity());
             }
@@ -607,8 +610,17 @@ public class AstToStringBuilder {
                 } else {
                     selectItemLabel = "*";
                 }
-
                 sqlBuilder.append(selectItemLabel);
+
+                if (item.isStar() && !item.getExcludedColumns().isEmpty()) {
+                    sqlBuilder.append(" EXCLUDE ( ");
+                    sqlBuilder.append(
+                            item.getExcludedColumns().stream()
+                            .map(col -> "`" + col + "`")
+                            .collect(Collectors.joining(","))
+                    );
+                    sqlBuilder.append(" ) ");
+                }
             }
 
             String fromClause = visit(stmt.getRelation());
@@ -636,7 +648,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
@@ -832,14 +844,18 @@ public class AstToStringBuilder {
             return sqlBuilder.toString();
         }
 
-        @Override
-        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+        private String outputFileTable(Map<String, String> properties) {
             StringBuilder sb = new StringBuilder();
             sb.append(FileTableFunctionRelation.IDENTIFIER);
             sb.append("(");
-            sb.append(new PrintableMap<String, String>(node.getProperties(), "=", true, false, hideCredential));
+            sb.append(new PrintableMap<String, String>(properties, "=", true, false, hideCredential));
             sb.append(")");
             return sb.toString();
+        }
+
+        @Override
+        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            return outputFileTable(node.getProperties());
         }
 
         @Override
@@ -858,7 +874,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(aggregation.getAlias());
                 }
             }
-            sb.append("\n");
+            sb.append(" ");
 
             sb.append("FOR ");
             if (node.getPivotColumns().size() == 1) {
@@ -896,7 +912,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(pivotValue.getAlias());
                 }
             }
-            sb.append(")\n)");
+            sb.append("))");
 
             return sb.toString();
         }
@@ -1114,7 +1130,11 @@ public class AstToStringBuilder {
             if (isImplicit) {
                 return visit(node.getChild(0));
             }
-            return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            if (node.getTargetTypeDef() == null) {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getType().toString() + ")";
+            } else {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            }
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
@@ -1305,7 +1325,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(Subquery node, Void context) {
+        public String visitSubqueryExpr(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }
 
@@ -1374,6 +1394,18 @@ public class AstToStringBuilder {
                 strBuilder.append(timeUnitIdent);
             }
             return strBuilder.toString();
+        }
+
+        @Override
+        public String visitDescTableStmt(DescribeStmt stmt, Void context) {
+            if (stmt.isTableFunctionTable()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("DESC ");
+                sb.append(outputFileTable(stmt.getTableFunctionProperties()));
+                return sb.toString();
+            } else {
+                return stmt.getOrigStmt().originStmt;
+            }
         }
 
         // ----------------- AST ---------------
@@ -1606,7 +1638,13 @@ public class AstToStringBuilder {
             sb.append(")");
             addTableComment(sb, view);
 
-            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+            if (view.isSecurity()) {
+                sb.append(" SECURITY INVOKER");
+            } else {
+                sb.append(" SECURITY NONE");
+            }
+
+            sb.append(" AS ").append(view.getInlineViewDefWithoutCredential()).append(";");
             createTableStmt.add(sb.toString());
             return;
         }
@@ -1924,7 +1962,8 @@ public class AstToStringBuilder {
         String location = null;
         try {
             location = table.getTableLocation();
-            if (!Strings.isNullOrEmpty(location)) {
+            // Paimon table has a `path` property instead of location
+            if (!Strings.isNullOrEmpty(location) && !table.isPaimonTable()) {
                 properties.put("location", location);
             }
         } catch (NotImplementedException e) {

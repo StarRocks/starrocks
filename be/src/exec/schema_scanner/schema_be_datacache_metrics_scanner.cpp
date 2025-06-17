@@ -15,10 +15,15 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
 #include "agent/master_info.h"
-#include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "runtime/string_value.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/starcache_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -59,25 +64,16 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     DatumArray row{};
     std::string status{};
-    DataCacheMetrics metrics{};
+    StarCacheMetrics metrics{};
 
     row.emplace_back(_be_id);
 
-    if (config::datacache_enable) {
-        const BlockCache* cache = BlockCache::instance();
-        // retrive different priority's used bytes from level = 2 metrics
-        metrics = cache->cache_metrics(2);
+    const auto* cache = reinterpret_cast<StarCacheEngine*>(DataCache::GetInstance()->local_cache());
+    if (cache != nullptr && cache->is_initialized()) {
+        // retrieve different priority's used bytes from level = 2 metrics
+        metrics = cache->starcache_metrics(2);
 
-        switch (metrics.status) {
-        case DataCacheStatus::NORMAL:
-            status = "Normal";
-            break;
-        case DataCacheStatus::UPDATING:
-            status = "Updating";
-            break;
-        default:
-            status = "Abnormal";
-        }
+        status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         row.emplace_back(Slice(status));
         row.emplace_back(metrics.disk_quota_bytes);
@@ -117,7 +113,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     }
 
     for (const auto& [slot_id, index] : (*chunk)->get_slot_id_to_index_map()) {
-        const ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
+        ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
         column->append_datum(row[slot_id - 1]);
     }
 

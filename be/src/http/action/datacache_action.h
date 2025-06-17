@@ -28,10 +28,10 @@
 
 namespace starrocks {
 
-class BlockCache;
+class LocalCacheEngine;
 class DataCacheAction : public HttpHandler {
 public:
-    explicit DataCacheAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+    explicit DataCacheAction(LocalCacheEngine* local_cache) : _local_cache(local_cache) {}
     ~DataCacheAction() override = default;
 
     void handle(HttpRequest* req) override;
@@ -39,11 +39,11 @@ public:
 private:
     bool _check_request(HttpRequest* req);
     void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);
-    void _handle_stat(HttpRequest* req, BlockCache* cache);
+    void _handle_stat(HttpRequest* req);
     void _handle_app_stat(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
 
-    ExecEnv* _exec_env;
+    LocalCacheEngine* _local_cache;
 };
 
 } // namespace starrocks

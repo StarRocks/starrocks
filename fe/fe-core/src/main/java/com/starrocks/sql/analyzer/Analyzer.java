@@ -148,6 +148,10 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
@@ -157,6 +161,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -170,6 +175,10 @@ import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 
 public class Analyzer {
     private final AnalyzerVisitor analyzerVisitor;
@@ -836,6 +845,32 @@ public class Analyzer {
             return null;
         }
 
+        // ---------------------------------------- Group Provider Statement -------------------------------------
+
+        @Override
+        public Void visitCreateGroupProviderStatement(CreateGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropGroupProviderStatement(DropGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         // -------------------------------------- Data Cache Management Statement -----------------------------------------
 
         @Override
@@ -1134,6 +1169,30 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitCreateCNGroupStatement(CreateCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropCNGroupStatement(DropCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitEnableDisableCNGroupStatement(EnableDisableCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterCNGroupStatement(AlterCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         // ---------------------------------------- Transaction Statement --------------------------------------------------
 
         @Override
@@ -1158,6 +1217,12 @@ public class Analyzer {
         @Override
         public Void visitTranslateStatement(TranslateStmt statement, ConnectContext context) {
             TranslateAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, ConnectContext context) {
+            ShowStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }

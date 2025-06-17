@@ -43,7 +43,7 @@ public:
 TEST_F(StringFunctionTrimTest, trimTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
+    BinaryColumn::Ptr str = BinaryColumn::create();
     for (int j = 0; j < 4096; ++j) {
         std::string spaces(j, ' ');
         str->append(spaces + "abcd" + std::to_string(j) + spaces);
@@ -68,14 +68,14 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     // string column
-    auto str_col = BinaryColumn::create();
+    BinaryColumn::Ptr str_col = BinaryColumn::create();
     for (int j = 0; j < 4096; ++j) {
         std::string spaces(j, ' ');
         str_col->append(spaces + "abcd" + std::to_string(j) + spaces);
     }
 
     // remove character column
-    auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ab", 4096);
+    ColumnPtr remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ab", 4096);
 
     std::vector<ColumnPtr> columns{str_col, remove_col};
     ctx->set_constant_columns(columns);
@@ -100,7 +100,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
                 str = "🙂🐶e" + str;
             }
             str_col->append(str);
-            Columns columns{str_col, remove_col};
+            Columns columns{std::move(str_col), std::move(remove_col)};
             ctx->set_constant_columns(columns);
             ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
             auto maybe_result = StringFunctions::trim(ctx.get(), columns);
@@ -115,7 +115,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
         // The 2rd parameter must be const
         auto remove_col = BinaryColumn::create();
         remove_col->append("ab");
-        ctx->set_constant_columns({nullptr, remove_col});
+        ctx->set_constant_columns({nullptr, std::move(remove_col)});
         Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
         EXPECT_TRUE(st.is_invalid_argument());
         EXPECT_EQ("Invalid argument: The second parameter of trim only accept literal value", st.to_string());
@@ -124,7 +124,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     {
         // The 2rd parameter must not be empty
         auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 4096);
-        ctx->set_constant_columns({nullptr, remove_col});
+        ctx->set_constant_columns({nullptr, std::move(remove_col)});
         Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
         EXPECT_TRUE(st.is_invalid_argument());
         EXPECT_EQ("Invalid argument: The second parameter should not be empty string", st.to_string());
@@ -132,7 +132,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     {
         // The 2rd parameter must not be null
         auto remove_col = ColumnHelper::create_const_null_column(4096);
-        ctx->set_constant_columns({nullptr, remove_col});
+        ctx->set_constant_columns({nullptr, std::move(remove_col)});
         Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
         EXPECT_TRUE(st.is_invalid_argument());
         EXPECT_EQ("Invalid argument: The second parameter should not be null", st.to_string());
@@ -145,7 +145,7 @@ TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
     auto str = BinaryColumn::create();
     str->append(Slice((const char*)nullptr, 0));
 
-    columns.emplace_back(str);
+    columns.emplace_back(std::move(str));
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
@@ -175,7 +175,7 @@ TEST_F(StringFunctionTrimTest, ltrimTest) {
         str->append(spaces + "abcd" + std::to_string(j) + spaces);
     }
 
-    columns.emplace_back(str);
+    columns.emplace_back(std::move(str));
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
@@ -200,7 +200,7 @@ TEST_F(StringFunctionTrimTest, rtrimTest) {
         str->append(spaces + "abcd" + std::to_string(j) + spaces);
     }
 
-    columns.emplace_back(str);
+    columns.emplace_back(std::move(str));
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
@@ -231,7 +231,7 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
         }
     }
 
-    columns.emplace_back(NullableColumn::create(str, nulls));
+    columns.emplace_back(NullableColumn::create(std::move(str), std::move(nulls)));
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));

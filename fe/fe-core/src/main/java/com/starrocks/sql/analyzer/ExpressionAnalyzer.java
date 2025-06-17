@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArraySliceExpr;
@@ -114,7 +115,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
@@ -1305,13 +1305,12 @@ public class ExpressionAnalyzer {
                 case FunctionSet.FIELD: {
                     if (node.getChildren().size() < 2) {
                         throw new SemanticException("Incorrect parameter count in" +
-                               " the call to native function 'field'");
+                                " the call to native function 'field'");
                     }
                     break;
                 }
             }
         }
-
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
@@ -1395,7 +1394,7 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(Subquery node, Scope context) {
+        public Void visitSubqueryExpr(Subquery node, Scope context) {
             QueryAnalyzer queryAnalyzer = new QueryAnalyzer(session);
             queryAnalyzer.analyze(node.getQueryStatement(), context);
             node.setType(node.getQueryStatement().getQueryRelation().getRelationFields().getFieldByIndex(0).getType());
@@ -1460,6 +1459,14 @@ public class ExpressionAnalyzer {
                     node.setStrValue("NONE");
                 } else {
                     node.setStrValue(Joiner.on(", ").join(roleName));
+                }
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CURRENT_GROUP)) {
+                node.setType(Type.VARCHAR);
+                Set<String> groupName = session.getGroups();
+                if (groupName.isEmpty()) {
+                    node.setStrValue("NONE");
+                } else {
+                    node.setStrValue(Joiner.on(", ").join(groupName));
                 }
             } else if (funcType.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
                 node.setType(Type.BIGINT);
@@ -1592,7 +1599,7 @@ public class ExpressionAnalyzer {
                 nullIfNotFoundIdx = params.size() - 1;
             } else {
                 throw new SemanticException(String.format("dict_mapping function param size should be %d - %d",
-                    keyColumns.size() + 1, keyColumns.size() + 3));
+                        keyColumns.size() + 1, keyColumns.size() + 3));
             }
 
             String valueField;
@@ -1656,7 +1663,7 @@ public class ExpressionAnalyzer {
                         List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
                         throw new SemanticException(
                                 String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
-                                    String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+                                        String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
                     }
 
                     Expr castExpr = new CastExpr(expectedType, actual);
@@ -1731,19 +1738,19 @@ public class ExpressionAnalyzer {
             int paramDictionaryKeysSize = params.size() - 1;
             if (!(paramDictionaryKeysSize == dictionaryKeysSize || paramDictionaryKeysSize == dictionaryKeysSize + 1)) {
                 throw new SemanticException("dictionary: " + dictionaryName + " has expected keys size: " +
-                                            Integer.toString(dictionaryKeysSize) + " keys: " +
-                                            "[" + String.join(", ", dictionaryKeys) + "]" +
-                                            " plus null_if_not_exist flag(optional)" +
-                                            " but param given: " + Integer.toString(paramDictionaryKeysSize));
+                        Integer.toString(dictionaryKeysSize) + " keys: " +
+                        "[" + String.join(", ", dictionaryKeys) + "]" +
+                        " plus null_if_not_exist flag(optional)" +
+                        " but param given: " + Integer.toString(paramDictionaryKeysSize));
             }
 
             if (paramDictionaryKeysSize == dictionaryKeysSize + 1 && !(params.get(params.size() - 1) instanceof BoolLiteral)) {
                 throw new SemanticException("dictionary: " + dictionaryName + " has invalid parameter for `null_if_not_exist` "
-                                            + "invalid parameter: " + params.get(params.size() - 1).toString());
+                        + "invalid parameter: " + params.get(params.size() - 1).toString());
             }
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
+                    session, dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());
             }
@@ -1787,7 +1794,7 @@ public class ExpressionAnalyzer {
             }
 
             boolean nullIfNotExist = (paramDictionaryKeysSize == dictionaryKeysSize + 1) ?
-                                     ((BoolLiteral) params.get(params.size() - 1)).getValue() : false;
+                    ((BoolLiteral) params.get(params.size() - 1)).getValue() : false;
             node.setNullIfNotExist(nullIfNotExist);
             node.setDictionaryId(dictionary.getDictionaryId());
             node.setDictionaryTxnId(GlobalStateMgr.getCurrentState().getDictionaryMgr().

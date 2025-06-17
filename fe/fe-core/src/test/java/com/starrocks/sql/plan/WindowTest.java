@@ -1584,15 +1584,18 @@ public class WindowTest extends PlanTestBase {
         String sql = "select array_length(v3) from (select v3, row_number() over (order by v2) row_num from tarray) t " +
                 "where row_num = 1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
+        assertContains(plan, "  6:Project\n" +
+                "  |  <slot 5> : 6: array_length\n" +
+                "  |  \n" +
+                "  5:SELECT\n" +
+                "  |  predicates: 4: row_number() = 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
                 "  |  functions: [, row_number(), ]\n" +
                 "  |  order by: 2: v2 ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                 "  |  \n" +
                 "  3:MERGING-EXCHANGE");
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 2> : 2: v2\n" +
-                "  |  <slot 6> : array_length(3: v3)");
     }
 
     @Test
@@ -1632,5 +1635,14 @@ public class WindowTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:SORT\n" +
                 "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 DESC");
+    }
+
+    @Test
+    public void testFirstValueIgnoreNulls() throws Exception {
+        String sql =
+                "select v1,v2,v3, first_value(v3 ignore nulls) over (partition by v1 order by v2" +
+                        " rows between unbounded PRECEDING and unbounded following) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
     }
 }

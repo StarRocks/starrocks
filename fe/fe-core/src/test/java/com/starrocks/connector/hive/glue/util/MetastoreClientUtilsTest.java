@@ -14,11 +14,20 @@
 
 package com.starrocks.connector.hive.glue.util;
 
+import com.starrocks.connector.hive.glue.metastore.DefaultAWSGlueMetastore;
 import com.starrocks.connector.hive.glue.metastore.GlueMetastoreClientDelegate;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.Assert;
 import org.junit.Test;
+import software.amazon.awssdk.services.glue.model.StorageDescriptor;
+
+import java.util.ArrayList;
+import java.util.Map;
+
+import static org.mockito.Mockito.mock;
 
 public class MetastoreClientUtilsTest {
 
@@ -31,5 +40,66 @@ public class MetastoreClientUtilsTest {
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID, "1234");
         Assert.assertEquals("1234", MetastoreClientUtils.getCatalogId(conf));
+    }
+
+    @Mocked
+    private DefaultAWSGlueMetastore metastore;
+
+    @Test
+    public void testGluePartitionProjection() {
+        software.amazon.awssdk.services.glue.model.Table.Builder tableBuilder = 
+                software.amazon.awssdk.services.glue.model.Table.builder();
+        tableBuilder
+                .name("test_table")
+                .databaseName("test_db")
+                .owner("owner")
+                .tableType("EXTERNAL_TABLE")
+                .storageDescriptor(StorageDescriptor.builder().build())
+                .parameters(Map.of(
+                        "Projection.enable", "TRUE",
+                        "projection.year.type", "integer",
+                        "projection.year.range", "2014,2016"));
+        new Expectations(metastore) {
+            {
+                try {
+                    metastore.getPartitions("test_db", "test_table", null, 1);
+                    result = new ArrayList<software.amazon.awssdk.services.glue.model.Partition>();
+                    minTimes = 0;
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
+        IllegalArgumentException exception = Assert.assertThrows(
+                IllegalArgumentException.class,
+                () -> {
+                MetastoreClientUtils.validateGlueTable(tableBuilder.build(),  metastore);
+            }
+        );
+        Assert.assertEquals(
+                "Partition projection table may not readable",
+                exception.getMessage()); 
+
+        software.amazon.awssdk.services.glue.model.Partition partition = 
+                mock(software.amazon.awssdk.services.glue.model.Partition.class);
+        ArrayList<software.amazon.awssdk.services.glue.model.Partition> partitions = new ArrayList<>();
+        partitions.add(partition);
+        new Expectations(metastore) {
+            {
+                try {
+                    metastore.getPartitions("test_db", "test_table2", null, 1);
+                    result = partitions;
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
+
+        tableBuilder.name("test_table2");
+        try {
+            MetastoreClientUtils.validateGlueTable(tableBuilder.build(), metastore);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
     }
 }

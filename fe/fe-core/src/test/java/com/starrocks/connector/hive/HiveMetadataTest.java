@@ -148,7 +148,7 @@ public class HiveMetadataTest {
 
     @Test
     public void testListDbNames() {
-        List<String> databaseNames = hiveMetadata.listDbNames();
+        List<String> databaseNames = hiveMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
         CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
@@ -156,7 +156,7 @@ public class HiveMetadataTest {
 
     @Test
     public void testListTableNames() {
-        List<String> databaseNames = hiveMetadata.listTableNames("db1");
+        List<String> databaseNames = hiveMetadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
     }
 
@@ -169,14 +169,14 @@ public class HiveMetadataTest {
 
     @Test
     public void testGetDb() {
-        Database database = hiveMetadata.getDb("db1");
+        Database database = hiveMetadata.getDb(new ConnectContext(), "db1");
         Assert.assertEquals("db1", database.getFullName());
 
     }
 
     @Test
     public void testGetTable() {
-        com.starrocks.catalog.Table table = hiveMetadata.getTable("db1", "tbl1");
+        com.starrocks.catalog.Table table = hiveMetadata.getTable(new ConnectContext(), "db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("db1", hiveTable.getCatalogDBName());
         Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
@@ -199,12 +199,12 @@ public class HiveMetadataTest {
         };
 
         Assert.assertThrows(StarRocksConnectorException.class,
-                () -> hiveMetadata.getTable("acid_db", "acid_table"));
+                () -> hiveMetadata.getTable(new ConnectContext(), "acid_db", "acid_table"));
     }
 
     @Test
     public void testTableExists() {
-        boolean exists = hiveMetadata.tableExists("db1", "tbl1");
+        boolean exists = hiveMetadata.tableExists(new ConnectContext(), "db1", "tbl1");
         Assert.assertTrue(exists);
     }
 
@@ -216,7 +216,7 @@ public class HiveMetadataTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
 
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
@@ -285,7 +285,7 @@ public class HiveMetadataTest {
 
     @Test
     public void testShowCreateHiveTbl() {
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
         Assert.assertEquals("CREATE TABLE `table1` (\n" +
                         "  `col2` int(11) DEFAULT NULL,\n" +
                         "  `col1` int(11) DEFAULT NULL\n" +
@@ -302,7 +302,7 @@ public class HiveMetadataTest {
 
     @Test
     public void testGetTableStatisticsNormal() throws AnalysisException {
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
         ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
         ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
@@ -343,33 +343,33 @@ public class HiveMetadataTest {
     public void createDbTest() throws AlreadyExistsException {
         ExceptionChecker.expectThrowsWithMsg(AlreadyExistsException.class,
                 "Database Already Exists",
-                () -> hiveMetadata.createDb("db1", new HashMap<>()));
+                () -> hiveMetadata.createDb(connectContext, "db1", new HashMap<>()));
 
         Map<String, String> conf = new HashMap<>();
         conf.put("location", "abs://xxx/zzz");
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Invalid location URI: abs://xxx/zzz",
-                () -> hiveMetadata.createDb("db3", conf));
+                () -> hiveMetadata.createDb(connectContext, "db3", conf));
 
         conf.clear();
         conf.put("not_support_prop", "xxx");
         ExceptionChecker.expectThrowsWithMsg(IllegalArgumentException.class,
                 "Unrecognized property: not_support_prop",
-                () -> hiveMetadata.createDb("db3", conf));
+                () -> hiveMetadata.createDb(connectContext, "db3", conf));
 
         conf.clear();
-        hiveMetadata.createDb("db4", conf);
+        hiveMetadata.createDb(connectContext, "db4", conf);
     }
 
     @Test
     public void dropDbTest() {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Database d1 not empty",
-                () -> hiveMetadata.dropDb("d1", true));
+                () -> hiveMetadata.dropDb(new ConnectContext(), "d1", true));
 
         ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
                 "Failed to access database empty_db",
-                () -> hiveMetadata.dropDb("empty_db", true));
+                () -> hiveMetadata.dropDb(new ConnectContext(), "empty_db", true));
     }
 
     @Test
@@ -385,9 +385,9 @@ public class HiveMetadataTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Table location will be cleared. 'Force' must be set when dropping a hive table." +
                         " Please execute 'drop table hive_catalog.hive_db.hive_table force",
-                () -> hiveMetadata.dropTable(new DropTableStmt(false, tableName, false)));
+                () -> hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableName, false)));
 
-        hiveMetadata.dropTable(new DropTableStmt(false, tableName, true));
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableName, true));
 
         new MockUp<HiveMetadata>() {
             @Mock
@@ -396,7 +396,7 @@ public class HiveMetadataTest {
             }
         };
 
-        hiveMetadata.dropTable(new DropTableStmt(true, tableName, true));
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(true, tableName, true));
     }
 
     @Test(expected = StarRocksConnectorException.class)
@@ -734,7 +734,7 @@ public class HiveMetadataTest {
         starRocksAssert.withCatalog(sql);
         new MockUp<HiveMetadata>() {
             @Mock
-            public Database getDb(String dbName) {
+            public Database getDb(ConnectContext context, String dbName) {
                 return new Database();
             }
         };
@@ -774,7 +774,7 @@ public class HiveMetadataTest {
                 return true;
             }
         };
-        Assert.assertTrue(hiveMetadata.createTable(createTableStmt));
+        Assert.assertTrue(hiveMetadata.createTable(connectContext, createTableStmt));
     }
 
     @Test

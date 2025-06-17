@@ -1,0 +1,78 @@
+-- name: test_keywords_system_table
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+
+SELECT * FROM information_schema.keywords ORDER BY keyword ASC;
+-- result:
+-- !result
+-- KEYWORD  | RESERVED
+-- ---------|---------
+-- DELETE   | true
+-- INDEX    | true
+-- INSERT   | true
+-- PASSWORD | false
+-- SELECT   | true
+-- TABLE    | true
+-- UPDATE   | true
+-- USER     | false
+-- VIEW     | true
+
+SELECT * FROM information_schema.keywords WHERE RESERVED = true ORDER BY keyword ASC;
+-- result:
+-- !result
+
+SELECT * FROM information_schema.keywords WHERE RESERVED = false ORDER BY keyword ASC;
+-- result:
+-- !result
+
+SELECT * FROM information_schema.keywords ORDER BY keyword ASC LIMIT 3 OFFSET 2;
+-- result:
+-- !result
+
+SELECT * FROM information_schema.keywords WHERE keyword LIKE 'S%' ORDER BY keyword ASC;
+-- result:
+-- !result
+
+SELECT * FROM information_schema.keywords WHERE keyword IN ('SELECT', 'USER', 'TABLE') ORDER BY keyword ASC;
+-- result:
+-- !result
+
+SELECT * FROM information_schema.keywords ORDER BY RESERVED DESC, keyword ASC;
+-- result:
+-- !result
+
+ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "1");
+-- result:
+-- !result
+SELECT * FROM information_schema.keywords ORDER BY keyword ASC;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "100000");
+-- result:
+-- !result
+
+SELECT * FROM information_schema.keywords WHERE keyword = 'NON_EXISTENT_KEYWORD';
+-- result:
+-- !result
+
+DROP USER IF EXISTS test_user;
+CREATE USER test_user IDENTIFIED BY 'password';
+-- result:
+-- !result
+GRANT SELECT ON information_schema.keywords TO test_user;
+-- result:
+-- !result
+SELECT * FROM information_schema.keywords;
+-- result:
+-- !result
+DROP USER test_user;
+-- result:
+-- !result
+
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

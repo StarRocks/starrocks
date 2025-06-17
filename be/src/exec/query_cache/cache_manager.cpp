@@ -26,7 +26,7 @@ static void delete_cache_entry(const CacheKey& key, void* value) {
 void CacheManager::populate(const std::string& key, const CacheValue& value) {
     auto* cache_value = new CacheValue(value);
     size_t value_size = cache_value->size();
-    auto* handle = _cache.insert(key, cache_value, value_size, value_size, &delete_cache_entry, CachePriority::NORMAL);
+    auto* handle = _cache.insert(key, cache_value, value_size, &delete_cache_entry, CachePriority::NORMAL);
     _cache.release(handle);
 }
 

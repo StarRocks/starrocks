@@ -117,6 +117,7 @@ WITH_GCOV=OFF
 WITH_STARCACHE=ON
 WITH_BRPC_KEEPALIVE=OFF
 WITH_DEBUG_SYMBOL_SPLIT=ON
+BUILD_JAVA_EXT=ON
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -133,11 +134,17 @@ while true; do
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
+        --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
 done
+
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
 
 if [ ${HELP} -eq 1 ]; then
     usage
@@ -182,6 +189,20 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
+# Build Java Extensions
+if [ ${BUILD_JAVA_EXT} = "ON" ]; then
+    echo "Build Java Extensions"
+    cd ${STARROCKS_HOME}/java-extensions
+    if [ ${CLEAN} -eq 1 ]; then
+        ${MVN_CMD} clean
+    fi
+    ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
+    cd ${STARROCKS_HOME}
+else
+    echo "Skip Building Java Extensions"
+fi
+
+cd ${CMAKE_BUILD_DIR}
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
@@ -230,6 +251,8 @@ mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
 
+export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/:$LD_LIBRARY_PATH
+
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
 # this is only for starting be
@@ -273,6 +296,8 @@ fi
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
+export CLASSPATH=${STARROCKS_HOME}/java-extensions/udf-extensions/target/*:$CLASSPATH
+export CLASSPATH=${STARROCKS_HOME}/java-extensions/java-utils/target/*:$CLASSPATH
 
 # ===========================================================
 
@@ -327,3 +352,4 @@ do
         fi
     fi
 done
+

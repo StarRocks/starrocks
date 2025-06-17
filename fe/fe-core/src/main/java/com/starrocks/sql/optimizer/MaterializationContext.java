@@ -100,6 +100,7 @@ public class MaterializationContext {
 
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<LogicalScanOperator, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
+    private final int level;
 
     public MaterializationContext(OptimizerContext optimizerContext,
                                   MaterializedView mv,
@@ -109,7 +110,8 @@ public class MaterializationContext {
                                   List<Table> baseTables,
                                   List<Table> intersectingTables,
                                   MvUpdateInfo mvUpdateInfo,
-                                  List<ColumnRefOperator> mvOutputColumnRefs) {
+                                  List<ColumnRefOperator> mvOutputColumnRefs,
+                                  int level) {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
@@ -121,6 +123,7 @@ public class MaterializationContext {
         this.mvUpdateInfo = mvUpdateInfo;
         this.mvOutputColumnRefs = mvOutputColumnRefs;
         this.scanOpToPartitionCompensatePredicates = Maps.newHashMap();
+        this.level = level;
     }
 
     public MaterializedView getMv() {
@@ -210,6 +213,10 @@ public class MaterializationContext {
 
     public List<ColumnRefOperator> getMvOutputColumnRefs() {
         return mvOutputColumnRefs;
+    }
+
+    public int getLevel() {
+        return level;
     }
 
     /**

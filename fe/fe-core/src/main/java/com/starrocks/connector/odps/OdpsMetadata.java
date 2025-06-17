@@ -57,6 +57,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -152,7 +153,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         try {
             if (StringUtils.isNullOrEmpty(catalogOwner)) {
@@ -178,7 +179,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String name) {
+    public Database getDb(ConnectContext context, String name) {
         try {
             return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), name);
         } catch (StarRocksConnectorException e) {
@@ -188,7 +189,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         try {
             return new ArrayList<>(tableNameCache.get(dbName));
         } catch (ExecutionException e) {
@@ -207,7 +208,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         return get(tableCache, OdpsTableName.of(dbName, tblName));
     }
 
@@ -365,9 +366,9 @@ public class OdpsMetadata implements ConnectorMetadata {
             remoteFileInfo.setFiles(remoteFileDescs);
             return Lists.newArrayList(remoteFileInfo);
         } catch (Exception e) {
-            LOG.error("getRemoteFiles error", e);
+            LOG.error("getRemoteFileInfos error", e);
+            throw new StarRocksConnectorException("Encounter error when try to split the maxcompute table: " + e.getMessage(), e);
         }
-        return Collections.emptyList();
     }
 
     private OdpsSplitsInfo callSizeSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder)
@@ -405,12 +406,12 @@ public class OdpsMetadata implements ConnectorMetadata {
         long numRecord = 0;
         for (long i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
             InputSplitWithRowRange splitByRowOffset =
-                    (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, i);
+                    (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, rowsPerSplit);
             splits.add(splitByRowOffset);
             numRecord = i;
         }
         InputSplitWithRowRange splitByRowOffset =
-                (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount);
+                (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount - numRecord);
         splits.add(splitByRowOffset);
         odpsSplitsInfo = new OdpsSplitsInfo(splits, rowScan,
                 OdpsSplitsInfo.SplitPolicy.ROW_OFFSET, splitProperties);

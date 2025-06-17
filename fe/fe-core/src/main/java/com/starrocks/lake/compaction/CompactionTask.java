@@ -39,10 +39,10 @@ import java.util.stream.Collectors;
  */
 public class CompactionTask {
     private static final Logger LOG = LogManager.getLogger(CompactionTask.class);
-    private final long nodeId;
-    private final LakeService rpcChannel;
+    protected final long nodeId;
+    protected final LakeService rpcChannel;
     private final CompactRequest request;
-    private Future<CompactResponse> responseFuture;
+    protected Future<CompactResponse> responseFuture;
 
     // FOR TEST
     public CompactionTask(long nodeId) {
@@ -55,6 +55,13 @@ public class CompactionTask {
         this.nodeId = nodeId;
         this.rpcChannel = Objects.requireNonNull(rpcChannel, "rpcChannel is null");
         this.request = Objects.requireNonNull(request, "request is null");
+        this.responseFuture = null;
+    }
+
+    public CompactionTask(long nodeId, LakeService rpcChannel) {
+        this.nodeId = nodeId;
+        this.rpcChannel = Objects.requireNonNull(rpcChannel, "rpcChannel is null");
+        this.request = null;
         this.responseFuture = null;
     }
 
@@ -123,7 +130,7 @@ public class CompactionTask {
             abortRequest.txnId = request.txnId;
             try {
                 Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
-                LOG.info("aborted compaction task, txn_id: {}, node: {}", request.txnId, nodeId);
+                LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", request.txnId, nodeId);
             } catch (Exception e) {
                 LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,
                         nodeId, e.getMessage());
@@ -149,5 +156,17 @@ public class CompactionTask {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public long getSuccessCompactInputFileSize() {
+        if (!isDone()) {
+            return 0;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return response.successCompactionInputFileSize;
+        } catch (Exception e) {
+            return 0;
+        }        
     }
 }

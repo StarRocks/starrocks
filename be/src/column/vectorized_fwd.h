@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "runtime/memory/column_allocator.h"
+#include "types/int256.h"
 
 namespace starrocks {
 
@@ -64,11 +65,6 @@ class DecimalV3Column;
 template <typename T>
 class BinaryColumnBase;
 
-using ColumnPtr = std::shared_ptr<Column>;
-using MutableColumnPtr = std::unique_ptr<Column>;
-using Columns = std::vector<ColumnPtr>;
-using MutableColumns = std::vector<MutableColumnPtr>;
-
 using Int8Column = FixedLengthColumn<int8_t>;
 using UInt8Column = FixedLengthColumn<uint8_t>;
 using BooleanColumn = UInt8Column;
@@ -79,6 +75,7 @@ using UInt32Column = FixedLengthColumn<uint32_t>;
 using Int64Column = FixedLengthColumn<int64_t>;
 using UInt64Column = FixedLengthColumn<uint64_t>;
 using Int128Column = FixedLengthColumn<int128_t>;
+using Int256Column = FixedLengthColumn<int256_t>;
 using DoubleColumn = FixedLengthColumn<double>;
 using FloatColumn = FixedLengthColumn<float>;
 using DateColumn = FixedLengthColumn<DateValue>;
@@ -87,6 +84,7 @@ using TimestampColumn = FixedLengthColumn<TimestampValue>;
 using Decimal32Column = DecimalV3Column<int32_t>;
 using Decimal64Column = DecimalV3Column<int64_t>;
 using Decimal128Column = DecimalV3Column<int128_t>;
+using Decimal256Column = DecimalV3Column<int256_t>;
 using BinaryColumn = BinaryColumnBase<uint32_t>;
 using LargeBinaryColumn = BinaryColumnBase<uint64_t>;
 
@@ -109,6 +107,8 @@ class JsonColumn;
 class MapColumn;
 class StructColumn;
 
+class ColumnView;
+
 using ChunkPtr = std::shared_ptr<Chunk>;
 using ChunkUniquePtr = std::unique_ptr<Chunk>;
 using Chunks = std::vector<ChunkPtr>;
@@ -127,5 +127,6 @@ using FieldPtr = std::shared_ptr<Field>;
 
 using Filter = Buffer<uint8_t>;
 using FilterPtr = std::shared_ptr<Filter>;
+using FilterData = uint8_t;
 
 } // namespace starrocks

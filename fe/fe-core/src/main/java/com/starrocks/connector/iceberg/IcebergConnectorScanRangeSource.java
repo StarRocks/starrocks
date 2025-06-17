@@ -57,6 +57,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,7 +88,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     private final Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
-    private final Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
+    private final Map<StructLikeWrapper, Long> partitionKeyToId = Maps.newHashMap();
 
     // spec_id -> Map(partition_field_index_in_partitionSpec, PartitionField)
     private final Map<Integer, BiMap<Integer, PartitionField>> indexToFieldCache = Maps.newHashMap();
@@ -259,8 +260,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
-
-        StructLike partition = task.partition();
+        //Make sure the parttion data with byte[], decimal value object and etc. can get the same hash code.
+        StructLike origPartition = task.partition();
+        StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
+        StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
         if (partitionKeyToId.containsKey(partition)) {
             return partitionKeyToId.get(partition);
         }
@@ -270,7 +273,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
-        PartitionKey partitionKey = getPartitionKey(partition, task.spec(), partitionFieldIndexes, indexToPartitionField);
+        PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
         long partitionId = partitionIdGen.getAndIncrement();
 
         Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
@@ -329,14 +332,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             Class<?> javaClass = type.typeId().javaClass();
 
             String partitionValue;
-            partitionValue = field.transform().toHumanString(type,
-                    PartitionUtil.getPartitionValue(partition, index, javaClass));
 
             // currently starrocks date literal only support local datetime
             if (type.equals(Types.TimestampType.withZone())) {
-                partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
-                        PartitionUtil.getPartitionValue(partition, index, javaClass)).toLocalDateTime().toString();
+                Long value = PartitionUtil.getPartitionValue(partition, index, javaClass);
+                if (value == null) {
+                    partitionValue = "null";
+                } else {
+                    partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(
+                            TimeUtils.getTimeZone().toZoneId()), value).toLocalDateTime().toString();
+                }
+            } else {
+                partitionValue = field.transform().toHumanString(type, PartitionUtil.getPartitionValue(
+                        partition, index, javaClass));
             }
+
             partitionValues.add(partitionValue);
 
             cols.add(table.getColumn(field.name()));

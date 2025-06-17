@@ -43,6 +43,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -63,6 +64,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -189,7 +191,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private long finishedTime = -1;
 
     private LocalTablet tablet = null;
+    private KeysType tabletKeysType = null;
     private long visibleVersion = -1;
+    private long visibleVersionTime = -1;
     private long visibleTxnId = -1;
     private long committedVersion = -1;
 
@@ -375,11 +379,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return tablet.getImmutableReplicas();
     }
 
-    public void setVersionInfo(long visibleVersion,
-                               long committedVersion, long visibleTxnId) {
+    public void setTabletKeysType(KeysType tabletKeysType) {
+        this.tabletKeysType = tabletKeysType;
+    }
+
+    public void setVersionInfo(long visibleVersion, long committedVersion, long visibleTxnId, long visibleVersionTime) {
         this.visibleVersion = visibleVersion;
         this.committedVersion = committedVersion;
         this.visibleTxnId = visibleTxnId;
+        this.visibleVersionTime = visibleVersionTime;
     }
 
     public long getVisibleTxnId() {
@@ -832,6 +840,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 visibleVersion, (int) (taskTimeoutMs / 1000));
         cloneTask.setPathHash(srcPathHash, destPathHash);
         cloneTask.setIsLocal(srcReplica.getBackendId() == destBackendId);
+        cloneTask.setNeedRebuildPkIndex(tabletKeysType == KeysType.PRIMARY_KEYS &&
+                System.currentTimeMillis() - visibleVersionTime < Config.tablet_sched_pk_index_rebuild_threshold_seconds * 1000);
 
         // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING,
         // we create a new replica with state CLONE
@@ -1283,28 +1293,25 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             return true;
         }
 
-        Locker locker = new Locker();
+        Table table = db.getTable(tblId);
+        if (table == null) {
+            return true;
+        }
+
+        // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
         try {
-            locker.lockDatabase(db.getId(), LockType.READ);
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
-            if (table == null) {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+            return true;
+        } catch (AccessDeniedException ae) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                 return true;
-            } else {
-                // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
-                try {
-                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
-                    return true;
-                } catch (AccessDeniedException ae) {
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
-                        return true;
-                    } catch (AccessDeniedException e) {
-                        return false;
-                    }
-                }
+            } catch (AccessDeniedException e) {
+                return false;
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

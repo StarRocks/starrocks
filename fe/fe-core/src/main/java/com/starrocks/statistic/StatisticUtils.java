@@ -48,11 +48,10 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.http.HttpConnectContext;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
@@ -104,9 +103,6 @@ public class StatisticUtils {
             case HTTP_PROTOCAL:
                 context = new HttpConnectContext();
                 break;
-            case ARROW_FLIGHT_PROTOCAL:
-                context = new ArrowFlightSqlConnectContext();
-                break;
             default:
                 throw new IllegalStateException("Unexpected value: " + connectType);
         }
@@ -115,6 +111,7 @@ public class StatisticUtils {
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
         context.getSessionVariable().setEnableLoadProfile(false);
+        context.getSessionVariable().setBigQueryProfileThreshold("0s");
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
@@ -124,7 +121,7 @@ public class StatisticUtils {
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
-        context.getSessionVariable().setWarehouseName(warehouse.getName());
+        context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
@@ -181,14 +178,17 @@ public class StatisticUtils {
     }
 
     public static boolean checkStatisticTableStateNormal() {
+        List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
+                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME, StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME);
+        return checkStatisticTables(tableNameList);
+    }
+
+    public static boolean checkStatisticTables(List<String> tableNameList) {
         if (FeConstants.runningUnitTest) {
             return true;
         }
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
-        List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
-                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
-                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
-
         // check database
         if (db == null) {
             return false;
@@ -212,7 +212,6 @@ public class StatisticUtils {
                 }
             }
         }
-
         return true;
     }
 
@@ -261,12 +260,11 @@ public class StatisticUtils {
             statsRowCount = tableStatistics.getOrDefault(partition.getId(), Optional.empty()).orElse(0L);
         }
 
-        return isPartitionStatsHealthy(table, partition, stats, statsRowCount);
+        return isPartitionStatsHealthy(partition, stats, statsRowCount);
     }
 
-    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats,
-                                                  long statsRowCount) {
-        if (stats == null || stats.isInitJobMeta()) {
+    public static boolean isPartitionStatsHealthy(Partition partition, BasicStatsMeta stats, long statsRowCount) {
+        if (stats == null) {
             return false;
         }
         if (!partition.hasData()) {
@@ -374,6 +372,16 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else if (tableName.equals(StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("column_ids", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("column_names", new TypeDef(columnNameType)),
+                    new ColumnDef("ndv",  new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
         } else {
@@ -551,7 +559,7 @@ public class StatisticUtils {
             String sql = String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
                     StatsConstants.STATISTICS_DB_NAME, tableName, expectedReplicationNum);
             if (StringUtils.isNotEmpty(sql)) {
-                RepoExecutor.getInstance().executeDDL(sql);
+                SimpleExecutor.getRepoExecutor().executeDDL(sql);
             }
             LOG.info("changed replication_number of table {} from {} to {}",
                     tableName, replica, expectedReplicationNum);

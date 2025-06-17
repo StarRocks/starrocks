@@ -31,8 +31,7 @@ public class WarehousePEntryObject implements PEntryObject {
         return id;
     }
 
-    public static WarehousePEntryObject generate(GlobalStateMgr mgr,
-                                                 List<String> tokens) throws PrivilegeException {
+    public static WarehousePEntryObject generate(List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens, should have only one, token: " + tokens);
         }
@@ -40,7 +39,7 @@ public class WarehousePEntryObject implements PEntryObject {
         if (name.equals("*")) {
             return new WarehousePEntryObject(PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID);
         } else {
-            WarehouseManager warehouseMgr = mgr.getWarehouseMgr();
+            WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Warehouse warehouse = warehouseMgr.getWarehouseAllowNull(name);
             if (warehouse == null) {
                 throw new PrivObjNotFoundException("cannot find warehouse: " + name);
@@ -78,8 +77,8 @@ public class WarehousePEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(id) != null;
+    public boolean validate() {
+        return GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(id) != null;
     }
 
     @Override

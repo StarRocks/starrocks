@@ -113,7 +113,7 @@ Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, column.get()));
     DCHECK(num_to_read == num_read);
 
-    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnViewer<TYPE_VARCHAR> viewer(std::move(column));
     auto value = viewer.value(0);
 
     *result = Roaring::read(value.data, false);

@@ -142,7 +142,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 ]
 -- partition_expression
 [PARTITION BY 
-    {<date_column> | date_trunc(fmt, <date_column>)}
+  [ <partition_column> [,...] ] | [ <date_function_expr> ]
 ]
 -- order_by_expression
 [ORDER BY (<sort_key>)]
@@ -228,7 +228,36 @@ AS
 
 **partition_expression**（选填）
 
-异步物化视图的分区表达式。目前仅支持在创建异步物化视图时使用一个分区表达式。
+异步物化视图的分区表达式。如不指定该参数，则默认物化视图为无分区。
+
+该参数支持如下值：
+
+- `partition_column`：用于分区的列。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
+- `date_function_expr`：用于分区的日期函数复杂表达式。
+  - `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
+  - `str2date` 函数：用于将基表的字符串类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
+  - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
+
+自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列，一一映射基表的分区列。
+
+**多列分区表达式相关说明**:
+
+- 当前物化视图支持的多列分区只能与基表的多列分区一一映射，或者是 N:1 关系，而不能是 M:N 关系。例如，如果基表的分区列为 `(col1, col2, ..., coln)`，则物化视图定义时的分区只能是单列分区，如 `col1`、`col2`、`coln`，或者与基表分区列一一映射，如 `(col1, col2, ..., coln)`。这是因为通用的 M:N 关系会导致基表与物化视图之间的分区映射逻辑复杂，通过一一映射可以简化刷新和分区补偿逻辑。
+- 由于 Iceberg 分区表达式支持 Transform 功能，若 Iceberg 的分区表达式映射到 StarRocks 时，需要额外处理分区表达式。以下为两者对应关系：
+
+  | Iceberg Transform | Iceberg 分区表达式      | 物化视图分区表达式             |
+  | ----------------- | --------------------- | ---------------------------- |
+  | Identity          | `<col>`               | `<col>`                      |
+  | hour              | `hour(<col>)`         | `date_trunc('hour', <col>)`  |
+  | day               | `day(<col>)`          | `date_trunc('day', <col>)`   |
+  | month             | `month(<col>)`        | `date_trunc('month', <col>)` |
+  | year              | `year(<col>)`         | `date_trunc('year', <col>)`  |
+  | bucket            | `bucket(<col>, <n>)`  | Not supported                |
+  | truncate          | `truncate(<col>)`     | Not supported                |
+
+- 对于非 Iceberg 类型的分区列，因不涉及分区表达式计算，创建物化视图时只需直接选择映射，不需要额外的分区表达式处理。
+
+有关多列分区表达式的详细指导，参考 [示例五](#示例)。
 
 > **注意**
 >
@@ -238,18 +267,40 @@ AS
 > - 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
 > - 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
 
-该参数支持如下值：
-
-- `date_column`：用于分区的列的名称。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
-- `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
-- `str2date` 函数：用于将基表的 STRING 类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
-- `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
-
-如不指定该参数，则默认物化视图为无分区。
-
 **order_by_expression**（选填）
 
 异步物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
+
+**INDEX**（选填）
+
+异步物化视图支持Bitmap和BloomFilter索引以加速查询性能，其使用方式同普通Table一样。关于Bitmap和BloomFilter索引的使用场景及信息，可以参考：[Bitmap 索引](../../../table_design/indexes/Bitmap_index.md)和[Bloom filter 索引](../../../table_design/indexes/Bloomfilter_index.md)。
+
+使用Bitmap索引：
+```
+-- 创建索引
+CREATE INDEX <index_name> ON <mv_name>(<column_name>) USING BITMAP COMMENT '<comment>';
+
+-- 查看创建索引进程
+SHOW ALTER TABLE COLUMN;
+
+-- 查看索引
+SHOW INDEXES FROM <mv_name>;
+
+-- 删除索引
+DROP INDEX <index_name> ON <mv_name>;
+```
+
+使用BloomFilter索引：
+```
+-- 创建索引
+ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "<col1,col2,col3,...>");
+
+-- 查看索引
+SHOW CREATE MATERIALIZED VIEW <mv_name>;
+
+-- 删除索引
+ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
+```
 
 **PROPERTIES**（选填）
 
@@ -259,6 +310,7 @@ AS
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
 - `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
+- `bloom_filter_columns`：开启 Bloom Filter 索引的列名数组。有关使用 Bloom Filter 索引，参见 [Bloom filter 索引](../../../table_design/indexes/Bloomfilter_index.md)。
 - `partition_ttl`: 物化视图分区的生存时间 (TTL)。数据在指定的时间范围内的分区将被保留，过期的分区将被自动删除。单位：`YEAR`、`MONTH`、`DAY`、`HOUR` 和 `MINUTE`。例如，您可以将此属性设置为 `2 MONTH`（2个月）。建议您使用此属性，不推荐使用 `partition_ttl_number`。该属性自 v3.1.5 起支持。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
@@ -280,6 +332,18 @@ AS
     - 如果未指定 `mv_rewrite_staleness_second`，则只有当物化视图的数据与所有基表中的数据一致时，才可以将其用于查询改写。
     - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最后刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
   - `loose`：直接启用自动查询改写，无需进行一致性检查。
+  - `force_mv`：从 v3.5.0 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。`force_mv` 语义即专门为该场景设计。当启用该语义时：
+    - 如果物化视图未定义 `partition_retention_condition` 属性，则无论基表是否有更新，都强制使用进行改写。
+    - 如果物化视图定义了 `partition_retention_condition` 属性:
+      - 对于 TTL 范围内的分区，无论基表是否有更新，都保证改写可用。
+      - 对于 TTL 范围外的分区，无论基表是否有更新，都需通过物化视图与基表之间的 Union 进行补偿。
+
+    例如，假设物化视图定义了 `partition_retention_condition` 属性，且分区 `20241131` 已过期，而基表的 `20241203` 数据已经更新并创建，但物化视图的 `20241203` 数据尚未刷新。当物化视图定义 `query_rewrite_consistency` 为 `force_mv` 时：
+    - 物化视图始终保证基于 TTL 范围内（例如 `20241201` 至 `20241203` 之间）符合 `partition_retention_condition` 条件的分区的查询可以透明改写。
+    - 对于不符合 `partition_retention_condition` 条件的分区上的查询，系统会自动基于物化视图和基表的 Union 进行补偿。
+
+    有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
+
 - `storage_volume`：[如果您使用存算分离集群](../../../deployment/shared_data/shared_data.mdx)，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
   - `true`（自 v3.3 变为默认值）：启用基于 External Catalog 的物化视图的查询改写。
@@ -295,6 +359,13 @@ AS
   - `true`：直接针对物化视图的查询将被改写，并返回最新数据，结果与物化视图定义查询的一致。请注意，当物化视图处于失效（Inactive）状态或不支持透明查询改写时，这些查询将路由至物化视图定义查询执行。
   - `transparent_or_error`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回错误。
   - `transparent_or_default`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回物化视图中现有的数据。
+- `partition_retention_condition`：从 v3.5.0 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。该属性用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。示例：`"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。
+  - 表达式只能包含分区列和常量。不支持非分区列。
+  - 通用分区表达式式处理 List 分区和 Range 分区的方式不同：
+    - 对于 List 分区物化视图，StarRocks 支持通过通用分区表达式过滤删除分区。
+    - 对于 Range 分区物化视图，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+  有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
 **query_statement**（必填）
 
@@ -855,6 +926,57 @@ SELECT
 FROM
 `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
+
+示例五：使用多列分区表达式基于 Iceberg Catalog（Spark）基表创建分区物化视图。
+
+Spark 中的基表定义如下：
+
+```SQL
+-- 分区表达式包含多个分区列以及 `days` Transform。
+CREATE TABLE lineitem_days (
+      l_orderkey    BIGINT,
+      l_partkey     INT,
+      l_suppkey     INT,
+      l_linenumber  INT,
+      l_quantity    DECIMAL(15, 2),
+      l_extendedprice  DECIMAL(15, 2),
+      l_discount    DECIMAL(15, 2),
+      l_tax         DECIMAL(15, 2),
+      l_returnflag  VARCHAR(1),
+      l_linestatus  VARCHAR(1),
+      l_shipdate    TIMESTAMP,
+      l_commitdate  TIMESTAMP,
+      l_receiptdate TIMESTAMP,
+      l_shipinstruct VARCHAR(25),
+      l_shipmode     VARCHAR(10),
+      l_comment      VARCHAR(44)
+) USING ICEBERG
+PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
+```
+
+创建多列分区一一映射物化视图：
+
+```SQL
+CREATE MATERIALIZED VIEW test_days
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+AS 
+SELECT * FROM iceberg_catalog.test_db.lineitem_days;
+```
+
+示例六：创建分区物化视图，指定通用分区表达式 TTL，并启用 `force_mv` 查询改写语义。
+
+```SQL
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt, province)
+REFRESH MANUAL 
+PROPERTIES (
+    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH",
+    "query_rewrite_consistency" = "force_mv"
+)
+AS SELECT * from t1;
+```
+
 
 ## 更多操作
 

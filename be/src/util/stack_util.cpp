@@ -19,14 +19,23 @@
 
 #include <cxxabi.h>
 #include <dirent.h>
+#include <fmt/core.h>
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <sys/syscall.h>
+
+#include <thread>
+#include <tuple>
 
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
+#include "util/hash.h"
+#include "util/phmap/phmap.h"
 #include "util/time.h"
 
 namespace google {
@@ -47,19 +56,30 @@ std::string get_stack_trace() {
 }
 
 struct StackTraceTask {
+    std::thread::id id;
     static constexpr int kMaxStackDepth = 64;
     void* addrs[kMaxStackDepth];
     int depth{0};
     bool done = false;
-    string to_string() const {
+    int64_t cost_us = 0;
+    string to_string(const std::string& line_prefix = "") const {
         string ret;
         for (int i = 0; i < depth; ++i) {
             char line[2048];
             char buf[1024];
-            if (google::glog_internal_namespace_::Symbolize(addrs[i], buf, sizeof(buf))) {
-                snprintf(line, 2048, "  %16p  %s\n", addrs[i], buf);
+            bool success = false;
+            // symbolize costs a lot of time, so mock it in test mode
+#ifndef BE_TEST
+            success = google::glog_internal_namespace_::Symbolize(addrs[i], buf, sizeof(buf));
+#else
+            std::tuple<void*, char*, size_t> tuple = {addrs[i], buf, sizeof(buf)};
+            TEST_SYNC_POINT_CALLBACK("StackTraceTask::symbolize", &tuple);
+            success = true;
+#endif
+            if (success) {
+                snprintf(line, 2048, "%s  %16p  %s\n", line_prefix.c_str(), addrs[i], buf);
             } else {
-                snprintf(line, 2048, "  %16p  (unknown)\n", addrs[i]);
+                snprintf(line, 2048, "%s  %16p  (unknown)\n", line_prefix.c_str(), addrs[i]);
             }
             ret += line;
         }
@@ -88,10 +108,39 @@ struct StackTraceTaskHash {
     }
 };
 
+// allocate an id for each stack trace request
+std::atomic_int g_stack_trace_id{0};
+// TID -> StackTraceTask
+using StackTraceTaskMap = std::unordered_map<int, StackTraceTask>;
+using StackTraceTaskMapSharedPtr = std::shared_ptr<StackTraceTaskMap>;
+/// stack trace id -> StackTraceTaskMap
+using StackTraceMap = phmap::parallel_flat_hash_map<int32_t, StackTraceTaskMapSharedPtr, phmap::Hash<int32_t>,
+                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>, 5, std::mutex>;
+StackTraceMap g_running_stack_trace;
+
 void get_stack_trace_sighandler(int signum, siginfo_t* siginfo, void* ucontext) {
-    auto task = reinterpret_cast<StackTraceTask*>(siginfo->si_value.sival_ptr);
-    task->depth = google::glog_internal_namespace_::GetStackTrace(task->addrs, StackTraceTask::kMaxStackDepth, 2);
-    task->done = true;
+    int64_t start_us = MonotonicMicros();
+    int tid = static_cast<int>(syscall(SYS_gettid));
+    auto stack_trace_id = siginfo->si_value.sival_int;
+    StackTraceTaskMapSharedPtr stack_trace_task_map;
+    bool ret =
+            g_running_stack_trace.if_contains(stack_trace_id, [&](const auto& value) { stack_trace_task_map = value; });
+    if (!ret) {
+        LOG(WARNING) << "stack trace id " << stack_trace_id << " not found, tid: " << tid;
+        return;
+    }
+    auto it = stack_trace_task_map->find(tid);
+    if (it == stack_trace_task_map->end()) {
+        LOG(WARNING) << "tid " << tid << " not found, stack trace id " << stack_trace_id;
+        return;
+    }
+    auto& task = it->second;
+    task.depth = google::glog_internal_namespace_::GetStackTrace(task.addrs, StackTraceTask::kMaxStackDepth, 2);
+    // get_stack_trace_for_thread first checks done flag then gets the cost.
+    // To ensure the cost is valid, set cost before done flag
+    task.cost_us = MonotonicMicros() - start_us;
+    task.done = true;
+    task.id = std::this_thread::get_id();
 }
 
 bool install_stack_trace_sighandler() {
@@ -124,11 +173,15 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
         }
         sighandler_installed = true;
     }
-    StackTraceTask task;
     const auto pid = getpid();
     const auto uid = getuid();
+    auto stack_trace_id = g_stack_trace_id.fetch_add(1);
+    StackTraceTaskMapSharedPtr tasks = std::make_shared<StackTraceTaskMap>();
+    tasks->emplace(tid, StackTraceTask());
+    g_running_stack_trace.insert_or_assign(stack_trace_id, tasks);
+    DeferOp defer([stack_trace_id]() { g_running_stack_trace.erase(stack_trace_id); });
     union sigval payload;
-    payload.sival_ptr = &task;
+    payload.sival_int = stack_trace_id;
     auto err = signal_thread(pid, tid, uid, SIGRTMIN, payload);
     if (0 != err) {
         auto msg = strings::Substitute("collect stack trace failed, signal thread error: $0 tid: $1", strerror(errno),
@@ -137,6 +190,7 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
         return msg;
     }
     int timeout_us = timeout_ms * 1000;
+    auto& task = (*tasks)[tid];
     while (!task.done) {
         usleep(1000);
         timeout_us -= 1000;
@@ -146,13 +200,14 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
             return msg;
         }
     }
-    std::string ret = "Stack trace tid: " + std::to_string(tid) + "\n" + task.to_string();
-    LOG(INFO) << ret;
+    std::string ret =
+            fmt::format("Stack trace id: {}, tid: {} cid:{} \n{}", stack_trace_id, tid, task.id, task.to_string());
     return ret;
 }
 
 std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tids, const string& pattern,
-                                                     int timeout_ms) {
+                                                     int timeout_ms, const std::string& line_prefix = "") {
+    int64_t start_us = MonotonicMicros();
     static bool sighandler_installed = false;
     if (!sighandler_installed) {
         if (!install_stack_trace_sighandler()) {
@@ -162,12 +217,18 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
         }
         sighandler_installed = true;
     }
-    vector<StackTraceTask> tasks(tids.size());
     const auto pid = getpid();
     const auto uid = getuid();
+    auto stack_trace_id = g_stack_trace_id.fetch_add(1);
+    StackTraceTaskMapSharedPtr tasks = std::make_shared<StackTraceTaskMap>();
+    for (int i = 0; i < tids.size(); ++i) {
+        tasks->emplace(tids[i], StackTraceTask());
+    }
+    g_running_stack_trace.insert_or_assign(stack_trace_id, tasks);
+    DeferOp defer([stack_trace_id]() { g_running_stack_trace.erase(stack_trace_id); });
     for (int i = 0; i < tids.size(); ++i) {
         union sigval payload;
-        payload.sival_ptr = &tasks[i];
+        payload.sival_int = stack_trace_id;
         auto err = signal_thread(pid, tids[i], uid, SIGRTMIN, payload);
         if (0 != err) {
             auto msg = strings::Substitute("collect stack trace failed, signal thread error: $0 tid: $1",
@@ -180,7 +241,7 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
         usleep(1000);
         int done = 0;
         for (int i = 0; i < tids.size(); ++i) {
-            if (tasks[i].done) {
+            if ((*tasks)[tids[i]].done) {
                 ++done;
             }
         }
@@ -195,23 +256,36 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
             break;
         }
     }
+
+    int64_t task_done_count = 0;
+    int64_t max_task_cost_us = 0;
+    int64_t min_task_cost_us = std::numeric_limits<int64_t>::max();
+    int64_t total_task_cost_us = 0;
     // group threads with same stack trace together
     std::unordered_map<StackTraceTask, std::vector<int>, StackTraceTaskHash> task_map;
     for (int i = 0; i < tids.size(); ++i) {
-        if (tasks[i].done) {
-            task_map[tasks[i]].push_back(tids[i]);
+        auto& task = (*tasks)[tids[i]];
+        if (task.done) {
+            task_map[task].push_back(tids[i]);
+            task_done_count += 1;
+            max_task_cost_us = std::max(max_task_cost_us, task.cost_us);
+            min_task_cost_us = std::min(min_task_cost_us, task.cost_us);
+            total_task_cost_us += task.cost_us;
         }
     }
     string ret;
+    int64_t total_symbolize_cost_us = 0;
     for (auto& e : task_map) {
-        string stack_trace = e.first.to_string();
+        int64_t ts = MonotonicMicros();
+        string stack_trace = e.first.to_string(line_prefix);
+        total_symbolize_cost_us += MonotonicMicros() - ts;
         if (!pattern.empty() && stack_trace.find(pattern) == string::npos) {
             continue;
         }
         if (e.second.size() == 1) {
-            ret += strings::Substitute("tid: $0\n", e.second[0]);
+            ret += strings::Substitute("$0tid: $1\n", line_prefix, e.second[0]);
         } else {
-            ret += strings::Substitute("$0 tids: ", e.second.size());
+            ret += strings::Substitute("$0$1 tids: ", line_prefix, e.second.size());
             for (size_t i = 0; i < e.second.size(); i++) {
                 if (i > 0) {
                     ret += ",";
@@ -223,7 +297,19 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
         ret += stack_trace;
         ret += "\n";
     }
-    ret += strings::Substitute("total $0 threads, $1 identical groups", tids.size(), task_map.size());
+    int64_t avg_task_cost_us = 0;
+    if (task_done_count == 0) {
+        min_task_cost_us = 0;
+        max_task_cost_us = 0;
+    } else {
+        avg_task_cost_us = total_task_cost_us / task_done_count;
+    }
+    ret += fmt::format(
+            "{}stack trace id {}, total {} threads, {} identical groups, finish {} threads, total cost {} us, "
+            "symbolize cost {} us,"
+            " thread block(avg/min/max) {}/{}/{} us, ",
+            line_prefix, stack_trace_id, tids.size(), task_map.size(), task_done_count, (MonotonicMicros() - start_us),
+            total_symbolize_cost_us, avg_task_cost_us, min_task_cost_us, max_task_cost_us);
     return ret;
 }
 
@@ -231,8 +317,12 @@ std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeou
     return get_stack_trace_for_threads_with_pattern(tids, "", timeout_ms);
 }
 
+std::string get_stack_trace_for_all_threads_with_prefix(const std::string& line_prefix) {
+    return get_stack_trace_for_threads_with_pattern(get_thread_id_list(), "", 3000, line_prefix);
+}
+
 std::string get_stack_trace_for_all_threads() {
-    return get_stack_trace_for_threads(get_thread_id_list(), 3000);
+    return get_stack_trace_for_all_threads_with_prefix("");
 }
 
 std::string get_stack_trace_for_function(const std::string& function_pattern) {

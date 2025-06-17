@@ -104,6 +104,8 @@ import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -122,6 +124,7 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.common.ErrorCode.ERR_LOAD_DATA_PARSE_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
 
 /**
@@ -140,6 +143,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
+    public static final boolean DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR = false;
 
     protected static final String STAR_STRING = "*";
 
@@ -305,6 +309,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
+    // no needs to persist
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
 
@@ -378,6 +385,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
+        jobProperties.put(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR, String.valueOf(stmt.isPauseOnFatalParseError()));
         if (stmt.getMergeConditionStr() != null) {
             jobProperties.put(LoadStmt.MERGE_CONDITION, stmt.getMergeConditionStr());
         }
@@ -616,6 +624,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return Boolean.valueOf(value);
     }
 
+    public boolean isPauseOnFatalParseError() {
+        String value = jobProperties.get(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR);
+        if (value == null) {
+            return DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
+        }
+        return Boolean.valueOf(value);
+    }
+
     public String getTimezone() {
         String value = jobProperties.get(LoadStmt.TIMEZONE);
         if (value == null) {
@@ -646,6 +662,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected abstract String getSourceProgressString();
+
+    protected abstract String getSourceLagString(String progressJsonStr);
 
     public double getMaxFilterRatio() {
         return maxFilterRatio;
@@ -715,6 +733,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
@@ -870,6 +892,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // call before first scheduling
     // derived class can override this.
     public void prepare() throws StarRocksException {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
@@ -1186,10 +1211,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 ++abortedTaskNum;
                 entity.counterRoutineLoadAbortedTasksTotal.increase(1L);
                 setOtherMsg(txnStatusChangeReasonString);
-                TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
+                TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
                     txnStatusChangeReason =
-                            TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonString);
+                            TxnStatusChangeReason.fromString(txnStatusChangeReasonString);
                     if (txnStatusChangeReason != null) {
                         switch (txnStatusChangeReason) {
                             case OFFSET_OUT_OF_RANGE:
@@ -1235,7 +1260,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (txnState.getTxnCommitAttachment() != null &&
                 checkCommitInfo((RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment(),
                         txnState,
-                        TransactionState.TxnStatusChangeReason.fromString(txnState.getReason()))) {
+                        TxnStatusChangeReason.fromString(txnState.getReason()))) {
             replayUpdateProgress((RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment());
         }
         this.abortedTaskNum++;
@@ -1245,6 +1270,25 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             streamLoadTask.replayOnAborted(txnState);
         }
         LOG.debug("replay on aborted: {}, has attachment: {}", txnState, txnState.getTxnCommitAttachment() == null);
+    }
+
+    private Optional<ErrorReason> shouldPauseOnTxnStateChange(String txnStatusChangeReasonStr) {
+        TxnStatusChangeReason reason =
+                TxnStatusChangeReason.fromString(txnStatusChangeReasonStr);
+        if (reason == null) {
+            return Optional.empty();
+        }
+        switch (reason) {
+            case FILTERED_ROWS:
+                return Optional.of(new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
+                        ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")));
+            case PARSE_ERROR:
+                return !isPauseOnFatalParseError() ? Optional.empty() : Optional.of(
+                        new ErrorReason(ERR_LOAD_DATA_PARSE_ERROR.getCode(),
+                                ERR_LOAD_DATA_PARSE_ERROR.formatErrorMsg(txnStatusChangeReasonStr)));
+            default:
+                return Optional.empty();
+        }
     }
 
     // check task exists or not before call method
@@ -1264,7 +1308,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         .build());
             }
         } else if (checkCommitInfo(rlTaskTxnCommitAttachment, txnState,
-                TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr))) {
+                TxnStatusChangeReason.fromString(txnStatusChangeReasonStr))) {
             // step2: update job progress
             updateProgress(rlTaskTxnCommitAttachment);
         }
@@ -1275,12 +1319,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         routineLoadTaskInfo.setTxnStatus(txnStatus);
 
-        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) ==
-                TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
-            updateState(JobState.PAUSED,
-                    new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                            ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")),
-                    false /* not replay */);
+        Optional<ErrorReason> pauseOptional = shouldPauseOnTxnStateChange(txnStatusChangeReasonStr);
+        if (pauseOptional.isPresent()) {
+            updateState(JobState.PAUSED, pauseOptional.get(), false /* not replay */);
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
@@ -1514,7 +1555,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // check the correctness of commit info
     protected abstract boolean checkCommitInfo(RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment,
                                                TransactionState txnState,
-                                               TransactionState.TxnStatusChangeReason txnStatusChangeReason);
+                                               TxnStatusChangeReason txnStatusChangeReason);
 
     protected abstract String getStatistic();
 
@@ -1552,7 +1593,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(dataSourcePropertiesJsonToString());
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
-            row.add(getProgress().toJsonString());
+            String progressJsonStr = getProgress().toJsonString();
+            row.add(progressJsonStr);
             row.add(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
@@ -1590,7 +1632,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 }
             }
             row.add(getSourceProgressString());
-
+            row.add(getSourceLagString(progressJsonStr));
             return row;
         } finally {
             readUnlock();
@@ -1701,6 +1743,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
         sb.append(isStrictMode()).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR).append("\"=\"");
+        sb.append(isPauseOnFatalParseError()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.TIMEZONE).append("\"=\"");
         sb.append(getTimezone()).append("\",\n");
@@ -2048,7 +2093,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setCustom_properties(customPropertiesJsonToString());
             info.setData_source_type(dataSourceType.name());
             info.setStatistic(getStatistic());
-            info.setProgress(getProgress().toJsonString());
+            String progressJsonStr = getProgress().toJsonString();
+            info.setProgress(progressJsonStr);
             switch (state) {
                 case PAUSED:
                     info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
@@ -2066,6 +2112,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
             }
             info.setOther_msg(otherMsg);
+            info.setLatest_source_position(getSourceProgressString());
+            info.setOffset_lag(getSourceLagString(progressJsonStr));
+            info.setTimestamp_progress(getTimestampProgress().toJsonString());
             return info;
         } finally {
             readUnlock();

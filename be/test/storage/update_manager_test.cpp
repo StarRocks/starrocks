@@ -162,7 +162,7 @@ TEST_F(UpdateManagerTest, testDelVec) {
 }
 
 TEST_F(UpdateManagerTest, testExpireEntry) {
-    srand(time(nullptr));
+    srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     // write
     const int N = 8000;
@@ -198,7 +198,7 @@ TEST_F(UpdateManagerTest, testExpireEntry) {
 }
 
 TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
-    srand(time(nullptr));
+    srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     TabletSegmentId tsid;
     tsid.tablet_id = _tablet->tablet_id();
@@ -214,7 +214,7 @@ TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
 }
 
 TEST_F(UpdateManagerTest, test_on_rowset_finished) {
-    srand(time(nullptr));
+    srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     const int N = 10;
     std::vector<int64_t> keys;
@@ -231,6 +231,46 @@ TEST_F(UpdateManagerTest, test_on_rowset_finished) {
     ASSERT_TRUE(_update_manager->on_rowset_finished(_tablet.get(), rs1.get()).ok());
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(trigger_mode);
+}
+
+TEST_F(UpdateManagerTest, testEraseDelVectorCacheByTablet) {
+    TabletSegmentId rssid1;
+    rssid1.tablet_id = 0;
+    rssid1.segment_id = 0;
+    DelVector empty;
+    DelVectorPtr delvec3;
+
+    vector<uint32_t> dels3 = {1, 3, 5, 70, 9000, 11, 12, 13, 14, 15, 16, 17, 18};
+    empty.add_dels_as_new_version(dels3, 3, &delvec3);
+    _update_manager->set_cached_del_vec(rssid1, delvec3);
+    ASSERT_EQ(delvec3->memory_usage(), _root_mem_tracker->consumption());
+    empty.set_empty();
+
+    TabletSegmentId rssid2;
+    rssid2.tablet_id = 1;
+    rssid2.segment_id = 1;
+    vector<uint32_t> dels5 = {2, 4, 6, 80, 9000};
+    DelVectorPtr delvec5;
+    empty.add_dels_as_new_version(dels5, 5, &delvec5);
+    _update_manager->set_cached_del_vec(rssid2, delvec5);
+    ASSERT_EQ(delvec3->memory_usage() + delvec5->memory_usage(), _root_mem_tracker->consumption());
+
+    _update_manager->clear_cached_del_vec_by_tablet_id(0);
+    ASSERT_EQ(delvec5->memory_usage(), _root_mem_tracker->consumption());
+
+    _update_manager->clear_cached_del_vec_by_tablet_id(1);
+    ASSERT_EQ(0, _root_mem_tracker->consumption());
+}
+
+TEST_F(UpdateManagerTest, testEraseDCGCacheByTablet) {
+    create_tablet(rand(), rand());
+    TabletSegmentId tsid;
+    tsid.tablet_id = _tablet->tablet_id();
+    tsid.segment_id = 1;
+    _update_manager->set_cached_empty_delta_column_group(_tablet->data_dir()->get_meta(), tsid);
+
+    _update_manager->clear_cached_delta_column_group_by_tablet_id(_tablet->tablet_id());
+    ASSERT_EQ(0, _root_mem_tracker->consumption());
 }
 
 } // namespace starrocks

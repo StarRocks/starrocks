@@ -40,10 +40,10 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
-#include "cache/block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -64,6 +64,7 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
@@ -82,12 +83,12 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "service/staros_worker.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
-#include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
@@ -138,8 +139,8 @@ static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
-static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
-    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, process_mem_limit);
+static StatusOr<int64_t> calc_max_consistency_memory(int64_t process_mem_limit) {
+    ASSIGN_OR_RETURN(int64_t limit, ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, process_mem_limit));
     int64_t percent = config::consistency_max_memory_limit_percent;
 
     if (process_mem_limit < 0) {
@@ -172,7 +173,7 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t bytes_limit = 0;
     std::stringstream ss;
     // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+    ASSIGN_OR_RETURN(bytes_limit, ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem()));
     // use 90% of mem_limit as the soft mem limit of BE
     bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
@@ -236,7 +237,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
-    int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
+    ASSIGN_OR_RETURN(int64_t consistency_mem_limit, calc_max_consistency_memory(_process_mem_tracker->limit()));
     _consistency_mem_tracker =
             regist_tracker(MemTrackerType::CONSISTENCY, consistency_mem_limit, process_mem_tracker());
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
@@ -245,7 +246,6 @@ Status GlobalEnv::_init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    _init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }
 
@@ -272,35 +272,6 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-void GlobalEnv::_init_storage_page_cache() {
-    int64_t storage_cache_limit = get_storage_page_cache_size();
-    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
-    StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
-}
-
-int64_t GlobalEnv::get_storage_page_cache_size() {
-    int64_t mem_limit = MemInfo::physical_mem();
-    if (process_mem_tracker()->has_limit()) {
-        mem_limit = process_mem_tracker()->limit();
-    }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
-}
-
-int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
-    if (storage_cache_limit > MemInfo::physical_mem()) {
-        LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
-    }
-    if (!config::disable_storage_page_cache) {
-        if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, use default size.";
-            storage_cache_limit = kcacheMinSize;
-        }
-        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
-    }
-    return storage_cache_limit;
-}
-
 std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent) {
     auto mem_tracker = std::make_shared<MemTracker>(type, bytes_limit, MemTracker::type_to_label(type), parent);
     _mem_tracker_map[type] = mem_tracker;
@@ -316,6 +287,23 @@ int64_t GlobalEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t perc
         percent = 90;
     }
     return process_mem_limit * percent / 100;
+}
+
+bool parse_resource_str(const string& str, string* value) {
+    if (!str.empty()) {
+        std::string tmp_str = str;
+        StripLeadingWhiteSpace(&tmp_str);
+        StripTrailingWhitespace(&tmp_str);
+        if (tmp_str.empty()) {
+            return false;
+        } else {
+            *value = tmp_str;
+            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
+            return true;
+        }
+    } else {
+        return false;
+    }
 }
 
 ExecEnv* ExecEnv::GetInstance() {
@@ -401,6 +389,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         query_rpc_threads = CpuInfo::num_cores();
     }
     _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
+
+    int datacache_rpc_threads = config::internal_service_datacache_rpc_thread_num;
+    if (datacache_rpc_threads <= 0) {
+        datacache_rpc_threads = CpuInfo::num_cores();
+    }
+    _datacache_rpc_pool =
+            new PriorityThreadPool("datacache_rpc", datacache_rpc_threads, std::numeric_limits<uint32_t>::max());
 
     // The _load_rpc_pool now handles routine load RPC and table function RPC.
     RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc
@@ -561,6 +556,18 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         });
         config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
     }
+    setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
+
+    int32_t max_thread_count = config::transaction_publish_version_worker_count;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores();
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_put_aggregate_metadata_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -569,6 +576,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata_pool")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_put_aggregate_metadata_thread_pool));
 #endif
 
     _agent_server = new AgentServer(this, false);
@@ -583,11 +595,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
 
-    _block_cache = BlockCache::instance();
-
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
+    _diagnose_daemon = new DiagnoseDaemon();
+    RETURN_IF_ERROR(_diagnose_daemon->init());
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
@@ -636,6 +648,10 @@ void ExecEnv::stop() {
         _pipeline_sink_io_pool->shutdown();
     }
 
+    if (_put_aggregate_metadata_thread_pool) {
+        _put_aggregate_metadata_thread_pool->shutdown();
+    }
+
     if (_agent_server) {
         _agent_server->stop();
     }
@@ -654,6 +670,10 @@ void ExecEnv::stop() {
 
     if (_query_rpc_pool) {
         _query_rpc_pool->shutdown();
+    }
+
+    if (_datacache_rpc_pool) {
+        _datacache_rpc_pool->shutdown();
     }
 
     if (_load_rpc_pool) {
@@ -692,6 +712,10 @@ void ExecEnv::stop() {
         _dictionary_cache_pool->shutdown();
     }
 
+    if (_diagnose_daemon) {
+        _diagnose_daemon->stop();
+    }
+
 #ifndef BE_TEST
     close_s3_clients();
 #endif
@@ -720,6 +744,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
+    SAFE_DELETE(_datacache_rpc_pool);
     _load_rpc_pool.reset();
     _workgroup_manager->destroy();
     _workgroup_manager.reset();
@@ -750,8 +775,10 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     SAFE_DELETE(_put_combined_txn_log_thread_pool);
+    SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
+    _put_aggregate_metadata_thread_pool.reset();
     _metrics = nullptr;
 }
 
@@ -769,8 +796,14 @@ void ExecEnv::_wait_for_fragments_finish() {
     size_t running_fragments = _get_running_fragments_count();
     size_t loop_secs = 0;
 
-    while (running_fragments > 0 && loop_secs < max_loop_secs) {
-        LOG(INFO) << running_fragments << " fragment(s) are still running...";
+    // TODO: decouple the heartbeat with the graceful exit
+    // only wait for frontend's heartbeat when the node is ever received heartbeats from the frontend
+    bool need_wait_frontend_hb = config::graceful_exit_wait_for_frontend_heartbeat && get_backend_id().has_value();
+
+    while ((running_fragments > 0 || (need_wait_frontend_hb && !is_frontend_aware_of_exit())) &&
+           loop_secs < max_loop_secs) {
+        LOG(INFO) << "Frontend is aware of exit: " << is_frontend_aware_of_exit() << ", " << running_fragments
+                  << " fragment(s) are still running...";
         sleep(1);
         running_fragments = _get_running_fragments_count();
         loop_secs++;
@@ -810,23 +843,6 @@ ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
 }
 
-bool parse_resource_str(const string& str, string* value) {
-    if (!str.empty()) {
-        std::string tmp_str = str;
-        StripLeadingWhiteSpace(&tmp_str);
-        StripTrailingWhitespace(&tmp_str);
-        if (tmp_str.empty()) {
-            return false;
-        } else {
-            *value = tmp_str;
-            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
-            return true;
-        }
-    } else {
-        return false;
-    }
-}
-
 void ExecEnv::try_release_resource_before_core_dump() {
     std::set<std::string> modules;
     bool release_all = false;
@@ -843,46 +859,31 @@ void ExecEnv::try_release_resource_before_core_dump() {
 
     if (_workgroup_manager != nullptr && need_release("connector_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
-        LOG(INFO) << "close connector scan executor";
     }
     if (_workgroup_manager != nullptr && need_release("olap_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
-        LOG(INFO) << "close olap scan executor";
     }
     if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
         _thread_pool->shutdown();
-        LOG(INFO) << "shutdown non-pipeline scan thread pool";
     }
     if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
         _pipeline_prepare_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline prepare thread pool";
     }
     if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
         _pipeline_sink_io_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline sink io thread pool";
     }
     if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
         _query_rpc_pool->shutdown();
-        LOG(INFO) << "shutdown query rpc thread pool";
+    }
+    if (_datacache_rpc_pool != nullptr && need_release("datacache_rpc_thread_pool")) {
+        _datacache_rpc_pool->shutdown();
+        LOG(INFO) << "shutdown datacache rpc thread pool";
     }
     if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
         _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
-        LOG(INFO) << "stop task worker pool for publish version";
     }
     if (_workgroup_manager != nullptr && need_release("wg_driver_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
-        LOG(INFO) << "stop worker group driver executor";
-    }
-    auto* storage_page_cache = StoragePageCache::instance();
-    if (storage_page_cache != nullptr && need_release("data_cache")) {
-        storage_page_cache->set_capacity(0);
-        LOG(INFO) << "release storage page cache memory";
-    }
-    if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
-        // TODO: Currently, block cache don't support shutdown now,
-        //  so here will temporary use update_mem_quota instead to release memory.
-        (void)_block_cache->update_mem_quota(0, false);
-        LOG(INFO) << "release block cache";
     }
 }
 

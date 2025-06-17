@@ -58,6 +58,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class RangerInterfaceTest {
     static ConnectContext connectContext;
@@ -212,7 +213,7 @@ public class RangerInterfaceTest {
 
         try {
             rangerStarRocksAccessController.hasPermission(
-                    RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, PrivilegeType.OPERATE);
+                    RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, Set.of(), PrivilegeType.OPERATE);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -228,7 +229,7 @@ public class RangerInterfaceTest {
         };
 
         Assert.assertThrows(AccessDeniedException.class, () -> rangerStarRocksAccessController.hasPermission(
-                RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, PrivilegeType.OPERATE));
+                RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, Set.of(), PrivilegeType.OPERATE));
     }
 
     @Test

@@ -44,11 +44,13 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -64,7 +66,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * PulsarRoutineLoadJob is a kind of RoutineLoadJob which fetch data from pulsar.
@@ -138,6 +139,12 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+    protected String getSourceLagString(String progressJsonStr) {
+        // empty implement.
+        return "";
+    }
+
+    @Override
     public void prepare() throws StarRocksException {
         super.prepare();
         // should reset converted properties each time the job being prepared.
@@ -202,10 +209,10 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), this,
+                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUIDUtil.genUUID(), this,
                             taskSchedIntervalS * 1000, timeToExecuteMs, partitions,
                             initialPositions, getTaskTimeoutSecond() * 1000);
-                    pulsarTaskInfo.setWarehouseId(warehouseId);
+                    pulsarTaskInfo.setComputeResource(computeResource);
                     LOG.debug("pulsar routine load task created: " + pulsarTaskInfo);
                     routineLoadTaskInfoList.add(pulsarTaskInfo);
                     result.add(pulsarTaskInfo);
@@ -231,7 +238,8 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
             aliveNodeNum = 0;
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             for (long nodeId : computeNodeIds) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
@@ -256,7 +264,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected boolean checkCommitInfo(RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment,
                                       TransactionState txnState,
-                                      TransactionState.TxnStatusChangeReason txnStatusChangeReason) {
+                                      TxnStatusChangeReason txnStatusChangeReason) {
         if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             // For committed txn, update the progress.
             return true;
@@ -265,7 +273,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // For compatible reason, the default behavior of empty load is still returning
         // "No partitions have data available for loading" and abort transaction.
         // In this situation, we also need update commit info.
-        if (txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
+        if (txnStatusChangeReason == TxnStatusChangeReason.NO_PARTITIONS) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
             // If no data is imported, the error "No partitions have data available for loading" may only be returned.
@@ -309,7 +317,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // add new task
         PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(timeToExecuteMs, oldPulsarTaskInfo,
                 ((PulsarProgress) progress).getPartitionToInitialPosition(oldPulsarTaskInfo.getPartitions()));
-        pulsarTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
+        pulsarTaskInfo.setComputeResource(routineLoadTaskInfo.getComputeResource());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task

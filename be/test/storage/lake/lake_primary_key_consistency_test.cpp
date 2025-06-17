@@ -342,7 +342,9 @@ public:
         for (uint32_t i = 0; i < chunk_size; i++) {
             indexes[i] = i;
         }
-        return {std::make_shared<Chunk>(Columns{c0, c1, c2, c3}, _slot_cid_map), std::move(indexes)};
+        return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2), std::move(c3)},
+                                        _slot_cid_map),
+                std::move(indexes)};
     }
 
     std::pair<ChunkPtr, std::vector<uint32_t>> gen_partial_update_data() {
@@ -359,7 +361,7 @@ public:
         for (uint32_t i = 0; i < chunk_size; i++) {
             indexes[i] = i;
         }
-        return {std::make_shared<Chunk>(Columns{c0, c1}, _slot_cid_map), std::move(indexes)};
+        return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1)}, _slot_cid_map), std::move(indexes)};
     }
 
     ChunkPtr read(int64_t tablet_id, int64_t version) {
@@ -549,8 +551,8 @@ public:
 
     Status compact_op() {
         auto txn_id = next_id();
-        auto task_context =
-                std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
+                                                                    false, nullptr);
         ASSIGN_OR_RETURN(auto task, _tablet_mgr->compact(task_context.get()));
         RETURN_IF_ERROR(task->execute(CompactionTask::kNoCancelFn));
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));

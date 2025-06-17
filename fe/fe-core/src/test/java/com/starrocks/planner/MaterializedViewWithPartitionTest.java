@@ -419,7 +419,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=4/5\n" +
                         "     rollup: partial_mv_7\n" +
-                        "     tabletRatio=4/8");
+                        "     tabletRatio=8/8");
 
         // query delta: with more partition predicates
         sql("select c1, c3, c2 from test_base_part where c3 < 1000 and c1 = 1")
@@ -427,7 +427,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_7\n" +
-                        "     tabletRatio=3/6");
+                        "     tabletRatio=6/6");
 
         // no match
         sql("select c1, c3, c2 from test_base_part where c3 < 1000")

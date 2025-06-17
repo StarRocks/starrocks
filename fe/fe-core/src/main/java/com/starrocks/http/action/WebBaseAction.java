@@ -178,7 +178,11 @@ public class WebBaseAction extends BaseAction {
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
                 try {
-                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.NODE);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(currentUser);
+                    context.setCurrentRoleIds(currentUser);
+
+                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
                     checkUserOwnsAdminRole(currentUser);
                 }
@@ -219,7 +223,10 @@ public class WebBaseAction extends BaseAction {
 
             try {
                 try {
-                    Authorizer.checkSystemAction(sessionValue.currentUser, null, PrivilegeType.NODE);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(sessionValue.currentUser);
+                    context.setCurrentRoleIds(sessionValue.currentUser);
+                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
                     checkUserOwnsAdminRole(sessionValue.currentUser);
                 }

@@ -24,6 +24,7 @@ public class MultiOpPattern extends Pattern {
             .add(OperatorType.LOGICAL_OLAP_SCAN)
             .add(OperatorType.LOGICAL_HIVE_SCAN)
             .add(OperatorType.LOGICAL_ICEBERG_SCAN)
+            .add(OperatorType.LOGICAL_DELTALAKE_SCAN)
             .add(OperatorType.LOGICAL_HUDI_SCAN)
             .add(OperatorType.LOGICAL_FILE_SCAN)
             .add(OperatorType.LOGICAL_SCHEMA_SCAN)
@@ -34,6 +35,7 @@ public class MultiOpPattern extends Pattern {
             .add(OperatorType.LOGICAL_BINLOG_SCAN)
             .add(OperatorType.LOGICAL_VIEW_SCAN)
             .add(OperatorType.LOGICAL_PAIMON_SCAN)
+            .add(OperatorType.LOGICAL_ODPS_SCAN)
             .add(OperatorType.PATTERN_SCAN)
             .build();
 

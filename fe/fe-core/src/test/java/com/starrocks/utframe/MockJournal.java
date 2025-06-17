@@ -188,5 +188,10 @@ public class MockJournal implements Journal {
         public long getLatestEpoch() {
             return 0;
         }
+
+        @Override
+        public void removeUnstableNode(String nodeName, int currentFollowerCnt) {
+
+        }
     }
 }

@@ -109,7 +109,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -169,7 +169,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -185,6 +185,47 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
         ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
+}
+
+TEST_P(LakeDuplicateKeyCompactionTest, test_skip_write_txnlog) {
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * 3, read(version));
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+    EXPECT_TRUE(task_context->skip_write_txnlog);
+    EXPECT_TRUE(task_context->txn_log != nullptr);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,
@@ -206,7 +247,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, task_context->progress.value());
@@ -248,7 +289,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -313,7 +354,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Cancelled compaction task
     {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         auto st = task->execute(CompactionTask::kCancelledFn);
@@ -323,7 +364,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Completed compaction task without error
     {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -408,7 +449,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -468,7 +509,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -532,7 +573,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -616,7 +657,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     }
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));

@@ -18,5 +18,7 @@
 add_library(format STATIC
         starrocks_format_writer.h
         starrocks_format_writer.cpp
+        starrocks_format_reader.h
+        starrocks_format_reader.cpp
         format_utils.h
 )

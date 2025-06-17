@@ -20,7 +20,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -28,9 +27,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -52,7 +49,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
@@ -111,7 +107,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @After
     public void after() throws Exception {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
     }
 
     @Test
@@ -426,17 +422,52 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testPublishVersion() throws AlterCancelException {
-        new MockUp<Utils>() {
+    public void testAlterTabletSuccessEnablePartitionAgg() throws Exception {
+        new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                       long newVersion, long warehouseId)
-                        throws
-                        RpcException {
-                throw new RpcException("publish version failed", "127.0.0.1");
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
             }
         };
 
+        LakeTable table1 = createTable(connectContext, 
+                    "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                                "PROPERTIES('file_bundling'='true')");
+        
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob schemaChangeJob1 = getAlterJob(table1);
+        
+        schemaChangeJob1.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runWaitingTxnJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assert.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Collection<Partition> partitions = table1.getPartitions();
+        Assert.assertEquals(1, partitions.size());
+        Partition partition = partitions.stream().findFirst().orElse(null);
+        Assert.assertNotNull(partition);
+        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        List<MaterializedIndex> shadowIndexes =
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assert.assertEquals(1, shadowIndexes.size());
+
+        // Does not support cancel job in FINISHED_REWRITING state.
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+
+        while (schemaChangeJob1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+    }
+
+    @Test
+    public void testPublishVersion() throws AlterCancelException, InterruptedException {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -486,21 +517,18 @@ public class LakeTableSchemaChangeJobTest {
         // Add table back to database
         db.registerTableUnlocked(table);
 
-        // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
-        // should not throw any exception.
-        schemaChangeJob.runFinishedRewritingJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
-
         // Make publish version success
-        new MockUp<Utils>() {
+        new MockUp<AlterJobV2>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                       long newVersion, long warehouseId) {
-                // nothing to do
+            public boolean publishVersion() {
+                return true;
             }
         };
 
-        schemaChangeJob.runFinishedRewritingJob();
+        while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
         Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
 

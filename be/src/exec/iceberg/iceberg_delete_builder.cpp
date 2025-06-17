@@ -130,7 +130,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     std::atomic<int32_t> lazy_column_coalesce_counter = 0;
     scanner_ctx->timezone = timezone;
     scanner_ctx->slot_descs = slot_descriptors;
-    scanner_ctx->iceberg_schema = &iceberg_schema;
+    scanner_ctx->lake_schema = &iceberg_schema;
     scanner_ctx->materialized_columns = std::move(columns);
     scanner_ctx->scan_range = &scan_range;
     scanner_ctx->lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
@@ -300,6 +300,16 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
                 ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheSkipReadBytes", TUnit::BYTES, prefix);
         RuntimeProfile::Counter* datacache_read_timer =
                 ADD_CHILD_TIMER(parent_profile, "MOR_DataCacheReadTimer", prefix);
+        RuntimeProfile::Counter* datacache_read_peer_counter =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheReadPeerCounter", TUnit::UNIT, prefix);
+        RuntimeProfile::Counter* datacache_read_peer_bytes =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheReadPeerBytes", TUnit::BYTES, prefix);
+        RuntimeProfile::Counter* datacache_read_peer_timer =
+                ADD_CHILD_TIMER(parent_profile, "MOR_DataCacheReadPeerTimer", prefix);
+        RuntimeProfile::Counter* datacache_skip_read_peer_counter =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheSkipReadPeerCounter", TUnit::UNIT, prefix);
+        RuntimeProfile::Counter* datacache_skip_read_peer_bytes =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheSkipReadPeerBytes", TUnit::BYTES, prefix);
         RuntimeProfile::Counter* datacache_write_counter =
                 ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheWriteCounter", TUnit::UNIT, prefix);
         RuntimeProfile::Counter* datacache_write_bytes =
@@ -323,6 +333,11 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
         COUNTER_UPDATE(datacache_read_timer, stats.read_cache_ns);
         COUNTER_UPDATE(datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(datacache_skip_read_bytes, stats.skip_read_cache_bytes);
+        COUNTER_UPDATE(datacache_read_peer_bytes, stats.read_peer_cache_bytes);
+        COUNTER_UPDATE(datacache_read_peer_counter, stats.read_peer_cache_count);
+        COUNTER_UPDATE(datacache_read_peer_timer, stats.read_peer_cache_ns);
+        COUNTER_UPDATE(datacache_skip_read_peer_counter, stats.skip_read_peer_cache_count);
+        COUNTER_UPDATE(datacache_skip_read_peer_bytes, stats.skip_read_peer_cache_bytes);
         COUNTER_UPDATE(datacache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(datacache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(datacache_write_timer, stats.write_cache_ns);

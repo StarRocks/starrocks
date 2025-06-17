@@ -51,12 +51,6 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
-        // TODO(packy92)
-        //  The tree-based rewriting rules in RBO may modify the child node but not update the
-        //  parent node, resulting in the statistical cache calculated by the previous rules
-        //  not being refreshed, which may affect the calculation of statistical information in memo.
-        //  Just clear it before into memo.
-        root.clearStatsAndInitOutputInfo();
         visit(root, null);
     }
 
@@ -129,6 +123,10 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     public OptExpression visitLogicalUnion(OptExpression optExpression, Void context) {
         LogicalUnionOperator unionOperator = (LogicalUnionOperator) optExpression.getOp();
         List<ColumnRefOperator> resultCols = unionOperator.getOutputColumnRefOp();
+        if (optExpression.getInputs().isEmpty()) {
+            ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
+                    ErrorType.INTERNAL_ERROR, optExpression, "union operator has no child");
+        }
         for (List<ColumnRefOperator> childCols : unionOperator.getChildOutputColumns()) {
             if (resultCols.size() != childCols.size()) {
                 ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,

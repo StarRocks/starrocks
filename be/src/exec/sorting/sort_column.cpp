@@ -79,7 +79,7 @@ static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column*
     return Status::OK();
 }
 
-static Status sort_and_tie_column(const std::atomic<bool>& cancel, Column* column, const SortDesc& sort_desc,
+static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
                                   SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie);
 
 template <class NullPred>
@@ -230,9 +230,9 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, std::vector<ColumnPtr> columns,
-                                  const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
-                                  std::pair<int, int> range, bool build_tie, size_t limit)
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, Columns columns, const SortDesc& sort_desc,
+                                  Permutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
+                                  size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
@@ -248,7 +248,7 @@ public:
 
     Status do_visit(const NullableColumn& column) {
         std::vector<const NullData*> null_datas;
-        std::vector<ColumnPtr> data_columns;
+        Columns data_columns;
         for (auto& col : _vertical_columns) {
             auto real = down_cast<const NullableColumn*>(col.get());
             null_datas.push_back(&real->immutable_null_column_data());
@@ -459,7 +459,7 @@ private:
     const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
 
-    std::vector<ColumnPtr> _vertical_columns;
+    Columns _vertical_columns;
     Permutation& _permutation;
     Tie& _tie;
     std::pair<int, int> _range;
@@ -485,12 +485,13 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
     return column->accept(&column_sorter);
 }
 
-static Status sort_and_tie_column(const std::atomic<bool>& cancel, Column* column, const SortDesc& sort_desc,
+static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
                                   SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        down_cast<NullableColumn*>(column)->fill_null_with_default();
+        auto* mutable_col = const_cast<Column*>(column);
+        down_cast<NullableColumn*>(mutable_col)->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
     return column->accept(&column_sorter);
@@ -518,7 +519,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
     return Status::OK();
 }
 
-Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<Column*>& columns,
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
                             const std::vector<std::span<const uint32_t>>& offsets_per_key) {
@@ -567,7 +568,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<C
     };
 
     for (int col_i = 0; col_i < num_keys; col_i++) {
-        Column* column = columns[col_i];
+        const Column* column = columns[col_i];
         const bool build_tie = (col_i != (columns.size() - 1));
         shift_perm(offsets_per_key[col_i].data());
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_i), perm, tie,
@@ -608,9 +609,9 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
     return Status::OK();
 }
 
-Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
-                             const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                             const bool build_tie, const size_t limit, size_t* limited) {
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDesc& sort_desc,
+                             Permutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                             const size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
 
@@ -647,7 +648,7 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
         std::pair<int, int> range(0, perm.size());
         DCHECK_GT(perm.size(), 0);
 
-        std::vector<ColumnPtr> vertical_columns;
+        Columns vertical_columns;
         vertical_columns.reserve(vertical_chunks.size());
         for (const auto& columns : vertical_chunks) {
             vertical_columns.push_back(columns[col]);

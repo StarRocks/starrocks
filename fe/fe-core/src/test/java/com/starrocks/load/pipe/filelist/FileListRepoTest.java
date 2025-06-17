@@ -16,6 +16,11 @@ package com.starrocks.load.pipe.filelist;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -23,6 +28,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
@@ -47,6 +53,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.starrocks.load.pipe.PipeFileRecord.JSON_FIELD_ERROR_MESSAGE;
 
 public class FileListRepoTest {
 
@@ -119,6 +127,15 @@ public class FileListRepoTest {
                         "NULL, '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')",
                 valueList);
+
+        // test error message
+        InvalidOlapTableStateException exp = InvalidOlapTableStateException.of(OlapTable.OlapTableState.SCHEMA_CHANGE, "my_tbl");
+        String errorInfo = exp.getMessage();
+        json = "{\"errorMessage\":\"" + errorInfo + "\"}";
+        JsonObject infoJson = (JsonObject) JsonParser.parseString(json);
+        JsonElement errorMessageElement = infoJson.get(JSON_FIELD_ERROR_MESSAGE);
+        Assert.assertTrue(errorMessageElement.getAsString().contains(
+                "A schema change operation is in progress on the table my_tbl"));
     }
 
     @Test
@@ -182,7 +199,7 @@ public class FileListRepoTest {
     }
 
     private void mockExecutor() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             private boolean ddlExecuted = false;
 
             @Mock
@@ -213,11 +230,11 @@ public class FileListRepoTest {
                 return true;
             }
         };
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         RepoCreator creator = RepoCreator.getInstance();
 
         // failed for the first time
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDDL(String sql) {
                 throw new RuntimeException("ddl failed");
@@ -235,7 +252,7 @@ public class FileListRepoTest {
             }
         };
         AtomicInteger changed = new AtomicInteger(0);
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDDL(String sql) {
                 changed.addAndGet(1);
@@ -264,7 +281,7 @@ public class FileListRepoTest {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
         RepoAccessor accessor = RepoAccessor.getInstance();
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         new Expectations(executor) {
             {
                 executor.executeDQL(anyString);
@@ -381,7 +398,7 @@ public class FileListRepoTest {
             }
         };
 
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         new Expectations(executor) {
             {
                 executor.executeDML(
@@ -409,7 +426,7 @@ public class FileListRepoTest {
             }
         };
 
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
         Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
 
@@ -422,7 +439,7 @@ public class FileListRepoTest {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
         RepoAccessor accessor = RepoAccessor.getInstance();
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
         new Expectations(executor) {
             {

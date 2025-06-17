@@ -32,8 +32,7 @@ public class ResourceGroupPEntryObject implements PEntryObject {
         return id;
     }
 
-    public static ResourceGroupPEntryObject generate(GlobalStateMgr mgr,
-                                                     List<String> tokens) throws PrivilegeException {
+    public static ResourceGroupPEntryObject generate(List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens, should have only one, token: " + tokens);
         }
@@ -41,7 +40,7 @@ public class ResourceGroupPEntryObject implements PEntryObject {
         if (name.equals("*")) {
             return new ResourceGroupPEntryObject(PrivilegeBuiltinConstants.ALL_RESOURCE_GROUP_ID);
         } else {
-            ResourceGroup resourceGroup = mgr.getResourceGroupMgr().getResourceGroup(name);
+            ResourceGroup resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(name);
             if (resourceGroup == null) {
                 throw new PrivObjNotFoundException("cannot find resource group: " + name);
             }
@@ -78,8 +77,8 @@ public class ResourceGroupPEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getResourceGroupMgr().getResourceGroup(id) != null;
+    public boolean validate() {
+        return GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(id) != null;
     }
 
     @Override

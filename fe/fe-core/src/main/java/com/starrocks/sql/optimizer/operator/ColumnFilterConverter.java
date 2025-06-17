@@ -59,6 +59,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -193,6 +194,24 @@ public class ColumnFilterConverter {
 
         if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
             return;
+        }
+
+        if (predicate.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (predicate.getChildren().stream().skip(1).noneMatch(SPMFunctions::canRevert2ScalarOperator)) {
+                return;
+            }
+            ScalarOperator clone = predicate.clone();
+            List<ScalarOperator> newChildren = Lists.newArrayList();
+            for (ScalarOperator child : clone.getChildren()) {
+                if (!SPMFunctions.isSPMFunctions(child)) {
+                    newChildren.add(child);
+                } else {
+                    newChildren.addAll(SPMFunctions.revertSPMFunctions(child));
+                }
+            }
+            clone.getChildren().clear();
+            clone.getChildren().addAll(newChildren);
+            predicate = clone;
         }
 
         if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {

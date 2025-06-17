@@ -42,6 +42,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,10 +60,10 @@ public class PartitionUtils {
                                                           String postfix, List<Long> sourcePartitionIds,
                                                           List<Long> tmpPartitionIds,
                                                           DistributionDesc distributionDesc,
-                                                          long warehouseId) throws DdlException {
+                                                          ComputeResource computeResource) throws DdlException {
         List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
-                        tmpPartitionIds, distributionDesc, warehouseId);
+                        tmpPartitionIds, distributionDesc, computeResource);
         Locker locker = new Locker();
         if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");

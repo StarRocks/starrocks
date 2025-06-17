@@ -48,7 +48,6 @@ import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
 import com.starrocks.connector.elasticsearch.QueryConverter;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -63,6 +62,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -84,9 +84,10 @@ public class EsScanNode extends ScanNode {
     private List<TScanRangeLocations> shardScanRanges = Lists.newArrayList();
     private EsTable table;
 
-    public EsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
+    public EsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, ComputeResource computeResource) {
         super(id, desc, planNodeName);
-        table = (EsTable) (desc.getTable());
+        this.table = (EsTable) (desc.getTable());
+        this.computeResource = computeResource;
     }
 
     @Override
@@ -172,12 +173,8 @@ public class EsScanNode extends ScanNode {
         List<ComputeNode> nodes;
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         if (RunMode.isSharedDataMode()) {
-            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-            if (ConnectContext.get() != null) {
-                warehouseName = ConnectContext.get().getCurrentWarehouseName();
-            }
-            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseName);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             nodes = computeNodeIds.stream()
                     .map(id -> systemInfoService.getBackendOrComputeNode(id)).collect(Collectors.toList());
         } else {

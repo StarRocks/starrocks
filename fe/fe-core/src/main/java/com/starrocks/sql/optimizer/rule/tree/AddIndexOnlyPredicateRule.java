@@ -63,7 +63,9 @@ public class AddIndexOnlyPredicateRule implements TreeRewriteRule {
                 ScalarOperator value = entry.getValue();
                 if (value instanceof CallOperator) {
                     CallOperator call = (CallOperator) value;
-                    if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(call.getFnName())) {
+                    if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(call.getFnName()) && scan.getOutputColumns()
+                            .containsAll(call.getUsedColumns()
+                                    .getColumnRefOperators(context.getOptimizerContext().getColumnRefFactory()))) {
                         // Set as index only filter
                         call.setIndexOnlyFilter(true);
                         BinaryPredicateOperator newIndexPredicate =

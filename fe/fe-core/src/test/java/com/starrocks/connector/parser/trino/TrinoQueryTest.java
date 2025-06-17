@@ -108,6 +108,12 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testAtTimezone() {
+        String sql = "select now() AT TIME ZONE 'Asia/Hong_Kong';";
+        analyzeSuccess(sql);
+    }
+
+    @Test
     public void testCastExpression() throws Exception {
         String sql = "select cast(tb as varchar(10)) from tall";
         assertPlanContains(sql, "CAST(2: tb AS VARCHAR(10))");
@@ -1250,5 +1256,11 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select null is not distinct from null";
         analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testRegexpReplace() throws Exception {
+        String sql = "select regexp_replace('123', '321')";
+        assertPlanContains(sql, "regexp_replace('123', '321', '')");
     }
 }

@@ -375,8 +375,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
         VelocityContext context = new VelocityContext();
         context.put("tableId", tableId);
-        context.put("targetPartitionId", sourcePartitionId);
-        context.put("sourcePartitionId", targetPartitionId);
+        context.put("targetPartitionId", targetPartitionId);
+        context.put("sourcePartitionId", sourcePartitionId);
         {
             StringWriter sw = new StringWriter();
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", OVERWRITE_PARTITION_TEMPLATE);
@@ -393,7 +393,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("FullStatisticsCollectJob{");
-        sb.append("type=").append(type);
+        sb.append("type=").append(analyzeType);
         sb.append(", scheduleType=").append(scheduleType);
         sb.append(", db=").append(db);
         sb.append(", table=").append(table);
@@ -402,5 +402,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         sb.append(", properties=").append(properties);
         sb.append('}');
         return sb.toString();
+    }
+
+    @Override
+    public String getName() {
+        return "Full";
     }
 }

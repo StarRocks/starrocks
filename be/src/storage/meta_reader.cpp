@@ -72,7 +72,7 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 
     std::vector<Column*> columns;
     for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
-        const ColumnPtr& col = chunk->get_column_by_index(i);
+        ColumnPtr& col = chunk->get_column_by_index(i);
         columns.emplace_back(col.get());
     }
 
@@ -122,7 +122,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == META_COUNT_COL || field == META_COUNT_ROWS) {
             TypeDescriptor item_desc;
@@ -130,7 +130,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_BIGINT;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, true);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == META_FLAT_JSON_META) {
             TypeDescriptor item_desc;
@@ -138,10 +138,10 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -189,7 +189,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     if (_segment->encryption_info()) {
         ropts.encryption_info = *_segment->encryption_info();
     }
-    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(ropts, _segment->file_name()));
+    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file_with_bundling(ropts, _segment->file_info()));
 
     auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);
@@ -310,9 +310,9 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
 
-    if (words.size() > DICT_DECODE_MAX_SIZE) {
-        return Status::GlobalDictError(fmt::format("global dict size:{} greater than DICT_DECODE_MAX_SIZE:{}",
-                                                   words.size(), DICT_DECODE_MAX_SIZE));
+    if (words.size() > _params->low_cardinality_threshold) {
+        return Status::GlobalDictError(fmt::format("global dict size:{} greater than low_cardinality_threshold:{}",
+                                                   words.size(), _params->low_cardinality_threshold));
     }
 
     // array<string> has none dict, return directly

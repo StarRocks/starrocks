@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -23,8 +24,10 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
@@ -35,6 +38,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,10 +50,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_WAREHOUSE;
+
 public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
+    // NOTE: ALL task run properties should be defined here, and the associated properties configuration below should be
+    // added carefully.
     public static final String MV_ID = "mvId";
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
@@ -57,14 +65,32 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_VALUES = "PARTITION_VALUES";
     public static final String FORCE = "FORCE";
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
-    // All properties that can be set in TaskRun
-    public static final Set<String> TASK_RUN_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES);
+    // Only used in FE's UT
+    public static final String IS_TEST = "__IS_TEST__";
+
+    // TODO: Refactor this for better extensibility later by using a class rather than a map.
+    // MV's task run can be generated from the last task run, those properties are not allowed to be copied from one task run
+    // to another and must be only set specifically for each run but cannot be extended from the last task run.
+    // eg: `FORCE` is only allowed to set in the first task run and cannot be copied into the following task run.
+    public static final Set<String> MV_UNCOPYABLE_PROPERTIES = ImmutableSet.of(
+            PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+    // If there are many pending mv task runs, we can merge some of them by comparing the properties, those properties that are
+    // used to check equality of task runs and we can ignore the other properties.
+    // eg:
+    // - `FORCE` is used to check equality of task runs because the refresh partitions are different for each task run.
+    // - `PROPERTIES_WAREHOUSE`/`START_TASK_RUN_ID` is no need to check equality of task runs because they will not affect
+    //  the task run's result.
+    public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+    // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
+    // and will ignore other properties in the task run history.
+    // This should be only used in the task run history table and should not used for checking task run's real properties
+    // because this is not a complete list of task run properties.
+    public static final Set<String> RESERVED_HISTORY_TASK_RUN_PROPERTIES = ImmutableSet.of(
+            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE, IS_TEST);
 
     public static final int INVALID_TASK_PROGRESS = -1;
 
-    // Only used in FE's UT
-    public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
     @SerializedName("taskId")
@@ -194,18 +220,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
             Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
                     materializedView.getWarehouseId());
-            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, w.getName());
+            newProperties.put(PROPERTIES_WAREHOUSE, w.getName());
+
+            // set current warehouse
+            ctx.setCurrentWarehouse(w.getName());
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }
         return newProperties;
-    }
-
-    private void handleWarehouseProperty() {
-        String warehouseId = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID);
-        if (warehouseId != null) {
-            runCtx.setCurrentWarehouseId(Long.parseLong(warehouseId));
-        }
     }
 
     @VisibleForTesting
@@ -252,17 +274,21 @@ public class TaskRun implements Comparable<TaskRun> {
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        if (properties != null) {
-            handleWarehouseProperty();
-            for (String key : properties.keySet()) {
-                try {
-                    runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
-                } catch (DdlException e) {
-                    // not session variable
-                    taskRunContextProperties.put(key, properties.get(key));
-                }
+        for (String key : properties.keySet()) {
+            try {
+                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
+            } catch (DdlException e) {
+                // not session variable
+                taskRunContextProperties.put(key, properties.get(key));
             }
         }
+        // set warehouse
+        String currentWarehouse = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+        if (currentWarehouse != null) {
+            runCtx.setCurrentWarehouse(currentWarehouse);
+            taskRunContextProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, currentWarehouse);
+        }
+
         LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}, " +
                         "taskRunContextProperties:{}", runCtx.getQueryId(),
                 ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId, taskRunContextProperties);
@@ -280,6 +306,9 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
 
+        // prepare to execute task run, move it here so that we can catch the exception and set the status
+        processor.prepare(taskRunContext);
+        // process task run
         processor.processTaskRun(taskRunContext);
 
         QueryState queryState = runCtx.getState();
@@ -375,7 +404,11 @@ public class TaskRun implements Comparable<TaskRun> {
         // NOTE: definition will cause a lot of repeats and cost a lot of metadata memory resources,
         // since history task runs has been stored in sr's internal table, we can save it in the
         // task run status.
-        status.setDefinition(task.getDefinition());
+        if (!Strings.isNullOrEmpty(task.getDefinition())) {
+            // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH/4 which is defined in the TaskRunsSystemTable.java
+            String query = LogUtil.removeLineSeparator(task.getDefinition());
+            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4));
+        }
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());

@@ -21,9 +21,11 @@ import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -46,6 +48,8 @@ public class LakeRollupJobTest {
 
     private static LakeRollupJob lakeRollupJob;
     private static LakeRollupJob lakeRollupJob2;
+    private static LakeRollupJob lakeRollupJob3;
+    private static LakeRollupJob lakeRollupJob4;
 
     private static Database db;
     private static Table table;
@@ -81,30 +85,67 @@ public class LakeRollupJobTest {
                         "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
                         "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
                         ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3")
+                .withTable("CREATE TABLE base_table3\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    k3 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3")
+                .withTable("CREATE TABLE base_table4\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    k3 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES(\n" +
+                        "    \"file_bundling\" = \"true\"\n" +
+                        ");");
 
         String sql = "create materialized view mv1 as\n" +
                 "select k2, k1 from base_table order by k2;";
+        lakeRollupJob = createJob(sql);
+
         String sql2 = "create materialized view mv2 as\n" +
                 "select k2, k1 from base_table2 order by k2;";
+        lakeRollupJob2 = createJob(sql2);
+
+        String sql3 = "create materialized view mv3 as\n" +
+                "select k2, k1 from base_table3 order by k2;";
+        lakeRollupJob3 = createJob(sql3);
+
+        String sql4 = "create materialized view mv4 as\n" +
+                "select k2, k1 from base_table4 order by k2;";
+        lakeRollupJob4 = createJob(sql4);
+
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        table = db.getTable("base_table");
+    }
+
+    private static LakeRollupJob createJob(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Assert.assertTrue(stmt instanceof CreateMaterializedViewStmt);
         CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
-
-        StatementBase stmt2 = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-        Assert.assertTrue(stmt2 instanceof CreateMaterializedViewStmt);
-        CreateMaterializedViewStmt createMaterializedViewStmt2 = (CreateMaterializedViewStmt) stmt2;
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt2);
-
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        table = db.getTable("base_table");
-
         Map<Long, AlterJobV2> alterJobV2Map = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
-        Assert.assertEquals(2, alterJobV2Map.size());
+        Assert.assertEquals(1, alterJobV2Map.size());
         List<AlterJobV2> alterJobV2List = alterJobV2Map.values().stream().collect(Collectors.toList());
-        lakeRollupJob = (LakeRollupJob) alterJobV2List.get(0);
-        lakeRollupJob2 = (LakeRollupJob) alterJobV2List.get(1);
+        LakeRollupJob job = (LakeRollupJob) alterJobV2List.get(0);
+        // Disable the execution of job in background thread
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+        return job;
     }
 
     @AfterClass
@@ -136,8 +177,42 @@ public class LakeRollupJobTest {
         lakeRollupJob.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, lakeRollupJob.getJobState());
 
-        lakeRollupJob.runFinishedRewritingJob();
+        while (lakeRollupJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            lakeRollupJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob.getJobState());
+    }
+
+    @Test
+    public void testCreateSyncMvWithEnableFileBundling() throws Exception {
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        lakeRollupJob4.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, lakeRollupJob4.getJobState());
+
+        lakeRollupJob4.runWaitingTxnJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, lakeRollupJob4.getJobState());
+
+        List<List<Comparable>> infos = new ArrayList<>();
+        lakeRollupJob4.getInfo(infos);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertTrue(!infos.get(0).get(10).equals(FeConstants.NULL_STRING));
+
+        Assert.assertEquals(1, infos.size());
+        lakeRollupJob4.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, lakeRollupJob4.getJobState());
+
+        while (lakeRollupJob4.getJobState() != AlterJobV2.JobState.FINISHED) {
+            lakeRollupJob4.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob4.getJobState());
     }
 
     @Test
@@ -155,5 +230,23 @@ public class LakeRollupJobTest {
         lakeRollupJob2.cancelImpl(errorMsg);
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, lakeRollupJob2.jobState);
         Assert.assertEquals(errorMsg, lakeRollupJob2.errMsg);
+    }
+
+    @Test
+    public void testPendingJobNoAliveBackend() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
+        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
+            lakeRollupJob3.runPendingJob();
+        });
+        Assert.assertTrue(exception.getMessage().contains("No alive backend"));
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
     }
 }

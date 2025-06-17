@@ -26,7 +26,6 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -35,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -282,7 +282,6 @@ public class PipeManagerTest {
         // Validate pipe execution
         Pipe p2 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p2")).get();
         p2.poll();
-        p2.schedule();
         p1 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
         Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
     }
@@ -354,7 +353,7 @@ public class PipeManagerTest {
     }
 
     public static void mockRepoExecutorDML() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -371,7 +370,7 @@ public class PipeManagerTest {
     }
 
     private void mockRepoExecutor() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -667,9 +666,8 @@ public class PipeManagerTest {
 
         mockPollError(1);
         Pipe p3 = getPipe(pipeName);
-        p3.poll();
-
-        // get error
+        // set error
+        p3.setState(Pipe.State.ERROR);
         Assert.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // resume after error

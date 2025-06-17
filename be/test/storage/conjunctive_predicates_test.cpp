@@ -124,7 +124,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     c4->append_datum(Datum(DecimalV2Value("0.000002")));
     c4->append_datum(Datum(DecimalV2Value("0.000003")));
 
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{c0, c1, c2, c3, c4}, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(
+            Columns{std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, schema);
 
     std::vector<uint8_t> selection(chunk->num_rows(), 0);
 
@@ -190,7 +191,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     c0->append_datum(Datum(2));
     c0->append_datum(Datum(3));
 
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{c0}, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(c0)}, schema);
 
     {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);
@@ -229,7 +230,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
     c0->append_datum(Datum(2));
     c0->append_datum(Datum(3));
 
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{c0}, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(c0)}, schema);
 
     {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);

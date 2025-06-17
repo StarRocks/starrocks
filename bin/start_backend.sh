@@ -35,6 +35,7 @@ OPTS=$(getopt \
     -l 'meta_tool' \
     -l numa: \
     -l 'check_mem_leak' \
+    -l 'jemalloc_debug' \
 -- "$@")
 
 eval set -- "$OPTS"
@@ -46,6 +47,7 @@ RUN_NUMA="-1"
 RUN_LOG_CONSOLE=0
 RUN_META_TOOL=0
 RUN_CHECK_MEM_LEAK=0
+RUN_JEMALLOC_DEBUG=0
 
 while true; do
     case "$1" in
@@ -56,6 +58,7 @@ while true; do
         --numa) RUN_NUMA=$2; shift 2 ;;
         --meta_tool) RUN_META_TOOL=1 ; shift ;;
         --check_mem_leak) RUN_CHECK_MEM_LEAK=1 ; shift ;;
+        --jemalloc_debug) RUN_JEMALLOC_DEBUG=1 ; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -80,18 +83,24 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# JEMALLOC enable DEBUG 
-# export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
+# enable jemalloc
+JEMALLOC_LIB=$STARROCKS_HOME/lib/libjemalloc.so
+ln -s -f $STARROCKS_HOME/lib/libjemalloc.so.2 $JEMALLOC_LIB
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+
 # Set JEMALLOC_CONF environment variable if not already set
 if [[ -z "$JEMALLOC_CONF" ]]; then
-    if [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
-      export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
+    # JEMALLOC enable DEBUG 
+    if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
+        ln -s -f $STARROCKS_HOME/lib/libjemalloc-dbg.so.2 $JEMALLOC_LIB
+        export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
+    elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
     else
-      export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
     fi
-else
-    echo "JEMALLOC_CONF from conf is '$JEMALLOC_CONF'"
 fi
+
 # enable coredump when BE build with ASAN
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
@@ -112,31 +121,13 @@ if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
     export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
+    export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
     java_version=$(jdk_version)
-    if [[ $java_version -gt 8 ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
-        # JAVA_HOME is jdk
-    elif [[ -d "$JAVA_HOME/jre"  ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
-        # JAVA_HOME is jre
-    else
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
+    if [[ $java_version -lt 17 ]]; then
+        echo "[WARNING] jdk versions lower than 17 are not supported"
     fi
 fi
 
-# Appending the option to avoid "process heaper" stack overflow exceptions.
-# Tried to adding this option to LIBHDFS_OPTS only, but that doesn't work.
-export JAVA_OPTS="$JAVA_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
-export JAVA_OPTS_FOR_JDK_9_AND_LATER="$JAVA_OPTS_FOR_JDK_9_AND_LATER -Djdk.lang.processReaperUseDefaultStackSize=true"
-
-# check java version and choose correct JAVA_OPTS
-JAVA_VERSION=$(jdk_version)
-final_java_opt=$JAVA_OPTS
-if [[ "$JAVA_VERSION" -gt 8 ]]; then
-    if [ -n "$JAVA_OPTS_FOR_JDK_9_AND_LATER" ]; then
-        final_java_opt=$JAVA_OPTS_FOR_JDK_9_AND_LATER
-    fi
-fi
 
 # check NUMA setting
 NUMA_CMD=""
@@ -147,6 +138,15 @@ if [[ "${RUN_NUMA}" -ne "-1" ]]; then
     set +e
 fi
 
+final_java_opt=${JAVA_OPTS}
+# Compatible with scenarios upgraded from jdk9~jdk16
+if [ ! -z "${JAVA_OPTS_FOR_JDK_9_AND_LATER}" ] ; then
+    echo "Warning: Configuration parameter JAVA_OPTS_FOR_JDK_9_AND_LATER is not supported, JAVA_OPTS is the only place to set jvm parameters"
+    final_java_opt=${JAVA_OPTS_FOR_JDK_9_AND_LATER}
+fi
+
+# Appending the option to avoid "process heaper" stack overflow exceptions.
+final_java_opt="$final_java_opt -Djdk.lang.processReaperUseDefaultStackSize=true"
 export LIBHDFS_OPTS=$final_java_opt
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
@@ -223,6 +223,8 @@ else
 fi
 
 echo "start time: $(date), server uptime: $(uptime)"
+echo "Run with JEMALLOC_CONF: '$JEMALLOC_CONF'"
+
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${START_BE_CMD} "$@" </dev/null &
 else

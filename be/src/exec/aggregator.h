@@ -28,6 +28,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
@@ -49,7 +50,8 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
-
+class RuntimeFilter;
+class AggInRuntimeFilterMerger;
 struct HashTableKeyAllocator;
 
 struct RawHashTableIterator {
@@ -151,7 +153,6 @@ struct ColumnType {
     bool is_nullable;
 };
 
-enum AggrPhase { AggrPhase1, AggrPhase2 };
 enum AggrMode {
     AM_DEFAULT, // normal mode(cache feature turn off)
     // A blocking operator is split into a pair {blocking operator(before cache), blocking operator(after cache)]
@@ -307,6 +308,13 @@ public:
             return 0;
         }
     }
+    size_t size() const {
+        if (is_hash_set()) {
+            return _hash_set_variant.size();
+        } else {
+            return _hash_map_variant.size();
+        }
+    }
 
     TStreamingPreaggregationMode::type& streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() const { return _streaming_preaggregation_mode; }
@@ -338,6 +346,7 @@ public:
     Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
     Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
 
+    RuntimeFilter* build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc);
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
 
@@ -348,8 +357,10 @@ public:
     Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
+                                     bool force_use_intermediate_as_output = false);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection,
+                                     bool force_use_intermediate_as_output = false);
 
     // convert input chunk to spill format
     Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
@@ -359,7 +370,8 @@ public:
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk,
+                                                    bool force_use_intermediate_as_output = false);
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -472,7 +484,7 @@ protected:
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    std::vector<Columns> _agg_input_columns;
     //raw pointers in order to get multi-column values
     std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     // The expr used to evaluate agg intermediate columns.
@@ -536,6 +548,7 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
     bool is_pre_cache() { return _aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE; }
+    Columns create_group_by_columns(size_t num_rows) const { return _create_group_by_columns(num_rows); }
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -563,10 +576,10 @@ protected:
 
     // Create new aggregate function result column by type
     Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
-    Columns _create_group_by_columns(size_t num_rows);
+    Columns _create_group_by_columns(size_t num_rows) const;
 
-    void _serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
-    void _finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
+    void _serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
+    void _finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
     void _destroy_state(AggDataPtr __restrict state);
 
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
@@ -592,6 +605,13 @@ protected:
 
     Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
                                       const AggregateFunction** ret);
+
+    int64_t get_two_level_threahold() {
+        if (config::two_level_memory_threshold < 0) {
+            return two_level_memory_threshold;
+        }
+        return config::two_level_memory_threshold;
+    }
 
     template <class HashMapWithKey>
     friend struct AllocateState;

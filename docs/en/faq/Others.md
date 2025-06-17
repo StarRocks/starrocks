@@ -244,3 +244,24 @@ You can remove the directory `trash` using `rm -rf` command. If you have already
 ## Can add extra disks to BE nodes?
 
 Yes. You can add the disks to the directory specified by the BE configuration item `storage_root_path`.
+
+## How can I prevent expression partition conflicts caused by concurrent execution of loading tasks and partition creation tasks?
+
+Currently, for tables with the expression partitioning strategy, partitions created during loading tasks conflict with those created during ALTER TABLE tasks. Since loading tasks take priority, any conflicting ALTER tasks will fail. To prevent this issue, consider the following workarounds:
+
+- If you use coarse time-based partitions (or example, partitioning by day or month), you can prevent ALTER operations from crossing time boundaries, reducing the risk of partition creation failures.
+- If you use fine-grained time-based partitions (or example, partitioning by hour), you can manually create partitions for a future time range to ensure that ALTER operations are not disrupted by new partition created by loading tasks. You can use the [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) feature to trigger partition creation by executing an INSERT statement without committing the transaction. This allows you to create the necessary partitions without affecting actual data. The following example demonstrates how to create partitions for the next 8 hours:
+
+```SQL
+CREATE TABLE t(
+    event_time DATETIME
+)
+PARTITION BY date_trunc('hour', event_time);
+
+EXPLAIN ANALYZE
+INSERT INTO t (event_time)
+SELECT DATE_ADD(NOW(), INTERVAL d hour)
+FROM table(generate_series(0, 8)) AS g(d);
+
+SHOW PARTITION FROM t;
+```

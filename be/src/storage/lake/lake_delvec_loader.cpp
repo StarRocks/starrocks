@@ -37,8 +37,15 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 Status LakeDelvecLoader::load_from_file(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
     (*pdelvec).reset(new DelVector());
     // 2. find in delvec file
-    ASSIGN_OR_RETURN(auto metadata,
-                     _tablet_manager->get_tablet_metadata(tsid.tablet_id, version, _fill_cache, 0, _lake_io_opts.fs));
+    TabletMetadataPtr metadata;
+    if (_lake_io_opts.location_provider) {
+        const std::string filepath = _lake_io_opts.location_provider->tablet_metadata_location(tsid.tablet_id, version);
+        ASSIGN_OR_RETURN(metadata, _tablet_manager->get_tablet_metadata(filepath, _fill_cache, 0, _lake_io_opts.fs));
+    } else {
+        ASSIGN_OR_RETURN(metadata, _tablet_manager->get_tablet_metadata(tsid.tablet_id, version, _fill_cache, 0,
+                                                                        _lake_io_opts.fs));
+    }
+
     RETURN_IF_ERROR(
             lake::get_del_vec(_tablet_manager, *metadata, tsid.segment_id, _fill_cache, _lake_io_opts, pdelvec->get()));
     return Status::OK();

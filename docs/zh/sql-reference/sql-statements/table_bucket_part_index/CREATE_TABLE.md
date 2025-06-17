@@ -777,8 +777,8 @@ PROPERTIES (
 
 > **NOTE**
 >
-> - 仅 StarRocks 存算一体集群支持该参数，支持自 v3.2.0 版本起。
-> - 如果您需要为存算分离表开启 fast schema evolution，则必须在集群范围内设置启用。需要通过 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution) 设置。
+> - 存算一体集群自 v3.2.0 起支持 fast schema evolution。
+> - 存算分离集群自 v3.3.0 起支持 fast schema evolution，默认启用。在存算分离集群中创建云原生表时无需指定此属性，由 FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
 
 #### 禁止 Base Compaction
 
@@ -819,6 +819,49 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 -- 每个工作日（周一到周五）的 8AM～9PM 禁止执行 Base Compaction。
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
+
+#### 指定通用分区表达式 TTL
+
+从 v3.5.0 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+
+`partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
+- 表达式只能包含分区列和常量。不支持非分区列。
+- 通用分区表达式处理 List 分区和 Range 分区的方式不同：
+  - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+  - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+示例：
+
+```SQL
+-- 保留最近三个月的数据。dt 列为分区列。
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+如需禁用此功能，可以使用 ALTER TABLE 语句将此属性设置为空字符串：
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
+```
+
+#### 设置 Flat JSON (目前仅支持存算一体的集群)
+
+如果你希望使用 Flat JSON 属性，请在 PROPERTIES 中进行设置。更多信息请参考：[Flat JSON](../../../using_starrocks/Flat_json.md)
+
+``` sql
+PROPERTIES (
+    "flat_json.enable" = "true|false",
+    "flat_json.null.factor" = "0-1",
+    "flat_json.sparsity.factor" = "0-1",
+    "flat_json.column.max" = "${integer_value}"
+)
+```
+
+| 参数                          | 是否必填 | 说明                                                                                      |
+| ----------------------------- | -------- |-----------------------------------------------------------------------------------------|
+| `flat_json.enable`    | 否       | 是否开启 Flat JSON 特性。开启后新导入的 JSON 数据会自动打平，提升 JSON 数据查询性能。取值为 `FALSE`（默认）或 `TRUE`。          |
+| `flat_json.null.factor` | 否       | 控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 enable_json_flat 为 true 时生效。 |
+| `flat_json.sparsity.factor`   | 否       | 控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 enable_json_flat 为 true 时生效。     |
+| `flat_json.column.max`       | 否       | 控制 Flat JSON 时，最多提取的子列数量。该参数仅在 enable_json_flat 为 true 时生效。默认值是 100                     |
 
 ## 示例
 
@@ -1131,6 +1174,29 @@ ORDER BY(`address`,`last_active`)
 PROPERTIES(
     "replication_num" = "3",
     "enable_persistent_index" = "true"
+);
+```
+
+### 创建一张带有 Flat JSON 的表 (目前仅支持存算一体的集群)
+
+创建一张开启flat json的表，并对其中的参数进行配置。建表语句如下：
+
+```SQL
+CREATE TABLE example_db.example_table
+(
+  k1 DATE,
+  k2 INT,
+  v1 VARCHAR(2048),
+  v2 JSON
+)
+ENGINE=olap
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2)
+PROPERTIES (
+    "flat_json.enable" = "true",
+    "flat_json.null.factor" = "0.5",
+    "flat_json.sparsity.factor" = "0.5",
+    "flat_json.column.max" = "50"
 );
 ```
 

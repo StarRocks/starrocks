@@ -100,7 +100,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
     }
 
     // 2. build schema.
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         std::string err_msg =
                 fmt::format("create column for primary key encoder failed, tablet_id: {}", params.tablet->id());
@@ -262,6 +262,9 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
                       .encryption_meta = relative_file_info.encryption_meta};
     if (relative_file_info.size.has_value()) {
         fileinfo.size = relative_file_info.size;
+    }
+    if (relative_file_info.bundle_file_offset.has_value()) {
+        fileinfo.bundle_file_offset = relative_file_info.bundle_file_offset;
     }
     uint32_t rowset_id = params.container.rssid_to_rowid().at(rssid);
     // 2. load segment meta.

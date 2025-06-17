@@ -43,6 +43,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
@@ -50,6 +51,8 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
+import com.starrocks.catalog.constraint.TableWithFKConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -68,6 +71,7 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -78,6 +82,8 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -91,6 +97,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
@@ -99,8 +106,12 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.constraint.ForeignKeyConstraint.onParentTableChanged;
 
 public class AlterJobMgr {
     private static final Logger LOG = LogManager.getLogger(AlterJobMgr.class);
@@ -205,21 +216,30 @@ public class AlterJobMgr {
             QueryStatement mvQueryStatement = null;
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
-            } catch (SemanticException e) {
+            } catch (Exception e) {
+                LOG.warn("Can not active materialized view [%s]" +
+                        " because analyze materialized view define sql: \n\n%s" +
+                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e);
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
-                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getDetailMsg());
+                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());
             }
 
             // Skip checks to maintain eventual consistency when replay
             List<BaseTableInfo> baseTableInfos =
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
-            materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             materializedView.onReload();
             materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
+            // clear running & pending task runs since the mv has been inactive
+            final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            if (currentTask != null) {
+                TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+                taskRunManager.killTaskRun(currentTask.getId(), true);
+            }
         }
     }
 
@@ -247,7 +267,7 @@ public class AlterJobMgr {
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getColumns().stream()
+        List<Column> existedColumns = materializedView.getOrderedOutputColumns().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
@@ -402,8 +422,10 @@ public class AlterJobMgr {
             newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
             final MaterializedView.RefreshType refreshType = log.getRefreshType();
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
+            final MaterializedView.RefreshMoment moment = oldRefreshScheme.getMoment();
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+            newMvRefreshScheme.setMoment(moment);
 
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(
@@ -513,6 +535,47 @@ public class AlterJobMgr {
             updateTaskDefinition(oldMv);
             updateTaskDefinition(newMv);
         }
+
+        // swap uk-fk constraints: after swap table, the parent table of fk constraint should be updated
+        final GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        final Set<TableWithFKConstraint> newRefConstraints = globalConstraintManager.getRefConstraints(origTable);
+        final Set<TableWithFKConstraint> originRefConstraints = globalConstraintManager.getRefConstraints(newTbl);
+        refreshTableConstraints(globalConstraintManager, newRefConstraints, newTbl, origTblName);
+        refreshTableConstraints(globalConstraintManager, originRefConstraints, origTable, newTblName);
+
+        // TODO: refactor unique/foreign key constraint by using table name rather than id to support swap table
+        // invalidate related materialized views' foreign key constraints and unique constraints because of
+        // the table name changed
+        invalidateRelatedMaterializedViews(origTable);
+        invalidateRelatedMaterializedViews(newTbl);
+    }
+
+    private void refreshTableConstraints(GlobalConstraintManager globalConstraintManager,
+                                         Set<TableWithFKConstraint> newRefConstraints,
+                                         OlapTable newTbl,
+                                         String origTblName) {
+        onParentTableChanged(newRefConstraints, newTbl, origTblName);
+        globalConstraintManager.updateConstraint(newTbl, newRefConstraints);
+    }
+
+    private void invalidateRelatedMaterializedViews(OlapTable olapTable) {
+        if (olapTable == null || olapTable.getRelatedMaterializedViews() == null) {
+            return;
+        }
+        final Set<MvId> relatedMvIds = olapTable.getRelatedMaterializedViews();
+        relatedMvIds.stream()
+                .map(mvId -> (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvId.getDbId(),
+                        mvId.getId()))
+                .filter(Objects::nonNull)
+                .forEach(mv -> {
+                    if (CollectionUtils.isNotEmpty(mv.getForeignKeyConstraints())) {
+                        mv.setForeignKeyConstraints(Lists.newArrayList());
+                    }
+                    if (CollectionUtils.isNotEmpty(mv.getUniqueConstraints())) {
+                        mv.setUniqueConstraints(Lists.newArrayList());
+                    }
+                });
+        relatedMvIds.clear();
     }
 
     public void alterView(AlterViewInfo alterViewInfo, boolean isReplay) {
@@ -545,6 +608,25 @@ public class AlterJobMgr {
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        }
+    }
+
+    public void setViewSecurity(AlterViewInfo alterViewInfo, boolean isReplay) {
+        long dbId = alterViewInfo.getDbId();
+        long tableId = alterViewInfo.getTableId();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        try {
+            view.setSecurity(alterViewInfo.getSecurity());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        }
+
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
         }
     }
 

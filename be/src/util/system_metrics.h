@@ -55,6 +55,7 @@ public:
     // MemPool metrics
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(connector_scan_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(load_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(metadata_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(tablet_metadata_mem_bytes, MetricUnit::BYTES);
@@ -138,6 +139,9 @@ private:
     void _update_vector_index_cache_metrics();
 
     void _install_io_metrics(MetricRegistry* registry);
+
+    void _update_datacache_mem_tracker();
+    void _update_pagecache_mem_tracker();
 
 private:
     static const char* const _s_hook_name;

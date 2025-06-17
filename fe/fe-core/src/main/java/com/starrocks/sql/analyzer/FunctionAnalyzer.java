@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -40,6 +39,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.spm.SPMFunctions;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -178,6 +179,19 @@ public class FunctionAnalyzer {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
             }
+        } else if (fn instanceof AggStateIf) {
+            FunctionName argFuncNameWithoutIf =
+                    new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            FunctionParams params = functionCallExpr.getParams();
+            FunctionParams functionParamsWithOutIf =
+                    new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
+                            params.getExprsNames() == null ? null :
+                                    params.getExprsNames().subList(0, params.getExprsNames().size() - 1),
+                            params.isDistinct(), params.getOrderByElements() == null ? null :
+                            params.getOrderByElements().subList(0, params.getOrderByElements().size() - 1));
+            FunctionCallExpr functionCallWithoutIf =
+                    new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
+            analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
         }
     }
 
@@ -343,6 +357,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
                 || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
@@ -427,7 +442,8 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX)) {
-            if (functionCallExpr.getChildren().size() != 2 && functionCallExpr.getChildren().size() != 3) {
+            List<Expr> children = functionCallExpr.getChildren();
+            if (children.size() != 2 && children.size() != 3) {
                 throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
                         functionCallExpr.getPos());
             }
@@ -438,11 +454,48 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.getChild(1).getType().isNumericType()) {
                 throw new SemanticException("percentile_approx requires the second parameter's type is numeric type");
             }
-
-            if (functionCallExpr.getChildren().size() == 3) {
+            if (children.size() == 3) {
                 if (!functionCallExpr.getChild(2).getType().isNumericType()) {
                     throw new SemanticException(
                             "percentile_approx requires the third parameter's type is numeric type");
+                }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX_WEIGHTED)) {
+            List<Expr> children = functionCallExpr.getChildren();
+            if (children.size() != 3 && children.size() != 4) {
+                throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
+                        functionCallExpr.getPos());
+            }
+            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
+                throw new SemanticException(
+                        "percentile_approx requires the first parameter's type is numeric type");
+            }
+            // 1th column cannot be constant
+            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
+                throw new SemanticException("percentile_approx requires the second parameter's type is bigint type column");
+            }
+            if (!functionCallExpr.getChild(2).getType().isNumericType()) {
+                throw new SemanticException(
+                        "percentile_approx requires the third parameter's type is numeric type");
+            }
+            if (children.size() == 4) {
+                if (!functionCallExpr.getChild(3).getType().isNumericType()) {
+                    throw new SemanticException(
+                            "percentile_approx requires the fourth parameter's type is numeric type");
+                }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.DICT_MERGE)) {
+            if (functionCallExpr.hasChild(1)) {
+                Expr kExpr = functionCallExpr.getChild(1);
+                Optional<Long> k = extractIntegerValue(kExpr);
+                if (!k.isPresent() || k.get() >= Integer.MAX_VALUE || k.get() < 0) {
+                    throw new SemanticException(
+                            "The second parameter of DICT_MERGE must be a constant positive integer: " +
+                                    functionCallExpr.toSql(), kExpr.getPos());
                 }
             }
         }
@@ -502,14 +555,18 @@ public class FunctionAnalyzer {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException(fnName + " requires two parameters");
             }
-            if (!(functionCallExpr.getChild(1) instanceof DecimalLiteral) &&
-                    !(functionCallExpr.getChild(1) instanceof IntLiteral)) {
-                throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+            Expr child1 = functionCallExpr.getChild(1);
+            if (!child1.isConstant() || !child1.getType().isNumericType()) {
+                throw new SemanticException(fnName + " 's second parameter should be constant and its type should be numeric",
+                        functionCallExpr.getPos());
             }
-            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
-            if (rate < 0 || rate > 1) {
-                throw new SemanticException(
-                        fnName + " second parameter'value should be between 0 and 1");
+            // If the input parameter is literal, check its range is [0, 1]; otherwise it will be checked in the be's implement.
+            if (child1 instanceof LiteralExpr) {
+                double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+                if (rate < 0 || rate > 1) {
+                    throw new SemanticException(
+                            fnName + " second parameter'value should be between 0 and 1",  functionCallExpr.getChild(1).getPos());
+                }
             }
         }
 
@@ -536,7 +593,7 @@ public class FunctionAnalyzer {
             // check the second parameter: tgt_type
             if (argSize == 3) {
                 if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
-                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong ");
                 }
                 String tgtType = ((LiteralExpr) functionCallExpr.getChild(2)).getStringValue();
                 if (!SUPPORTED_TGT_TYPES.contains(tgtType)) {
@@ -552,7 +609,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(fnName + " function 's args must be column");
+                throw new SemanticException(fnName + " function 's args must be constant");
             }
         }
 
@@ -677,6 +734,10 @@ public class FunctionAnalyzer {
             return fn;
         }
 
+        fn = SPMFunctions.getSPMFunction(node, Arrays.stream(argumentTypes).toList());
+        if (fn != null) {
+            return fn;
+        }
         // get fn from builtin functions
         fn = getAnalyzedBuiltInFunction(session, fnName, params, argumentTypes, node.getPos());
         if (fn != null) {
@@ -1032,7 +1093,8 @@ public class FunctionAnalyzer {
             }
         } else if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)
                 || fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
+                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
+                || fnName.endsWith(FunctionSet.IF)) {
             Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;

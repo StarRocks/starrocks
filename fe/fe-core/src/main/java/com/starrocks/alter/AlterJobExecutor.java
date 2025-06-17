@@ -35,13 +35,15 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -103,6 +105,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -212,7 +215,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.table = table;
 
         if (statement.getAlterClause() == null) {
-            ((View) table).setSecurity(statement.isSecurity());
+            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(), statement.isSecurity());
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().setViewSecurity(alterViewInfo, false);
             return null;
         }
 
@@ -339,6 +343,63 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     }
                 }
 
+                // check unique constraints: if old table contains constraints, new table must contain the same constraints
+                // TODO: only check users' defined constraints to be compatible with old version
+                final List<UniqueConstraint> origUKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
+                        .orElse(Lists.newArrayList());
+                final List<UniqueConstraint> newUKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
+                        .orElse(Lists.newArrayList());
+                if (origUKConstraints.size() != newUKConstraints.size()) {
+                    throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints, " +
+                            "origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                }
+                for (UniqueConstraint origUniqueConstraint : origUKConstraints) {
+                    final List<String> originUKNames = origUniqueConstraint.getUniqueColumnNames(origTable);
+                    final List<String> newUKNames = origUniqueConstraint.getUniqueColumnNames(olapNewTbl);
+                    if (originUKNames.size() != newUKNames.size()) {
+                        throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints" +
+                                ", origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                    }
+                    for (int i = 0; i < originUKNames.size(); i++) {
+                        if (!originUKNames.get(i).equals(newUKNames.get(i))) {
+                            throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints" +
+                                    ", origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                        }
+                    }
+                }
+                // check foreign constraints: if old table contains constraints, new table must contain the same constraints
+                // NOTE: only check users' defined constraints to be compatible with old version
+                final List<ForeignKeyConstraint> origFKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
+                        .orElse(Lists.newArrayList());
+                final List<ForeignKeyConstraint> newFKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
+                        .orElse(Lists.newArrayList());
+                if (origFKConstraints.size() != newFKConstraints.size()) {
+                    throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                            "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                }
+                for (int i = 0; i < origFKConstraints.size(); i++) {
+                    final ForeignKeyConstraint originFKConstraint = origFKConstraints.get(i);
+                    final ForeignKeyConstraint newFKConstraint = newFKConstraints.get(i);
+                    final List<Pair<String, String>> originFKCNPairs = originFKConstraint.getColumnNameRefPairs(origTable);
+                    final List<Pair<String, String>> newFKCNPairs = newFKConstraint.getColumnNameRefPairs(origTable);
+                    if (originFKCNPairs.size() != newFKCNPairs.size()) {
+                        throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                                "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                    }
+                    for (int j = 0; j < originFKCNPairs.size(); j++) {
+                        final Pair<String, String> originPair = originFKCNPairs.get(j);
+                        final Pair<String, String> newPair = newFKCNPairs.get(j);
+                        if (!originPair.first.equals(newPair.first) || !originPair.second.equals(newPair.second)) {
+                            throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                                    "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                        }
+                    }
+                }
+
                 // inactive the related MVs
                 AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
@@ -373,7 +434,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
-                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
                     locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -421,6 +483,16 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         properties, TTabletMetaType.BINLOG_CONFIG);
                 if (!isSuccess) {
                     throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                boolean isSuccess = schemaChangeHandler.updateFlatJsonConfigMeta(db, table.getId(),
+                        properties, TTabletMetaType.FLAT_JSON_CONFIG);
+                if (!isSuccess) {
+                    throw new DdlException("modify flat json config of FEMeta failed");
+
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
@@ -471,6 +543,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);

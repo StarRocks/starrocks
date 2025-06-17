@@ -1,0 +1,21 @@
+-- name: test_bitmap_union_window_function
+
+CREATE TABLE t1(
+    c1 int,
+    c2 bitmap
+)
+PRIMARY KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES(
+    "replication_num"="1"
+);
+
+INSERT INTO t1 VALUES (1, to_bitmap(11)), (2, to_bitmap(22)), (3, null), (4, bitmap_empty()), (5, to_bitmap(55));
+
+SELECT c1, bitmap_to_string(bitmap_union(c2) over()) from t1 order by c1;
+
+SELECT c1, bitmap_to_string(bitmap_union(c2) over(partition by c1)) from t1 order by c1;
+
+SELECT c1, bitmap_to_string(bitmap_union(c2) over(partition by c1%2)) from t1 order by c1;
+
+SELECT c1, bitmap_to_string(bitmap_union(c2) over(partition by c1%2 order by c1)) from t1 order by c1;

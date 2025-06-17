@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <optional>
 
 #include "exec/query_cache/ticket_checker.h"
@@ -360,6 +361,10 @@ public:
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual Status append_morsels(Morsels&& morsels);
     virtual Type type() const = 0;
+    void set_tablet_schema(TabletSchemaCSPtr tablet_schema) {
+        DCHECK(tablet_schema != nullptr);
+        _tablet_schema = tablet_schema;
+    }
     bool has_more() const { return _has_more; }
     void set_has_more(bool v) { _has_more = v; }
 
@@ -370,6 +375,7 @@ protected:
     MorselPtr _unget_morsel = nullptr;
     std::vector<BaseTabletSharedPtr> _tablets;
     std::vector<std::vector<BaseRowsetSharedPtr>> _tablet_rowsets;
+    TabletSchemaCSPtr _tablet_schema = nullptr;
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
@@ -418,10 +424,11 @@ public:
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
+    mutable std::mutex _mutex;
 
-    int64_t _current_sequence = -1;
     MorselQueuePtr _morsel_queue;
     query_cache::TicketCheckerPtr _ticket_checker;
+    int64_t _current_sequence = -1;
 };
 
 class SplitMorselQueue : public MorselQueue {

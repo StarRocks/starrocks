@@ -48,6 +48,7 @@ class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
 struct NgramBloomFilterReaderOptions;
+class RuntimeFilterProbeDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
@@ -79,6 +80,7 @@ enum class PredicateType {
     kExpr = 13,
     kTrue = 14,
     kMap = 15,
+    kPlaceHolder = 16,
 };
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);
@@ -255,5 +257,23 @@ ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bo
 
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping);
+
+ColumnPredicate* new_column_placeholder_predicate(const TypeInfoPtr& type_info, ColumnId id);
+
+ColumnPredicate* new_column_eq_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_ne_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_lt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_le_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_gt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_ge_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
+                                                    const std::vector<Datum>& operands);
+ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
+                                                        const std::vector<Datum>& operands);
+
+template <LogicalType LT>
+class Bitset;
+template <LogicalType LT>
+ColumnPredicate* new_bitset_in_predicate(const TypeInfoPtr& type_info, ColumnId id, const Bitset<LT>& bitset);
 
 } //namespace starrocks

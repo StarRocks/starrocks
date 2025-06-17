@@ -14,7 +14,6 @@
 
 #include <benchmark/benchmark.h>
 
-#include <map>
 #include <random>
 #include <vector>
 
@@ -24,8 +23,7 @@
 #include "simd/simd.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
 static const int kDictSize = 4000;
 static const int kDictLength = 5;
@@ -56,7 +54,7 @@ static void BM_GetDictCodesWithMap(benchmark::State& state) {
     std::mt19937 rng(rd());
     std::uniform_int_distribution<int> dist(0, 999);
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+    MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
     (void)column->append_strings_overflow(dict_values, kDictLength);
     column->append_default();
     for (int i = 0; i < kDictSize + 1; i++) {
@@ -239,7 +237,6 @@ BM_GetDictCodesWithFilterBatch32/960       0.001 ms        0.001 ms       779697
 BM_GetDictCodesWithFilterBatch32/980       0.001 ms        0.001 ms       796140
 BM_GetDictCodesWithFilterBatch32/1000      0.001 ms        0.001 ms       788616
 */
-} // namespace parquet
-} // namespace starrocks
+} // namespace starrocks::parquet
 
 BENCHMARK_MAIN();

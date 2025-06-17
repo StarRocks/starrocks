@@ -166,6 +166,7 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")");
         // for complex type predicates, column pruning can still be used after pull up predicates from scan node
+        starRocksAssert.getCtx().getSessionVariable().setCboPruneJsonSubfield(true);
         {
             String sql = "select k from complex_t where v1[0] > v2[3]";
             String plan = getVerboseExplain(sql);

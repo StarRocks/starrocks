@@ -344,6 +344,10 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
     }
 
+    public void executePartitionTTLForTable(Long dbId, Long tableId) {
+        ttlPartitionScheduler.executePartitionTTLForTable(dbId, tableId);
+    }
+
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -465,11 +469,14 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(dbId)) {
+                    // register dynamic partition table
                     if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
                         registerDynamicPartitionTable(db.getId(), table.getId());
                         dynamicPartitionTables.computeIfAbsent(db.getFullName(), k -> new ArrayList<>())
                                     .add(table.getName());
-                    } else if (DynamicPartitionUtil.isTTLPartitionTable(table)) {
+                    }
+                    // register ttl partition table
+                    if (DynamicPartitionUtil.isTTLPartitionTable(table)) {
                         // Table(MV) with dynamic partition enabled should not specify partition_ttl_number(MV) or
                         // partition_live_number property.
                         registerTtlPartitionTable(db.getId(), table.getId());
@@ -497,12 +504,13 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         // Find all tables that need to be scheduled.
         long now = System.currentTimeMillis();
-        if ((now - lastFindingTime) > Math.max(300000, Config.dynamic_partition_check_interval_seconds)) {
+        long checkIntervalMs = Config.dynamic_partition_check_interval_seconds * 1000L;
+        if ((now - lastFindingTime) > Math.max(60000, checkIntervalMs)) {
             findSchedulableTables();
         }
 
         // Update scheduler interval.
-        setInterval(Config.dynamic_partition_check_interval_seconds * 1000L);
+        setInterval(checkIntervalMs);
 
         // Schedule tables with dynamic partition enabled (only works for base table).
         if (Config.dynamic_partition_enable) {

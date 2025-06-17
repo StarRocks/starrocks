@@ -51,8 +51,10 @@ public class IdleAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
+        String showDetails = request.getSingleParameter("show_details");
         if (Config.warehouse_idle_check_enable) {
-            IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+            IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker()
+                    .getIdleStatus("true".equals(showDetails));
             String content = GsonUtils.GSON.toJson(idleStatus);
             response.getContent().append(content);
         } else {

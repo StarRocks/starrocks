@@ -193,7 +193,7 @@ Status AvroScanner::_create_src_chunk(ChunkPtr* chunk) {
             continue;
         }
         auto column = ColumnHelper::create_column(_avro_types[column_pos], true, false, 0, true);
-        (*chunk)->append_column(column, slot_desc->id());
+        (*chunk)->append_column(std::move(column), slot_desc->id());
     }
 
     return Status::OK();
@@ -664,11 +664,14 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
             }
         }
 
-        if (UNLIKELY(avro_value_get_type(&cur_value) != AVRO_RECORD)) {
+        auto value_type = avro_value_get_type(&cur_value);
+        // MAP shares the same processing of RECORD
+        if (UNLIKELY(value_type != AVRO_RECORD && value_type != AVRO_MAP)) {
             if (i == paths.size() - 1) {
                 break;
             } else {
-                auto err_msg = "A non-record type was found during avro parsing. Please check the path you specified";
+                auto err_msg =
+                        "A non-record/map type was found during avro parsing. Please check the path you specified";
                 return Status::InternalError(err_msg);
             }
         }
@@ -702,7 +705,7 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
                     return Status::InternalError(err_msg);
                 }
                 avro_value_t element;
-                RETURN_IF_ERROR(_get_array_element(&cur_value, paths[0].idx, &element));
+                RETURN_IF_ERROR(_get_array_element(&cur_value, paths[i].idx, &element));
                 cur_value = element;
             }
         } else {

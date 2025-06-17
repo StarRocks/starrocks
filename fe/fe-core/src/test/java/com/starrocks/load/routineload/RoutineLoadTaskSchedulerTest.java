@@ -47,12 +47,15 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.awaitility.Awaitility;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class RoutineLoadTaskSchedulerTest {
 
@@ -119,6 +122,13 @@ public class RoutineLoadTaskSchedulerTest {
         RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
         Deencapsulation.setField(routineLoadTaskScheduler, "needScheduleTasksQueue", routineLoadTaskInfoQueue);
         routineLoadTaskScheduler.runAfterCatalogReady();
+
+        // The task was submitted to the thread pool waiting for execution, it could be some delay the task didn't get
+        // executed at all when main thread thought the testing is done.
+        // Fix it by waiting for a few seconds and shutdown the thread pool to make sure the task get executed.
+        ExecutorService executor = Deencapsulation.getField(routineLoadTaskScheduler, "threadPool");
+        executor.shutdown();
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(executor::isTerminated);
     }
 
     @Test

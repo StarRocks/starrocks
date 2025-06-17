@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -64,7 +65,8 @@ public class MVTaskRunExtraMessage implements Writable {
     private long processStartTime = 0;
 
     @SerializedName("executeOption")
-    private ExecuteOption executeOption = new ExecuteOption(true);
+    private ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+            false, Maps.newHashMap());
 
     @SerializedName("planBuilderMessage")
     public Map<String, String> planBuilderMessage = Maps.newHashMap();

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "butil/file_util.h"
+#include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
@@ -77,9 +78,11 @@ int init_test_env(int argc, char** argv) {
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
 
-    auto metadata_mem_tracker = std::make_unique<MemTracker>();
-    auto tablet_schema_mem_tracker = std::make_unique<MemTracker>(-1, "tablet_schema", metadata_mem_tracker.get());
-    auto schema_change_mem_tracker = std::make_unique<MemTracker>();
+    auto* global_env = GlobalEnv::GetInstance();
+    config::disable_storage_page_cache = true;
+    auto st = global_env->init();
+    CHECK(st.ok()) << st;
+
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
     auto update_mem_tracker = std::make_unique<MemTracker>();
     StorageEngine* engine = nullptr;
@@ -95,16 +98,17 @@ int init_test_env(int argc, char** argv) {
         return -1;
     }
     engine->start_schedule_apply_thread();
-    auto* global_env = GlobalEnv::GetInstance();
-    config::disable_storage_page_cache = true;
-    auto st = global_env->init();
-    CHECK(st.ok()) << st;
 
-    auto* exec_env = ExecEnv::GetInstance();
-    // Pagecache is turned on by default, and some test cases require cache to be turned on,
+    // Pagecache is turned off by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
+    auto* cache_env = DataCache::GetInstance();
+    config::datacache_enable = false;
+    st = cache_env->init(paths);
+    CHECK(st.ok()) << st;
+
+    auto* exec_env = ExecEnv::GetInstance();
     st = exec_env->init(paths);
     CHECK(st.ok()) << st;
 
@@ -125,6 +129,7 @@ int init_test_env(int argc, char** argv) {
     }
 #endif
     exec_env->destroy();
+    cache_env->destroy();
     global_env->stop();
 
     shutdown_tracer();

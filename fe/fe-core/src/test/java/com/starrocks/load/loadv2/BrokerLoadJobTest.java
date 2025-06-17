@@ -70,6 +70,7 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.transaction.TxnStateChangeCallback;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -345,7 +346,7 @@ public class BrokerLoadJobTest {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
-                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong);
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, (ComputeResource) any);
                 leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
@@ -436,6 +437,17 @@ public class BrokerLoadJobTest {
         brokerLoadJob5.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob5, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+
+        // test parse error, should not retry
+        BrokerLoadJob brokerLoadJob6 = new BrokerLoadJob();
+        brokerLoadJob6.retryTime = 1;
+        brokerLoadJob6.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = "parse error, task failed";
+        brokerLoadJob6.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        Assert.assertEquals(JobState.CANCELLED, brokerLoadJob6.getState());
+        idToTasks = Deencapsulation.getField(brokerLoadJob6, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
     }
 
     @Test
@@ -457,7 +469,7 @@ public class BrokerLoadJobTest {
     }
 
     @Test
-    public void testTaskOnResourceGroupTaskFailed(@Injectable long taskId, @Injectable FailMsg failMsg) {
+    public void testTaskFailedUserCancelType(@Injectable long taskId, @Injectable FailMsg failMsg) {
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         new MockUp<EditLog>() {
             @Mock
@@ -722,7 +734,7 @@ public class BrokerLoadJobTest {
         TxnStateChangeCallback callback = globalTxnMgr.getCallbackFactory().getCallback(1);
         Assert.assertNotNull(callback);
 
-        // 2. The job will be discard when failure isn't timeout
+        // 2. The job will be discard when parse error
         new Expectations() {
             {
                 txnState.getTxnCommitAttachment();
@@ -730,7 +742,7 @@ public class BrokerLoadJobTest {
                 result = attachment;
                 txnState.getReason();
                 minTimes = 0;
-                result = "load_run_fail";
+                result = "parse error";
             }
         };
         brokerLoadJob.replayOnAborted(txnState);

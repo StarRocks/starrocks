@@ -32,6 +32,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
@@ -53,6 +54,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -308,19 +310,23 @@ public class InsertOverwriteJobRunner {
             }
         }
 
-        try {
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        String targetDb = insertStmt.getTableName().getDb();
+        Database db = state.getLocalMetastore().getDb(targetDb);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
+                LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues, false, null);
         } catch (AnalysisException ex) {
             LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
-        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
-        String targetDb = insertStmt.getTableName().getDb();
-        Database db = state.getLocalMetastore().getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
-            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-            analyzer.analyze(context, addPartitionClause);
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
+                    LockType.READ)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(context, addPartitionClause);
+            }
             state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
         } catch (Exception ex) {
             LOG.warn(ex.getMessage(), ex);
@@ -385,8 +391,14 @@ public class InsertOverwriteJobRunner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
+        // acquire compute resource
+        ComputeResource computeResource = context.getCurrentComputeResource();
+        if (computeResource == null) {
+            throw new DmlException("insert overwrite commit failed because no available resource");
+        }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null, job.getWarehouseId());
+                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null,
+                computeResource);
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 
@@ -541,12 +553,12 @@ public class InsertOverwriteJobRunner {
                                 .collect(Collectors.toList()));
                     }
                     LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
-                    targetTable.replaceMatchPartitions(tmpPartitionNames);
+                    targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
                 } else {
-                    targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                    targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
                 }
             } else if (partitionInfo instanceof SinglePartitionInfo) {
-                targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+                targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }

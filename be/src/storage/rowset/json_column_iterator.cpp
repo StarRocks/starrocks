@@ -96,7 +96,7 @@ private:
     std::vector<LogicalType> _source_types;
     bool _need_remain = false;
 
-    std::vector<ColumnPtr> _source_column_modules;
+    Columns _source_column_modules;
     // to avoid create column with find type
 
     bool _is_direct = false;
@@ -120,7 +120,7 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
 
     for (int i = 0; i < _source_paths.size(); i++) {
         auto column = ColumnHelper::create_column(TypeDescriptor(_source_types[i]), true);
-        _source_column_modules.emplace_back(column);
+        _source_column_modules.emplace_back(std::move(column));
     }
 
     DCHECK_EQ(_source_column_modules.size(), _source_paths.size());
@@ -175,7 +175,7 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
 
 template <typename FUNC>
 Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
-    std::vector<ColumnPtr> columns;
+    Columns columns;
     for (int i = 0; i < _source_column_modules.size(); i++) {
         columns.emplace_back(_source_column_modules[i]->clone_empty());
     }
@@ -185,11 +185,11 @@ Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
     }
 
     if (_is_direct) {
-        json_column->set_flat_columns(_source_paths, _source_types, columns);
+        json_column->set_flat_columns(_source_paths, _source_types, std::move(columns));
     } else {
-        RETURN_IF_ERROR(transformer->trans(columns));
+        RETURN_IF_ERROR(transformer->trans(std::move(columns)));
         auto result = transformer->mutable_result();
-        json_column->set_flat_columns(_target_paths, _target_types, result);
+        json_column->set_flat_columns(_target_paths, _target_types, std::move(result));
     }
     return Status::OK();
 }
@@ -387,7 +387,7 @@ Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
     // 2. flat
     _flattener->flatten(proxy.get());
     auto result = _flattener->mutable_result();
-    json_data->set_flat_columns(_target_paths, _target_types, result);
+    json_data->set_flat_columns(_target_paths, _target_types, std::move(result));
     return Status::OK();
 }
 
@@ -454,6 +454,9 @@ public:
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
 private:
     template <typename FUNC>
     Status _merge(JsonColumn* dst, FUNC func);
@@ -465,7 +468,7 @@ private:
     std::vector<std::unique_ptr<ColumnIterator>> _all_iter;
     std::vector<std::string> _src_paths;
     std::vector<LogicalType> _src_types;
-    std::vector<ColumnPtr> _src_column_modules;
+    Columns _src_column_modules;
 
     std::unique_ptr<JsonMerger> _merger;
 };
@@ -485,7 +488,7 @@ Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
     DCHECK(_all_iter.size() == _src_paths.size() || _all_iter.size() == _src_paths.size() + 1);
     for (int i = 0; i < _src_paths.size(); i++) {
         auto column = ColumnHelper::create_column(TypeDescriptor(_src_types[i]), true);
-        _src_column_modules.emplace_back(column);
+        _src_column_modules.emplace_back(std::move(column));
     }
 
     if (_all_iter.size() != _src_paths.size()) {
@@ -502,7 +505,7 @@ Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
 
 template <typename FUNC>
 Status JsonMergeIterator::_merge(JsonColumn* dst, FUNC func) {
-    std::vector<ColumnPtr> all_columns;
+    Columns all_columns;
     for (size_t i = 0; i < _all_iter.size(); i++) {
         auto iter = _all_iter[i].get();
         auto c = _src_column_modules[i]->clone_empty();
@@ -613,6 +616,21 @@ Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const Col
                                                      CompoundNodeType pred_relation) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> JsonMergeIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                       Column* dst) {
+    std::vector<std::pair<int64_t, int64_t>> res;
+    if (_null_iter != nullptr) {
+        ASSIGN_OR_RETURN(auto vec, _null_iter->get_io_range_vec(range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+
+    for (size_t i = 0; i < _all_iter.size(); i++) {
+        ASSIGN_OR_RETURN(auto vec, _all_iter[i]->get_io_range_vec(range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+    return res;
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(

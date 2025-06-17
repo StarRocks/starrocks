@@ -35,6 +35,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -98,6 +99,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
+    public String getName() {
+        return "ExternalFull";
+    }
+
+    @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long finishedSQLNum = 0;
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
@@ -152,6 +158,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String nullValue;
         if (table.isIcebergTable()) {
             nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+        } else if (table.isPaimonTable()) {
+            nullValue = PaimonMetadata.PAIMON_PARTITION_NULL_VALUE;
         } else {
             nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
         }
@@ -248,12 +256,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            params.add(table.getUUID());
+            params.add("'" + table.getUUID() + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getPartitionName()) + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
-            params.add(catalogName);
-            params.add(db.getOriginName());
-            params.add(table.getName());
+            params.add("'" + catalogName + "'");
+            params.add("'" + db.getOriginName() + "'");
+            params.add("'" + table.getName() + "'");
             params.add(String.valueOf(data.getRowCount()));
             params.add(String.valueOf(data.getDataSize()));
             params.add("hll_deserialize(unhex('mockData'))");

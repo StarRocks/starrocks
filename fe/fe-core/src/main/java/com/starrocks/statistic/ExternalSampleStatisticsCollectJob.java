@@ -44,4 +44,9 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     public int getAllPartitionSize() {
         return allPartitionSize;
     }
+
+    @Override
+    public String getName() {
+        return "ExternalSample";
+    }
 }

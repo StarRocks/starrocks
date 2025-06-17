@@ -26,6 +26,7 @@
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/stack_trace_mutex.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -123,6 +124,7 @@ private:
 
     std::unique_ptr<DeltaWriter> _writer{};
     bthread::ExecutionQueueId<TaskPtr> _queue_id{kInvalidQueueId};
+    std::unique_ptr<ThreadPoolToken> _block_merge_token{};
     StackTraceMutex<bthread::Mutex> _mtx{};
     // _status、_opened and _closed are protected by _mtx
     Status _status{};
@@ -172,6 +174,8 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     int num_tasks = 0;
     auto st = Status{};
     int64_t pending_time_ns = 0;
+    MonotonicStopWatch watch;
+    watch.start();
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
@@ -206,8 +210,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
             } else if (delta_writer->has_spill_block()) {
                 // If there are spill blocks, we merge them using another thread pool
                 auto merge_task = std::make_shared<MergeBlockTask>(finish_task, async_writer);
-                auto res = StorageEngine::instance()->load_spill_block_merge_executor()->get_thread_pool()->submit(
-                        merge_task);
+                auto res = async_writer->_block_merge_token->submit(merge_task);
                 if (!res.ok()) {
                     st.update(res);
                     LOG_IF(ERROR, !st.ok()) << "Fail to submit merge task: " << st;
@@ -225,6 +228,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
     }
     async_writer->_writer->update_task_stat(num_tasks, pending_time_ns);
+    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() /
+                                                                                        NANOSECS_PER_USEC);
+    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns /
+                                                                                        NANOSECS_PER_USEC);
     return 0;
 }
 
@@ -253,6 +262,9 @@ inline Status AsyncDeltaWriterImpl::do_open() {
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, execute, this); r != 0) {
         _queue_id.value = kInvalidQueueId;
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
+    }
+    if (_block_merge_token == nullptr) {
+        _block_merge_token = StorageEngine::instance()->load_spill_block_merge_executor()->create_token();
     }
     return _writer->open();
 }
@@ -313,6 +325,12 @@ inline void AsyncDeltaWriterImpl::close() {
         l.unlock();
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
+
+        // Wait for block merge finished.
+        if (_block_merge_token != nullptr) {
+            _block_merge_token->shutdown();
+            _block_merge_token.reset();
+        }
 
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
@@ -399,6 +417,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_column_to_expr_value(_column_to_expr_value)
                                           .set_load_id(_load_id)
                                           .set_profile(_profile)
+                                          .set_bundle_writable_file_context(_bundle_writable_file_context)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

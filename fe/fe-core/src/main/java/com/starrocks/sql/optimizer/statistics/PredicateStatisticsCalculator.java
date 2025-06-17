@@ -15,6 +15,8 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -26,11 +28,16 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.HistogramStatisticsUtils.estimateInPredicateWithHistogram;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateUtils.computeCompoundStatsWithMultiColumnOptimize;
 
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
@@ -95,20 +102,61 @@ public class PredicateStatisticsCalculator {
         }
 
         @Override
+        public Statistics visitVariableReference(ColumnRefOperator variable, Void context) {
+            if (!checkNeedEvalEstimate(variable)) {
+                return statistics;
+            }
+
+            if (!variable.getType().isBoolean()) {
+                return visit(variable, context);
+            }
+
+            try {
+                BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
+                        BinaryType.EQ, variable, ConstantOperator.createBoolean(true));
+                return visitBinaryPredicate(binaryPredicateOperator, context);
+            } catch (Exception e) {
+                return visit(variable, context);
+            }
+        }
+
+        @Override
         public Statistics visitInPredicate(InPredicateOperator predicate, Void context) {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
             }
+            if (SPMFunctions.isSPMFunctions(predicate)) {
+                if (SPMFunctions.canRevert2ScalarOperator(predicate)) {
+                    predicate = (InPredicateOperator) SPMFunctions.revertSPMFunctions(predicate).get(0);
+                } else {
+                    return statistics;
+                }
+            }
             double selectivity;
 
             ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
-            List<ScalarOperator> otherChildrenList =
-                    predicate.getChildren().stream().skip(1).map(this::getChildForCastOperator).distinct()
-                            .collect(Collectors.toList());
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
+
+            List<ScalarOperator> otherChildrenList = predicate.getChildren().stream().skip(1).toList();
+            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().toList();
+            boolean allConstants = otherChildrenList.stream().allMatch(op -> op instanceof ConstantOperator);
+
+            if (!predicate.isSubquery() && firstChild.isColumnRef() && !inColumnStatistic.isUnknown() &&
+                    inColumnStatistic.getHistogram() != null && allConstants) {
+                return estimateInPredicateWithHistogram(
+                        (ColumnRefOperator) firstChild,
+                        inColumnStatistic,
+                        otherChildrenList.stream()
+                                .map(op -> (ConstantOperator) op)
+                                .collect(Collectors.toList()),
+                        predicate.isNotIn(),
+                        statistics
+                );
+            }
+
             List<ColumnStatistic> otherChildrenColumnStatisticList =
-                    otherChildrenList.stream().distinct().map(this::getExpressionStatistic).collect(Collectors.toList());
+                    otherChildrenList.stream().distinct().map(this::getExpressionStatistic).toList();
 
             // using ndv to estimate string col inPredicate
             if (!predicate.isNotIn() && firstChild.getType().getPrimitiveType().isCharFamily()
@@ -245,6 +293,18 @@ public class PredicateStatisticsCalculator {
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
+
+            // For SPM functions, we try to revert to origin scalar operator
+            // in actually, SPMFunction also support the correct statistics, but the implement of binary
+            // predicate depend on ConstantOperator, not ConstantExpression, it's take SPM's plan is
+            // different with origin plan.
+            if (SPMFunctions.isSPMFunctions(leftChild) && SPMFunctions.canRevert2ScalarOperator(leftChild)) {
+                leftChild = SPMFunctions.revertSPMFunctions(leftChild).get(0);
+            }
+            if (SPMFunctions.isSPMFunctions(rightChild) && SPMFunctions.canRevert2ScalarOperator(rightChild)) {
+                rightChild = SPMFunctions.revertSPMFunctions(rightChild).get(0);
+            }
+
             // compute left and right column statistics
             ColumnStatistic leftColumnStatistic = getExpressionStatistic(leftChild);
             ColumnStatistic rightColumnStatistic = getExpressionStatistic(rightChild);
@@ -265,13 +325,8 @@ public class PredicateStatisticsCalculator {
                 // only columnRefOperator could add column statistic to statistics
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
-                if (rightChild.isConstant()) {
-                    Optional<ConstantOperator> constantOperator;
-                    if (rightChild.isConstantRef()) {
-                        constantOperator = Optional.of((ConstantOperator) rightChild);
-                    } else {
-                        constantOperator = Optional.empty();
-                    }
+                if (rightChild.isConstantRef()) {
+                    Optional<ConstantOperator> constantOperator = Optional.of((ConstantOperator) rightChild);
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constantOperator, statistics);
@@ -301,6 +356,13 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
+                Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> extracted =
+                        Utils.separateEqualityPredicates(predicate);
+
+                if (extracted.first.size() > 1) {
+                    return computeCompoundStatsWithMultiColumnOptimize(predicate, statistics);
+                }
+
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics =
                         predicate.getChild(1).accept(new BaseCalculatingVisitor(leftStatistics), null);
@@ -382,6 +444,13 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
+                Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> extracted =
+                        Utils.separateEqualityPredicates(predicate);
+
+                if (extracted.first.size() > 1) {
+                    return computeCompoundStatsWithMultiColumnOptimize(predicate, statistics);
+                }
+
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics = predicate.getChild(1)
                         .accept(new LargeOrCalculatingVisitor(leftStatistics), null);
@@ -432,5 +501,6 @@ public class PredicateStatisticsCalculator {
             });
             return builder.build();
         }
+
     }
 }

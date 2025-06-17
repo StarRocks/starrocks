@@ -47,10 +47,13 @@ public:
 
 private:
     template <bool all_const_input, bool independent_lambda_expr>
-    StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
-                                             const std::vector<ColumnPtr>& arguments, const NullColumnPtr& null_column);
+    StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk, const Columns& arguments,
+                                             const NullColumnPtr& null_column);
 
     // use map to make sure the order of execution
     std::map<SlotId, Expr*> _outer_common_exprs;
+    // the slots initially required for lambda function evaluation, excluding lambda arguments,
+    // other common expressions can be evaluated based on these slots.
+    std::unordered_set<SlotId> _initial_required_slots;
 };
 } // namespace starrocks

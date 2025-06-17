@@ -235,6 +235,9 @@ struct OlapReaderStatistics {
     int64_t rows_vec_cond_filtered = 0;
     int64_t vec_cond_ns = 0;
     int64_t vec_cond_evaluate_ns = 0;
+    int64_t rf_cond_input_rows = 0;
+    int64_t rf_cond_output_rows = 0;
+    int64_t rf_cond_evaluate_ns = 0;
     int64_t vec_cond_chunk_copy_ns = 0;
     int64_t branchless_cond_evaluate_ns = 0;
     int64_t expr_cond_evaluate_ns = 0;
@@ -324,7 +327,9 @@ struct OlapReaderStatistics {
 
 // OlapWriterStatistics used to collect statistics when write data to storage
 struct OlapWriterStatistics {
-    int64_t segment_write_ns = 0;
+    int64_t bytes_write_ns = 0; // how much time is spent on write
+    int64_t bytes_write = 0;    // how many bytes are written
+    int64_t segment_count = 0;  // how many files are written
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";

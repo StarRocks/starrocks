@@ -107,6 +107,8 @@ set(RUNTIME_FILES
     type_pack.cpp
     customized_result_writer.cpp
     int128_to_double.cpp
+    diagnose_daemon.cpp
+    load_fail_point.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

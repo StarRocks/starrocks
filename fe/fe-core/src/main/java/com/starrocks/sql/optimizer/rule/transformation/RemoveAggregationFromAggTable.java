@@ -33,9 +33,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -138,7 +141,23 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         aggregationOperator.getGroupingKeys().forEach(g -> projectMap.put(g, g));
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
             // in this case, CallOperator must have only one child ColumnRefOperator
-            projectMap.put(entry.getKey(), entry.getValue().getChild(0));
+            //
+            // in AggTable,may metric definition is `col int sum`, but in query sum(col)'s type is bigint,
+            // so after replace sum(col) wit col, we must guarantee the same ColumnRefOperator points to
+            // the same type expr, so we must cast col as bigint, otherwise during executing, ExchangeSink would
+            // send serialize the column as int column while the ExchangeSource would derserialize it in bigint
+            // column.
+            ColumnRefOperator columnRef = entry.getKey();
+            CallOperator aggFunc = entry.getValue();
+            ScalarOperator aggFuncArg = aggFunc.getChild(0);
+            if (aggFunc.getType().equals(aggFuncArg.getType())) {
+                projectMap.put(columnRef, aggFuncArg);
+            } else {
+                ScalarOperator newExpr = new ScalarOperatorRewriter().rewrite(
+                        new CastOperator(aggFunc.getType(), aggFuncArg, true),
+                        Lists.newArrayList(new ReduceCastRule()));
+                projectMap.put(columnRef, newExpr);
+            }
         }
 
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();

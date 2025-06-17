@@ -70,7 +70,7 @@ public:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return std::make_shared<Chunk>(Columns{c0, c1}, _schema);
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1)}, _schema);
     }
 
 protected:
@@ -236,6 +236,31 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
 }
 
 TEST_F(SpillMemTableSinkTest, test_merge) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager =
+            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    auto chunk = gen_data(kChunkSize, 0);
+    starrocks::SegmentPB segment0;
+    ASSERT_OK(sink.flush_chunk(*chunk, &segment0, false));
+    starrocks::SegmentPB segment1;
+    ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
+    ASSERT_OK(sink.merge_blocks_to_segments());
+    ASSERT_EQ(1, tablet_writer->files().size());
+}
+
+TEST_F(SpillMemTableSinkTest, test_out_of_disk_space) {
+    TEST_ENABLE_ERROR_POINT("PosixFileSystem::pre_allocate",
+                            Status::CapacityLimitExceed("injected pre_allocate error"));
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        TEST_DISABLE_ERROR_POINT("PosixFileSystem::pre_allocate");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
     std::unique_ptr<LoadSpillBlockManager> block_manager =

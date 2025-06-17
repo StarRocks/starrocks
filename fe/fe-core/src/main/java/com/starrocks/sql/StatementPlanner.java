@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.spm.SPMPlanner;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
@@ -87,6 +89,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.qe.StmtExecutor.buildExplainString;
 
 public class StatementPlanner {
     private static final Logger LOG = LogManager.getLogger(StatementPlanner.class);
@@ -113,6 +117,9 @@ public class StatementPlanner {
                 throw new SemanticException("fail to begin transaction. " + e.getMessage());
             }
         }
+
+        SPMPlanner spmPlanner = new SPMPlanner(session);
+        stmt = spmPlanner.plan(stmt);
 
         boolean needWholePhaseLock = true;
         // 1. For all queries, we need db lock when analyze phase
@@ -143,10 +150,16 @@ public class StatementPlanner {
                     unLock(plannerMetaLocker);
                     plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime);
                 }
+                if (spmPlanner.getBaseline() != null) {
+                    plan.setUseBaseline(spmPlanner.getBaseline().getId());
+                }
                 setOutfileSink(queryStmt, plan);
+                setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.SELECT);
                 return plan;
             } else if (stmt instanceof InsertStmt) {
-                return planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
+                ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
+                setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
+                return plan;
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -157,7 +170,10 @@ public class StatementPlanner {
             throw e;
         } catch (Throwable e) {
             if (stmt instanceof DmlStmt) {
-                abortTransaction((DmlStmt) stmt, session, e.getMessage());
+                //If it is an explicit transaction, the transaction will not be aborted automatically.
+                if (session.getTxnId() == 0) {
+                    abortTransaction((DmlStmt) stmt, session, e.getMessage());
+                }
             }
             throw e;
         } finally {
@@ -168,6 +184,25 @@ public class StatementPlanner {
         }
 
         return null;
+    }
+
+    /**
+     * Generate a query plan for query detail.
+     * Explaining internal table is very quick, we prefer to use EXPLAIN COSTS.
+     * But explaining external table is expensive, may need to access lots of metadata, so have to use EXPLAIN.
+     *
+     * <p> NOTE that `buildExplainString` will access table metadata, so need be called in the critical section of the lock.
+     */
+    private static void setExplainToQueryDetail(ExecPlan plan, StatementBase stmt, ConnectContext session,
+                                                ResourceGroupClassifier.QueryType queryType) {
+        if (plan == null || session.getQueryDetail() == null) {
+            return;
+        }
+
+        StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(stmt) ?
+                StatementBase.ExplainLevel.defaultValue() :
+                StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+        session.getQueryDetail().setExplain(buildExplainString(plan, stmt, session, queryType, level));
     }
 
     /**
@@ -430,8 +465,8 @@ public class StatementPlanner {
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
             DuplicatedRequestException {
-        if (session.getExplicitTxnState() != null) {
-            stmt.setTxnId(session.getExplicitTxnState().getTransactionState().getTransactionId());
+        if (session.getTxnId() != 0) {
+            stmt.setTxnId(session.getTxnId());
             return;
         }
 
@@ -455,7 +490,7 @@ public class StatementPlanner {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -516,7 +551,6 @@ public class StatementPlanner {
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
-            long warehouseId = session.getCurrentWarehouseId();
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
                     dbId,
@@ -526,7 +560,7 @@ public class StatementPlanner {
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
                     session.getExecTimeout(),
-                    warehouseId);
+                    session.getCurrentComputeResource());
 
             // add table indexes to transaction state
             if (targetTable instanceof OlapTable) {
@@ -547,7 +581,7 @@ public class StatementPlanner {
         stmt.getTableName().normalization(session);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }

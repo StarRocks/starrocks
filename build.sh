@@ -108,6 +108,9 @@ Usage: $0 <options>
      --without-avx2     build Backend without avx2(instruction)    
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
+     --output           specify the output directory (default: $STARROCKS_HOME/output)
+     --disable-java-check-style
+                        disable Java checkstyle checks during build (default: $DISABLE_JAVA_CHECK_STYLE)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
@@ -117,7 +120,9 @@ Usage: $0 <options>
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
     $0 --hive-udf                                build Hive UDF
+    $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
+    DISABLE_JAVA_CHECK_STYLE=ON ./build.sh       build with Java checkstyle disabled
   "
   exit 1
 }
@@ -146,7 +151,9 @@ OPTS=$(getopt \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
   -l 'with-maven-batch-mode:' \
+  -l 'output:' \
   -l 'help' \
+  -l 'disable-java-check-style' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -161,7 +168,6 @@ BUILD_FE=
 BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
 CLEAN=
-RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
@@ -200,11 +206,11 @@ fi
 if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
 fi
-if [[ -z ${JEMALLOC_DEBUG} ]]; then
-    JEMALLOC_DEBUG=OFF
-fi
 if [[ -z ${ENABLE_JIT} ]]; then
     ENABLE_JIT=ON
+fi
+if [[ -z ${DISABLE_JAVA_CHECK_STYLE} ]]; then
+    DISABLE_JAVA_CHECK_STYLE=OFF
 fi
 
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
@@ -244,7 +250,6 @@ if [ $# == 1 ] ; then
     BUILD_HIVE_UDF=1
     BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
 elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     # default. `sh build.sh -j 32`
     BUILD_BE=1
@@ -253,7 +258,6 @@ elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     BUILD_HIVE_UDF=1
     BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
     PARALLEL=$2
 else
     BUILD_BE=0
@@ -262,7 +266,6 @@ else
     BUILD_SPARK_DPP=0
     BUILD_HIVE_UDF=0
     CLEAN=0
-    RUN_UT=0
     while true; do
         case "$1" in
             --be) BUILD_BE=1 ; shift ;;
@@ -271,7 +274,6 @@ else
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
-            --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
@@ -285,13 +287,20 @@ else
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
+            --output) STARROCKS_OUTPUT=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
+            --disable-java-check-style) DISABLE_JAVA_CHECK_STYLE=ON; shift ;;
             --) shift ;  break ;;
             *) echo "Internal error" ; exit 1 ;;
         esac
     done
+fi
+
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
 fi
 
 if [[ ${HELP} -eq 1 ]]; then
@@ -321,7 +330,6 @@ echo "Get params:
     BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
     CCACHE                      -- ${CCACHE}
     CLEAN                       -- $CLEAN
-    RUN_UT                      -- $RUN_UT
     WITH_GCOV                   -- $WITH_GCOV
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
@@ -332,7 +340,6 @@ echo "Get params:
     USE_AVX512                  -- $USE_AVX512
     USE_SSE4_2                  -- $USE_SSE4_2
     USE_BMI_2                   -- $USE_BMI_2
-    JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
     PARALLEL                    -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
     ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
@@ -341,6 +348,7 @@ echo "Get params:
     WITH_TENANN                 -- $WITH_TENANN
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
     WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
+    DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
 "
 
 check_tool()
@@ -386,6 +394,11 @@ addon_mvn_opts=""
 if [ "x$WITH_MAVEN_BATCH_MODE" = "xON" ] ; then
     # this option is only available with mvn >= 3.6
     addon_mvn_opts="--batch-mode"
+fi
+
+if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
+    # Add checkstyle.skip parameter to disable Java checkstyle
+    addon_mvn_opts="${addon_mvn_opts} -Dcheckstyle.skip=true"
 fi
 
 # Clean and build Backend
@@ -449,7 +462,6 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
-                  -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
@@ -479,7 +491,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
-        ${MVN_CMD} $addon_mvn_opts package -DskipTests
+        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -509,15 +521,16 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
-    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}
 fi
 
 
 # Clean and prepare output dir
-STARROCKS_OUTPUT=${STARROCKS_HOME}/output/
+STARROCKS_OUTPUT=${STARROCKS_OUTPUT:="${STARROCKS_HOME}/output/"}
+echo "OUTPUT DIR=${STARROCKS_OUTPUT}"
 mkdir -p ${STARROCKS_OUTPUT}
 
 # Copy Frontend and Backend
@@ -600,6 +613,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
+    ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
+
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
@@ -617,6 +634,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
 
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
+        # note that conf files will not be overwritten when doing upgrade.
+        # so we have to preserve directory structure to avoid upgrade incompatibility.
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/native
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop/common
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -642,19 +663,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     fi
-
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
-
-    # remove zookeeper
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
 
     cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
 

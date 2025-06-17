@@ -22,6 +22,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
@@ -56,6 +57,10 @@ Status LoadSpillBlockMergeExecutor::refresh_max_thread_num() {
         return _merge_pool->update_max_threads(calc_max_merge_blocks_thread());
     }
     return Status::OK();
+}
+
+std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_token() {
+    return _merge_pool->new_token(ThreadPool::ExecutionMode::SERIAL);
 }
 
 void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
@@ -105,7 +110,7 @@ Status LoadSpillBlockManager::init() {
 }
 
 // acquire Block from BlockManager
-StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size) {
+StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size, bool force_remote) {
     spill::AcquireBlockOptions opts;
     opts.query_id = _load_id; // load id as query id
     opts.fragment_instance_id =
@@ -113,6 +118,7 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     opts.plan_node_id = 0;
     opts.name = "load_spill";
     opts.block_size = block_size;
+    opts.force_remote = force_remote;
     return _block_manager->acquire_block(opts);
 }
 

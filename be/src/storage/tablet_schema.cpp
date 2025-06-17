@@ -94,6 +94,9 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
+    case TYPE_DECIMAL256:
+    case TYPE_INT256:
+        return 32;
     case TYPE_CHAR:
         return string_length;
     case TYPE_VARCHAR:
@@ -370,14 +373,27 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
     std::vector<ColumnId> sort_key_idxes;
+    // from referenced column name to index, used for build sort key idxes later.
+    std::map<std::string, uint32_t> col_name_to_idx;
     uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
-        if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
-            sort_key_idxes.emplace_back(cid);
+        col_name_to_idx[tablet_column->name()] = cid++;
+    }
+    // build sort key idxes
+    for (const auto& sort_key_idx : src_tablet_schema->sort_key_idxes()) {
+        std::string col_name = std::string(src_tablet_schema->column(sort_key_idx).name());
+        if (col_name_to_idx.count(col_name) <= 0) {
+            // sort key column is not in referenced column, skip it.
+            continue;
         }
-        cid++;
+        sort_key_idxes.emplace_back(col_name_to_idx[col_name]);
+    }
+    const auto* indexes = src_tablet_schema->indexes();
+    for (const auto& index : *indexes) {
+        TabletIndexPB* index_pb = partial_tablet_schema_pb.add_table_indices();
+        index.to_schema_pb(index_pb);
     }
     partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);

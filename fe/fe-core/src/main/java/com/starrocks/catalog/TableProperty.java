@@ -87,6 +87,7 @@ import java.util.stream.Collectors;
 public class TableProperty implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TableProperty.class);
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
+    public static final String FLAT_JSON_PROPERTY_PREFIX = "flat_json";
     public static final int INVALID = -1;
 
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
@@ -185,8 +186,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
+    private FlatJsonConfig flatJsonConfig;
+
     private transient DynamicPartitionProperty dynamicPartitionProperty =
             new DynamicPartitionProperty(Maps.newHashMap());
+
     // table's default replication num
     private Short replicationNum = RunMode.defaultReplicationNum();
 
@@ -199,9 +203,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // it's a SQL expression, and the partition will be deleted if the condition is not true.
     private String partitionRetentionCondition = null;
 
+    private String timeDriftConstraintSpec = null;
+
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
+
+    // This property only applies to materialized views
+    // It represents the mode selected to determine the number of partitions to refresh
+    private String partitionRefreshStrategy = Config.default_mv_partition_refresh_strategy;
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -311,6 +321,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Multimap<String, String> location;
 
+    private boolean fileBundling = false;
+
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -393,6 +405,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildPartitionTTL();
                 buildPartitionLiveNumber();
                 buildPartitionRetentionCondition();
+                buildTimeDriftConstraint();
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
@@ -410,10 +423,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
+        buildMVPartitionRefreshStrategy();
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
         buildConstraint();
+        buildTimeDriftConstraint();
         buildMvSortKeys();
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
@@ -434,9 +449,28 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildFlatJsonConfig() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+            double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
+            double flatJsonSparsityFactory = PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
+            int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
+            flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
+                    flatJsonSparsityFactory, flatJsonColumnMax);
+        }
+        return this;
+    }
+
     // just modify binlogConfig, not properties
     public void setBinlogConfig(BinlogConfig binlogConfig) {
         this.binlogConfig = binlogConfig;
+    }
+
+    public void setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
+        this.flatJsonConfig = flatJsonConfig;
     }
 
     public TableProperty buildDynamicProperty() {
@@ -502,8 +536,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildMVPartitionRefreshStrategy() {
+        partitionRefreshStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY,
+                Config.default_mv_partition_refresh_strategy);
+        return this;
+    }
+
     public TableProperty buildPartitionRetentionCondition() {
         partitionRetentionCondition = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, "");
+        return this;
+    }
+
+    public TableProperty buildTimeDriftConstraint() {
+        timeDriftConstraintSpec = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, "");
         return this;
     }
 
@@ -773,6 +818,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildFileBundling() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
+        }
+        return this;
+    }
+
     public TableProperty buildStorageCoolDownTTL() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
@@ -856,6 +909,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.partitionRetentionCondition = partitionRetentionCondition;
     }
 
+    public String getTimeDriftConstraintSpec() {
+        return timeDriftConstraintSpec;
+    }
+
+    public void setTimeDriftConstraintSpec(String spec) {
+        this.timeDriftConstraintSpec = spec;
+    }
+
     public int getAutoRefreshPartitionsLimit() {
         return autoRefreshPartitionsLimit;
     }
@@ -868,8 +929,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionRefreshNumber;
     }
 
+    public String getPartitionRefreshStrategy() {
+        return partitionRefreshStrategy;
+    }
+
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
         this.partitionRefreshNumber = partitionRefreshNumber;
+    }
+
+    public void setPartitionRefreshStrategy(String partitionRefreshStrategy) {
+        this.partitionRefreshStrategy = partitionRefreshStrategy;
     }
 
     public void setResourceGroup(String resourceGroup) {
@@ -942,6 +1011,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public boolean enablePersistentIndex() {
         return enablePersistentIndex;
+    }
+
+    public boolean isFileBundling() {
+        return fileBundling;
     }
 
     public int primaryIndexCacheExpireSec() {
@@ -1028,6 +1101,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogConfig;
     }
 
+    public FlatJsonConfig getFlatJsonConfig() {
+        return flatJsonConfig;
+    }
+
     public List<UniqueConstraint> getUniqueConstraints() {
         return uniqueConstraints;
     }
@@ -1100,10 +1177,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildWriteQuorum();
         buildPartitionLiveNumber();
         buildPartitionRetentionCondition();
+        buildTimeDriftConstraint();
         buildReplicatedStorage();
         buildBucketSize();
         buildEnableLoadProfile();
         buildBinlogConfig();
+        buildFlatJsonConfig();
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();
         buildUseFastSchemaEvolution();
@@ -1111,5 +1190,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
+        buildFileBundling();
+        buildMutableBucketNum();
     }
 }

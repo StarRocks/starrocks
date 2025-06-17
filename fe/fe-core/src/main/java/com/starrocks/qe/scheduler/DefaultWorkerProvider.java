@@ -29,6 +29,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,16 +91,18 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private final boolean preferComputeNode;
 
+    private final ComputeResource computeResource;
+
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                      boolean preferComputeNode, int numUsedComputeNodes,
                                      ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                     long warehouseId) {
+                                     ComputeResource computeResource) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
-                                         computationFragmentSchedulingPolicy, warehouseId);
+                                         computationFragmentSchedulingPolicy, computeResource);
 
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
@@ -116,7 +119,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
             return new DefaultWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
-                    preferComputeNode);
+                    preferComputeNode, computeResource);
         }
     }
 
@@ -125,7 +128,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                  ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                  ImmutableMap<Long, ComputeNode> availableID2Backend,
                                  ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                 boolean preferComputeNode) {
+                                 boolean preferComputeNode, ComputeResource computeResource) {
         this.id2Backend = id2Backend;
         this.id2ComputeNode = id2ComputeNode;
 
@@ -141,6 +144,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             this.usedComputeNode = hasComputeNode && preferComputeNode;
         }
         this.preferComputeNode = preferComputeNode;
+        this.computeResource = computeResource;
     }
 
     @VisibleForTesting
@@ -158,6 +162,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.hasComputeNode = true;
         this.preferComputeNode = true;
         this.usedComputeNode = true;
+        this.computeResource = WarehouseManager.DEFAULT_RESOURCE;
     }
 
     @Override
@@ -295,6 +300,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return -1;
     }
 
+    @Override
+    public ComputeResource getComputeResource() {
+        return computeResource;
+    }
+
     private String toString(boolean chooseComputeNode, boolean allowNormalNodes) {
         return chooseComputeNode ? computeNodesToString(allowNormalNodes) :
                 backendsToString(allowNormalNodes);
@@ -359,7 +369,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                   int numUsedComputeNodes,
                                   ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                  long warehouseId) {
+                                  ComputeResource computeResource) {
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 

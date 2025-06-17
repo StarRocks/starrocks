@@ -72,7 +72,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
             .add("DataSize").add("RowCount").add("State")
             .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
             .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
-            .add("DiskRootPath")
+            .add("DiskRootPath").add("IsConsistent").add("Checksum")
             .build();
 
     private final Database db;
@@ -96,7 +96,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
     }
 
     public List<List<Comparable>> fetchComparableResult(long version, long backendId, Replica.ReplicaState state,
-                                                        Boolean hideIpPort) {
+                                                        Boolean isConsistent, Boolean hideIpPort) {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
         Preconditions.checkState(table.isOlapTableOrMaterializedView());
@@ -117,7 +117,8 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                     for (Replica replica : localTablet.getImmutableReplicas()) {
                         if ((version > -1 && replica.getVersion() != version)
                                 || (backendId > -1 && replica.getBackendId() != backendId)
-                                || (state != null && replica.getState() != state)) {
+                                || (state != null && replica.getState() != state)
+                                || (isConsistent != null && localTablet.isConsistent() != isConsistent)) {
                             continue;
                         }
                         List<Comparable> tabletInfo = new ArrayList<Comparable>();
@@ -161,6 +162,8 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(metaUrl);
                         tabletInfo.add(compactionUrl);
                         tabletInfo.add(diskRootPath);
+                        tabletInfo.add(localTablet.isConsistent());
+                        tabletInfo.add(replica.getChecksum());
 
                         tabletInfos.add(tabletInfo);
                     }
@@ -195,11 +198,14 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         tabletInfo.add(-1); // path hash
         tabletInfo.add(FeConstants.NULL_STRING); // meta url
         tabletInfo.add(FeConstants.NULL_STRING); // compaction status
+        tabletInfo.add(FeConstants.NULL_STRING); // DiskRootPath
+        tabletInfo.add(true); // is consistent
+        tabletInfo.add(-1); // checksum
         return tabletInfo;
     }
 
     private List<List<Comparable>> fetchComparableResult() {
-        return fetchComparableResult(-1, -1, null, false);
+        return fetchComparableResult(-1, -1, null, null, false);
     }
 
     @Override

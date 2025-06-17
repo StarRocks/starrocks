@@ -44,4 +44,17 @@ Status MultiCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
 Status MultiCastDataStreamSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::NotSupported("Don't support non-pipelined query engine");
 }
+
+Status SplitDataStreamSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
+    const TSplitDataStreamSink& split_sink = thrift_sink.split_stream_sink;
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, split_sink.splitExprs, &_split_expr_ctxs, state));
+    TDataSink fakeDataSink{};
+    for (size_t i = 0; i < _sinks.size(); i++) {
+        auto& s = _sinks[i];
+        // super ugly
+        fakeDataSink.stream_sink = split_sink.sinks[i];
+        RETURN_IF_ERROR(s->init(fakeDataSink, state));
+    }
+    return Status::OK();
+}
 } // namespace starrocks

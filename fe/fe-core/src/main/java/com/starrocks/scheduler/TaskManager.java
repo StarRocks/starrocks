@@ -87,7 +87,7 @@ public class TaskManager implements MemoryTrackable {
 
     // include PENDING/RUNNING taskRun;
     private final TaskRunManager taskRunManager;
-    private final TaskRunScheduler taskRunScheduler;
+    private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
 
     // The periodScheduler is used to generate the corresponding TaskRun on time for the Periodical Task.
     // This scheduler can use the time wheel to optimize later.
@@ -107,9 +107,8 @@ public class TaskManager implements MemoryTrackable {
         idToTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
         periodFutureMap = Maps.newConcurrentMap();
-        taskRunManager = new TaskRunManager();
+        taskRunManager = new TaskRunManager(taskRunScheduler);
         taskLock = new QueryableReentrantLock(true);
-        taskRunScheduler = taskRunManager.getTaskRunScheduler();
     }
 
     public void start() {
@@ -294,7 +293,7 @@ public class TaskManager implements MemoryTrackable {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        ExecuteOption option = new ExecuteOption(task.getSource().isMergeable());
+        ExecuteOption option = new ExecuteOption(task);
         option.setManual(true);
         return executeTask(taskName, option);
     }
@@ -312,7 +311,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public SubmitResult executeTaskSync(Task task) {
-        return executeTaskSync(task, new ExecuteOption(task.getSource().isMergeable()));
+        return executeTaskSync(task, new ExecuteOption(task));
     }
 
     public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
@@ -377,7 +376,7 @@ public class TaskManager implements MemoryTrackable {
                     }
                     periodFutureMap.remove(task.getId());
                 }
-                if (!killTask(task.getName(), false)) {
+                if (!killTask(task.getName(), true)) {
                     LOG.warn("kill task failed: {}", task.getName());
                 }
                 idToTaskMap.remove(task.getId());
@@ -697,7 +696,7 @@ public class TaskManager implements MemoryTrackable {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-                ExecuteOption executeOption = new ExecuteOption(task.getSource().isMergeable());
+                ExecuteOption executeOption = new ExecuteOption(task);
                 executeOption.setReplay(true);
                 TaskRun taskRun = TaskRunBuilder
                         .newBuilder(task)
@@ -858,8 +857,8 @@ public class TaskManager implements MemoryTrackable {
         dropTasks(taskIdToDelete, true);
     }
 
-    public void removeExpiredTaskRuns() {
-        taskRunManager.getTaskRunHistory().vacuum();
+    public void removeExpiredTaskRuns(boolean archiveHistory) {
+        taskRunManager.getTaskRunHistory().vacuum(archiveHistory);
     }
 
     @Override

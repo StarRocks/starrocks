@@ -91,6 +91,7 @@ import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -175,6 +176,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    // no needs to persistent
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     @SerializedName("mc")
     protected String mergeCondition;
@@ -198,7 +201,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
 
-    protected int retryTime = 2; // retry time if timeout
+    protected int retryTime = 2;
 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;

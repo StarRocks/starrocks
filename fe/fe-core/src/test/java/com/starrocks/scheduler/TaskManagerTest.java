@@ -20,8 +20,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -35,7 +37,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -67,6 +68,7 @@ public class TaskManagerTest {
     private static StarRocksAssert starRocksAssert;
     private static final ExecuteOption DEFAULT_MERGE_OPTION = makeExecuteOption(true, false);
     private static final ExecuteOption DEFAULT_NO_MERGE_OPTION = makeExecuteOption(false, false);
+    private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
 
     @Before
     public void setUp() {
@@ -141,7 +143,8 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun, new ExecuteOption(false));
+        taskRunManager.submitTaskRun(taskRun, new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+                false, Maps.newHashMap()));
         List<TaskRunStatus> taskRuns = null;
         Constants.TaskRunState state = null;
 
@@ -226,7 +229,7 @@ public class TaskManagerTest {
     @Test
     public void testTaskRunMergePriorityFirst() {
 
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         Task task = new Task("test");
         task.setDefinition("select 1");
 
@@ -262,7 +265,7 @@ public class TaskManagerTest {
     @Test
     public void testTaskRunMergePriorityFirst2() {
 
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         Task task = new Task("test");
         task.setDefinition("select 1");
 
@@ -299,7 +302,7 @@ public class TaskManagerTest {
     @Test
     public void testTaskRunMergeTimeFirst() {
 
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         Task task = new Task("test");
         task.setDefinition("select 1");
 
@@ -336,7 +339,7 @@ public class TaskManagerTest {
     @Test
     public void testTaskRunMergeTimeFirst2() {
 
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         Task task = new Task("test");
         task.setDefinition("select 1");
 
@@ -373,7 +376,7 @@ public class TaskManagerTest {
     @Test
     public void testTaskRunNotMerge() {
 
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         Task task = new Task("test");
         task.setDefinition("select 1");
 
@@ -492,7 +495,7 @@ public class TaskManagerTest {
     @Test
     public void testForceGC() {
         Config.enable_task_history_archive = false;
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         for (int i = 0; i < 100; i++) {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setQueryId("test" + i);
@@ -508,7 +511,7 @@ public class TaskManagerTest {
 
     @Test
     public void testForceGC2() {
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         for (int i = 0; i < 10; i++) {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setQueryId("test" + i);
@@ -547,7 +550,8 @@ public class TaskManagerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
-        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+                isMergeRedundant, Maps.newHashMap());
         executeOption.setSync(isSync);
         return executeOption;
     }
@@ -563,7 +567,7 @@ public class TaskManagerTest {
 
     @Test
     public void testTaskRunMergeRedundant1() {
-        TaskRunManager taskRunManager = new TaskRunManager();
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         Task task = new Task("test");
         task.setDefinition("select 1");
         long taskId = 1;
@@ -815,5 +819,71 @@ public class TaskManagerTest {
         taskRun.getStatus().setPriority(0);
         TaskRunStatus taskRunStatus = taskRun.getStatus();
         Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
+    }
+
+    @Test
+    public void testTaskRunWithLargeDefinition1() {
+        Task task = new Task("test");
+        StringBuilder sb = new StringBuilder("select ");
+        for (int i = 0; i < SystemTable.MAX_FIELD_VARCHAR_LENGTH; i++) {
+            sb.append("\n ");
+        }
+        sb.append(" 1");
+        task.setDefinition(sb.toString());
+
+        long taskId = 1;
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(makeExecuteOption(true, false))
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setPriority(0);
+
+        Assert.assertTrue(taskRun1.getStatus().getDefinition().equals("select 1"));
+    }
+
+    @Test
+    public void testTaskRunWithLargeDefinition2() {
+        Task task = new Task("test");
+        StringBuilder sb = new StringBuilder("select ");
+        for (int i = 0; i < SystemTable.MAX_FIELD_VARCHAR_LENGTH; i++) {
+            sb.append("'a', \n ");
+        }
+        sb.append(" 1");
+        task.setDefinition(sb.toString());
+
+        long taskId = 1;
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(makeExecuteOption(true, false))
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setPriority(0);
+
+        String definition = taskRun1.getStatus().getDefinition();
+        Assert.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4);
+    }
+
+    @Test
+    public void testTaskRunWithLargeDefinition3() {
+        Task task = new Task("test");
+        task.setDefinition(null);
+
+        long taskId = 1;
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(makeExecuteOption(true, false))
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setPriority(0);
+
+        String definition = taskRun1.getStatus().getDefinition();
+        Assert.assertTrue(definition == null);
     }
 }

@@ -78,7 +78,7 @@ public class ScalarTypeTest {
                 ScalarType.createUnifiedDecimalType(38, 38),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 38));
 
-        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(39, 38));
+        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(79, 38));
         Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(10, 11));
     }
 

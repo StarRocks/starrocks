@@ -19,14 +19,20 @@ import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 
@@ -56,8 +62,23 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
             }
         };
 
-        new MockUp<TransactionLoadAction>() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                List<Long> nodes = new ArrayList<>();
+                nodes.add(1234L);
+                return nodes;
+            }
+        };
 
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+
+        new MockUp<TransactionLoadAction>() {
             @Mock
             public void redirectTo(BaseRequest request,
                                    BaseResponse response,

@@ -38,4 +38,6 @@ public interface HAProtocol {
     boolean removeElectableNode(String nodeName);
 
     long getLatestEpoch();
+
+    void removeUnstableNode(String nodeName, int currentFollowerCnt);
 }

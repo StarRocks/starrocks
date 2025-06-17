@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "mem_hook.h"
+
 #include <iostream>
 
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
@@ -92,6 +95,17 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
+static int64_t g_large_memory_alloc_failure_threshold = 0;
+
+namespace starrocks {
+// thread-safety is not a concern here since this is a really rare op
+int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
+    int64_t old_val = g_large_memory_alloc_failure_threshold;
+    g_large_memory_alloc_failure_threshold = val;
+    return old_val;
+}
+} // namespace starrocks
+
 const size_t large_memory_alloc_report_threshold = 1073741824;
 inline thread_local bool skip_report = false;
 inline void report_large_memory_alloc(size_t size) {
@@ -101,7 +115,8 @@ inline void report_large_memory_alloc(size_t size) {
             auto qid = starrocks::CurrentThread::current().query_id();
             auto fid = starrocks::CurrentThread::current().fragment_instance_id();
             LOG(WARNING) << "large memory alloc, query_id:" << print_id(qid) << " instance: " << print_id(fid)
-                         << " acquire:" << size << " bytes, stack:\n"
+                         << " acquire:" << size << " bytes, is_bad_alloc_caught: " << IS_BAD_ALLOC_CATCHED()
+                         << ", stack:\n"
                          << starrocks::get_stack_trace();
         } catch (...) {
             // do nothing
@@ -110,6 +125,18 @@ inline void report_large_memory_alloc(size_t size) {
     }
 }
 #define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) report_large_memory_alloc(size)
+
+inline bool block_large_memory_alloc(size_t size) {
+    if (UNLIKELY(g_large_memory_alloc_failure_threshold > 0 && size > g_large_memory_alloc_failure_threshold)) {
+        // DON'T try to allocate the memory at all
+        if (starrocks::config::abort_on_large_memory_allocation) {
+            std::abort();
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
 
 DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 
@@ -142,6 +169,10 @@ void* my_malloc(size_t size) __THROW {
         }
         return ptr;
     } else {
+        if (UNLIKELY(block_large_memory_alloc(size))) {
+            return nullptr;
+        }
+
         void* ptr = STARROCKS_MALLOC(size);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
@@ -228,6 +259,9 @@ void* my_calloc(size_t n, size_t size) __THROW {
         }
         return ptr;
     } else {
+        if (UNLIKELY(block_large_memory_alloc(n * size))) {
+            return nullptr;
+        }
         void* ptr = STARROCKS_CALLOC(n, size);
         int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
         MEMORY_CONSUME_SIZE(alloc_size);

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Preconditions;
@@ -57,48 +58,26 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
 
-    AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.statistic_cache_columns)
-            .executor(statsCacheRefresherExecutor)
-            .buildAsync(new TableStatsCacheLoader());
+    AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache =
+            createAsyncLoadingCache(new TableStatsCacheLoader());
 
-    AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> columnStatistics = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.statistic_cache_columns)
-            .executor(statsCacheRefresherExecutor)
-            .buildAsync(new ColumnBasicStatsCacheLoader());
+    AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> columnStatistics =
+            createAsyncLoadingCache(new ColumnBasicStatsCacheLoader());
 
-    AsyncLoadingCache<ColumnStatsCacheKey, Optional<PartitionStats>> partitionStatistics = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.statistic_cache_columns)
-            .executor(statsCacheRefresherExecutor)
-            .buildAsync(new PartitionStatsCacheLoader());
+    AsyncLoadingCache<ColumnStatsCacheKey, Optional<PartitionStats>> partitionStatistics =
+            createAsyncLoadingCache(new PartitionStatsCacheLoader());
 
     AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics =
-            Caffeine.newBuilder().expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.statistic_cache_columns)
-            .executor(statsCacheRefresherExecutor)
-            .buildAsync(new ConnectorColumnStatsCacheLoader());
+            createAsyncLoadingCache(new ConnectorColumnStatsCacheLoader());
 
-    AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.statistic_cache_columns)
-            .executor(statsCacheRefresherExecutor)
-            .buildAsync(new ColumnHistogramStatsCacheLoader());
+    AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache =
+            createAsyncLoadingCache(new ColumnHistogramStatsCacheLoader());
 
-    AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>> connectorHistogramCache = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.statistic_cache_columns)
-            .executor(statsCacheRefresherExecutor)
-            .buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
+    AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>> connectorHistogramCache =
+            createAsyncLoadingCache(new ConnectorHistogramColumnStatsCacheLoader());
 
+    AsyncLoadingCache<Long, Optional<MultiColumnCombinedStatistics>> multiColumnStats =
+            createAsyncLoadingCache(new MultiColumnCombinedStatsCacheLoader());
 
     @Override
     public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
@@ -179,6 +158,36 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to refresh getColumnStatistics", e);
+        }
+    }
+
+    @Override
+    public void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId()) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
+        }
+
+        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
+        long tableId = table.getId();
+        for (String column : columns) {
+            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
+        }
+
+        try {
+            ColumnHistogramStatsCacheLoader loader = new ColumnHistogramStatsCacheLoader();
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ColumnStatsCacheKey, Optional<Histogram>> result = future.get();
+                histogramCache.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> histogramCache.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh histogram", e);
         }
     }
 
@@ -392,8 +401,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     /**
      *
      */
-    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<Long> partitions,
-                                                                  List<String> columns) {
+    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
 
         List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
         long tableId = table.getId();
@@ -435,12 +443,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             return null;
         }
 
-        long tableId = table.getId();
-        List<ColumnStatsCacheKey> cacheKeys = columns.stream()
-                .map(x -> new ColumnStatsCacheKey(tableId, x))
-                .collect(Collectors.toList());
         List<ColumnStatistic> columnStatistics = getColumnStatistics(table, columns);
-        Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, partitions, columns);
+        Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, columns);
         if (MapUtils.isEmpty(columnNDVForPartitions)) {
             return null;
         }
@@ -460,8 +464,10 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     return null;
                 }
                 double distinctCount = partitionStats.getDistinctCount().get(partition);
+                double nullFraction = partitionStats.getNullFraction().get(partition);
                 ColumnStatistic newStats = ColumnStatistic.buildFrom(columnStatistic)
-                                .setDistinctValuesCount(distinctCount).build();
+                        .setDistinctValuesCount(distinctCount)
+                        .setNullsFraction(nullFraction).build();
                 newStatistics.add(newStats);
             }
             result.put(partition, newStatistics);
@@ -577,6 +583,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         histogramCache.synchronous().invalidateAll(allKeys);
     }
 
+
     @Override
     public void expireConnectorHistogramStatistics(Table table, List<String> columns) {
         if (table == null || columns == null) {
@@ -606,6 +613,58 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         return connectorTableColumnStatsList;
     }
 
+    public MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
+        if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
+            return MultiColumnCombinedStatistics.EMPTY;
+        }
+
+        try {
+            CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = multiColumnStats.get(tableId);
+            if (result.isDone()) {
+                Optional<MultiColumnCombinedStatistics> data = result.get();
+                return data.orElse(MultiColumnCombinedStatistics.EMPTY);
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to execute tableStatsCache.getAll", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Faied to execute tableStatsCache.getAll", e);
+        }
+        return MultiColumnCombinedStatistics.EMPTY;
+    }
+
+    @Override
+    public void refreshMultiColumnStatistics(Long tableId,  boolean isSync) {
+        try {
+            if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
+                    !StatisticUtils.checkStatisticTableStateNormal()) {
+                return;
+            }
+
+            MultiColumnCombinedStatsCacheLoader loader = new MultiColumnCombinedStatsCacheLoader();
+            CompletableFuture<Optional<MultiColumnCombinedStatistics>> future =
+                    loader.asyncLoad(tableId, statsCacheRefresherExecutor);
+            if (isSync) {
+                Optional<MultiColumnCombinedStatistics> result = future.get();
+                multiColumnStats.synchronous().put(tableId, result);
+            } else {
+                future.whenComplete((res, e) ->
+                        multiColumnStats.synchronous().put(tableId, res));
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to execute refresh multi-column combined statistics", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Failed to execute refresh multi-column combined statistics", e);
+        }
+    }
+
+    public void expireMultiColumnStatistics(Long tableId) {
+        Preconditions.checkNotNull(tableId);
+        multiColumnStats.synchronous().invalidate(tableId);
+    }
+
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.<String, Long>builder()
@@ -615,6 +674,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .put("HistogramStats", histogramCache.synchronous().estimatedSize())
                 .put("ConnectorTableStats", connectorTableCachedStatistics.synchronous().estimatedSize())
                 .put("ConnectorHistogramStats", connectorHistogramCache.synchronous().estimatedSize())
+                .put("MultiColumnCombinedStats", multiColumnStats.synchronous().estimatedSize())
                 .build();
     }
 
@@ -647,4 +707,14 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 sampleFromCache(connectorTableCachedStatistics)
         );
     }
+
+    private <K, V> AsyncLoadingCache<K, V> createAsyncLoadingCache(AsyncCacheLoader<K, V> cacheLoader) {
+        return Caffeine.newBuilder()
+                .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+                .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+                .maximumSize(Config.statistic_cache_columns)
+                .executor(statsCacheRefresherExecutor)
+                .buildAsync(cacheLoader);
+    }
+
 }

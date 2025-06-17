@@ -64,6 +64,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
@@ -71,11 +72,13 @@ import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -175,6 +178,52 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(partitionOffsets);
     }
 
+
+    @Override
+    protected String getSourceLagString(String progressJsonStr) {
+        Gson gson = new Gson();
+        Map<String, String> progress = gson.fromJson(progressJsonStr, Map.class);
+
+        if (progress == null || progress.isEmpty()) {
+            return gson.toJson(progress);
+        }
+
+        if (latestPartitionOffsets == null || latestPartitionOffsets.isEmpty()) {
+            return gson.toJson(latestPartitionOffsets);
+        }
+
+        Map<String, String> partitionLag = Maps.newHashMap();
+        for (Map.Entry<Integer, Long> entry : latestPartitionOffsets.entrySet()) {
+            // progress and latest all have same id
+            String mapKey = entry.getKey().toString();
+            if (progress.containsKey(mapKey)) {
+                String progressVal = progress.get(mapKey);
+                //check progressVal
+                if (!checkProgressVal(progressVal)) {
+                    continue;
+                }
+                Long lag = entry.getValue() - Long.valueOf(progress.get(mapKey));
+                lag = lag < 0 ? 0 : lag;
+                partitionLag.put(mapKey, lag.toString());
+            }
+        }
+        return gson.toJson(partitionLag);
+    }
+
+    private boolean checkProgressVal(String progressVal) {
+        if (progressVal == null) {
+            return false;
+        }
+        if (progressVal.equals(KafkaProgress.OFFSET_ZERO) || progressVal.equals(KafkaProgress.OFFSET_END) ||
+                progressVal.equals(KafkaProgress.OFFSET_BEGINNING)) {
+            return false;
+        }
+        if (!StringUtils.isNumeric(progressVal)) {
+            return false;
+        }
+        return true;
+    }
+
     public void setPartitionOffset(int partition, long offset) {
         latestPartitionOffsets.put(Integer.valueOf(partition), Long.valueOf(offset));
     }
@@ -191,7 +240,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
-        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouseId);
+        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, computeResource);
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -245,10 +294,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), this,
+                    KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(), this,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
-                    kafkaTaskInfo.setWarehouseId(warehouseId);
+                    kafkaTaskInfo.setComputeResource(computeResource);
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }
@@ -273,7 +322,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
             aliveNodeNum = 0;
-            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             for (long nodeId : computeIds) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
@@ -311,7 +361,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected boolean checkCommitInfo(RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment,
                                       TransactionState txnState,
-                                      TransactionState.TxnStatusChangeReason txnStatusChangeReason) {
+                                      TxnStatusChangeReason txnStatusChangeReason) {
         if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             // For committed txn, update the progress.
             return true;
@@ -321,7 +371,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // "No partitions have data available for loading" and abort transaction.
         // In this situation, we also need update commit info.
         if (txnStatusChangeReason != null &&
-                txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
+                txnStatusChangeReason == TxnStatusChangeReason.NO_PARTITIONS) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
             // If no data is imported, the error "No partitions have data available for loading" may only be returned.
@@ -361,7 +411,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(timeToExecuteMs, oldKafkaTaskInfo,
                 ((KafkaProgress) progress).getPartitionIdToOffset(oldKafkaTaskInfo.getPartitions()),
                 ((KafkaTaskInfo) routineLoadTaskInfo).getLatestOffset());
-        kafkaTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
+        // cngroup
+        kafkaTaskInfo.setComputeResource(routineLoadTaskInfo.getComputeResource());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -461,7 +512,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Integer> getAllKafkaPartitions() throws StarRocksException {
         convertCustomProperties(false);
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
-                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
+                ImmutableMap.copyOf(convertedCustomProperties), computeResource);
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
@@ -807,6 +858,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
         if (dataSourceProperties.getConfluentSchemaRegistryUrl() != null) {
             confluentSchemaRegistryUrl = dataSourceProperties.getConfluentSchemaRegistryUrl();
+        }
+
+        // modify broker list
+        if (dataSourceProperties.getKafkaBrokerList() != null) {
+            this.brokerList = dataSourceProperties.getKafkaBrokerList();
         }
 
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",

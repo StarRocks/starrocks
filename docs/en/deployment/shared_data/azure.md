@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Use Azure Blob Storage for shared-data
+# Use Azure Storage for shared-data
 
 import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
@@ -27,9 +27,11 @@ The deployment of a shared-data StarRocks cluster is similar to that of a shared
 
 Before starting the cluster configure the FEs and CNs. An example configuration is provided below, and then the details for each parameter are provided.
 
-### Example FE configuration for Azure Blob Storage
+### Example FE configuration for Azure Storage
 
 The example shared-data additions for your `fe.conf` can be added to the `fe.conf` file on each of your FE nodes.
+
+**Azure Blob Storage**
 
 - If you use the shared key to access Azure Blob Storage, add the following configuration items:
 
@@ -67,7 +69,45 @@ The example shared-data additions for your `fe.conf` can be added to the `fe.con
 >
 > The hierarchical namespace must be disabled when you create the Azure Blob Storage Account.
 
-### All FE parameters related to shared-storage with Azure Blob Storage
+**Azure Data Lake Storage Gen2**
+
+- If you use the shared key to access Azure Data Lake Storage Gen2, add the following configuration items:
+
+  ```Properties
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = ADLS2
+
+  # For example, testfilesystem/starrocks
+  azure_adls2_path = <file_system_name>/<dir_name>
+
+  # For example, https://test.dfs.core.windows.net
+  azure_adls2_endpoint = <endpoint_url>
+
+  azure_adls2_shared_key = <shared_key>
+  ```
+
+- If you use shared access signatures (SAS) to access Azure Data Lake Storage Gen2, add the following configuration items:
+
+  ```Properties
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = ADLS2
+
+  # For example, testfilesystem/starrocks
+  azure_adls2_path = <file_system_name>/<dir_name>
+
+  # For example, https://test.dfs.core.windows.net
+  azure_adls2_endpoint = <endpoint_url>
+
+  azure_adls2_sas_token = <sas_token>
+  ```
+
+> **NOTE**
+>
+> Azure Data Lake Storage Gen1 is not supported.
+
+### All FE parameters related to shared-storage with Azure Storage
 
 #### run_mode
 
@@ -130,6 +170,22 @@ The Shared Key used to authorize requests for your Azure Blob Storage.
 
 The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
 
+#### azure_adls2_path
+
+The Azure Data Lake Storage Gen2 path used to store data. It consists of the file system name and the directory name, for example, `testfilesystem/starrocks`.
+
+#### azure_adls2_endpoint
+
+The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
+
+#### azure_adls2_shared_key
+
+The Shared Key used to authorize requests for your Azure Data Lake Storage Gen2.
+
+#### azure_adls2_sas_token
+
+The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2.
+
 > **NOTE**
 >
 > Only credential-related configuration items can be modified after your shared-data StarRocks cluster is created. If you changed the original storage path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.
@@ -163,6 +219,19 @@ PROPERTIES
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;
+```
+
+The following example creates a storage volume `adls2` for an Azure Data Lake Storage Gen2 file system `testfilesystem` with SAS token, and disables the storage volume:
+
+```SQL
+CREATE STORAGE VOLUME adls2
+    TYPE = ADLS2
+    LOCATIONS = ("adls2://testfilesystem/starrocks")
+    PROPERTIES (
+        "enabled" = "false",
+        "azure.adls2.endpoint" = "<endpoint_url>",
+        "azure.adls2.sas_token" = "<sas_token>"
+    );
 ```
 
 <SharedDataUse />

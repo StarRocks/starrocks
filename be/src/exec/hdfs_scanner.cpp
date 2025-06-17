@@ -98,7 +98,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
 
 Status HdfsScanner::_build_scanner_context() {
     HdfsScannerContext& ctx = _scanner_ctx;
-    std::vector<ColumnPtr>& partition_values = ctx.partition_values;
+    Columns& partition_values = ctx.partition_values;
 
     // evaluate partition values.
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
@@ -110,7 +110,7 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     // evaluate extended column values
-    std::vector<ColumnPtr>& extended_values = ctx.extended_values;
+    Columns& extended_values = ctx.extended_values;
     for (size_t i = 0; i < _scanner_params.extended_col_slots.size(); i++) {
         int extended_col_idx = _scanner_params.index_in_extended_columns[i];
         ASSIGN_OR_RETURN(auto extended_value_column,
@@ -133,8 +133,8 @@ Status HdfsScanner::_build_scanner_context() {
             column.slot_desc = slot;
             column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
             column.decode_needed =
-                    slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
-                                                        _scanner_params.slots_of_mutli_slot_conjunct.end();
+                    slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
+                                                        _scanner_params.slots_of_multi_field_conjunct.end();
             ctx.materialized_columns.emplace_back(std::move(column));
         }
     }
@@ -166,14 +166,17 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
+    ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
-    ctx.iceberg_schema = _scanner_params.iceberg_schema;
+    ctx.lake_schema = _scanner_params.lake_schema;
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
     ctx.split_context = _scanner_params.split_context;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
     ctx.global_dictmaps = _scanner_params.global_dictmaps;
+    ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
+    ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
@@ -225,7 +228,8 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     _opened = true;
     VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
-              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset) << "]";
+              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
+              << "], candidate node = " << _scanner_params.scan_range->candidate_node;
     return Status::OK();
 }
 
@@ -318,6 +322,9 @@ Status HdfsScanner::open_random_access_file() {
                             .compression_type = _compression_type};
 
     ASSIGN_OR_RETURN(_file, create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, options));
+    if (_cache_input_stream) {
+        _cache_input_stream->set_peer_cache_node(_scanner_params.scan_range->candidate_node);
+    }
     return Status::OK();
 }
 
@@ -445,6 +452,11 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_read_timer, stats.read_cache_ns);
         COUNTER_UPDATE(profile->datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(profile->datacache_skip_read_bytes, stats.skip_read_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_peer_bytes, stats.read_peer_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_peer_counter, stats.read_peer_cache_count);
+        COUNTER_UPDATE(profile->datacache_read_peer_timer, stats.read_peer_cache_ns);
+        COUNTER_UPDATE(profile->datacache_skip_read_peer_counter, stats.skip_read_peer_cache_count);
+        COUNTER_UPDATE(profile->datacache_skip_read_peer_bytes, stats.skip_read_peer_cache_bytes);
         COUNTER_UPDATE(profile->datacache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(profile->datacache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(profile->datacache_write_timer, stats.write_cache_ns);
@@ -625,7 +637,7 @@ void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chu
 
 void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
                                                           const std::vector<ColumnInfo>& columns,
-                                                          const std::vector<ColumnPtr>& values) {
+                                                          const Columns& values) {
     if (columns.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);

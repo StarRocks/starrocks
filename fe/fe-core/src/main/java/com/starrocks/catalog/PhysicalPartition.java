@@ -102,6 +102,20 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private long versionEpoch;
     @SerializedName(value = "versionTxnType")
     private TransactionType versionTxnType;
+
+    /**
+     * metadataSwitchVersion is non-zero: The metadata format differs before and after this version.
+     * Therefore, vacuum operations cannot be executed across `metadataSwitchVersion`
+     * e.g.
+     *  the tablet under this partition has five versions: 1, 2, 3, 4, 5 and the metadataSwitchVersion is 3
+     *  the vacuum is run as the following:
+     *      1. Set minRetainVersion to 3 in the vacuumRequest.
+     *      2. The BE will delete tablet metadata where the version is less than 3.
+     *      3. If all tablets execute successfully and there are no metadata entries in two different formats, 
+     *      set metadataSwitchVersion to 0.
+     */
+    @SerializedName(value = "metadataSwitchVersion")
+    private long metadataSwitchVersion;
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
@@ -111,6 +125,13 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private volatile long lastVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
+
+    private volatile long lastSuccVacuumVersion = 0;
+
+    @SerializedName(value = "bucketNum")
+    private int bucketNum = 0;
+    
+    private volatile long extraFileSize = 0;
 
     private PhysicalPartition() {
 
@@ -192,11 +213,35 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public long getMinRetainVersion() {
-        return minRetainVersion;
+        long retainVersion = minRetainVersion;
+        if (metadataSwitchVersion != 0) {
+            retainVersion = Math.min(retainVersion, metadataSwitchVersion);
+        }
+        return retainVersion;
     }
 
     public void setMinRetainVersion(long minRetainVersion) {
         this.minRetainVersion = minRetainVersion;
+    }
+
+    public long getLastSuccVacuumVersion() {
+        return lastSuccVacuumVersion;
+    }
+
+    public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
+        this.lastSuccVacuumVersion = lastSuccVacuumVersion;
+    }
+
+    public long getExtraFileSize() {
+        return extraFileSize;
+    }
+
+    public void setExtraFileSize(long extraFileSize) {
+        this.extraFileSize = extraFileSize;
+    }
+
+    public void incExtraFileSize(long addFileSize) {
+        this.extraFileSize += addFileSize;
     }
 
     /*
@@ -317,6 +362,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.versionTxnType = versionTxnType;
     }
 
+    public long getMetadataSwitchVersion() {
+        return metadataSwitchVersion;
+    }
+
+    public void setMetadataSwitchVersion(long metadataSwitchVersion) {
+        this.metadataSwitchVersion = metadataSwitchVersion;
+    }
+
     public MaterializedIndex getIndex(long indexId) {
         if (baseIndex.getId() == indexId) {
             return baseIndex;
@@ -410,6 +463,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         Preconditions.checkState(!idToVisibleRollupIndex.containsKey(shadowIndexId), shadowIndexId);
         shadowIdx.setState(IndexState.NORMAL);
         if (isBaseIndex) {
+            // in shared-data cluster, if upgraded from 3.3 or older version, `shardGroupId` will not
+            // be set, so must set it here
+            if (shadowIdx.getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                shadowIdx.setShardGroupId(shardGroupId);
+            }
             baseIndex = shadowIdx;
         } else {
             idToVisibleRollupIndex.put(shadowIndexId, shadowIdx);
@@ -420,6 +478,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public int hashCode() {
         return Objects.hashCode(visibleVersion, baseIndex);
+    }
+
+    public int getBucketNum() {
+        return bucketNum;
+    }
+
+    public void setBucketNum(int bucketNum) {
+        this.bucketNum = bucketNum;
     }
 
     public boolean equals(Object obj) {
@@ -482,6 +548,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         buffer.append("storageDataSize: ").append(storageDataSize()).append("; ");
         buffer.append("storageRowCount: ").append(storageRowCount()).append("; ");
         buffer.append("storageReplicaCount: ").append(storageReplicaCount()).append("; ");
+        buffer.append("bucketNum: ").append(bucketNum).append("; ");
 
         return buffer.toString();
     }

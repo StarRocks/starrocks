@@ -49,14 +49,14 @@ import java.util.concurrent.ConcurrentSkipListMap;
 // only used for AUTOMATED snapshot for now
 public class ClusterSnapshotMgr implements GsonPostProcessable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotMgr.class);
-    public static final String AUTOMATED_NAME_PREFIX = "automated_cluster_snapshot";
+    public static final String AUTOMATED_NAME_PREFIX = "automated_cluster_snapshot_";
 
     @SerializedName(value = "storageVolumeName")
-    private volatile String storageVolumeName;
+    protected volatile String storageVolumeName;
     @SerializedName(value = "automatedSnapshotJobs")
-    private NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
+    protected NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
 
-    private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
+    protected ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
 
     public ClusterSnapshotMgr() {
     }
@@ -127,10 +127,19 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    public boolean canScheduleNextJob(long lastAutomatedJobStartTimeMs) {
+        return isAutomatedSnapshotOn() && (System.currentTimeMillis() - lastAutomatedJobStartTimeMs >=
+                                           Config.automated_cluster_snapshot_interval_seconds * 1000L);
+    }
+
+    public ClusterSnapshotJob getNextCluterSnapshotJob() {
+        return createAutomatedSnapshotJob();
+    }
+
     public ClusterSnapshotJob createAutomatedSnapshotJob() {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
-        String snapshotName = AUTOMATED_NAME_PREFIX + '_' + String.valueOf(createTimeMs);
+        String snapshotName = AUTOMATED_NAME_PREFIX + String.valueOf(createTimeMs);
         ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
         job.logJob();
 
@@ -246,7 +255,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
         if (entry != null) {
             ClusterSnapshotJob job = entry.getValue();
-            // Last snapshot may in init state, because the last snapshot checkpoint does not include the
+            // Last snapshot may in init state, because it does not include the
             // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
             if (job.getSnapshotName().equals(restoredSnapshotName) && job.isInitializing()) {
                 job.setJournalIds(feJournalId, starMgrJournalId);

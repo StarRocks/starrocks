@@ -556,8 +556,10 @@ public class QueryTransformer {
             repeatOutput.add(grouping);
 
             //Build grouping function in select item
+            Map<ColumnRefOperator, List<ColumnRefOperator>> groupingFnArgs = Maps.newHashMap();
             for (Expr groupingFunction : groupingFunctionCallExprs) {
                 grouping = columnRefFactory.create(GROUPING, Type.BIGINT, false);
+                List<ColumnRefOperator> fnArgs = Lists.newArrayList();
 
                 ArrayList<BitSet> tempGroupingIdsBitSets = new ArrayList<>();
                 for (int i = 0; i < repeatColumnRefList.size(); ++i) {
@@ -569,6 +571,7 @@ public class QueryTransformer {
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(expr, subOpt.getExpressionMapping(), columnRefFactory);
+                    fnArgs.add(groupingKey);
                     for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {
@@ -586,10 +589,18 @@ public class QueryTransformer {
                         .collect(Collectors.toList()));
                 groupByColumnRefs.add(grouping);
                 repeatOutput.add(grouping);
+                groupingFnArgs.put(grouping, fnArgs);
             }
 
             LogicalRepeatOperator repeatOperator =
-                    new LogicalRepeatOperator(repeatOutput, repeatColumnRefList, groupingIds);
+                    new LogicalRepeatOperator(repeatOutput, repeatColumnRefList, groupingIds, groupingFnArgs);
+
+            // constant group-by column in grouping-set should not propagate upwards, since repeat operator
+            // would output NULL values for this constant group-by column and projection operator upon
+            // aggregate operator would substitute this values with constant values mistakenly, so NULL values
+            // is eliminated.
+            groupByColumnRefs.forEach(groupByCol ->
+                    groupingTranslations.getColumnRefToConstOperators().remove(groupByCol));
             subOpt = new OptExprBuilder(repeatOperator, Lists.newArrayList(subOpt), groupingTranslations);
         }
 

@@ -27,6 +27,7 @@ import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -47,8 +48,9 @@ public class IcebergPartitionsTable extends MetadataTable {
         super(catalogName, id, name, type, baseSchema, originDb, originTable, metadataTableType);
     }
 
-    public static IcebergPartitionsTable create(String catalogName, String originDb, String originTable) {
-        Table icebergTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, originDb, originTable);
+    public static IcebergPartitionsTable create(ConnectContext context, String catalogName, String originDb, String originTable) {
+        Table icebergTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(context, catalogName, originDb, originTable);
         if (icebergTable == null) {
             throw new StarRocksConnectorException("table [%s.%s.%s] does not exist", catalogName, originDb, originTable);
         }

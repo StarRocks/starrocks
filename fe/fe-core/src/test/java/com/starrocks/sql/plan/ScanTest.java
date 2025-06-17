@@ -430,22 +430,22 @@ public class ScanTest extends PlanTestBase {
         // we should keep nullable attribute of columns consistent with previous version,
         // see more detail in the description of https://github.com/StarRocks/starrocks/pull/17619
         // without count, all columns should be not null
-        sql = "select min(t1a),max(t1a),dict_merge(t1a) from test_all_type_not_null[_META_]";
+        sql = "select min(t1a),max(t1a),dict_merge(t1a, 255) from test_all_type_not_null[_META_]";
         plan = getVerboseExplain(sql);
         assertContains(plan, "aggregate: " +
                 "min[([min_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true], 255); args: INVALID_TYPE,INT; " +
                 "result: VARCHAR; args nullable: true; result nullable: true]");
 
         // with count, all columns should be nullable
-        sql = "select min(t1a),max(t1a),dict_merge(t1a),count() from test_all_type_not_null[_META_]";
+        sql = "select min(t1a),max(t1a),dict_merge(t1a, 255),count() from test_all_type_not_null[_META_]";
         plan = getVerboseExplain(sql);
         assertContains(plan, "min[([min_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; result: VARCHAR; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true], 255); args: INVALID_TYPE,INT; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
                 "sum[([rows_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
                 "args nullable: true; result nullable: true]");
@@ -492,7 +492,7 @@ public class ScanTest extends PlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), expexted[i]);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), expexted[i]);
         }
 
         connectContext.getSessionVariable().setEnableCountStarOptimization(false);
@@ -500,7 +500,7 @@ public class ScanTest extends PlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), false);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), false);
         }
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
@@ -524,7 +524,7 @@ public class ScanTest extends PlanTestBase {
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
+            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
         }
     }
 
