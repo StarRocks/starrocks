@@ -314,6 +314,8 @@ struct TypeDescriptor {
                type == TYPE_LARGEINT;
     }
 
+    inline bool is_row_id_type() const { return type == TYPE_ROW_ID; }
+
     inline bool is_float_type() const { return type == TYPE_FLOAT || type == TYPE_DOUBLE; }
 
     // Could this type be used at join on conjuncts

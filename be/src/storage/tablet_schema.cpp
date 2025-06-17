@@ -87,6 +87,7 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_DATETIME:
     case TYPE_DECIMAL64:
         return 8;
+    case TYPE_ROW_ID:
     case TYPE_DECIMAL:
         return 12;
     case TYPE_LARGEINT:
