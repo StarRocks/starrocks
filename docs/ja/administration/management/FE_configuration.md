@@ -1572,7 +1572,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: Routine Load プロセスのメトリクスを収集するかどうか。この項目を `true` に設定すると、Kafka API を呼び出してパーティションの最新のオフセットを取得することに注意。
+- 説明: Routine Load パーティションのオフセットラグをメトリクスで収集するかどうか。この項目を `true` に設定すると、Kafka API を呼び出してパーティションの最新のオフセットを取得することに注意。
 - 導入バージョン: -
 
 ##### min_routine_load_lag_for_metrics
