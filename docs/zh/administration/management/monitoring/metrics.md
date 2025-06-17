@@ -1667,8 +1667,6 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：所有 Routine Load 作业导入错误数据的总行数。
-<<<<<<< HEAD
-=======
 
 ### starrocks_fe_routine_load_max_lag_of_partition
 
@@ -1679,4 +1677,3 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述: 黑名单 SQL 被拦截的次数。
->>>>>>> fe73d8d9fa ([Doc] Add routine load offset lag metric and configuration doc (#59923))
