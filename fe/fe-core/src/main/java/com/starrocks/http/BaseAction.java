@@ -42,6 +42,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
@@ -122,7 +123,7 @@ public abstract class BaseAction implements IAction {
     // Whether to support to handle the request asynchronously, that is,
     // handle it in a separate thread pool instead of netty workers.
     public boolean supportAsyncHandler() {
-        return true;
+        return Config.enable_http_legacy_action_async_hanlder;
     }
 
     public abstract void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException;

@@ -814,14 +814,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"max_http_sql_service_task_threads_num"})
     public static int http_async_threads_num = 4096;
 
-    /**
-     * Whether to execute transaction stream load requests asynchronously. When enabled,
-     * the requests will be processed in a separate thread pool instead of netty workers,
-     * which prevents the request from blocking the HTTP server.
-     * Default: true
-     */
+    // Controls whether asynchronous request handling is enabled for legacy (pre-existing) actions.
     @ConfField(mutable = true)
-    public static boolean enable_transaction_stream_load_async_handler = true;
+    public static boolean enable_http_legacy_action_async_hanlder = false;
 
     /**
      * Cluster name will be shown as the title of web page

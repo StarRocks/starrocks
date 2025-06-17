@@ -98,6 +98,12 @@ public class ExecuteSqlAction extends RestBaseAction {
     }
 
     @Override
+    public boolean supportAsyncHandler() {
+        // always enable async handler no matter what Config.enable_http_legacy_action_async_hanlder is
+        return true;
+    }
+
+    @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         StatementBase parsedStmt;
 
