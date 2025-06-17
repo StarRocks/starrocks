@@ -220,7 +220,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.reader_type = options.reader_type;
     if (_metadata->has_column_hash_modulus_predicate()) {
         ASSIGN_OR_RETURN(seg_options.column_hash_modulus_predicate,
-                ColumnHashModulusPredicate::create(_metadata->column_hash_modulus_predicate()));
+                         ColumnHashModulusPredicate::create(_metadata->column_hash_modulus_predicate()));
     }
 
     std::unique_ptr<Schema> segment_schema_guard;
