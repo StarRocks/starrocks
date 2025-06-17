@@ -1294,7 +1294,7 @@ bool TabletManager::check_clone_tablet(int64_t tablet_id) {
 }
 
 Status TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                                  const std::string& tablet_id_path) {
+                                                    const std::string& tablet_id_path) {
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks
     // create tablet and load tablet task should check whether the dir exists
     TabletsShard& shard = _get_tablets_shard(tablet_id);
@@ -1304,17 +1304,19 @@ Status TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId
     TabletMeta tablet_meta;
     Status st = TabletMetaManager::get_tablet_meta(data_dir, tablet_id, schema_hash, &tablet_meta);
     if (st.ok()) {
-        return Status::InternalError(strings::Substitute("Cannot remove schema_hash_path=$0, tablet meta exist in meta store", tablet_id_path));
+        return Status::InternalError(strings::Substitute(
+                "Cannot remove schema_hash_path=$0, tablet meta exist in meta store", tablet_id_path));
     } else if (st.is_not_found()) {
         if (shard.tablets_under_clone.count(tablet_id) > 0) {
-            return Status::InternalError(strings::Substitute("Cannot remove schema_hash_path=$0 to trash, tablet is under clone", tablet_id_path));
+            return Status::InternalError(strings::Substitute(
+                    "Cannot remove schema_hash_path=$0 to trash, tablet is under clone", tablet_id_path));
         }
 
         if (st = move_to_trash(tablet_id_path); st.ok() || st.is_not_found()) {
             return Status::OK();
         } else {
-            LOG(WARNING) << "Fail to move " << tablet_id_path << " to trash: " << st;
-            return Status::InternalError(strings::Substitute("Fail to move $0 to trash: $1", tablet_id_path, st.to_string()));
+            return Status::InternalError(
+                    strings::Substitute("Fail to move $0 to trash: $1", tablet_id_path, st.to_string()));
         }
     } else {
         return Status::InternalError(strings::Substitute("Fail to get tablet meta: $0", st.to_string()));
