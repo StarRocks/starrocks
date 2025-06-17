@@ -397,8 +397,10 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
-            readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
-                    locker.getLockerThread(), 0, Short.MAX_VALUE));
+            if (Config.slow_lock_print_stack) {
+                readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
+                        locker.getLockerThread(), 0, Short.MAX_VALUE));
+            }
             ownerArray.add(readerInfo);
         }
         ownerInfo.add("owners", ownerArray);
