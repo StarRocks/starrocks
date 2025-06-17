@@ -84,18 +84,18 @@ TEST_F(PInternalService_RecoverableStub_ParallelTest, test_reset_channel_with_co
     EXPECT_EQ(2, stub->connection_group());
 
     // reset channel with the correct next_connection_group
-    EXPECT_TRUE(stub->reset_channel("", 3).ok());
+    EXPECT_TRUE(stub->reset_channel(3).ok());
     EXPECT_EQ(3, stub->connection_group());
 
     // reset with wrong next_connection_group, connection_group() won't increase
-    EXPECT_TRUE(stub->reset_channel("", 5).ok());
+    EXPECT_TRUE(stub->reset_channel(5).ok());
     EXPECT_EQ(3, stub->connection_group());
 
-    EXPECT_TRUE(stub->reset_channel("", 3).ok());
+    EXPECT_TRUE(stub->reset_channel(3).ok());
     EXPECT_EQ(3, stub->connection_group());
 
     // rest channel with correct next_connection_group
-    EXPECT_TRUE(stub->reset_channel("", 4).ok());
+    EXPECT_TRUE(stub->reset_channel(4).ok());
     EXPECT_EQ(4, stub->connection_group());
 }
 
@@ -115,7 +115,7 @@ TEST_F(PInternalService_RecoverableStub_ParallelTest, test_parallel_reset_channe
     for (int i = 0; i < num_threads; ++i) {
         reset_threads.emplace_back([&] {
             ready_future.wait();
-            stub->reset_channel("", next_connection_group);
+            stub->reset_channel(next_connection_group);
         });
     }
 
