@@ -218,16 +218,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                           tableId.longValue());
                 continue;
             }
-            boolean isFileBundling = false;
-            // Get OlapTable from tableId
-            OlapTable table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableId);
-            if (table != null) {
-                isFileBundling = table.isFileBundling();
-            } else {
-                // if table is null, it means the table has been dropped, it is safe to regard it as file bundling
-                LOG.debug("table with id: {} is null, treat it as file bundling", tableId);
-                isFileBundling = true;
-            }
 
             long createTimeTs = Long.parseLong(entry.getValue().getPropertiesOrDefault("createTime", "0"));
             if (createTimeTs == 0) {
@@ -236,7 +226,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
 
             if (createTimeTs < creationExpireTime) {
-                cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup, isFileBundling);
+                cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup);
             }
         }
 
@@ -247,8 +237,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     @VisibleForTesting
-    void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup,
-            boolean isFileBundling) {
+    void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
         try {
             List<Long> shardIds = starOSAgent.listShard(groupId);
             if (shardIds.isEmpty()) {
@@ -261,7 +250,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             } else {
                 // drop meta and data
                 long start = System.currentTimeMillis();
-                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, isFileBundling);
+                // Since the DB and table cannot be determined, the file bundle flag is uniformly set to true, 
+                // allowing a single BE node to complete the tablet deletion. 
+                // Here, even for tables without file bundle enabled, 
+                // the tablet deletion can still be performed by a single node.
+                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, true);
                 LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
                         groupId, (System.currentTimeMillis() - start));
             }
