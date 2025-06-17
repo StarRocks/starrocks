@@ -1069,6 +1069,7 @@ public class TransactionState implements Writable {
     }
 
     public void clearAutomaticPartitionSnapshot() {
+        writeLock();
         try {
             tabletIdToTTabletLocation.clear();
             tableToPartitionNameToTPartition.clear();
