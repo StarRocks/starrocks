@@ -126,6 +126,8 @@ public class FeConstants {
     public static final String DOCUMENT_ALTER_ROUTINE_LOAD =
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD";
 
+    public static final String METRIC_LABEL_IS_LEADER = "is_leader";
+
     public static String getNodeNotFoundError(boolean chooseComputeNode) {
         return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;
     }
