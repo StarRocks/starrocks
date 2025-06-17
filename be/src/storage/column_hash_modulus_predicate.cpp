@@ -34,18 +34,12 @@ Status ColumnHashModulusPredicate::get_column_ids(const ColumnHashModulusPredica
 
 Status ColumnHashModulusPredicate::get_column_ids(const ColumnHashModulusPredicate& pred, const Schema& schema,
                                                   std::set<ColumnId>* column_ids) {
-    std::set<ColumnId> tmp_column_cids;
+    RETURN_IF_ERROR(pred.contains_hash_columns(schema));
     for (const auto& col_name : pred.hash_column_names()) {
         auto f = schema.get_field_by_name(col_name);
         if (f != nullptr) {
-            tmp_column_cids.insert(f->id());
-        } else {
-            return Status::NotFound("Column not found in hash filter: " + col_name);
+            column_ids->insert(f->id());
         }
-    }
-
-    for (auto const& col_id : tmp_column_cids) {
-        column_ids->insert(col_id);
     }
     return Status::OK();
 }
@@ -110,7 +104,7 @@ Status ColumnHashModulusPredicate::_check_valid_pb(const ColumnHashModulusPredic
 Status ColumnHashModulusPredicate::contains_hash_columns(const Schema& schema) const {
     for (const auto& column_name : _hash_column_names) {
         if (schema.get_field_index_by_name(column_name) == -1) {
-            return Status::NotFound("Column not found in hash filter: " + column_name);
+            return Status::NotFound("Column not found in given schema for column hash modulus predicate: col: " + column_name);
         }
     }
     return Status::OK();
