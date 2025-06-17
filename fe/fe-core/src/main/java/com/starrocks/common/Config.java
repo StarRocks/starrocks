@@ -173,6 +173,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true)
+    public static int slow_lock_stack_trace_reserve_levels = 15;
+
+    @ConfField(mutable = true)
+    public static boolean slow_lock_print_stack = true;
+
+>>>>>>> 9e0faac862 ([Enhancement] Add Config param slow_lock_print_stack (#59967))
     @ConfField
     public static String custom_config_dir = "/conf";
 
