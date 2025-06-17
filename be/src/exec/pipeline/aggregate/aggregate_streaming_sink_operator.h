@@ -18,9 +18,13 @@
 
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
+#include "runtime/runtime_state.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+class AggTopNRuntimeFilterBuilder;
+namespace pipeline {
 
+class AggregateStreamingSinkOperatorFactory;
 class AggregateStreamingSinkOperator : public Operator {
 public:
     AggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -52,6 +56,9 @@ public:
     std::string get_name() const override;
 
 private:
+    AggregateStreamingSinkOperatorFactory* factory() {
+        return down_cast<AggregateStreamingSinkOperatorFactory*>(_factory);
+    }
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
     Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
 
@@ -77,16 +84,21 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
 public:
-    AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory)
+    AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory,
+                                          const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters)
             : OperatorFactory(id, "aggregate_streaming_sink", plan_node_id),
-              _aggregator_factory(std::move(aggregator_factory)) {}
+              _aggregator_factory(std::move(aggregator_factory)),
+              _build_runtime_filters(build_runtime_filters) {}
 
     ~AggregateStreamingSinkOperatorFactory() override = default;
+
+    const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() { return _build_runtime_filters; }
 
     bool support_event_scheduler() const override { return true; }
 
@@ -97,5 +109,8 @@ public:
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
+    std::once_flag _set_collector_flag;
+    const std::vector<RuntimeFilterBuildDescriptor*>& _build_runtime_filters;
 };
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

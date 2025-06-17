@@ -160,7 +160,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         DCHECK(has_pending_data());
         //
         if (!yield_ctx.task_context_data.has_value()) {
-            yield_ctx.task_context_data = SpillIOTaskContextPtr(std::make_shared<FlushContext>());
+            yield_ctx.task_context_data =
+                    SpillIOTaskContextPtr(std::make_shared<FlushContext>(_spiller->shared_from_this()));
         }
         auto defer = CancelableDefer([&]() {
             {
@@ -332,7 +333,8 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         yield_ctx.time_spent_ns = 0;
         yield_ctx.need_yield = false;
         if (!yield_ctx.task_context_data.has_value()) {
-            yield_ctx.task_context_data = SpillIOTaskContextPtr(std::make_shared<PartitionedFlushContext>());
+            yield_ctx.task_context_data =
+                    SpillIOTaskContextPtr(std::make_shared<PartitionedFlushContext>(_spiller->shared_from_this()));
         }
         _spiller->update_spilled_task_status(
                 yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions));

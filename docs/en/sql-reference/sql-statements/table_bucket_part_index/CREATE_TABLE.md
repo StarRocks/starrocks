@@ -714,7 +714,7 @@ Example:
 
 #### Specify Common Partition Expression TTL
 
-From v3.4.1 onwards, StarRocks native tables support Common Partition Expression TTL.
+From v3.5.0 onwards, StarRocks native tables support Common Partition Expression TTL.
 
 `partition_retention_condition`: The expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly.
 - The expression can only contain partition columns and constants. Non-partition columns are not supported.
@@ -734,6 +734,29 @@ To disable this feature, you can use the ALTER TABLE statement to set this prope
 ```SQL
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
+
+#### Configure flat json config (only support on shared-nothing clusters now)
+
+If you want to use flat json attributes, please specify it in properties. See [ Flat JSON ](../../../using_starrocks/Flat_json.md) for further information
+
+```SQL
+PROPERTIES (
+    "flat_json.enable" = "true|false",
+    "flat_json.null.factor" = "0-1",
+    "flat_json.sparsity.factor" = "0-1",
+    "flat_json.column.max" = "${integer_value}"
+)
+```
+
+**`PROPERTIES`**
+
+| Parameter                   | Required | Description                                                                                                                                                                                                                                                       |
+| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `flat_json.enable`    | No       | Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.                                                                                                 |
+| `flat_json.null.factor` | No      | The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 0.3. |
+| `flat_json.sparsity.factor`     | No      | The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to true. Default value: 0.9.    |
+| `flat_json.column.max`       | No      | The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 100.                                                                                                |
+
 
 ## Examples
 
@@ -1095,6 +1118,27 @@ PARTITION BY RANGE (k1)
     PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
 DISTRIBUTED BY HASH(k2);
+```
+
+### Create a table that support flat json (only support on shared-nothing clusters now)
+
+```SQL
+CREATE TABLE example_db.example_table
+(
+    k1 DATE,
+    k2 INT,
+    v1 VARCHAR(2048),
+    v2 JSON
+)
+ENGINE=olap
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2)
+PROPERTIES (
+    "flat_json.enable" = "true",
+    "flat_json.null.factor" = "0.5",
+    "flat_json.sparsity.factor" = "0.5",
+    "flat_json.column.max" = "50"
+);
 ```
 
 ## References

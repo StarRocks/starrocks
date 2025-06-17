@@ -101,7 +101,7 @@ mysql> explain verbose select col1 from hudi_table;
 
 `dataCacheOptions={populate: false}` indicates that the cache will not be populated because the query will scan all partitions.
 
-You can also fine tune the population behavior of Data Cache via the Session Variable [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode).
+You can also fine tune the population behavior of Data Cache via the Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode).
 
 ### Population mode
 
@@ -255,7 +255,7 @@ You can configure Data Cache using the following system variables and BE paramet
 
 ### System variables
 
-- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)

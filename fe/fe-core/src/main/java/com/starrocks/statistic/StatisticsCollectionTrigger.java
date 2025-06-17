@@ -292,7 +292,7 @@ public class StatisticsCollectionTrigger {
         Preconditions.checkNotNull(overwriteJobStats, "must have overwrite stats");
         long sourceRows = overwriteJobStats.getSourceRows();
         long targetRows = overwriteJobStats.getTargetRows();
-        double deltaRatio = 1.0 * (targetRows - sourceRows) / (sourceRows + 1);
+        double deltaRatio = 1.0 * Math.abs(targetRows - sourceRows) / (sourceRows + 1);
         if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
             return null;
         } else if (targetRows > Config.statistic_sample_collect_rows) {

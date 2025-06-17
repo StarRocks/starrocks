@@ -34,6 +34,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -54,6 +55,7 @@ import static org.mockito.Mockito.when;
 public class VacuumTest {
     private static Database db;
     private static OlapTable olapTable;
+    private static OlapTable olapTable2;
     private static PhysicalPartition partition;
     private static WarehouseManager warehouseManager;
     private static ComputeNode computeNode;
@@ -82,16 +84,29 @@ public class VacuumTest {
                     "DISTRIBUTED BY HASH(v1) BUCKETS 1\n" +
                     "PROPERTIES('replication_num' = '1');");
 
+        starRocksAssert.withTable("CREATE TABLE testTable2\n" +
+                    "(\n" +
+                    "    v1 date,\n" +
+                    "    v2 int,\n" +
+                    "    v3 int\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(`v1`)\n" +
+                    "DISTRIBUTED BY HASH(v1) BUCKETS 1\n" +
+                    "PROPERTIES('file_bundling' = 'true');");
+
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
+        olapTable2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable2);
 
         warehouseManager = mock(WarehouseManager.class);
         computeNode = mock(ComputeNode.class);
         
 
         when(warehouseManager.getBackgroundWarehouse()).thenReturn(mock(Warehouse.class));
-        when(warehouseManager.getComputeNodeAssignedToTablet(anyString(), any(LakeTablet.class))).thenReturn(computeNode);
+        when(warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any(), any(LakeTablet.class)))
+                .thenReturn(computeNode);
 
         when(computeNode.getHost()).thenReturn("localhost");
         when(computeNode.getBrpcPort()).thenReturn(8080);
@@ -101,6 +116,7 @@ public class VacuumTest {
     @AfterClass
     public static void clear() {
         db.dropTable(olapTable.getName());
+        db.dropTable(olapTable2.getName());
     }
 
     @Test
@@ -109,6 +125,7 @@ public class VacuumTest {
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
+        partition.setMetadataSwitchVersion(5L);
         partition.setLastSuccVacuumVersion(4L);
 
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
@@ -119,6 +136,7 @@ public class VacuumTest {
         mockResponse.vacuumedFiles = 10L;
         mockResponse.vacuumedFileSize = 1024L;
         mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
         mockResponse.tabletInfos = new ArrayList<>();
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
@@ -139,6 +157,46 @@ public class VacuumTest {
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
         Assert.assertEquals(7L, partition.getLastSuccVacuumVersion());
+        Assert.assertEquals(0L, partition.getMetadataSwitchVersion());
+    }
+
+    @Test
+    public void testAggregateVacuum() throws Exception {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        partition = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+
+        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 10L;
+        mockResponse.vacuumedFileSize = 1024L;
+        mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        lakeService = mock(LakeService.class);
+        when(lakeService.vacuum(any(VacuumRequest.class))).thenReturn(mockFuture);
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+        
+        Assert.assertEquals(5L, partition.getLastSuccVacuumVersion());
+
+        mockResponse.vacuumedVersion = 7L;
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+        Assert.assertEquals(7L, partition.getLastSuccVacuumVersion());
     }
 
     @Test
@@ -148,6 +206,7 @@ public class VacuumTest {
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
         partition.setLastSuccVacuumVersion(4L);
+        partition.setMetadataSwitchVersion(5L);
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
         VacuumResponse mockResponse = new VacuumResponse();
@@ -157,6 +216,7 @@ public class VacuumTest {
         mockResponse.vacuumedFiles = 10L;
         mockResponse.vacuumedFileSize = 1024L;
         mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
         mockResponse.tabletInfos = new ArrayList<>();
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
@@ -170,6 +230,7 @@ public class VacuumTest {
         }
         
         Assert.assertEquals(4L, partition.getLastSuccVacuumVersion());
+        Assert.assertEquals(5L, partition.getMetadataSwitchVersion());
     }
 
     @Test
@@ -181,8 +242,11 @@ public class VacuumTest {
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
         long current = System.currentTimeMillis();
         // static
-        partition.setVisibleVersion(1L, current - Config.lake_autovacuum_stale_partition_threshold * 3600 * 1000);
+        partition.setVisibleVersion(10L, current - Config.lake_autovacuum_stale_partition_threshold * 3600 * 1000);
         Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        // metaSwitchVersion is not 0
+        partition.setMetadataSwitchVersion(5);
+        Assert.assertTrue(autovacuumDaemon.shouldVacuum(partition));
         // empty
         partition.setVisibleVersion(1L, current);
         Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));

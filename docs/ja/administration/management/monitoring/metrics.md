@@ -603,7 +603,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Instantaneous
 - 説明: 特定のウェアハウスで実行中の RESTORE タスクの数を示します。共有なしクラスタの場合、この項目はデフォルトのウェアハウスのみを監視します。共有データクラスタの場合、この値は常に `0` です。
 
-### starrocks_fe_memory
+### starrocks_fe_memory_usage
 
 - 単位: Bytes または Count
 - タイプ: Instantaneous
@@ -1667,3 +1667,8 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - 説明: すべての Routine Load ジョブによるデータロード中に発生したエラーロウの総数。
+
+### starrocks_fe_sql_block_hit_count
+
+- 単位: Count
+- 説明: ブラックリストに登録された SQL がインターセプトされた回数。

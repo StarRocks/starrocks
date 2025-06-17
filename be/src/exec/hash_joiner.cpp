@@ -79,7 +79,6 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _build_output_slots(param._build_output_slots),
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
-          _mor_reader_mode(param._mor_reader_mode),
           _enable_late_materialization(param._enable_late_materialization),
           _is_skew_join(param._is_skew_join) {
     _is_push_down = param._hash_join_node.is_push_down;
@@ -118,7 +117,7 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
 
     _build_metrics->prepare(runtime_profile);
 
-    _init_hash_table_param(&_hash_table_param);
+    _init_hash_table_param(&_hash_table_param, state);
     _hash_join_builder->create(hash_table_param());
 
     _output_probe_column_count = _hash_join_builder->get_output_probe_column_count();
@@ -145,16 +144,16 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
     return Status::OK();
 }
 
-void HashJoiner::_init_hash_table_param(HashTableParam* param) {
+void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* state) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
-    param->mor_reader_mode = _mor_reader_mode;
     param->enable_late_materialization = _enable_late_materialization;
-
+    param->column_view_concat_rows_limit = state->column_view_concat_rows_limit();
+    param->column_view_concat_bytes_limit = state->column_view_concat_bytes_limit();
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;

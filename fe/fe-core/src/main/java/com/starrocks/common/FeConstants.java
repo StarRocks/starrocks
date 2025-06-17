@@ -106,6 +106,8 @@ public class FeConstants {
 
     public static final String GENERATED_PARTITION_COLUMN_PREFIX = "__generated_partition_column_";
 
+    public static final String ICEBERG_TRANSFORM_EXPRESSION_PREFIX = "__iceberg_transform_";
+
     // Max counter num of TOP K function
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
@@ -123,6 +125,8 @@ public class FeConstants {
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_RESTORE";
     public static final String DOCUMENT_ALTER_ROUTINE_LOAD =
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD";
+
+    public static final String METRIC_LABEL_IS_LEADER = "is_leader";
 
     public static String getNodeNotFoundError(boolean chooseComputeNode) {
         return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;

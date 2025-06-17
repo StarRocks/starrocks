@@ -27,10 +27,9 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.HashMap;
 import java.util.List;
@@ -60,7 +59,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
-        schemaChangeJob.setWarehouseId(warehouseId);
+        schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
@@ -87,7 +86,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(physicalPartitionId),
                                 table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
-                                originTabletIds, properties, warehouseId);
+                                originTabletIds, properties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -113,12 +112,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                           long groupId, List<Long> matchShardIds, Map<String, String> properties,
-                                          long warehouseId)
+                                          ComputeResource computeResource)
             throws DdlException {
-        WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
         return GlobalStateMgr.getCurrentState().getStarOSAgent()
                 .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
-                        warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
-                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+                        computeResource);
     }
 }

@@ -242,7 +242,7 @@ public class SparkLoadJob extends BulkLoadJob {
         transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        LoadJobSourceType.FRONTEND, id, timeoutSecond, warehouseId);
+                        LoadJobSourceType.FRONTEND, id, timeoutSecond, computeResource);
     }
 
     @Override
@@ -479,6 +479,7 @@ public class SparkLoadJob extends BulkLoadJob {
             throw new MetaNotFoundException(errMsg);
         }
 
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         AgentBatchTask batchTask = new AgentBatchTask();
         boolean hasLoadPartitions = false;
         Set<Long> totalTablets = Sets.newHashSet();
@@ -566,9 +567,8 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                                    ComputeNode backend = warehouseManager
-                                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+                                    ComputeNode backend = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
+                                            (LakeTablet) tablet);
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", ((LakeTablet) tablet).getShardId());
                                         continue;

@@ -257,7 +257,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,
-                            new ErrorReason(e.getErrorCode(), "failed to create task: " + e.getMessage()),
+                            new ErrorReason(e.getInternalErrorCode(), "failed to create task: " + e.getMessage()),
                             false);
             throw e;
         }
@@ -371,7 +371,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId, routineLoadTaskInfo.getJobId());
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getJobId());
         if (beId < 0) {
             return false;
         }

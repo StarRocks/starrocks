@@ -485,6 +485,11 @@ TEST(StringToFloat, Basic) {
     test_all_float_variants("INFinity", StringParser::PARSE_SUCCESS);
     test_all_float_variants("infinity", StringParser::PARSE_SUCCESS);
     test_all_float_variants("inf", StringParser::PARSE_SUCCESS);
+    test_all_float_variants("Inf", StringParser::PARSE_SUCCESS);
+
+    test_all_float_variants("xinf", StringParser::PARSE_FAILURE);
+    test_all_float_variants("innf", StringParser::PARSE_FAILURE);
+    test_all_float_variants("ErrorInfo", StringParser::PARSE_FAILURE);
 
     test_float_value_is_nan<float>("nan", StringParser::PARSE_SUCCESS);
     test_float_value_is_nan<double>("nan", StringParser::PARSE_SUCCESS);

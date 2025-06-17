@@ -95,4 +95,10 @@ select count(*) from read_range_test a join[broadcast] read_range_big_page_test 
 set enable_shared_scan = true;
 select count(distinct c2) from read_range_big_page_test;
 
+-- page data cache
+update default_catalog.information_schema.be_configs set value = "1G" where name = "datacache_mem_size";
+select count(*) from read_range_test where (c0 >= 900 and c0 < 902) or (c0 >= 10900 and c0 < 10902);
+select count(*) from read_range_test where (c0 >= 900 and c0 < 902);
+update default_catalog.information_schema.be_configs set value = "0G" where name = "datacache_mem_size";
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

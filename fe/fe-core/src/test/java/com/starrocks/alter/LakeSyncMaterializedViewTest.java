@@ -24,16 +24,13 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -50,6 +47,7 @@ import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
 
 public class LakeSyncMaterializedViewTest {
     @Rule
@@ -540,11 +538,6 @@ public class LakeSyncMaterializedViewTest {
         starRocksAssert.dropTable("t1");
     }
 
-    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        new StmtExecutor(connectContext, statement).execute();
-    }
 
     @Test
     public void testCreateMVWithAggregateTable2() throws Exception {

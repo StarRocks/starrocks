@@ -60,6 +60,8 @@
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
 #include "exec/schema_scanner/schema_views_scanner.h"
+#include "exec/schema_scanner/schema_warehouse_metrics.h"
+#include "exec/schema_scanner/schema_warehouse_queries.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 #include "exec/schema_scanner/sys_fe_locks.h"
@@ -120,7 +122,7 @@ Status SchemaScanner::init(SchemaScannerParam* param, ObjectPool* pool) {
         return Status::OK();
     }
 
-    if (nullptr == param || nullptr == pool || nullptr == _columns) {
+    if (nullptr == param || nullptr == pool || (nullptr == _columns && 0 != _column_num)) {
         return Status::InternalError("invalid parameter");
     }
 
@@ -231,6 +233,10 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaApplicableRolesScanner>();
     case TSchemaTableType::SCH_KEYWORDS:
         return std::make_unique<SchemaKeywordsScanner>();
+    case TSchemaTableType::SCH_WAREHOUSE_METRICS:
+        return std::make_unique<WarehouseMetricsScanner>();
+    case TSchemaTableType::SCH_WAREHOUSE_QUERIES:
+        return std::make_unique<WarehouseQueriesScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

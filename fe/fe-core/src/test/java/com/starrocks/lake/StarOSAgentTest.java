@@ -44,6 +44,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -56,6 +57,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -364,7 +366,7 @@ public class StarOSAgentTest {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
         Assert.assertEquals(Lists.newArrayList(10L, 11L),
                 starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
-                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+                Collections.EMPTY_MAP, WarehouseManager.DEFAULT_RESOURCE));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
@@ -783,5 +785,80 @@ public class StarOSAgentTest {
         List<Long> ids = starosAgent.listShard(999L);
         Assert.assertEquals(1, ids.size());
         Assert.assertEquals((Long) 1000L, (Long) ids.get(0));
+    }
+
+    @Test
+    public void testUpdateWorkerGroupExcepted() throws StarClientException {
+        long workerGroupId = 10086;
+        Map<String, String> properties = new HashMap<>();
+        properties.put("A", "a");
+        StarClientException expectedException = new StarClientException(StarStatus.newBuilder()
+                .setStatusCode(StatusCode.INTERNAL)
+                .setErrorMsg("Injected internal error from unit test: testUpdateWorkerGroupExcepted")
+                .build());
+        new Expectations() {
+            {
+                client.updateWorkerGroup("1", workerGroupId, null, properties, 0, ReplicationType.NO_SET,
+                        WarmupLevel.WARMUP_NOT_SET);
+                result = expectedException;
+                result = null;
+                minTimes = 2;
+                maxTimes = 2;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        // first call, exception thrown
+        Assert.assertThrows(DdlException.class, () -> starosAgent.updateWorkerGroup(workerGroupId, properties));
+        // second call, no exception
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.updateWorkerGroup(workerGroupId, properties));
+    }
+
+    @Test
+    public void testGetWorkerGroupInfoNormal() throws StarClientException {
+        long workerGroupId = 10086;
+        Map<String, String> properties = new HashMap<>();
+        properties.put("A", "a");
+        WorkerGroupDetailInfo expectedInfo = WorkerGroupDetailInfo.newBuilder()
+                .putAllProperties(properties)
+                .setGroupId(workerGroupId)
+                .build();
+
+        new Expectations() {
+            {
+                client.listWorkerGroup("1", Lists.newArrayList(workerGroupId), false);
+                result = expectedInfo;
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        List<WorkerGroupDetailInfo> infos = new ArrayList<>();
+        ExceptionChecker.expectThrowsNoException(() -> {
+            WorkerGroupDetailInfo info = starosAgent.getWorkerGroupInfo(workerGroupId);
+            infos.add(info);
+        });
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(expectedInfo.toString(), infos.get(0).toString());
+    }
+
+    @Test
+    public void testGetWorkerGroupInfoExcepted() throws StarClientException {
+        long workerGroupId = 10086;
+        StarClientException expectedException = new StarClientException(StarStatus.newBuilder()
+                .setStatusCode(StatusCode.INTERNAL)
+                .setErrorMsg("Injected internal error from unit test: testGetWorkerGroupInfoExcepted")
+                .build());
+        new Expectations() {
+            {
+                client.listWorkerGroup("1", Lists.newArrayList(workerGroupId), false);
+                result = expectedException;
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertThrows(DdlException.class, () -> starosAgent.getWorkerGroupInfo(workerGroupId));
     }
 }

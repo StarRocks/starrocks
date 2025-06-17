@@ -25,13 +25,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.After;
@@ -387,6 +387,82 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         replayOptimizeJob.replay(optimizeJob);
         Assert.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
+    }
+
+    @Test
+    public void testOptimizeDistributionColumnPartialFail() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "testTable2");
+
+        String stmt = "alter table testTable2 distributed by hash(v2)";
+        AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        schemaChangeHandler.process(alterStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assert.assertEquals(1, alterJobsV2.size());
+        OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+
+        // runPendingJob
+        optimizeJob.runPendingJob();
+        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+
+        // runWaitingTxnJob
+        optimizeJob.runWaitingTxnJob();
+        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        // runRunningJob
+        List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
+        Assert.assertEquals(2, optimizeTasks.size());
+        optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+        optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.FAILED);
+
+        try {
+            optimizeJob.runRunningJob();
+        } catch (AlterCancelException e) {
+            optimizeJob.cancel(e.getMessage());
+        }
+
+        // finish alter tasks
+        Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
+    }
+
+    @Test
+    public void testOptimizeDistributionTypePartialFail() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "testTable2");
+
+        String stmt = "alter table testTable2 distributed by random";
+        AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        schemaChangeHandler.process(alterStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assert.assertEquals(1, alterJobsV2.size());
+        OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+
+        // runPendingJob
+        optimizeJob.runPendingJob();
+        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+
+        // runWaitingTxnJob
+        optimizeJob.runWaitingTxnJob();
+        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        // runRunningJob
+        List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
+        Assert.assertEquals(2, optimizeTasks.size());
+        optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+        optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.FAILED);
+
+        try {
+            optimizeJob.runRunningJob();
+        } catch (AlterCancelException e) {
+            optimizeJob.cancel(e.getMessage());
+        }
+
+        // finish alter tasks
+        Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
     }
 
     @Test

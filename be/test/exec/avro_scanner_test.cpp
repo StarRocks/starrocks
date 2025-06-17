@@ -106,10 +106,11 @@ protected:
         _profile = _pool.add(new RuntimeProfile("test"));
         _counter = _pool.add(new ScannerCounter());
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _config_avro_ignore_union_type_tag = config::avro_ignore_union_type_tag;
         std::string starrocks_home = getenv("STARROCKS_HOME");
     }
 
-    void TearDown() override { config::avro_ignore_union_type_tag = false; }
+    void TearDown() override { config::avro_ignore_union_type_tag = _config_avro_ignore_union_type_tag; }
 
     void init_avro_value(const std::string& schema_path, AvroHelper& avro_helper) {
         std::ifstream infile_schema;
@@ -154,11 +155,14 @@ protected:
         return Status::OK();
     }
 
+    void test_map_nested_struct();
+
 private:
     RuntimeProfile* _profile = nullptr;
     ScannerCounter* _counter = nullptr;
     RuntimeState* _state = nullptr;
     ObjectPool _pool;
+    bool _config_avro_ignore_union_type_tag;
 };
 
 TEST_F(AvroScannerTest, test_basic_type) {
@@ -1357,7 +1361,7 @@ TEST_F(AvroScannerTest, test_map_to_json) {
     }
 }
 
-TEST_F(AvroScannerTest, test_map_nested_struct) {
+void AvroScannerTest::test_map_nested_struct() {
     // protocol request {
     //     record cookie {
     //         string name;
@@ -1378,9 +1382,6 @@ TEST_F(AvroScannerTest, test_map_nested_struct) {
         avro_value_decref(&avro_helper.avro_val);
     });
 
-    std::string json_str =
-            R"%({"headers":{"User-Agent":["Mozilla/5.0 (Linux; Android 6.0.1)","curl/7.81.0"], "X-Forwarded-For":["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4"]},
-                 "cookies":{"session":[{"name":"key1","value":{"string":"value1"}},{"name":"key2","value":null}]}})%";
     std::vector<std::string> user_agents = {"Mozilla/5.0 (Linux; Android 6.0.1)", "curl/7.81.0"};
     std::vector<std::string> xfwd_for = {"10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"};
     std::vector<std::map<std::string, std::string>> cookies = {{{"key1", "value1"}}, {{"key2", "null"}}};
@@ -1485,45 +1486,71 @@ TEST_F(AvroScannerTest, test_map_nested_struct) {
 
     ChunkPtr chunk = st2.value();
 
-    auto js_or = JsonValue::parse_json_or_string(Slice(json_str));
-    ASSERT_TRUE(js_or.ok());
-    JsonValue js_root = std::move(js_or.value());
-    auto header_or = js_root.get_obj("headers");
-    ASSERT_TRUE(header_or.ok());
-    // {"User-Agent":["Mozilla/5.0 (Linux; Android 6.0.1)","curl/7.81.0"], "X-Forwarded-For":["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4"]}
-    auto header_js = std::move(header_or.value());
+    // {"headers":{"User-Agent":["Mozilla/5.0 (Linux; Android 6.0.1)","curl/7.81.0"], "X-Forwarded-For":["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4"]},
+    //  "cookies":{"session":[{"name":"key1","value":{"string":"value1"}},{"name":"key2","value":null}]}}
+    // validate the json result
+    std::string expected_headers_str, expected_user_agents_str, expected_x_fwd_for_arr_str;
+    std::string expected_cookies_str, expected_cookies_session_str, expected_cookies_session_0_str;
+
+    // a little bit difference in the output json format when `config::avro_ignore_union_type_tag` is true and false respectively.
+    if (config::avro_ignore_union_type_tag) {
+        expected_headers_str =
+                R"%({"User-Agent":["Mozilla/5.0 (Linux; Android 6.0.1)","curl/7.81.0"],"X-Forwarded-For":["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4"]})%";
+        expected_user_agents_str = R"%(["Mozilla/5.0 (Linux; Android 6.0.1)","curl/7.81.0"])%";
+        expected_x_fwd_for_arr_str = R"(["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4"])";
+        expected_cookies_str = R"({"session":[{"name":"key1","value":"value1"},{"name":"key2","value":null}]})";
+        expected_cookies_session_str = R"([{"name":"key1","value":"value1"},{"name":"key2","value":null}])";
+        expected_cookies_session_0_str = R"({"name":"key1","value":"value1"})";
+    } else {
+        // config::avro_ignore_union_type_tag = false
+        // Json fields will be followed by one additional space, and the union type tag will be preserved.
+        expected_headers_str =
+                R"%({"User-Agent": ["Mozilla/5.0 (Linux; Android 6.0.1)", "curl/7.81.0"], "X-Forwarded-For": ["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"]})%";
+        expected_user_agents_str = R"%(["Mozilla/5.0 (Linux; Android 6.0.1)", "curl/7.81.0"])%";
+        expected_x_fwd_for_arr_str = R"(["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"])";
+        expected_cookies_str =
+                R"({"session": [{"name": "key1", "value": {"string": "value1"}}, {"name": "key2", "value": null}]})";
+        expected_cookies_session_str =
+                R"([{"name": "key1", "value": {"string": "value1"}}, {"name": "key2", "value": null}])";
+        expected_cookies_session_0_str = R"({"name": "key1", "value": {"string": "value1"}})";
+    }
 
     EXPECT_EQ(11, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
     // $.headers
-    EXPECT_EQ(header_js.to_string_uncheck(), chunk->get(0)[0].get_slice());
+    EXPECT_EQ(expected_headers_str, chunk->get(0)[0].get_slice());
     // $.headers.User-Agent
-    EXPECT_EQ(R"%(["Mozilla/5.0 (Linux; Android 6.0.1)", "curl/7.81.0"])%", chunk->get(0)[1].get_slice());
+    EXPECT_EQ(expected_user_agents_str, chunk->get(0)[1].get_slice());
     // $.headers.User-Agent[1]
     EXPECT_EQ(user_agents[1], chunk->get(0)[2].get_slice());
     // $.headers.X-Forwarded-For
-    EXPECT_EQ(R"(["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"])", chunk->get(0)[3].get_slice());
+    EXPECT_EQ(expected_x_fwd_for_arr_str, chunk->get(0)[3].get_slice());
     // $.headers.X-Forwarded-For[0]
     EXPECT_EQ(xfwd_for[0], chunk->get(0)[4].get_slice());
     // $.headers.X-Forwarded-For[3]
     EXPECT_EQ(xfwd_for[3], chunk->get(0)[5].get_slice());
 
-    auto cookies_or = js_root.get_obj("cookies");
-    ASSERT_TRUE(cookies_or.ok());
-    // {"session":[{"name":"key1","value":{"string":"value1"}},{"name":"key2","value":null}]}}
-    auto cookies_js = std::move(cookies_or.value());
     // $.cookies
-    EXPECT_EQ(cookies_js.to_string_uncheck(), chunk->get(0)[6].get_slice());
+    EXPECT_EQ(expected_cookies_str, chunk->get(0)[6].get_slice());
     // $.cookies.session
-    EXPECT_EQ(R"([{"name": "key1", "value": {"string": "value1"}}, {"name": "key2", "value": null}])",
-              chunk->get(0)[7].get_slice());
+    EXPECT_EQ(expected_cookies_session_str, chunk->get(0)[7].get_slice());
     // $.cookies.session[0]
-    EXPECT_EQ(R"({"name": "key1", "value": {"string": "value1"}})", chunk->get(0)[8].get_slice());
+    EXPECT_EQ(expected_cookies_session_0_str, chunk->get(0)[8].get_slice());
     // $.cookies.session[0].value
     EXPECT_EQ(cookies[0]["key1"], chunk->get(0)[9].get_slice());
     EXPECT_EQ("null", cookies[1]["key2"]);
     // $.cookies.session[1].value
     EXPECT_TRUE(chunk->get(0)[10].is_null());
+}
+
+TEST_F(AvroScannerTest, test_map_nested_struct_avro_ignore_union_type_tag_true) {
+    config::avro_ignore_union_type_tag = true;
+    test_map_nested_struct();
+}
+
+TEST_F(AvroScannerTest, test_map_nested_struct_avro_ignore_union_type_tag_false) {
+    config::avro_ignore_union_type_tag = false;
+    test_map_nested_struct();
 }
 
 TEST_F(AvroScannerTest, test_root_array) {

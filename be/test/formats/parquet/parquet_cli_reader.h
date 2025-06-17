@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <exception>
 #include <filesystem>
 
 #include "common/status.h"
@@ -51,7 +50,7 @@ public:
         THdfsScanRange* scan_range = _create_scan_range(_filepath);
 
         // create temporary reader to load schema.
-        FileMetaData* file_metadata = nullptr;
+        const FileMetaData* file_metadata = nullptr;
         HdfsScannerContext ctx;
         HdfsScanStats stats;
         ctx.stats = &stats;

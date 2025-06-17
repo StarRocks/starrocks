@@ -32,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -302,6 +303,13 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
     @Test
     public void testSpecifyStatisticsCollectWarehouse() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         String sql = "analyze table test.t0_stats";
         Config.statistics_collect_warehouse = "xxx";
         FeConstants.enableUnitStatistics = false;

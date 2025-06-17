@@ -40,7 +40,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
         wopts.encryption_info = ropts.encryption_info;
         dest->encryption_meta = src.encryption_meta;
     }
-    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(ropts, src));
+    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file_with_bundling(ropts, src));
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest->path));
 
     SegmentFooterPB footer;

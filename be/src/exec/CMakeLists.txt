@@ -47,6 +47,7 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
+    agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp
@@ -105,6 +106,7 @@ set(EXEC_FILES
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
+    avro_cpp_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -162,6 +164,8 @@ set(EXEC_FILES
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
     schema_scanner/schema_temp_tables_scanner.cpp
+    schema_scanner/schema_warehouse_metrics.cpp
+    schema_scanner/schema_warehouse_queries.cpp
     schema_scanner/schema_cluster_snapshots_scanner.cpp
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     schema_scanner/schema_applicable_roles_scanner.cpp

@@ -333,6 +333,12 @@ public class OffHeapColumnVector {
         return elementsAppended++;
     }
 
+    public int appendTime(int v) {
+        reserve(elementsAppended + 1);
+        putDouble(elementsAppended, (double) v / 1000);
+        return elementsAppended++;
+    }
+
     private void putDouble(int rowId, double value) {
         Platform.putDouble(null, data + rowId * 8L, value);
     }
@@ -528,6 +534,9 @@ public class OffHeapColumnVector {
                 break;
             case DOUBLE:
                 appendDouble(o.getDouble());
+                break;
+            case TIME:
+                appendTime(o.getInt());
                 break;
             case BINARY:
                 appendBinary(o.getBytes());

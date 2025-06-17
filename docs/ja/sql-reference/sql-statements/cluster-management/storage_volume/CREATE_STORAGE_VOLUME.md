@@ -18,7 +18,7 @@ displayed_sidebar: docs
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | HDFS | AZBLOB }
+TYPE = { S3 | HDFS | AZBLOB | ADLS2 }
 LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
@@ -39,11 +39,13 @@ PROPERTIES
 
 以下の表は、ストレージボリュームのすべての利用可能なプロパティを示しています。表の後には、[認証情報](#credential-information) と [機能](#features) の観点から異なるシナリオに基づいたこれらのプロパティの使用方法が示されています。
 
+import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
+
 | **プロパティ**                        | **説明**                                              |
 | ----------------------------------- | ------------------------------------------------------------ |
 | enabled                             | このストレージボリュームを有効にするかどうか。デフォルトは `false` です。無効なストレージボリュームは参照できません。 |
 | aws.s3.region                       | S3 バケットが存在するリージョンです。例：`us-west-2`。 |
-| aws.s3.endpoint                     | S3 バケットにアクセスするためのエンドポイント URL です。例：`https://s3.us-west-2.amazonaws.com`。[プレビュー] v3.3.0 以降、Amazon S3 Express One Zone ストレージクラスがサポートされています。例：`https://s3express.us-west-2.amazonaws.com`。   |
+| aws.s3.endpoint                     | S3 バケットにアクセスするためのエンドポイント URL です。例：`https://s3.us-west-2.amazonaws.com`。[プレビュー] v3.3.0 以降、Amazon S3 Express One Zone ストレージクラスがサポートされています。例：`https://s3express.us-west-2.amazonaws.com`。 <Beta />  |
 | aws.s3.use_aws_sdk_default_behavior | AWS SDK のデフォルト認証情報を使用するかどうか。有効な値は `true` と `false`（デフォルト）です。 |
 | aws.s3.use_instance_profile         | S3 にアクセスするための認証方法としてインスタンスプロファイルとアサインドロールを使用するかどうか。有効な値は `true` と `false`（デフォルト）です。<ul><li>IAM ユーザー認証（アクセスキーとシークレットキー）を使用して S3 にアクセスする場合、この項目を `false` に設定し、`aws.s3.access_key` と `aws.s3.secret_key` を指定する必要があります。</li><li>インスタンスプロファイルを使用して S3 にアクセスする場合、この項目を `true` に設定する必要があります。</li><li>アサインドロールを使用して S3 にアクセスする場合、この項目を `true` に設定し、`aws.s3.iam_role_arn` を指定する必要があります。</li><li>外部 AWS アカウントを使用する場合、この項目を `true` に設定し、`aws.s3.iam_role_arn` と `aws.s3.external_id` を指定する必要があります。</li></ul> |
 | aws.s3.access_key                   | S3 バケットにアクセスするためのアクセスキー ID です。             |
@@ -56,6 +58,9 @@ PROPERTIES
 | azure.adls2.endpoint                 | Azure Data Lake Storage Gen2 アカウントのエンドポイントです。例：`https://test.dfs.core.windows.net`。 |
 | azure.adls2.shared_key               | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有キーです。 |
 | azure.adls2.sas_token                | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名 (SAS) です。 |
+| azure.adls2.oauth2_use_managed_identity | Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。デフォルト: `false`。|
+| azure.adls2.oauth2_tenant_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。 |
+| azure.adls2.oauth2_client_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。 |
 | hadoop.security.authentication      | 認証方法です。有効な値は `simple`（デフォルト）と `kerberos` です。`simple` はシンプル認証、つまりユーザー名を示します。`kerberos` は Kerberos 認証を示します。 |
 | username                            | HDFS クラスターの NameNode にアクセスするためのユーザー名です。                      |
 | hadoop.security.kerberos.ticket.cache.path | kinit で生成されたチケットキャッシュを保存するパスです。                   |
@@ -187,7 +192,7 @@ Azure Blob Storage アカウントを作成する際には、階層型名前空�
 
 Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3.4.1 以降でサポートされています。
 
-- Shared Key を使用して Azure Blob Storage にアクセスする場合、次のプロパティを設定します：
+- Shared Key を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
 
   ```SQL
   "enabled" = "{ true | false }",
@@ -195,12 +200,22 @@ Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
-- 共有アクセス署名 (SAS) を使用して Azure Blob Storage にアクセスする場合、次のプロパティを設定します：
+- 共有アクセス署名 (SAS) を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
 
   ```SQL
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
   "azure.adls2.sas_token" = "<sas_token>"
+  ```
+
+- Managed Identity を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
 :::note

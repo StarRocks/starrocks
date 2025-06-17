@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # JDBC catalog
+
+<Beta />
 
 StarRocks は v3.0 以降で JDBC catalog をサポートしています。
 

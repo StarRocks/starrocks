@@ -17,10 +17,12 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
@@ -50,6 +52,13 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
         return null;
     }
 
+
+    @Override
+    public Expr generateMVPartitionPredicate(TableName tableName,
+                                             Set<String> mvPartitionNames) throws AnalysisException {
+        return null;
+    }
+
     @Override
     public Set<String> getMVPartitionsToRefreshWithForce() {
         return mv.getVisiblePartitionNames();
@@ -76,6 +85,12 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                Set<String> mvPotentialPartitionNames, boolean tentative) {
+        // do nothing
+    }
+
+    @Override
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames, boolean tentative) {
         // do nothing
     }
 }

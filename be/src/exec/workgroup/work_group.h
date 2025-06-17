@@ -283,6 +283,8 @@ public:
     // return reserved beforehand default mv workgroup for MV query is not bound to any workgroup
     WorkGroupPtr get_default_mv_workgroup();
 
+    size_t num_workgroups() const { return _workgroups.size(); }
+
     void close();
     // destruct workgroups
     void destroy();

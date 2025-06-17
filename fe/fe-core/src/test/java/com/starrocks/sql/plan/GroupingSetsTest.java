@@ -369,4 +369,52 @@ public class GroupingSetsTest extends PlanTestBase {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }
+
+    @Test
+    public void testNotEliminateConstantGroupByColumnInGroupingSets() throws Exception {
+        String sql = "select v1, v2,v3, cnt\n" +
+                "from(\n" +
+                "select v1, v2, v3, count(*) as cnt\n" +
+                "from  (\n" +
+                "select v1, 1 as v2, v3, 1 as metric\n" +
+                "from t0\n" +
+                ") t2\n" +
+                "group by cube(v1,v2,v3)\n" +
+                ")t3;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  6:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 6> : 6: v2\n" +
+                "  |  <slot 7> : 7: count\n" +
+                "  |  \n" +
+                "  5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7: count)\n" +
+                "  |  group by: 1: v1, 6: v2, 3: v3, 8: GROUPING_ID"));
+    }
+
+    @Test
+    public void testPushDownGroupingSetHaving() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d) " +
+                    "   having t1b is null and (t1c is null or t1d is null)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "predicates: 20: t1b IS NULL, (21: t1c IS NULL) OR (22: t1d IS NULL)");
+            assertContains(plan, "PREDICATES: 14: t1b IS NULL\n"
+                    + "  |");
+
+            sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d) " +
+                    "   having t1b is null and (t1c is null or t1d is null) and sum(t1g) > 10";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "predicates: 20: t1b IS NULL, "
+                    + "(21: t1c IS NULL) OR (22: t1d IS NULL), 19: sum > 10");
+            assertContains(plan, "having: 17: sum > 10");
+            assertContains(plan, "PREDICATES: 14: t1b IS NULL");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
 }

@@ -614,7 +614,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     public MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
-        if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
+        if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
             return MultiColumnCombinedStatistics.EMPTY;
         }
 
@@ -633,13 +634,24 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         return MultiColumnCombinedStatistics.EMPTY;
     }
 
-    public void refreshMultiColumnStatistics(Long tableId) {
+    @Override
+    public void refreshMultiColumnStatistics(Long tableId,  boolean isSync) {
         try {
+            if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
+                    !StatisticUtils.checkStatisticTableStateNormal()) {
+                return;
+            }
+
             MultiColumnCombinedStatsCacheLoader loader = new MultiColumnCombinedStatsCacheLoader();
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> future =
                     loader.asyncLoad(tableId, statsCacheRefresherExecutor);
-            Optional<MultiColumnCombinedStatistics> result = future.get();
-            multiColumnStats.synchronous().put(tableId, result);
+            if (isSync) {
+                Optional<MultiColumnCombinedStatistics> result = future.get();
+                multiColumnStats.synchronous().put(tableId, result);
+            } else {
+                future.whenComplete((res, e) ->
+                        multiColumnStats.synchronous().put(tableId, res));
+            }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute refresh multi-column combined statistics", e);
             Thread.currentThread().interrupt();

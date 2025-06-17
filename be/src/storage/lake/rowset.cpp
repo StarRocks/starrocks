@@ -106,6 +106,10 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
     bool clear_file_size_info = false;
     bool clear_encryption_meta = (metadata().segments_size() != metadata().segment_encryption_metas_size());
 
+    // NOTE: segments order must be kept, always already compacted segments, then compacted new segments,
+    //       at last uncompacted segments, otherwise it will have data consistency problem for tables like
+    //       UNIQUE table
+
     // 1. add already compacted segments first
     auto& already_compacted_segments = not_used_segments.first;
     for (size_t i = 0; i < metadata().next_compaction_offset(); ++i) {
@@ -130,11 +134,13 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
     }
 
     // 2. add compacted segments in this round
+    op_compaction->set_new_segment_offset(op_compaction->output_rowset().segments_size());
     for (auto& file : writer->files()) {
         op_compaction->mutable_output_rowset()->add_segments(file.path);
         op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
         op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
     }
+    op_compaction->set_new_segment_count(writer->files().size());
 
     // 3. set next compaction offset
     op_compaction->mutable_output_rowset()->set_next_compaction_offset(op_compaction->output_rowset().segments_size());
@@ -411,12 +417,19 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     // RowsetMetaData upgrade from old version may not have the field of segment_size
     auto segment_size_size = metadata().segment_size_size();
     auto segment_file_size = metadata().segments_size();
+    auto bundle_file_offsets_size = metadata().bundle_file_offsets_size();
     bool has_segment_size = segment_size_size == segment_file_size;
     LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
             << "segment_size size != segment file size, tablet: " << _tablet_id << ", rowset: " << metadata().id()
             << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+    LOG_IF(ERROR, bundle_file_offsets_size > 0 && segment_size_size != bundle_file_offsets_size)
+            << "segment_size size != bundle file offsets size, tablet: " << _tablet_id
+            << ", rowset: " << metadata().id() << ", segment file size: " << segment_file_size
+            << ", bundle file offsets size: " << bundle_file_offsets_size
+            << ", segment_size size: " << segment_size_size;
 
     const auto& files_to_size = metadata().segment_size();
+    const auto& files_to_offset = metadata().bundle_file_offsets();
     int index = 0;
 
     std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
@@ -443,6 +456,9 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         auto segment_info = FileInfo{.path = segment_path, .fs = seg_options.fs};
         if (LIKELY(has_segment_size)) {
             segment_info.size = files_to_size.Get(index);
+        }
+        if (bundle_file_offsets_size > 0) {
+            segment_info.bundle_file_offset = files_to_offset.Get(index);
         }
         auto segment_encryption_metas_size = metadata().segment_encryption_metas_size();
         if (segment_encryption_metas_size > 0) {

@@ -55,7 +55,6 @@ public:
 class IndexReadOptions {
 public:
     bool use_page_cache = false;
-    bool kept_in_memory = false;
     // for lake tablet
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
 

@@ -1762,11 +1762,19 @@ class StarrocksSQLApiLib(object):
         show_sql = "show routine load for %s" % routine_load_task_name
         return self.execute_sql(show_sql, True)
 
-    def check_routine_load_progress(self, sum_data_count, task_name):
+    def running_load_count(self, db_name, table_name, load_type):
+        load_sql = "select count(*) from information_schema.loads where db_name='%s' and table_name='%s' and type='%s' and state not in ('FINISHED','CANCELLED')" % (
+            db_name, table_name, load_type)
+        res = self.execute_sql(load_sql, True)
+        tools.assert_true(res["status"])
+        return int(res["result"][0][0])
+
+    def check_routine_load_progress(self, sum_data_count, task_name, db_name, table_name):
         load_finished = False
         count = 0
         while count < 60:
             res = self.show_routine_load(task_name)
+            log.info("show routine load, %s" % res)
             tools.assert_true(res["status"])
             progress_dict = eval(res["result"][0][14])
             if "OFFSET_BEGINNING" in list(progress_dict.values()):
@@ -1782,10 +1790,13 @@ class StarrocksSQLApiLib(object):
             if current_data_count != sum_data_count:
                 time.sleep(5)
             else:
-                # Sleep for a little while to await the publishing finished.
-                time.sleep(10)
-                load_finished = True
-                break
+                running_load_count = self.running_load_count(db_name, table_name, "ROUTINE_LOAD")
+                if running_load_count == 0:
+                    load_finished = True
+                    break
+                log.info("routine load running loads %d, db: %s, table: %s, job: %s" % (
+                    running_load_count, db_name, table_name, task_name))
+                time.sleep(3)
             count += 1
         tools.assert_true(load_finished)
 
@@ -1828,6 +1839,25 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
 
+    def wait_table_rollup_finish(self, check_count=60):
+        """
+        wait materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER TABLE ROLLUP "
+        count = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][8]
+            if status != "FINISHED":
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
     def wait_materialized_view_finish(self, check_count=60):
         """
         wait materialized view job finish and return status
@@ -1865,6 +1895,25 @@ class StarrocksSQLApiLib(object):
                 break
             count += 1
         tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
+    
+    def retry_execute_sql(self, sql:str, ori:bool, max_retry_times:int=3, pending_time_ms:int=100):
+        """
+        execute sql with retry
+        :param sql: sql to execute
+        :param max_retry_times: max retry times
+        :param pending_time_ms: pending time in ms before retry
+        :return: result of the sql execution
+        """
+        retry_times = 0
+        while retry_times < max_retry_times:
+            res = self.execute_sql(sql, ori)
+            if res["status"]:
+                return res
+            else:
+                log.warning(f"SQL execution failed, retrying {retry_times + 1}/{max_retry_times}...")
+                time.sleep(pending_time_ms / 1000)
+                retry_times += 1
+        return res
 
     def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """
@@ -1875,7 +1924,7 @@ class StarrocksSQLApiLib(object):
         def is_all_finished1():
             sql = "SHOW MATERIALIZED VIEWS WHERE database_name='{}' AND NAME='{}'".format(current_db, mv_name)
             print(sql)
-            result = self.execute_sql(sql, True)
+            result = self.retry_execute_sql(sql, True)
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
@@ -1893,7 +1942,7 @@ class StarrocksSQLApiLib(object):
                     and a.`database`='{current_db}'
             """
             self_print(sql)
-            result = self.execute_sql(sql, True)
+            result = self.retry_execute_sql(sql, True)
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
@@ -1909,7 +1958,7 @@ class StarrocksSQLApiLib(object):
                 where b.table_name='{mv_name}' 
                     and a.`database`='{current_db}'"""
             print(show_sql)
-            res = self.execute_sql(show_sql, True)
+            res = self.retry_execute_sql(show_sql, True)
             if not res["status"]:
                 tools.assert_true(False, "show mv state error")
             success_cnt = get_success_count(res["result"])
@@ -1958,7 +2007,7 @@ class StarrocksSQLApiLib(object):
         cnt = 1
         refresh_count = 0
         while cnt < 60:
-            res = self.execute_sql(show_sql, True)
+            res = self.retry_execute_sql(show_sql, True)
             print(res)
             refresh_count = res["result"][0][0]
             if refresh_count >= expect_count:
@@ -2009,7 +2058,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
@@ -2023,7 +2072,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
             return False
@@ -2039,7 +2088,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
             return ""
@@ -2092,7 +2141,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
@@ -2669,7 +2718,8 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for expect in expects:
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(plan_string.find(expect) > 0,
-                              "assert expect %s is not found in plan: %s" % (expect, plan_string))
+                              "verbose plan of sql (%s) assert expect %s is not found in plan: %s" % (
+                                  query, expect, plan_string))
 
     def assert_explain_costs_contains(self, query, *expects):
         """
@@ -2788,6 +2838,38 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         write_cache_size = int(result[1].replace("B", "").replace("KB", ""))
         tools.assert_true(read_cache_size + write_cache_size > 0,
                           "cache select is failed, read_cache_size + write_cache_size must larger than 0 bytes")
+
+    def assert_show_stats_meta(self, sql=None, exp=None):
+        if sql is None:
+            sql = "show stats meta"
+
+        res = self.execute_sql(sql, ori=True)
+        if not res["status"]:
+            return {"status": False, "msg": res["msg"]}
+
+        column_names = [desc[0] for desc in res["desc"]]
+
+        skip_columns = ["UpdateTime", "TabletStatsReportTime", "TableUpdateTime"]
+        time_related_columns = []
+        for i, col_name in enumerate(column_names):
+            if col_name in skip_columns:
+                time_related_columns.append(i)
+
+        act = []
+        for row in res["result"]:
+            processed_row = []
+            for i, value in enumerate(row):
+                if i not in time_related_columns:
+                    processed_row.append(value)
+            act.append(processed_row)
+
+        log.info("[check regex]: %s" % exp[len(REGEX_FLAG):])
+        tools.assert_regexp_matches(
+            r"%s" % str(act),
+            exp[len(REGEX_FLAG):],
+            "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+            % (self_print(sql, need_print=True), exp[len(REGEX_FLAG):], act),
+        )
 
     @staticmethod
     def regex_match(check_str: str, pattern: str):

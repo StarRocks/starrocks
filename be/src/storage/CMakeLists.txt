@@ -39,7 +39,6 @@ set(STORAGE_FILES
     olap_define.cpp
     olap_server.cpp
     options.cpp
-    page_cache.cpp
     persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
@@ -216,6 +215,7 @@ set(STORAGE_FILES
     lake/lake_primary_key_recover.cpp
     lake/load_spill_block_manager.cpp
     lake/spill_mem_table_sink.cpp
+    lake/tablet_retain_info.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp
@@ -240,6 +240,7 @@ set(STORAGE_FILES
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_load_executor.cpp
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp

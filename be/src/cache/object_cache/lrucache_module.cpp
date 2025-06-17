@@ -21,24 +21,16 @@
 
 namespace starrocks {
 
-LRUCacheModule::LRUCacheModule(const ObjectCacheOptions& options) : _options(options) {
-    _cache.reset(new_lru_cache(_options.capacity));
+LRUCacheModule::LRUCacheModule(std::shared_ptr<Cache> cache) : _cache(std::move(cache)) {
     _initialized.store(true, std::memory_order_release);
 }
 
-LRUCacheModule::~LRUCacheModule() {
-    if (_cache) {
-        _cache->prune();
-    }
-}
-
-Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
-                              ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
-                              ObjectCacheWriteOptions* options) {
-    if (!_check_write(charge, options)) {
+Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
+                              ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) {
+    if (!_check_write(size, options)) {
         return Status::InternalError("cache insertion is rejected");
     }
-    auto* lru_handle = _cache->insert(key, value, size, charge, deleter, static_cast<CachePriority>(options->priority));
+    auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options.priority));
     if (handle) {
         *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
     }
@@ -123,20 +115,22 @@ Status LRUCacheModule::shutdown() {
     return Status::OK();
 }
 
-bool LRUCacheModule::_check_write(size_t charge, ObjectCacheWriteOptions* options) const {
-    if (options->evict_probability >= 100) {
+bool LRUCacheModule::_check_write(size_t charge, const ObjectCacheWriteOptions& options) const {
+    if (options.evict_probability >= 100) {
         return true;
     }
-    if (options->evict_probability <= 0) {
+    if (options.evict_probability <= 0) {
         return false;
     }
 
+    /*
     // TODO: The cost of this call may be relatively high, and it needs to be optimized later.
     if (_cache->get_memory_usage() + charge <= _cache->get_capacity()) {
         return true;
     }
+    */
 
-    if (butil::fast_rand_less_than(100) < options->evict_probability) {
+    if (butil::fast_rand_less_than(100) < options.evict_probability) {
         return true;
     }
     return false;

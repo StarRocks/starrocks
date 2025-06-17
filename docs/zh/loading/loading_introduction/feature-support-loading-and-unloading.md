@@ -42,7 +42,8 @@ sidebar_label: "能力边界"
         <td>待支持</td>
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="3">待支持</td>
+        <td>Yes (v3.4.4+)</td>
+        <td colspan="2">待支持</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -344,7 +345,7 @@ sidebar_label: "能力边界"
         <td>CSV</td>
         <td rowspan="2">
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>
@@ -420,7 +421,7 @@ sidebar_label: "能力边界"
         <td>CSV</td>
         <td>
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>

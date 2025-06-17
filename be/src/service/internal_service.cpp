@@ -46,6 +46,7 @@
 #include "agent/publish_version.h"
 #include "agent/task_worker_pool.h"
 #include "brpc/errno.pb.h"
+#include "cache/datacache.h"
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
@@ -82,9 +83,11 @@
 #include "storage/txn_manager.h"
 #include "util/arrow/row_batch.h"
 #include "util/failpoint/fail_point.h"
+#include "util/hash_util.hpp"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/time.h"
+#include "util/time_guard.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -420,6 +423,12 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
+void PInternalServiceImplBase<T>::get_load_replica_status(google::protobuf::RpcController* controller,
+                                                          const PLoadReplicaStatusRequest* request,
+                                                          PLoadReplicaStatusResult* response,
+                                                          google::protobuf::Closure* done) {}
+
+template <typename T>
 void PInternalServiceImplBase<T>::load_diagnose(google::protobuf::RpcController* controller,
                                                 const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
                                                 google::protobuf::Closure* done) {}
@@ -471,6 +480,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
+    SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
@@ -564,7 +574,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                         "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
                         print_id(tid));
             } else {
-                fragment_ctx->cancel(Status::Cancelled(reason_string));
+                fragment_ctx->cancel(Status::Cancelled(reason_string), true);
             }
         }
     } else {
@@ -599,6 +609,58 @@ void PInternalServiceImplBase<T>::_fetch_data(google::protobuf::RpcController* c
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::fetch_datacache(google::protobuf::RpcController* cntl_base,
+                                                  const PFetchDataCacheRequest* request,
+                                                  PFetchDataCacheResponse* response, google::protobuf::Closure* done) {
+    auto task = [=]() { this->_fetch_datacache(cntl_base, request, response, done); };
+    if (!_exec_env->datacache_rpc_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(response->mutable_status());
+    }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcController* cntl_base,
+                                                   const PFetchDataCacheRequest* request,
+                                                   PFetchDataCacheResponse* response, google::protobuf::Closure* done) {
+    auto begin_us = GetCurrentTimeMicros();
+    // NOTE: we should give a default value to response to avoid concurrent risk
+    // If we don't give response here, stream manager will call done->Run before
+    // transmit_data(), which will cause a dirty memory access.
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    Status st;
+    st.to_protobuf(response->mutable_status());
+
+    VLOG_CACHE << "recv fetch_datacache from " << cntl->remote_side().ip << ":" << cntl->remote_side().port
+               << ", request_id: " << request->request_id()
+               << ", cache_key: " << HashUtil::hash(request->cache_key().data(), request->cache_key().size(), 0)
+               << ", offset: " << request->offset() << ", size: " << request->size();
+
+    BlockCache* block_cache = DataCache::GetInstance()->block_cache();
+    if (!block_cache || !block_cache->available()) {
+        st = Status::ServiceUnavailable("block cache is unavailable");
+    } else {
+        ReadCacheOptions options;
+        IOBuffer buf;
+        st = block_cache->read(request->cache_key(), request->offset(), request->size(), &buf, &options);
+        if (st.ok()) {
+            cntl->response_attachment().swap(buf.raw_buf());
+        }
+    }
+    LOG_IF(WARNING, !st.ok()) << "failed to fetch datacache, req_id: " << request->request_id()
+                              << ", reason: " << st.message();
+
+    if (done != nullptr) {
+        // NOTE: only when done is not null, we can set response status
+        st.to_protobuf(response->mutable_status());
+        done->Run();
+    }
+    VLOG_CACHE << "finish fetch_datacache, request_id: " << request->request_id() << ", st: " << st
+               << ", size: " << cntl->response_attachment().size()
+               << ", latency_us: " << GetCurrentTimeMicros() - begin_us;
 }
 
 template <typename T>

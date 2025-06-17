@@ -245,12 +245,14 @@ public class SetTest extends PlanTestBase {
                 "  |  cardinality: 2\n" +
                 "  |  \n" +
                 "  |----11:EXCHANGE\n" +
+                "  |       distribution type: ROUND_ROBIN\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
+                "     distribution type: ROUND_ROBIN\n" +
                 "     cardinality: 1\n" +
                 "\n" +
-                "PLAN FRAGMENT 1(F02)\n" +
+                "PLAN FRAGMENT 1(F06)\n" +
                 "\n" +
                 "  Input Partition: RANDOM\n" +
                 "  OutPut Partition: RANDOM\n" +
@@ -268,7 +270,8 @@ public class SetTest extends PlanTestBase {
                 "  |      [12, INT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [7: cast, INT, true] | [5: v5, BIGINT, true] | [6: v6, BIGINT, true]\n" +
-                "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]");
+                "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]\n" +
+                "  |  cardinality: 1");
     }
 
     @Test
@@ -637,7 +640,7 @@ public class SetTest extends PlanTestBase {
                 "  |      [11, DOUBLE, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [10: cast, DOUBLE, true]\n" +
-                "  |      [3: cast, DOUBLE, true]\n");
+                "  |      [12: cast, DOUBLE, true]");
 
         sql = "(select 1 limit 1) UNION ALL select 2;";
         plan = getVerboseExplain(sql);
@@ -653,25 +656,23 @@ public class SetTest extends PlanTestBase {
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
+        assertContains(plan, "|  output exprs:\n" +
                 "  |      [13, VARCHAR(32), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: k1, VARCHAR, true]\n" +
                 "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [7: cast, VARCHAR(32), true]\n");
+                "  |      [14: k1, VARCHAR(32), true]\n");
 
         sql = "select k1 from db1.tbl6 union all select 1 union" +
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
+        assertContains(plan, "  |  output exprs:\n" +
                 "  |      [13, VARCHAR(32), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: k1, VARCHAR, true]\n" +
                 "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [7: cast, VARCHAR(32), true]\n");
+                "  |      [14: k1, VARCHAR(32), true]");
 
         sql = "select 1 union all select 2 union all select * from (values (1)) t;";
         plan = getVerboseExplain(sql);

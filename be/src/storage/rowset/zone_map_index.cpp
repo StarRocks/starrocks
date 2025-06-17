@@ -88,6 +88,13 @@ struct ZoneMapDatum<TYPE_DECIMAL128> final : public ZoneMapDatumBase<TYPE_DECIMA
 };
 
 template <>
+struct ZoneMapDatum<TYPE_DECIMAL256> final : public ZoneMapDatumBase<TYPE_DECIMAL256> {
+    std::string to_zone_map_string(TypeInfo* type_info) const override {
+        return get_decimal_zone_map_string(type_info, &value);
+    }
+};
+
+template <>
 struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
     void resize_container_for_fit(TypeInfo* type_info, const void* v) override {
         static const int INIT_SIZE = 64;

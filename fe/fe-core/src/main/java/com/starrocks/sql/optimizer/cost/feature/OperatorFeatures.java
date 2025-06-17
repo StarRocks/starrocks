@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -104,6 +105,7 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 4;
 
         protected final Table table;
+        protected final Statistics statistics;
         protected final long numTablets;
         protected final long numPartitions;
         protected final int numBinaryPredicates;
@@ -126,8 +128,9 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
             } else {
                 this.table = scanOperator.getTable();
                 this.numTablets = 0;
-                this.numPartitions = 0;
+                this.numPartitions = getSelectedPartitionSize(scanOperator);
             }
+            this.statistics = optExpr.getStatistics();
 
             ScalarOperator predicate = scanOperator.getPredicate();
             if (predicate != null) {
@@ -137,6 +140,16 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
             } else {
                 this.numPredicateColumns = 0;
                 this.numBinaryPredicates = 0;
+            }
+        }
+
+        private long getSelectedPartitionSize(PhysicalScanOperator scanOperator) {
+            try {
+                ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
+                return scanOperatorPredicates.getSelectedPartitionIds().size();
+            } catch (Exception e) {
+                // ignore exception
+                return 0;
             }
         }
 
@@ -155,6 +168,68 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
             return table;
         }
 
+        public TableFeature getTableFeature() {
+            return new TableFeature(table, statistics);
+        }
+    }
+
+    /**
+     * Table feature, used to extract table features from scan operators
+     */
+    public static class TableFeature {
+        private final Table table;
+        private final Statistics statistics;
+
+        public TableFeature(Table table, Statistics statistics) {
+            this.table = table;
+            this.statistics = statistics;
+        }
+
+        public Table getTable() {
+            return table;
+        }
+
+        public long getRowCount() {
+            if (table instanceof OlapTable) {
+                return ((OlapTable) table).getRowCount();
+            } else {
+                return (long) statistics.getOutputRowCount();
+            }
+        }
+
+        /**
+         * Identifier of the table, used to identify the table in the feature vector
+         */
+        public String getTableIdentifier() {
+            if (table instanceof OlapTable) {
+                return String.valueOf(((OlapTable) table).getId());
+            } else {
+                try {
+                    String dbName = table.getCatalogDBName();
+                    String tableName = table.getCatalogTableName();
+                    return String.format("%s.%s", dbName, tableName);
+                } catch (Exception e) {
+                    return table.getName();
+                }
+            }
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof TableFeature)) {
+                return false;
+            }
+            TableFeature that = (TableFeature) obj;
+            return table.equals(that.table);
+        }
+
+        @Override
+        public int hashCode() {
+            return table.hashCode();
+        }
     }
 
     public static class JoinOperatorFeatures extends OperatorFeatures {

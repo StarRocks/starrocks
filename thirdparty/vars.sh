@@ -368,10 +368,10 @@ JANSSON_SOURCE="jansson-2.14"
 JANSSON_MD5SUM="6cbfc54c2ab3b4d7284e188e185c2b0b"
 
 # avro
-AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.10.2.tar.gz"
-AVRO_NAME="avro-release-1.10.2.tar.gz"
-AVRO_SOURCE="avro-release-1.10.2"
-AVRO_MD5SUM="55b9c200976366fd62f1201231f3a5eb"
+AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.12.0.tar.gz"
+AVRO_NAME="avro-release-1.12.0.tar.gz"
+AVRO_SOURCE="avro-release-1.12.0"
+AVRO_MD5SUM="0657ab3ab89d264ccccbca317dbfa54b"
 
 # serdes
 SERDES_DOWNLOAD="https://github.com/confluentinc/libserdes/archive/refs/tags/v7.3.1.tar.gz"
@@ -452,9 +452,27 @@ ICU_NAME="icu4c-76_1-src.zip"
 ICU_SOURCE="icu"
 ICU_MD5SUM="f5f5c827d94af8445766c7023aca7f6b"
 
+# xsimd
+XSIMD_DOWNLOAD="https://github.com/xtensor-stack/xsimd/archive/refs/tags/13.2.0.tar.gz"
+XSIMD_NAME="xsimd-13.2.0.tar.gz"
+XSIMD_SOURCE="xsimd-13.2.0"
+XSIMD_MD5SUM="f451a1c57d2a4fdc0ba663be438dced4"
+
+# libxml2
+LIBXML2_DOWNLOAD="https://github.com/GNOME/libxml2/archive/refs/tags/v2.11.7.tar.gz"
+LIBXML2_NAME="libxml2-2.11.7.tar.gz"
+LIBXML2_SOURCE="libxml2-2.11.7"
+LIBXML2_MD5SUM="929dade129bbe7072e65c3121fbf12c2"
+
+# azure
+AZURE_DOWNLOAD="https://github.com/Azure/azure-sdk-for-cpp/archive/refs/tags/azure-storage-files-shares_12.12.0.tar.gz"
+AZURE_NAME="azure-storage-files-shares_12.12.0.tar.gz"
+AZURE_SOURCE="azure-storage-files-shares_12.12.0"
+AZURE_MD5SUM="cb38786198aa103295d4d670604a9a60"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE"

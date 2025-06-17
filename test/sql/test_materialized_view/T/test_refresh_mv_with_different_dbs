@@ -1,11 +1,8 @@
 -- name: test_refresh_mv_with_different_dbs
 
 -- db1
-create database db1;
-use db1;
-
--- db2
-create database db2;
+create database db_${uuid0}_1;
+use db_${uuid0}_1;
 CREATE TABLE `t1` (
 `k1` int,
 `k2` int,
@@ -14,7 +11,9 @@ CREATE TABLE `t1` (
 DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
 
-CREATE TABLE db2.t1 (
+-- db2
+create database db_${uuid0}_2 ;
+CREATE TABLE db_${uuid0}_2.t1 (
 `k1` int,
 `k2` int,
 `k3` int
@@ -22,25 +21,25 @@ CREATE TABLE db2.t1 (
 DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
 
+INSERT INTO t1 VALUES (1,1,1);
+INSERT INTO db_${uuid0}_2.t1 VALUES (1,2,2);
+
+[UC]analyze full table t1;
+[UC]analyze full table db_${uuid0}_2.t1;
+
+
 -- create db with different dbs
 CREATE MATERIALIZED VIEW mv1
 DISTRIBUTED BY HASH(k1) BUCKETS 10
 REFRESH ASYNC
 AS SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4
-FROM t1 join db2.t1 t2 on t1.k1=t2.k1;
+FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1;
 
-INSERT INTO t1 VALUES (1,1,1);
-INSERT INTO db2.t1 VALUES (1,2,2);
-
-analyze full table t1;
-analyze full table db2.t1;
-
-function: wait_async_materialized_view_finish("db_${uuid0}", "mv1")
-function: check_hit_materialized_view("SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4 FROM t1 join db2.t1 t2 on t1.k1=t2.k1;", "mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}_1", "mv1")
+function: check_hit_materialized_view("SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4 FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1;", "mv1")
 
 SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4
-FROM t1 join db2.t1 t2 on t1.k1=t2.k1 order by 1, 2, 3, 4;
+FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1 order by 1, 2, 3, 4;
 
-drop materialized view mv1;
-drop table t1;
-drop table db2.t1;
+drop database db_${uuid0}_1 force;
+drop database db_${uuid0}_2 force;

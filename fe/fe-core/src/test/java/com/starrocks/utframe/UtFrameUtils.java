@@ -84,7 +84,6 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogDeserializer;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -329,7 +328,11 @@ public class UtFrameUtils {
     }
 
     public static void createMinStarRocksCluster() {
-        createMinStarRocksCluster(false, RunMode.SHARED_NOTHING);
+        if (RunMode.isSharedDataMode()) {
+            createMinStarRocksCluster(RunMode.SHARED_DATA);
+        } else {
+            createMinStarRocksCluster(RunMode.SHARED_NOTHING);
+        }
     }
 
     // create a min starrocks cluster with the given runMode
@@ -1071,7 +1074,7 @@ public class UtFrameUtils {
 
         public PseudoImage() throws IOException {
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
-            imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+            imageWriter = new ImageWriter("", 0);
             imageWriter.setOutputStream(buffer);
         }
 

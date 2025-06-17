@@ -141,6 +141,11 @@ while true; do
     esac
 done
 
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
+
 if [ ${HELP} -eq 1 ]; then
     usage
     exit 0
@@ -245,6 +250,8 @@ done
 mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
+
+export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/:$LD_LIBRARY_PATH
 
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table

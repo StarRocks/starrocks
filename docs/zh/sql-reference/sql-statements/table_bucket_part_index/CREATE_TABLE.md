@@ -822,7 +822,7 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 
 #### 指定通用分区表达式 TTL
 
-从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+从 v3.5.0 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
 
 `partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
 - 表达式只能包含分区列和常量。不支持非分区列。
@@ -842,6 +842,26 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 ```SQL
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
+
+#### 设置 Flat JSON (目前仅支持存算一体的集群)
+
+如果你希望使用 Flat JSON 属性，请在 PROPERTIES 中进行设置。更多信息请参考：[Flat JSON](../../../using_starrocks/Flat_json.md)
+
+``` sql
+PROPERTIES (
+    "flat_json.enable" = "true|false",
+    "flat_json.null.factor" = "0-1",
+    "flat_json.sparsity.factor" = "0-1",
+    "flat_json.column.max" = "${integer_value}"
+)
+```
+
+| 参数                          | 是否必填 | 说明                                                                                      |
+| ----------------------------- | -------- |-----------------------------------------------------------------------------------------|
+| `flat_json.enable`    | 否       | 是否开启 Flat JSON 特性。开启后新导入的 JSON 数据会自动打平，提升 JSON 数据查询性能。取值为 `FALSE`（默认）或 `TRUE`。          |
+| `flat_json.null.factor` | 否       | 控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 enable_json_flat 为 true 时生效。 |
+| `flat_json.sparsity.factor`   | 否       | 控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 enable_json_flat 为 true 时生效。     |
+| `flat_json.column.max`       | 否       | 控制 Flat JSON 时，最多提取的子列数量。该参数仅在 enable_json_flat 为 true 时生效。默认值是 100                     |
 
 ## 示例
 
@@ -1154,6 +1174,29 @@ ORDER BY(`address`,`last_active`)
 PROPERTIES(
     "replication_num" = "3",
     "enable_persistent_index" = "true"
+);
+```
+
+### 创建一张带有 Flat JSON 的表 (目前仅支持存算一体的集群)
+
+创建一张开启flat json的表，并对其中的参数进行配置。建表语句如下：
+
+```SQL
+CREATE TABLE example_db.example_table
+(
+  k1 DATE,
+  k2 INT,
+  v1 VARCHAR(2048),
+  v2 JSON
+)
+ENGINE=olap
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2)
+PROPERTIES (
+    "flat_json.enable" = "true",
+    "flat_json.null.factor" = "0.5",
+    "flat_json.sparsity.factor" = "0.5",
+    "flat_json.column.max" = "50"
 );
 ```
 

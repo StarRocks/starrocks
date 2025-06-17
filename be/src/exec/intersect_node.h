@@ -68,8 +68,10 @@ private:
     const int _tuple_id;
     // Descriptor for tuples this union node constructs.
     const TupleDescriptor* _tuple_desc;
+    bool _has_outer_join_child = false;
     // Exprs materialized by this node. The i-th result expr list refers to the i-th child.
     std::vector<std::vector<ExprContext*>> _child_expr_lists;
+    std::vector<std::vector<ExprContext*>> _local_partition_by_exprs;
 
     struct IntersectColumnTypes {
         TypeDescriptor result_type;

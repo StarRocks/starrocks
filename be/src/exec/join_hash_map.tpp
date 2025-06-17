@@ -478,10 +478,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         {
             // output default values for build-columns as placeholder.
             SCOPED_TIMER(_probe_state->output_build_column_timer);
-            if (_table_items->mor_reader_mode) {
-                return;
-            }
-
             if (!_table_items->with_other_conjunct) {
                 // When the project doesn't require any cols from join, FE will select the first col in the build table
                 // of join as the output col for simple, wo we also need output build column here
@@ -634,7 +630,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
         bool need_output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
         if (need_output) {
             ColumnPtr& column = _table_items->build_chunk->columns()[i];
-            if (!column->is_nullable()) {
+            if (!column->is_nullable() && !column->is_nullable_view()) {
                 _copy_build_column(column, chunk, slot, to_nullable);
             } else {
                 _copy_build_nullable_column(column, chunk, slot);
