@@ -2269,7 +2269,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: INT
 - Unit: -
 - Is mutable: Yes
-- Description: The minimum lag of Routine Load jobs to be shown in monitoring metrics. Routine Load jobs whose lags are greater than this value will be displayed in the metrics.
+- Description: The minimum offset lag of Routine Load jobs to be shown in monitoring metrics. Routine Load jobs whose offset lags are greater than this value will be displayed in the metrics.
 - Introduced in: -
 
 ##### max_tolerable_backend_down_num
