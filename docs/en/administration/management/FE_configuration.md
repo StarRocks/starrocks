@@ -2260,7 +2260,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to collect Routine Load process metrics. Please note that set this item to `true` will call the Kafka API to get the partition's latest offset.
+- Description: Whether to collect Routine Load Kafka partition offset lag metrics. Please note that set this item to `true` will call the Kafka API to get the partition's latest offset.
 - Introduced in: -
 
 ##### min_routine_load_lag_for_metrics
