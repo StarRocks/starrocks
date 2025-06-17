@@ -311,9 +311,13 @@ public class TransactionState implements Writable {
     // For a transaction, we need to ensure that different clients obtain consistent partition information,
     // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
     // Therefore, a snapshot of this information is maintained here.
-    private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
+    private Map<Long, ConcurrentMap<String, TOlapTablePartition>> tableToPartitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
+<<<<<<< HEAD
+=======
+    private Map<Long, List<String>> tableToCreatedPartitionNames = Maps.newHashMap();
+>>>>>>> 8285e315c8 ([BugFix] Fix partition creation failure during multi-table write with in a single transaction (#59954))
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
@@ -1055,17 +1059,47 @@ public class TransactionState implements Writable {
         return combinedTxnLog;
     }
 
-    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
-        return partitionNameToTPartition;
+    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition(long tableId) {
+        writeLock();
+        try {
+            return tableToPartitionNameToTPartition.computeIfAbsent(tableId, k -> Maps.newConcurrentMap());
+        } finally {
+            writeUnlock();
+        }
     }
 
     public ConcurrentMap<Long, TTabletLocation> getTabletIdToTTabletLocation() {
         return tabletIdToTTabletLocation;
     }
 
+<<<<<<< HEAD
     public void clearAutomaticPartitionSnapshot() {
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
+=======
+    public List<String> getCreatedPartitionNames(long tableId) {
+        writeLock();
+        try {
+            return tableToCreatedPartitionNames.computeIfAbsent(tableId, k -> new ArrayList<>());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void clearAutomaticPartitionSnapshot() {
+        writeLock();
+        try {
+            tableToPartitionNameToTPartition.forEach((tableId, partitionNameToTPartition) -> {
+                List<String> createdPartitionNames = tableToCreatedPartitionNames.computeIfAbsent(
+                        tableId, k -> new ArrayList<>());
+                createdPartitionNames.addAll(partitionNameToTPartition.keySet());
+            });
+            tabletIdToTTabletLocation.clear();
+            tableToPartitionNameToTPartition.clear();
+        } finally {
+            writeUnlock();
+        }
+>>>>>>> 8285e315c8 ([BugFix] Fix partition creation failure during multi-table write with in a single transaction (#59954))
     }
 
     public void setIsCreatePartitionFailed(boolean v) {

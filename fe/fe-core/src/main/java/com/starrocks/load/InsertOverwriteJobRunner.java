@@ -426,6 +426,42 @@ public class InsertOverwriteJobRunner {
                     }
                 }
             }
+<<<<<<< HEAD
+=======
+            // if dynamic overwrite, drop all runtime created partitions
+            if (job.isDynamicOverwrite()) {
+                List<String> tmpPartitionNames = Lists.newArrayList();
+                if (!isReplay) {
+                    int waitTimes = 10;
+                    // wait for transaction state to be finished
+                    TransactionState txnState = null;
+                    do {
+                        txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                .getTransactionState(dbId, insertStmt.getTxnId());
+                        if (txnState == null) {
+                            throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                        }
+                        // wait a little bit even if txnState is finished
+                        Thread.sleep(200);
+                    } while (txnState.isRunning() && --waitTimes > 0);
+                    tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
+                    job.setTmpPartitionIds(tmpPartitionNames.stream()
+                            .map(name -> targetTable.getPartition(name, true).getId())
+                            .collect(Collectors.toList()));
+                    LOG.info("dynamic overwrite job {} drop tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
+                }
+                for (String partitionName : tmpPartitionNames) {
+                    Partition partition = targetTable.getPartition(partitionName, true);
+                    if (partition != null) {
+                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            sourceTablets.addAll(index.getTablets());
+                        }
+                        targetTable.dropTempPartition(partitionName, true);
+                    }
+                }
+            }
+>>>>>>> 8285e315c8 ([BugFix] Fix partition creation failure during multi-table write with in a single transaction (#59954))
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
@@ -491,7 +527,27 @@ public class InsertOverwriteJobRunner {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+<<<<<<< HEAD
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+=======
+                if (job.isDynamicOverwrite()) {
+                    if (!isReplay) {
+                        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                .getTransactionState(dbId, insertStmt.getTxnId());
+                        if (txnState == null) {
+                            throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                        }
+                        tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
+                        job.setTmpPartitionIds(tmpPartitionNames.stream()
+                                .map(name -> targetTable.getPartition(name, true).getId())
+                                .collect(Collectors.toList()));
+                    }
+                    LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
+                    targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
+                } else {
+                    targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
+                }
+>>>>>>> 8285e315c8 ([BugFix] Fix partition creation failure during multi-table write with in a single transaction (#59954))
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
