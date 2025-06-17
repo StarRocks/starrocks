@@ -1581,7 +1581,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 監視メトリクスに表示される Routine Load ジョブの最小ラグ。ラグがこの値より大きい Routine Load ジョブは、メトリクスに表示されます。
+- 説明: 監視メトリクスに表示される Routine Load ジョブの最小オフセットラグ。オフセットラグがこの値より大きい Routine Load ジョブは、メトリクスに表示されます。
 - 導入バージョン: -
 
 ##### max_tolerable_backend_down_num
