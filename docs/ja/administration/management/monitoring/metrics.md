@@ -1668,6 +1668,11 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: Count
 - 説明: すべての Routine Load ジョブによるデータロード中に発生したエラーロウの総数。
 
+### starrocks_fe_routine_load_max_lag_of_partition
+
+- 単位: -
+- 説明: 各 Routine Load ジョブにおける Kafka パーティションの最大オフセットラグ。これは、FEの設定項目 `enable_routine_load_lag_metrics` が `true` に設定され、かつオフセットラグが FE の設定項目 `min_routine_load_lag_for_metrics` 以上である場合にのみ収集されます。デフォルトでは、`enable_routine_load_lag_metrics` は `false` に設定されており、`min_routine_load_lag_for_metrics` は `10000` に設定されています。
+
 ### starrocks_fe_sql_block_hit_count
 
 - 単位: Count

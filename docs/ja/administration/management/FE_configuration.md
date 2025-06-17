@@ -1566,6 +1566,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: Routine Load ジョブ内のタスクが遅延すると、Routine Load ジョブは UNSTABLE 状態に設定されます。具体的には、消費されているメッセージのタイムスタンプと現在の時間の差がこのしきい値を超え、データソースに未消費のメッセージが存在する場合です。
 - 導入バージョン: -
 
+##### enable_routine_load_lag_metrics
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Routine Load パーティションのオフセットラグをメトリクスで収集するかどうか。この項目を `true` に設定すると、Kafka API を呼び出してパーティションの最新のオフセットを取得することに注意。
+- 導入バージョン: -
+
+##### min_routine_load_lag_for_metrics
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 監視メトリクスに表示される Routine Load ジョブの最小オフセットラグ。オフセットラグがこの値より大きい Routine Load ジョブは、メトリクスに表示されます。
+- 導入バージョン: -
+
 ##### max_tolerable_backend_down_num
 
 - デフォルト: 0
