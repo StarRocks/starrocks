@@ -2246,6 +2246,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
 - 引入版本：-
 
+##### enable_routine_load_lag_metrics
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否收集 Routine Load Partition Offset Lag 的指标。请注意，将此项目设置为 `true` 会调用 Kafka API 来获取 Partition 的最新 Offset。
+- 引入版本：-
+
+##### min_routine_load_lag_for_metrics
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：要在监控指标中显示的 Routine Load 任务的最小 Offset Lag。Offset Lag 大于此值的 Routine Load 任务将显示在指标中。
+- 引入版本：-
+
 ##### max_tolerable_backend_down_num
 
 - 默认值：0
