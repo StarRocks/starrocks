@@ -1111,7 +1111,8 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup,
+                    boolean isFileBundling) {
                 cleanedGroupIds.add(groupId);
             }
         };
@@ -1205,7 +1206,8 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup,
+                    boolean isFileBundling) {
                 cleanedGroupIds.add(groupId);
             }
         };
