@@ -53,7 +53,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
-    _runtime_profile->reserve_child_holder(2);
+    // _runtime_profile->reserve_child_holder(2);
     _common_metrics = std::make_shared<RuntimeProfile>("CommonMetrics");
     _runtime_profile->add_child(_common_metrics, true, nullptr);
 

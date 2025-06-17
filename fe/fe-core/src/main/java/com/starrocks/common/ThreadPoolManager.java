@@ -284,7 +284,7 @@ public class ThreadPoolManager {
      * Use at most 3/4 to execute cpu-intensive background tasks
      */
     public static int cpuIntensiveThreadPoolSize() {
-        return Integer.max(2, cpuCores() * 30);
+        return Integer.max(2, cpuCores() * 3 / 4);
     }
 }
 
