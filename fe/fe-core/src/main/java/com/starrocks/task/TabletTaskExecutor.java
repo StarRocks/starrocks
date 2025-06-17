@@ -38,8 +38,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletSchema;
@@ -347,10 +349,14 @@ public class TabletTaskExecutor {
                 List<TAgentTaskRequest> agentTaskRequests =
                         agentBatchTask.stream().map(AgentBatchTask::toAgentTaskRequest).collect(Collectors.toList());
 
-                ThriftRPCRequestExecutor.call(
+                final TAgentResult result = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.backendPool,
                         new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()),
                         client -> client.submit_tasks(agentTaskRequests));
+                final TStatus status = result.getStatus();
+                if (status.status_code != TStatusCode.OK) {
+                    throw new RuntimeException(status.getError_msgs().toString());
+                }
                 return true;
             } catch (TException e) {
                 throw new RuntimeException(e);
