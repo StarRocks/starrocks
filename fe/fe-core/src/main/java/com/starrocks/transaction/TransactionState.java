@@ -311,7 +311,7 @@ public class TransactionState implements Writable {
     // For a transaction, we need to ensure that different clients obtain consistent partition information,
     // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
     // Therefore, a snapshot of this information is maintained here.
-    private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
+    private Map<Long, ConcurrentMap<String, TOlapTablePartition>> tableToPartitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
@@ -1055,8 +1055,13 @@ public class TransactionState implements Writable {
         return combinedTxnLog;
     }
 
-    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
-        return partitionNameToTPartition;
+    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition(long tableId) {
+        writeLock();
+        try {
+            return tableToPartitionNameToTPartition.computeIfAbsent(tableId, k -> Maps.newConcurrentMap());
+        } finally {
+            writeUnlock();
+        }
     }
 
     public ConcurrentMap<Long, TTabletLocation> getTabletIdToTTabletLocation() {
@@ -1064,8 +1069,13 @@ public class TransactionState implements Writable {
     }
 
     public void clearAutomaticPartitionSnapshot() {
-        partitionNameToTPartition.clear();
-        tabletIdToTTabletLocation.clear();
+        writeLock();
+        try {
+            tabletIdToTTabletLocation.clear();
+            tableToPartitionNameToTPartition.clear();
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void setIsCreatePartitionFailed(boolean v) {

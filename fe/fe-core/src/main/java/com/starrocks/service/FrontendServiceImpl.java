@@ -2318,7 +2318,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
             // get partition info from snapshot
-            TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition().get(partitionName);
+            TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition(olapTable.getId()).get(partitionName);
             if (tPartition != null) {
                 partitions.add(tPartition);
                 for (TOlapTableIndexTablets index : tPartition.getIndexes()) {
@@ -2457,7 +2457,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             tPartition.setNum_buckets(index.getTablets().size());
         }
         partitions.add(tPartition);
-        txnState.getPartitionNameToTPartition().put(partition.getName(), tPartition);
+        txnState.getPartitionNameToTPartition(olapTable.getId()).put(partition.getName(), tPartition);
     }
 
     @Override
