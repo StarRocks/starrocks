@@ -302,13 +302,13 @@ build_llvm() {
 
     check_if_source_exist $LLVM_SOURCE
 
-    cd $TP_SOURCE_DIR
+    cd ${TP_SOURCE_DIR}/${LLVM_SOURCE}
     mkdir -p llvm-build
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
 
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -S ../${LLVM_SOURCE}/llvm -G "${CMAKE_GENERATOR}" \
+    $CMAKE_CMD -S ../llvm -G "${CMAKE_GENERATOR}" \
     -DLLVM_ENABLE_EH:Bool=True \
     -DLLVM_ENABLE_RTTI:Bool=True \
     -DLLVM_ENABLE_PIC:Bool=True \
@@ -322,11 +322,11 @@ build_llvm() {
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
     -DBUILD_SHARED_LIBS:BOOL=False \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
+    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
     # TODO(yueyang): Add more targets.
     # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
+    REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
 
@@ -637,7 +637,7 @@ build_pulsar() {
     cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
-        -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
+        -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
     ${BUILD_SYSTEM} -j$PARALLEL
 
     cp lib/libpulsar.a $TP_INSTALL_DIR/lib/
