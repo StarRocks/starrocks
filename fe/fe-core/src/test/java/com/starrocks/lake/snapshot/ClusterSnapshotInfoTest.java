@@ -88,25 +88,25 @@ public class ClusterSnapshotInfoTest {
                 long value = clusterSnapshotInfo.getVersion(dbTest.getId(), olapTable.getId(), part.getParentId(), part.getId());
                 Assert.assertTrue(value != 0 && value == part.getVisibleVersion());
 
-                Assert.assertTrue(clusterSnapshotInfo.isDbExisted(dbTest.getId()));
-                Assert.assertTrue(clusterSnapshotInfo.isTableExisted(dbTest.getId(), olapTable.getId()));
-                Assert.assertTrue(clusterSnapshotInfo.isPartitionExisted(dbTest.getId(), olapTable.getId(),
-                                                                           part.getParentId()));
+                Assert.assertTrue(clusterSnapshotInfo.containsDb(dbTest.getId()));
+                Assert.assertTrue(clusterSnapshotInfo.containsTable(dbTest.getId(), olapTable.getId()));
+                Assert.assertTrue(clusterSnapshotInfo.containsPartition(dbTest.getId(), olapTable.getId(),
+                                                                        part.getParentId()));
 
                 for (MaterializedIndex index : part.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    Assert.assertTrue(clusterSnapshotInfo.isMaterializedIndexExisted(dbTest.getId(), olapTable.getId(),
+                    Assert.assertTrue(clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
+                                                                                    part.getParentId(), part.getId(),
+                                                                                    index.getId()));
+                    Assert.assertTrue(!clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
                                                                                      part.getParentId(), part.getId(),
-                                                                                     index.getId()));
-                    Assert.assertTrue(!clusterSnapshotInfo.isMaterializedIndexExisted(dbTest.getId(), olapTable.getId(),
-                                                                                      part.getParentId(), part.getId(),
-                                                                                      index.getId() + 1L));
+                                                                                     index.getId() + 1L));
                 }
             }
         }
-        Assert.assertTrue(!clusterSnapshotInfo.isDbExisted(0L));
-        Assert.assertTrue(!clusterSnapshotInfo.isTableExisted(0L, 1L));
-        Assert.assertTrue(!clusterSnapshotInfo.isPartitionExisted(0L, 1L, 2L));
-        Assert.assertTrue(!clusterSnapshotInfo.isMaterializedIndexExisted(0L, 1L, 2L, 3L, 4L));
+        Assert.assertTrue(!clusterSnapshotInfo.containsDb(0L));
+        Assert.assertTrue(!clusterSnapshotInfo.containsTable(0L, 1L));
+        Assert.assertTrue(!clusterSnapshotInfo.containsPartition(0L, 1L, 2L));
+        Assert.assertTrue(!clusterSnapshotInfo.containsMaterializedIndex(0L, 1L, 2L, 3L, 4L));
         clusterSnapshotInfo = null;
     }
 }

@@ -38,30 +38,30 @@ public class ClusterSnapshotInfo {
         return physicalPartInfo.version;
     }
 
-    public boolean isDbExisted(long dbId) {
+    public boolean containsDb(long dbId) {
         return getDbInfo(dbId) != null;
     }
 
-    public boolean isTableExisted(long dbId, long tableId) {
+    public boolean containsTable(long dbId, long tableId) {
         return getTableInfo(dbId, tableId) != null;
     }
 
-    public boolean isPartitionExisted(long dbId, long tableId, long partId) {
+    public boolean containsPartition(long dbId, long tableId, long partId) {
         return getPartitionInfo(dbId, tableId, partId) != null;
     }
 
-    public boolean isMaterializedIndexExisted(long dbId, long tableId, long partId, long physicalPartId, long indexId) {
+    public boolean containsMaterializedIndex(long dbId, long tableId, long partId, long physicalPartId, long indexId) {
         return getIndexInfo(dbId, tableId, partId, physicalPartId, indexId) != null;
     }
 
-    public boolean isMaterializedIndexExisted(long dbId, long tableId, long partId, long indexId) {
+    public boolean containsMaterializedIndex(long dbId, long tableId, long partId, long indexId) {
         PartitionSnapshotInfo partInfo = getPartitionInfo(dbId, tableId, partId);
         if (partInfo == null) {
             return false;
         }
 
         for (PhysicalPartitionSnapshotInfo physicalPartInfo : partInfo.physicalPartInfos.values()) {
-            if (isMaterializedIndexExisted(dbId, tableId, partId, physicalPartInfo.physicalPartitionId, indexId)) {
+            if (containsMaterializedIndex(dbId, tableId, partId, physicalPartInfo.physicalPartitionId, indexId)) {
                 return true;
             }
         }

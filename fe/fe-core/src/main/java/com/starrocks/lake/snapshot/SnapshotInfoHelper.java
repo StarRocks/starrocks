@@ -26,9 +26,6 @@ import java.util.List;
 import java.util.Map;
 
 public class SnapshotInfoHelper {
-    public SnapshotInfoHelper() {
-    }
-
     public static ClusterSnapshotInfo buildClusterSnapshotInfo(List<Database> dbs) {
         Map<Long, DatabaseSnapshotInfo> dbInfos = new HashMap<>();
         for (Database db : dbs) {
