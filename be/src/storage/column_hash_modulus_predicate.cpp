@@ -55,23 +55,19 @@ ColumnHashModulusPredicate::ColumnHashModulusPredicate()
           _modulus(0), _remainder(0), _hash_column_names(), _inited(false) {}
 
 Status ColumnHashModulusPredicate::evaluate(Chunk* chunk, uint8_t* selection) const {
-    return evaluate(chunk, selection, 0, chunk->num_rows());
-}
-
-Status ColumnHashModulusPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
     if (!_inited) {
         return Status::InternalError("column hash modulus predicate is not initialized");
     }
     RETURN_IF_ERROR(contains_hash_columns(*chunk->schema()));
 
-    size_t size = to - from;
+    size_t size = chunk->num_rows();
     std::vector<uint32_t> hashes(size, 0);
     for (const auto& col_name : _hash_column_names) {
-        chunk->get_column_by_name(col_name)->crc32_hash(&(hashes)[0], from, to);
+        chunk->get_column_by_name(col_name)->crc32_hash(&(hashes)[0], 0, size);
     }
 
     const uint32_t* hashes_data = hashes.data();
-    for (size_t i = from; i < to; ++i) {
+    for (size_t i = 0; i < size; ++i) {
         selection[i] = (hashes_data[i] % _modulus == _remainder);
     }
     return Status::OK();
