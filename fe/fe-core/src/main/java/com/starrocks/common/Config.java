@@ -180,6 +180,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int slow_lock_stack_trace_reserve_levels = 15;
 
+    @ConfField(mutable = true)
+    public static boolean slow_lock_print_stack = true;
+
     @ConfField
     public static String custom_config_dir = "/conf";
 
