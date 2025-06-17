@@ -81,7 +81,11 @@ sudo apt update
 ```
 
 ```bash
+<<<<<<< HEAD
 sudo apt install gcc g++ maven openjdk-11-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build
+=======
+sudo apt install gcc g++ maven openjdk-17-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build curl
+>>>>>>> e3cea5e7f4 ([BugFix] Fix third-party build failure for pulsar-client-cpp-3.3.0 mo… (#59904))
 ```
 
 Setup `JAVA_HOME` env
