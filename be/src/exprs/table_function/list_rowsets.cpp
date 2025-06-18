@@ -88,7 +88,7 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
         return {};
     }
 
-    auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto tablet_mgr = runtime_state->exec_env()->lake_tablet_manager();
     if (UNLIKELY(tablet_mgr == nullptr)) {
         state->set_status(Status::InternalError("Only works for tablets in the cloud-native table"));
         return {};
