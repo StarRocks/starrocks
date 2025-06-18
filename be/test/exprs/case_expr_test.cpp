@@ -24,11 +24,13 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -918,7 +920,11 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
     auto array_expr0 = MockExpr(type_arr_int, array0);
 
-    auto when0 = MockVectorizedExpr<TYPE_BOOLEAN>(expr_node, 3, false);
+    auto bo = BooleanColumn::create();
+    bo->append_datum(Datum(true));  // [true]
+    bo->append_datum(Datum(false)); // [false]
+    bo->append_datum(Datum(false)); // [false]
+    auto when0 = MockExpr(TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN), bo);
 
     expr->_children.push_back(&when0);       // when1
     expr->_children.push_back(&array_expr0); // then1
