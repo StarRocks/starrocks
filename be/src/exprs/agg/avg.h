@@ -38,6 +38,11 @@ struct AvgResultTrait<LT, DecimalLTGuard<LT>> {
     static const LogicalType value = TYPE_DECIMAL128;
 };
 
+template <>
+struct AvgResultTrait<TYPE_DECIMAL256, DecimalLTGuard<TYPE_DECIMAL256>> {
+    static const LogicalType value = TYPE_DECIMAL256;
+};
+
 template <LogicalType LT>
 inline constexpr LogicalType AvgResultLT = AvgResultTrait<LT>::value;
 
@@ -230,7 +235,8 @@ public:
         } else if constexpr (lt_is_arithmetic<LT>) {
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
-            static_assert(lt_is_decimal128<ResultLT>, "Result type of avg on decimal32/64/128 is decimal 128");
+            static_assert(lt_is_decimal128<ResultLT> || lt_is_decimal256<ResultLT>,
+                          "Result type of avg on decimal32/64/128/256 is decimal 128 or 256");
             auto sum = ResultType(this->data(state).sum);
             auto count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
@@ -256,7 +262,8 @@ public:
         } else if constexpr (lt_is_arithmetic<LT>) {
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
-            static_assert(lt_is_decimal128<ResultLT>, "Result type of avg on decimal32/64/128 is decimal 128");
+            static_assert(lt_is_decimal128<ResultLT> || lt_is_decimal256<ResultLT>,
+                          "Result type of avg on decimal32/64/128/256 is decimal 128 or 256");
             auto sum = ResultType(this->data(state).sum);
             auto count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
@@ -270,8 +277,9 @@ public:
 
     std::string get_name() const override { return "avg"; }
 };
+
 template <LogicalType LT, typename = DecimalLTGuard<LT>>
 using DecimalAvgAggregateFunction =
-        AvgAggregateFunction<LT, RunTimeCppType<LT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
+        AvgAggregateFunction<LT, RunTimeCppType<LT>, (LT == TYPE_DECIMAL256) ? TYPE_DECIMAL256 : TYPE_DECIMAL128>;
 
 } // namespace starrocks

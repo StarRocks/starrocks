@@ -292,6 +292,7 @@ public enum PrimitiveType {
      */
     public static PrimitiveType getWiderDecimalV3Type(PrimitiveType t1, PrimitiveType t2) {
         Preconditions.checkState(t1.isDecimalV3Type() && t2.isDecimalV3Type());
+        // TODO(stephen): support auto scale up decimal precision
         if (t1.equals(DECIMAL256) || t2.equals(DECIMAL256)) {
             return DECIMAL256;
         }

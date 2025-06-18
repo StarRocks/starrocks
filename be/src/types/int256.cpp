@@ -240,7 +240,7 @@ int256_t divide_positive(const int256_t& dividend, const int256_t& divisor) {
 
 } // anonymous namespace
 
-// Constructor from floating point types with proper overflow detection
+// Constructor from floating point types
 int256_t::int256_t(float value) {
     if (std::isnan(value) || std::isinf(value)) {
         low = 0;
@@ -248,379 +248,209 @@ int256_t::int256_t(float value) {
         return;
     }
 
-    // Check for overflow - float can represent up to ~2^127 precisely
-    constexpr float max_safe_float = 1.7014118346046923e+38f; // ~2^127
-    if (std::abs(value) >= max_safe_float) {
-        if (value > 0) {
-            *this = INT256_MAX;
-        } else {
-            *this = INT256_MIN;
-        }
+    if (value == 0.0f) {
+        low = 0;
+        high = 0;
         return;
     }
 
-    bool negative = value < 0;
+    bool negative = std::signbit(value);
     float abs_value = std::abs(value);
 
-    // Convert to integer part only (truncate)
     if (abs_value < 1.0f) {
         low = 0;
         high = 0;
         return;
     }
 
-    // Use bit manipulation for precise conversion
-    uint32_t bits = *reinterpret_cast<const uint32_t*>(&abs_value);
-    int32_t exponent = ((bits >> 23) & 0xFF) - 127;   // IEEE 754 bias
-    uint32_t mantissa = (bits & 0x7FFFFF) | 0x800000; // Add implicit 1
+    constexpr float max_safe_float = 16777216.0f; // 2^24
 
-    if (exponent < 0) {
-        low = 0;
-        high = 0;
-    } else if (exponent < 24) {
-        uint32_t int_value = mantissa >> (23 - exponent);
-        low = negative ? -int_value : int_value;
-        high = negative && int_value != 0 ? -1 : 0;
-    } else {
-        // Large exponent case
-        uint128_t result = static_cast<uint128_t>(mantissa) << (exponent - 23);
-        if (exponent >= 128) {
-            low = 0;
-            high = negative ? -static_cast<int128_t>(result >> 128) : static_cast<int128_t>(result >> 128);
+    constexpr float max_float = 3.4028235e38f;
+
+    high = 0;
+
+    if (abs_value >= max_safe_float) {
+        int exponent;
+        float mantissa = std::frexp(abs_value, &exponent);
+
+        mantissa *= 2.0f;
+        exponent -= 1;
+
+        uint32_t mantissa_bits = static_cast<uint32_t>((mantissa - 1.0f) * (1U << 23));
+
+        uint32_t significand = (1U << 23) | mantissa_bits;
+
+        if (exponent <= 64) {
+            if (exponent >= 23) {
+                low = static_cast<uint128_t>(significand) << (exponent - 23);
+            } else {
+                low = static_cast<uint128_t>(significand) >> (23 - exponent);
+            }
+        } else if (exponent <= 128) {
+            if (exponent >= 87) {
+                int high_shift = exponent - 87;
+                if (high_shift >= 64) {
+                    low = static_cast<uint128_t>(max_float);
+                    high = 0;
+                } else {
+                    low = static_cast<uint128_t>(significand) << 64;
+                    high = static_cast<int128_t>(static_cast<uint64_t>(significand) >> (64 - high_shift));
+                }
+            } else if (exponent >= 23) {
+                low = static_cast<uint128_t>(significand) << (exponent - 23);
+                high = 0;
+            } else {
+                low = static_cast<uint128_t>(significand) >> (23 - exponent);
+                high = 0;
+            }
         } else {
-            low = static_cast<uint128_t>(result);
+            low = static_cast<uint128_t>(max_float);
             high = 0;
         }
-        if (negative) {
-            *this = -*this;
+    } else {
+        if (abs_value <= static_cast<float>(UINT64_MAX)) {
+            low = static_cast<uint128_t>(static_cast<uint64_t>(abs_value));
+        } else {
+            low = static_cast<uint128_t>(abs_value);
         }
+    }
+
+    if (negative) {
+        *this = -*this;
     }
 }
 
+// Constructor from floating double types with proper overflow detection
 int256_t::int256_t(double value) {
-    if (std::isnan(value) || std::isinf(value)) {
+    if (std::isnan(value) || std::isinf(value) || value == 0.0) {
         low = 0;
         high = 0;
         return;
     }
 
-    // Check for overflow - double can represent up to ~2^1023, but we limit to 2^255
-    constexpr double max_safe_double =
-            5.7896044618658097711785492504343953926634992332820282019728792003956564819968e+76; // 2^255
-    if (std::abs(value) >= max_safe_double) {
-        if (value > 0) {
-            *this = INT256_MAX;
-        } else {
-            *this = INT256_MIN;
-        }
-        return;
-    }
-
-    bool negative = value < 0;
     double abs_value = std::abs(value);
 
-    // Convert to integer part only (truncate)
     if (abs_value < 1.0) {
         low = 0;
         high = 0;
         return;
     }
 
-    // Use bit manipulation for precise conversion
-    uint64_t bits = *reinterpret_cast<const uint64_t*>(&abs_value);
-    int32_t exponent = ((bits >> 52) & 0x7FF) - 1023;                // IEEE 754 bias
-    uint64_t mantissa = (bits & 0xFFFFFFFFFFFFF) | 0x10000000000000; // Add implicit 1
+    constexpr double max_safe_double = 9007199254740992.0; // 2^53
 
-    if (exponent < 0) {
+    constexpr double max_int256_double =
+            5.7896044618658097711785492504343953926634992332820282019728792003956564819968e+76;
+
+    if (abs_value >= max_int256_double) {
         low = 0;
         high = 0;
-    } else if (exponent < 53) {
-        uint64_t int_value = mantissa >> (52 - exponent);
-        low = negative ? -int_value : int_value;
-        high = negative && int_value != 0 ? -1 : 0;
-    } else {
-        // Large exponent case - need to handle carefully
-        if (exponent >= 255) {
-            // Overflow case
-            *this = negative ? INT256_MIN : INT256_MAX;
-            return;
-        }
+        return;
+    }
 
-        uint128_t result = static_cast<uint128_t>(mantissa);
-        int shift = exponent - 52;
+    if (abs_value >= max_safe_double) {
+        constexpr double pow_128 = 340282366920938463463374607431768211456.0; // 2^128
 
-        if (shift >= 128) {
-            low = 0;
-            high = static_cast<int128_t>(result << (shift - 128));
+        bool negative = value < 0.0;
+        double abs_val = std::abs(value);
+
+        double high_part = std::floor(abs_val / pow_128);
+        double low_part = abs_val - (high_part * pow_128);
+
+        if (high_part > 0) {
+            high = static_cast<int128_t>(high_part);
         } else {
-            low = result << shift;
-            high = static_cast<int128_t>(result >> (128 - shift));
+            high = 0;
         }
+
+        low = static_cast<uint128_t>(low_part);
 
         if (negative) {
+            *this = -*this;
+        }
+
+    } else {
+        int64_t int_value = static_cast<int64_t>(value);
+
+        if (int_value >= 0) {
+            low = static_cast<uint128_t>(int_value);
+            high = 0;
+        } else {
+            uint64_t abs_int = static_cast<uint64_t>(-int_value);
+            low = static_cast<uint128_t>(abs_int);
+            high = 0;
             *this = -*this;
         }
     }
 }
 
 // =============================================================================
-// Anonymous namespace for internal utilities
-// =============================================================================
-
-namespace {
-
-// -----------------------------------------------------------------------------
-// Bit manipulation utilities
-// -----------------------------------------------------------------------------
-
-/// Count leading zeros in 256-bit integer
-/// @param num Input value
-/// @return Number of leading zero bits (0-256)
-int count_leading_zeros(const int256_t& num) {
-    uint64_t high_high = static_cast<uint64_t>(num.high >> 64);
-    if (high_high != 0) {
-        return __builtin_clzll(high_high);
-    }
-
-    uint64_t high_low = static_cast<uint64_t>(num.high);
-    if (high_low != 0) {
-        return 64 + __builtin_clzll(high_low);
-    }
-
-    uint64_t low_high = static_cast<uint64_t>(num.low >> 64);
-    if (low_high != 0) {
-        return 128 + __builtin_clzll(low_high);
-    }
-
-    uint64_t low_low = static_cast<uint64_t>(num.low);
-    if (low_low != 0) {
-        return 192 + __builtin_clzll(low_low);
-    }
-
-    return 256;
-}
-
-/// Count trailing zeros in 256-bit integer
-/// @param value Input value
-/// @return Number of trailing zero bits (0-256)
-int count_trailing_zeros(const int256_t& value) {
-    uint64_t low_low = static_cast<uint64_t>(value.low);
-    if (low_low != 0) {
-        return __builtin_ctzll(low_low);
-    }
-
-    uint64_t low_high = static_cast<uint64_t>(value.low >> 64);
-    if (low_high != 0) {
-        return 64 + __builtin_ctzll(low_high);
-    }
-
-    uint64_t high_low = static_cast<uint64_t>(value.high);
-    if (high_low != 0) {
-        return 128 + __builtin_ctzll(high_low);
-    }
-
-    uint64_t high_high = static_cast<uint64_t>(value.high >> 64);
-    if (high_high != 0) {
-        return 192 + __builtin_ctzll(high_high);
-    }
-
-    return 256;
-}
-
-bool is_power_of_2(const int256_t& value) {
-    if (value.high < 0 || (value.high == 0 && value.low == 0)) {
-        return false;
-    }
-
-    if (value.high == 0) {
-        return (value.low & (value.low - 1)) == 0;
-    }
-
-    if (value.low != 0) {
-        return false;
-    }
-
-    uint128_t h = static_cast<uint128_t>(value.high);
-    return (h & (h - 1)) == 0;
-}
-
-// -----------------------------------------------------------------------------
-// Division implementation helpers
-// -----------------------------------------------------------------------------
-
-/// Convert int256_t to 4 64-bit parts
-/// @param value Input value
-/// @param parts Output array of 4 uint64_t values
-inline void to_u64_parts(const int256_t& value, uint64_t parts[4]) {
-    parts[0] = static_cast<uint64_t>(value.low);
-    parts[1] = static_cast<uint64_t>(value.low >> 64);
-    parts[2] = static_cast<uint64_t>(value.high);
-    parts[3] = static_cast<uint64_t>(value.high >> 64);
-}
-
-/// Convert 4 64-bit parts to int256_t
-/// @param parts Input array of 4 uint64_t values
-/// @return Reconstructed int256_t value
-inline int256_t from_u64_parts(const uint64_t parts[4]) {
-    int256_t result;
-    result.low = static_cast<uint128_t>(parts[0]) | (static_cast<uint128_t>(parts[1]) << 64);
-    result.high = static_cast<int128_t>(static_cast<uint128_t>(parts[2]) | (static_cast<uint128_t>(parts[3]) << 64));
-    return result;
-}
-
-// -----------------------------------------------------------------------------
-// Division algorithm selection and implementation
-// -----------------------------------------------------------------------------
-
-/// Information about operand sizes for division algorithm selection
-struct DivisionInfo {
-    bool dividend_is_128bit;
-    bool divisor_is_128bit;
-    bool divisor_is_64bit;
-    bool divisor_is_power_of_2;
-    int divisor_shift; // For power of 2 divisors
-};
-
-DivisionInfo analyze_division(const int256_t& dividend, const int256_t& divisor) {
-    DivisionInfo info;
-
-    info.dividend_is_128bit = (dividend.high == 0);
-    info.divisor_is_128bit = (divisor.high == 0);
-    info.divisor_is_64bit = info.divisor_is_128bit && (static_cast<uint64_t>(divisor.low >> 64) == 0);
-    info.divisor_is_power_of_2 = is_power_of_2(divisor);
-    info.divisor_shift = info.divisor_is_power_of_2 ? count_trailing_zeros(divisor) : 0;
-
-    return info;
-}
-
-/// Fast division by 64-bit divisor using chunked algorithm
-/// @param dividend Dividend value (positive)
-/// @param divisor 64-bit divisor (positive)
-/// @return Quotient
-int256_t divide_by_64bit(const int256_t& dividend, uint64_t divisor) {
-    uint64_t dividend_parts[4];
-    to_u64_parts(dividend, dividend_parts);
-
-    uint64_t quotient_parts[4] = {0, 0, 0, 0};
-    uint64_t remainder = 0;
-
-    // Process from most significant to least significant
-    for (int i = 3; i >= 0; --i) {
-        uint128_t temp = (static_cast<uint128_t>(remainder) << 64) | dividend_parts[i];
-        quotient_parts[i] = static_cast<uint64_t>(temp / divisor);
-        remainder = static_cast<uint64_t>(temp % divisor);
-    }
-
-    return from_u64_parts(quotient_parts);
-}
-
-/// Fast division when both operands are 128-bit
-/// @param dividend 128-bit dividend
-/// @param divisor 128-bit divisor
-/// @return Quotient
-int256_t divide_128by128(uint128_t dividend, uint128_t divisor) {
-    uint128_t quotient = dividend / divisor;
-    return int256_t(0, quotient);
-}
-
-/// Full 256-bit by 256-bit division using binary long division
-/// @param dividend 256-bit dividend (positive)
-/// @param divisor 256-bit divisor (positive)
-/// @return Quotient
-int256_t divide_256by256(const int256_t& dividend, const int256_t& divisor) {
-    if (dividend < divisor) {
-        return int256_t(0);
-    }
-
-    int256_t remainder = dividend;
-    int256_t quotient = 0;
-    const int divisor_bits = 256 - count_leading_zeros(divisor);
-
-    while (true) {
-        const int rem_zeros = count_leading_zeros(remainder);
-        const int rem_bits = 256 - rem_zeros;
-
-        if (rem_bits < divisor_bits) {
-            break;
-        }
-
-        int shift = rem_bits - divisor_bits;
-
-        int256_t shifted_divisor = divisor << shift;
-        if (shifted_divisor > remainder) {
-            shift--;
-            if (shift < 0) {
-                break;
-            }
-            shifted_divisor = divisor << shift;
-        }
-
-        remainder = remainder - shifted_divisor;
-        quotient = quotient + (int256_t(1) << shift);
-    }
-
-    return quotient;
-}
-
-/// Core division implementation for positive operands
-/// @param dividend Positive dividend
-/// @param divisor Positive divisor
-/// @return Quotient
-int256_t divide_positive(const int256_t& dividend, const int256_t& divisor) {
-    const DivisionInfo info = analyze_division(dividend, divisor);
-
-    if (info.divisor_is_power_of_2) {
-        return dividend >> info.divisor_shift;
-    }
-
-    if (info.divisor_is_64bit) {
-        return divide_by_64bit(dividend, static_cast<uint64_t>(divisor.low));
-    }
-
-    if (info.divisor_is_128bit && info.dividend_is_128bit) {
-        return divide_128by128(dividend.low, divisor.low);
-    }
-
-    return divide_256by256(dividend, divisor);
-}
-
-} // anonymous namespace
-
-// =============================================================================
 // Type Conversion Operators Implementation
 // =============================================================================
+int256_t::operator double() const {
+    if (*this == 0) return 0.0;
 
-// int256_t::operator double() const {
-//     if (*this == 0) return 0.0;
-//
-//     const bool negative = (high < 0);
-//     const int256_t abs_val = negative ? -*this : *this;
-//
-//     // Find the position of the most significant bit
-//     int bit_count = 0;
-//     int256_t temp = abs_val;
-//     while (temp > 0) {
-//         temp >>= 1;
-//         bit_count++;
-//     }
-//
-//     if (bit_count <= 53) {
-//         // Can represent exactly in double
-//         double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
-//         if (abs_val.high != 0) {
-//             result += static_cast<double>(static_cast<uint64_t>(abs_val.high)) * (1ULL << 32) * (1ULL << 32) *
-//                       (1ULL << 32) * (1ULL << 32);
-//         }
-//         return negative ? -result : result;
-//     } else {
-//         // Need to round to fit in double precision
-//         const int shift = bit_count - 53;
-//         const int256_t rounded = (abs_val + (int256_t(1) << (shift - 1))) >> shift;
-//         const double mantissa = static_cast<double>(static_cast<uint64_t>(rounded.low));
-//         const double result = mantissa * pow(2.0, shift);
-//         return negative ? -result : result;
-//     }
-// }
+    const bool negative = (high < 0);
+    const int256_t abs_val = negative ? -*this : *this;
+
+    const int leading_zeros = count_leading_zeros(abs_val);
+    if (leading_zeros == 256) return 0.0;
+
+    const int msb_pos = 255 - leading_zeros;
+
+    const int double_precision = 53;
+
+    if (msb_pos < double_precision) {
+        double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
+        return negative ? -result : result;
+    } else if (msb_pos < 128) {
+        const int excess_bits = msb_pos + 1 - double_precision;
+        uint128_t shifted = static_cast<uint128_t>(abs_val.low) >> excess_bits;
+
+        if (excess_bits > 0) {
+            uint128_t remainder = static_cast<uint128_t>(abs_val.low) - (shifted << excess_bits);
+            uint128_t half = uint128_t(1) << (excess_bits - 1);
+
+            if (remainder > half || (remainder == half && (shifted & 1) == 1)) {
+                shifted += 1;
+            }
+        }
+
+        double mantissa = static_cast<double>(static_cast<uint64_t>(shifted));
+        double result = mantissa * pow(2.0, excess_bits);
+        return negative ? -result : result;
+
+    } else {
+        const int excess_bits = msb_pos + 1 - double_precision;
+
+        int256_t shifted = abs_val >> excess_bits;
+
+        if (excess_bits > 0) {
+            int256_t remainder = abs_val - (shifted << excess_bits);
+            int256_t half = int256_t(1) << (excess_bits - 1);
+
+            if (remainder > half || (remainder == half && (shifted.low & 1) == 1)) {
+                shifted = shifted + 1;
+            }
+        }
+
+        double mantissa;
+        if (shifted.high == 0) {
+            mantissa = static_cast<double>(static_cast<uint64_t>(shifted.low));
+        } else {
+            mantissa = static_cast<double>(static_cast<uint64_t>(shifted.low));
+            constexpr double pow_128 = 340282366920938463463374607431768211456.0; // 2^128
+            mantissa += static_cast<double>(static_cast<uint64_t>(shifted.high)) * pow_128;
+        }
+
+        double result = mantissa * pow(2.0, excess_bits);
+
+        if (std::isinf(result)) {
+            result = negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+        }
+
+        return negative ? -result : result;
+    }
+}
 
 // =============================================================================
 // Multiplication Runtime Implementation - Helper Functions

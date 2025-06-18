@@ -227,12 +227,10 @@ public:
             // (https://www.felixcloutier.com/x86/cvttsd2si)
             return (*dec_value == float_lower_overflow_indicator<To>) ||
                    (*dec_value == float_upper_overflow_indicator<To>);
-        } else if constexpr (is_decimal128<To>) {
+        } else if constexpr (is_decimal128<To> || is_decimal256<To>) {
             // std::abs(value)<1.0 -> 0: Acceptable
             // std::abs(value)>=1.0 -> 0 or different sign: Overflow!!
             return std::abs(value) >= From(1) && (*dec_value == To(0) || ((value < From(0)) ^ (*dec_value < To(0))));
-        } else if constexpr (is_decimal256<To>) {
-            return false;
         } else {
             static_assert(is_decimal<To>, "invalid decimal type");
         }

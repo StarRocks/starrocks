@@ -282,9 +282,12 @@ public class MultiDistinctByCTERewriter {
                 if (avgCallOperator.getType().isDecimalV3()) {
                     // There is not need to apply ImplicitCastRule to divide operator of decimal types.
                     // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-                    ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    ScalarType decimalType = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    if (avgCallOperator.getType().isDecimal256()) {
+                        decimalType = ScalarType.createDecimalV3NarrowestType(76, 0);
+                    }
                     distinctAvgCallOperator.getChildren().set(
-                            1, new CastOperator(decimal128p38s0, distinctAvgCallOperator.getChild(1), true));
+                            1, new CastOperator(decimalType, distinctAvgCallOperator.getChild(1), true));
                 } else {
                     distinctAvgCallOperator = (CallOperator) scalarRewriter.rewrite(distinctAvgCallOperator,
                             Lists.newArrayList(new ImplicitCastRule()));

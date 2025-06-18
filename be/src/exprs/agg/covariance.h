@@ -179,8 +179,8 @@ public:
 
         int64_t count = 1;
         for (size_t i = 0; i < chunk_size; ++i) {
-            meanX = src_column0->get_data()[i];
-            meanY = src_column1->get_data()[i];
+            meanX = static_cast<double>(src_column0->get_data()[i]);
+            meanY = static_cast<double>(src_column1->get_data()[i]);
             memcpy(bytes.data() + old_size, &meanX, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double), &meanY, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double) * 2, &c2, sizeof(double));

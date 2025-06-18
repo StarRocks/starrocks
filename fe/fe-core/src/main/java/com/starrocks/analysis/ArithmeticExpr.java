@@ -214,8 +214,8 @@ public class ArithmeticExpr extends Expr {
         final int rhsScale = rhsType.getScalarScale();
 
         int maxRetPrecision = 38;
-        if (triple.lhsTargetType.getPrimitiveType() == Type.DECIMAL256.getPrimitiveType() ||
-                triple.rhsTargetType.getPrimitiveType() == Type.DECIMAL256.getPrimitiveType()) {
+        // TODO(stephen): support auto scale up decimal precision
+        if (triple.lhsTargetType.isDecimal256() || triple.rhsTargetType.isDecimal256()) {
             maxRetPrecision = 76;
         }
         // decimal(p1, s1) + decimal(p2, s2)
@@ -268,8 +268,8 @@ public class ArithmeticExpr extends Expr {
                 returnScale = lhsScale + rhsScale;
                 returnPrecision = lhsPrecision + rhsPrecision;
                 PrimitiveType defaultMaxDecimalType = PrimitiveType.DECIMAL128;
-                if (result.lhsTargetType.getPrimitiveType() == Type.DECIMAL256.getPrimitiveType() ||
-                        result.rhsTargetType.getPrimitiveType() == Type.DECIMAL256.getPrimitiveType()) {
+                // TODO(stephen): support auto scale up decimal precision
+                if (result.lhsTargetType.isDecimal256() || result.rhsTargetType.isDecimal256()) {
                     defaultMaxDecimalType = PrimitiveType.DECIMAL256;
                 }
                 final int maxDecimalPrecision = PrimitiveType.getMaxPrecisionOfDecimal(defaultMaxDecimalType);
@@ -280,6 +280,7 @@ public class ArithmeticExpr extends Expr {
                     // decimal64(15,3) * decimal32(9,4) => decimal128(24,7).
                     PrimitiveType commonPtype =
                             ScalarType.createDecimalV3NarrowestType(returnPrecision, returnScale).getPrimitiveType();
+                    // TODO(stephen): support auto scale up decimal precision
                     if (defaultMaxDecimalType == PrimitiveType.DECIMAL128 && commonPtype == PrimitiveType.DECIMAL256) {
                         commonPtype = PrimitiveType.DECIMAL128;
                     }
@@ -322,8 +323,8 @@ public class ArithmeticExpr extends Expr {
                     returnScale = lhsScale;
                 }
                 widerType = PrimitiveType.DECIMAL128;
-                if (result.lhsTargetType.getPrimitiveType() == Type.DECIMAL256.getPrimitiveType() ||
-                        result.rhsTargetType.getPrimitiveType() == Type.DECIMAL256.getPrimitiveType()) {
+                // TODO(stephen): support auto scale up decimal precision
+                if (result.lhsTargetType.isDecimal256() || result.rhsTargetType.isDecimal256()) {
                     widerType = PrimitiveType.DECIMAL256;
                 }
 
