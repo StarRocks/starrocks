@@ -2538,6 +2538,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return idToDb.get(dbId);
     }
 
+    public List<Database> getAllDbs() {
+        return Lists.newArrayList(idToDb.values());
+    }
+
     public Optional<Database> mayGetDb(String name) {
         return Optional.ofNullable(getDb(name));
     }
