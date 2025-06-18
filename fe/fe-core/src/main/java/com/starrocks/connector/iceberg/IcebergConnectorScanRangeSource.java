@@ -191,6 +191,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
         return res;
     }
+
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -244,6 +245,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         hdfsScanRange.setExtended_columns(extendedColumns);
+        hdfsScanRange.setFile_record_count(file.recordCount());
         return hdfsScanRange;
     }
 
@@ -322,7 +324,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     }
 
     private PartitionKey getPartitionKey(StructLike partition, PartitionSpec spec, List<Integer> indexes,
-                                           BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
+                                         BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
         List<String> partitionValues = new ArrayList<>();
         List<Column> cols = new ArrayList<>();
         indexes.forEach((index) -> {

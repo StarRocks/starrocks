@@ -426,6 +426,8 @@ struct THdfsScanRange {
     31:optional TDeletionVectorDescriptor deletion_vector_descriptor
 
     32: optional string candidate_node
+
+    33: optional i64 file_record_count
 }
 
 struct TBinlogScanRange {
