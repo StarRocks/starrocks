@@ -141,14 +141,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     private RuntimeProfile runtimeProfile;
     private MVPCTRefreshPartitioner mvRefreshPartitioner;
-
-    // represents the refresh job final job status
-    public enum RefreshJobStatus {
-        SUCCESS,
-        FAILED,
-        EMPTY,
-    }
-
     // for testing
     private TaskRun nextTaskRun = null;
 
@@ -181,7 +173,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // 4. construct the refresh sql and execute it
     // 5. update the source table version map if refresh task completes successfully
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         // register tracers
         Tracers.register(context.getCtx());
         QueryDebugOptions queryDebugOptions = context.getCtx().getSessionVariable().getQueryDebugOptions();
@@ -200,16 +192,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // refresh mv
                 Preconditions.checkState(mv != null);
                 mvEntity = MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-                RefreshJobStatus status = doMvRefresh(context, mvEntity);
+                Constants.TaskRunState taskRunState = doMvRefresh(context, mvEntity);
                 // update metrics
-                mvEntity.increaseRefreshJobStatus(status);
+                mvEntity.increaseRefreshJobStatus(taskRunState);
                 connectContext.getState().setOk();
                 // only trigger to post process when mv has been refreshed successfully
-                this.isNeedToTriggerPostProcess = status == RefreshJobStatus.SUCCESS;
+                this.isNeedToTriggerPostProcess = taskRunState == Constants.TaskRunState.SUCCESS;
+                return taskRunState;
             }
         } catch (Exception e) {
             if (mvEntity != null) {
-                mvEntity.increaseRefreshJobStatus(RefreshJobStatus.FAILED);
+                mvEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
             }
             connectContext.getState().setError(e.getMessage());
             throw e;
@@ -337,7 +330,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return mvToRefreshedPartitions;
     }
 
-    private RefreshJobStatus doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity) {
+    private Constants.TaskRunState doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity) {
         long startRefreshTs = System.currentTimeMillis();
 
         // log mv basic info, it may throw exception if mv is invalid since base table has dropped
@@ -351,7 +344,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // refresh materialized view
-        RefreshJobStatus result = doRefreshMaterializedViewWithRetry(context, mvEntity);
+        Constants.TaskRunState result = doRefreshMaterializedViewWithRetry(context, mvEntity);
 
         // do not generate next task run if the current task run is killed
         if (mvContext.hasNextBatchPartition() && !mvContext.getTaskRun().isKilled()) {
@@ -376,8 +369,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Retry the `doRefreshMaterializedView` method to avoid insert fails in occasional cases.
      */
-    private RefreshJobStatus doRefreshMaterializedViewWithRetry(TaskRunContext taskRunContext,
-                                                                IMaterializedViewMetricsEntity mvEntity) throws DmlException {
+    private Constants.TaskRunState doRefreshMaterializedViewWithRetry(
+            TaskRunContext taskRunContext,
+            IMaterializedViewMetricsEntity mvEntity) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = getMaxRefreshMaterializedViewRetryNum(taskRunContext.getCtx());
         logger.info("start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
@@ -427,8 +421,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return maxRefreshMaterializedViewRetryNum;
     }
 
-    private RefreshJobStatus doRefreshMaterializedView(TaskRunContext context,
-                                                       IMaterializedViewMetricsEntity mvEntity) throws Exception {
+    private Constants.TaskRunState doRefreshMaterializedView(TaskRunContext context,
+                                                             IMaterializedViewMetricsEntity mvEntity) throws Exception {
         // 0. Compute the base-table partitions to check for external table
         // The candidate partition info is used to refresh the external table
         Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions = Maps.newHashMap();
@@ -464,7 +458,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             mvToRefreshedPartitions = checkMvToRefreshedPartitions(context, false);
             if (CollectionUtils.isEmpty(mvToRefreshedPartitions)) {
-                return RefreshJobStatus.EMPTY;
+                return Constants.TaskRunState.SKIPPED;
             }
             // ref table of mv : refreshed partition names
             refTableRefreshPartitions = getRefTableRefreshPartitions(mvToRefreshedPartitions);
@@ -492,7 +486,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
         }
 
-        return RefreshJobStatus.SUCCESS;
+        return Constants.TaskRunState.SUCCESS;
     }
 
     /**
@@ -927,7 +921,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     mv.getName(), mvId, mv.getInactiveReason());
             logger.warn(errorMsg);
-            mvEntity.increaseRefreshJobStatus(RefreshJobStatus.FAILED);
+            mvEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
             throw new DmlException(errorMsg);
         }
         // wait util transaction is visible for mv refresh task

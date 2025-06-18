@@ -138,6 +138,7 @@ T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
 
 SECRET_INFOS = {}
+TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
 
 
 class StarrocksSQLApiLib(object):
@@ -1930,7 +1931,8 @@ class StarrocksSQLApiLib(object):
             results = result["result"]
             for _res in results:
                 last_refresh_state = _res[12]
-                if last_refresh_state != "SUCCESS" and last_refresh_state != "MERGED":
+                if last_refresh_state not in TASK_RUN_SUCCESS_STATES:
+                    print("mv %s last refresh state is %s, not in %s" % (mv_name, last_refresh_state, TASK_RUN_SUCCESS_STATES))
                     return False
             return True
 
@@ -1947,7 +1949,7 @@ class StarrocksSQLApiLib(object):
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
             for _res in results:
-                if _res[0] != "SUCCESS" and _res[0] != "MERGED":
+                if _res[0] not in TASK_RUN_SUCCESS_STATES:
                     return False
             return True
 
@@ -1970,7 +1972,7 @@ class StarrocksSQLApiLib(object):
         def get_success_count(results):
             cnt = 0
             for _res in results:
-                if _res[0] == "SUCCESS" or _res[0] == "MERGED":
+                if _res[0] in TASK_RUN_SUCCESS_STATES:
                     cnt += 1
             return cnt
 
@@ -1998,7 +2000,7 @@ class StarrocksSQLApiLib(object):
     def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
         show_sql = """select count(*) from information_schema.materialized_views 
             join information_schema.task_runs using(task_name)
-            where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED')
+            where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED'  or state = 'SKIPPED')
         """.format(
             db_name, mv_name
         )

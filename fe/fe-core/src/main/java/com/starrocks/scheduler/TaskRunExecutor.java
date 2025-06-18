@@ -57,12 +57,8 @@ public class TaskRunExecutor {
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             try {
-                boolean isSuccess = taskRun.executeTaskRun();
-                if (isSuccess) {
-                    status.setState(Constants.TaskRunState.SUCCESS);
-                } else {
-                    status.setState(Constants.TaskRunState.FAILED);
-                }
+                Constants.TaskRunState runState = taskRun.executeTaskRun();
+                status.setState(runState);
             } catch (Exception ex) {
                 LOG.warn("failed to execute TaskRun.", ex);
                 status.setState(Constants.TaskRunState.FAILED);
