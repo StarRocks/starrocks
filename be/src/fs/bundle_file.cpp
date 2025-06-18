@@ -139,6 +139,10 @@ Status BundleSeekableInputStream::touch_cache(int64_t offset, size_t length) {
     return _stream->touch_cache(_offset + offset, length);
 }
 
+StatusOr<std::unique_ptr<io::NumericStatistics>> BundleSeekableInputStream::get_numeric_statistics() {
+    return _stream->get_numeric_statistics();
+}
+
 const std::string& BundleSeekableInputStream::filename() const {
     return _stream->filename();
 }

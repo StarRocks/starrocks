@@ -247,7 +247,7 @@ TEST_F(BundleFileTest, test_concurrent_write) {
     }
 }
 
-TEST_F(BundleFileTest, test_touch_cache) {
+TEST_F(BundleFileTest, test_touch_cache_and_statistics) {
     std::string test_data1 = "Hello, SharedFile!";
     std::string bundle_file_path = _test_dir + "/test_touch_cache_bundle_file.dat";
 
@@ -274,8 +274,12 @@ TEST_F(BundleFileTest, test_touch_cache) {
     RandomAccessFileOptions ropts;
     FileInfo file_info2{.path = bundle_file_path, .size = test_data1.size(), .bundle_file_offset = 0};
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(bundle_file_path));
-    ASSIGN_OR_ABORT(auto reader, fs->new_random_access_file_with_bundling(ropts, bundle_file_path));
+    ASSIGN_OR_ABORT(auto reader, fs->new_random_access_file_with_bundling(ropts, file_info2));
     ASSERT_OK(reader->touch_cache(0, sizeof(test_data1))); // touch the first 30 bytes
+
+    // get numeric statistics
+    ASSIGN_OR_ABORT(auto numeric_stats, reader->get_numeric_statistics());
+    ASSERT_TRUE(numeric_stats != nullptr);
 }
 
 } // namespace starrocks
