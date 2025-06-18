@@ -83,7 +83,10 @@ public:
             : _runnable(std::move(runner)), _cleaner(std::move(cleaner)), _st(Status::Unknown("Not yet executed")) {}
     virtual ~AutoCleanRunnable() { _cleaner(_st); }
 
-    virtual void run() override { set_status(Status::OK()); _runnable(); }
+    virtual void run() override {
+        set_status(Status::OK());
+        _runnable();
+    }
 
     void set_status(Status st) { _st = st; }
 

@@ -265,7 +265,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 [&, tablet_id](Status executed_st) {
                     if (!executed_st.ok()) {
                         g_publish_version_failed_tasks << 1;
-                        LOG(WARNING) << "publish version task of tablet: " << tablet_id << " exit without execution, " << executed_st;
+                        LOG(WARNING) << "publish version task of tablet: " << tablet_id << " exit without execution, "
+                                     << executed_st;
                         std::lock_guard l(response_mtx);
                         response->add_failed_tablets(tablet_id);
                         if (response->status().status_code() == 0) {
@@ -352,7 +353,8 @@ struct AggregatePublishContext {
                         },
                         [&](Status executed_st) {
                             if (!executed_st.ok()) {
-                                LOG(WARNING) << "put_aggregate_tablet_metadata task exit without execution, " << executed_st;
+                                LOG(WARNING)
+                                        << "put_aggregate_tablet_metadata task exit without execution, " << executed_st;
                                 publish_status = executed_st;
                             }
                             latch.count_down();
@@ -461,9 +463,10 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
                 [&, tablet_id](Status executed_st) {
                     if (!executed_st.ok()) {
                         g_publish_version_failed_tasks << 1;
-                        LOG(WARNING) << "publish log version task exit without execution: " << executed_st << " tablet_id=" << tablet_id
-                                    << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
-                                    << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
+                        LOG(WARNING) << "publish log version task exit without execution: " << executed_st
+                                     << " tablet_id=" << tablet_id
+                                     << " txns=" << JoinMapped(txn_infos, txn_info_string, ",") << " versions="
+                                     << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
                         std::lock_guard l(response_mtx);
                         response->add_failed_tablets(tablet_id);
                     }
@@ -751,8 +754,8 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
             },
             [&](Status executed_st) {
                 if (!executed_st.ok()) {
-                    LOG(WARNING) << "drop table task exit without execution: " << executed_st << " tablet_id=" << request->tablet_id()
-                                << " path=" << request->path();
+                    LOG(WARNING) << "drop table task exit without execution: " << executed_st
+                                 << " tablet_id=" << request->tablet_id() << " path=" << request->path();
                     if (response->status().status_code() == 0) {
                         executed_st.to_protobuf(response->mutable_status());   
                     }
@@ -1037,9 +1040,7 @@ struct AggregateCompactContext {
             } else {
                 auto latch = BThreadCountDownLatch(1);
                 auto task = std::make_shared<AutoCleanRunnable>(
-                        [&] {
-                            final_status = starrocks::write_combined_txn_log(combined_txn_log);
-                        },
+                        [&] { final_status = starrocks::write_combined_txn_log(combined_txn_log); },
                         [&](Status executed_st) {
                             if (!executed_st.ok()) {
                                 LOG(WARNING) << "write combined_txn_log task exit without execution: " << executed_st;

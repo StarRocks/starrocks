@@ -710,7 +710,8 @@ Status ConcurrencyLimitedThreadPoolToken::submit(std::shared_ptr<Runnable> task,
         return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
     }
     auto token_task =
-            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); }, [sem = _sem](Status) { sem->release(); });
+            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); },
+                                                [sem = _sem](Status) { sem->release(); });
     return _pool->submit(std::move(token_task));
 }
 
