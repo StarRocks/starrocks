@@ -11,11 +11,7 @@ JDBC catalog は、JDBC を介してアクセスされるデータソースか�
 
 また、JDBC catalog を使用して、JDBC データソースから直接データを変換してロードすることもできます。[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用します。
 
-<<<<<<< HEAD
-JDBC catalog は、v3.0 以降で MySQL と PostgreSQL をサポートし、v3.2.9 と v3.3.1 以降で Oracle と SQLServer をサポートしています。
-=======
 JDBC catalog は v3.0 から MySQL と PostgreSQL を、v3.2.9 と v3.3.1 から Oracle と SQLServer を、v3.3.0 から ClickHouse (実験的) をサポートしています。
->>>>>>> 9653b1318a ([Doc]Update jdbc_catalog.md (#60016))
 
 ## 前提条件
 
