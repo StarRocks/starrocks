@@ -155,38 +155,46 @@ public:
     /// @param value Floating point value to convert (truncated to integer)
     explicit int256_t(float value);
     explicit int256_t(double value);
-    // constexpr int256_t(float value)
-    //         : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
-    // constexpr int256_t(double value)
-    //         : low(static_cast<uint128_t>(static_cast<long long>(value))), high(value < 0 ? -1 : 0) {}
 
     // =============================================================================
     // Type Conversion Operators
     // =============================================================================
 
     /// Convert to boolean (true if non-zero)
-    operator bool() const { return high != 0 || low != 0; }
-    //
-    // /// High precision conversion using bit manipulation
-    // operator double() const;
-    //
-    // /// Convert to size_t (safe conversion with overflow checking)
-    // operator size_t() const {
-    //     if (high < 0) {
-    //         throw std::out_of_range("Cannot convert negative int256_t to size_t");
-    //     }
-    //
-    //     if (high > 0) {
-    //         throw std::out_of_range("int256_t value too large for size_t");
-    //     }
-    //
-    //     constexpr uint128_t max_size_t = std::numeric_limits<size_t>::max();
-    //     if (low > max_size_t) {
-    //         throw std::out_of_range("int256_t value too large for size_t");
-    //     }
-    //
-    //     return static_cast<size_t>(low);
-    // }
+    explicit operator bool() const { return high != 0 || low != 0; }
+
+    /// High precision conversion using bit manipulation
+    explicit operator double() const;
+
+    explicit operator int() const { return static_cast<int>(static_cast<uint32_t>(low)); }
+
+    explicit operator long() const { return static_cast<long>(static_cast<uint64_t>(low)); }
+
+    explicit operator int128_t() const { return static_cast<__int128>(low); }
+
+    /// Convert to signed char
+    explicit operator signed char() const { return static_cast<signed char>(static_cast<int64_t>(low)); }
+
+    /// Convert to short int
+    explicit operator short int() const { return static_cast<short>(static_cast<int64_t>(low)); }
+
+    /// Convert to size_t (safe conversion with overflow checking)
+    explicit operator size_t() const {
+        if (high < 0) {
+            throw std::out_of_range("Cannot convert negative int256_t to size_t");
+        }
+
+        if (high > 0) {
+            throw std::out_of_range("int256_t value too large for size_t");
+        }
+
+        constexpr uint128_t max_size_t = std::numeric_limits<size_t>::max();
+        if (low > max_size_t) {
+            throw std::out_of_range("int256_t value too large for size_t");
+        }
+
+        return static_cast<size_t>(low);
+    }
 
     // =============================================================================
     // Unary Operators
@@ -277,6 +285,28 @@ public:
     /// @param other Integer value to compare with
     /// @return true if this value is greater than or equal to other
     constexpr bool operator>=(int other) const { return *this >= int256_t(other); }
+
+    // =============================================================================
+    // Friend Comparison Operators (for reverse operand order)
+    // =============================================================================
+
+    /// Equality comparison: int == int256_t
+    friend constexpr bool operator==(int lhs, const int256_t& rhs) { return int256_t(lhs) == rhs; }
+
+    /// Inequality comparison: int != int256_t
+    friend constexpr bool operator!=(int lhs, const int256_t& rhs) { return int256_t(lhs) != rhs; }
+
+    /// Less than comparison: int < int256_t
+    friend constexpr bool operator<(int lhs, const int256_t& rhs) { return int256_t(lhs) < rhs; }
+
+    /// Less than or equal comparison: int <= int256_t
+    friend constexpr bool operator<=(int lhs, const int256_t& rhs) { return int256_t(lhs) <= rhs; }
+
+    /// Greater than comparison: int > int256_t
+    friend constexpr bool operator>(int lhs, const int256_t& rhs) { return int256_t(lhs) > rhs; }
+
+    /// Greater than or equal comparison: int >= int256_t
+    friend constexpr bool operator>=(int lhs, const int256_t& rhs) { return int256_t(lhs) >= rhs; }
 
     // =============================================================================
     // Arithmetic Operators - Addition
@@ -482,7 +512,57 @@ public:
     /// Left shift assignment operator
     /// @param shift Number of bits to shift left
     /// @return Reference to this after shifting
-    constexpr int256_t& operator<<=(int shift) { return *this = *this << shift; }
+    int256_t& operator<<=(int shift) { return *this = *this << shift; }
+
+    // =============================================================================
+    // Bitwise Operators
+    // =============================================================================
+
+    /// Bitwise AND operator
+    /// @param other Value to perform AND with
+    /// @return Bitwise AND result
+    int256_t operator&(const int256_t& other) const { return int256_t(high & other.high, low & other.low); }
+
+    /// Bitwise OR operator
+    /// @param other Value to perform OR with
+    /// @return Bitwise OR result
+    int256_t operator|(const int256_t& other) const { return int256_t(high | other.high, low | other.low); }
+
+    /// Bitwise XOR operator
+    /// @param other Value to perform XOR with
+    /// @return Bitwise XOR result
+    int256_t operator^(const int256_t& other) const { return int256_t(high ^ other.high, low ^ other.low); }
+
+    /// Bitwise NOT operator
+    /// @return Bitwise complement of this value
+    int256_t operator~() const { return int256_t(~high, ~low); }
+
+    /// Bitwise AND assignment operator
+    /// @param other Value to perform AND with
+    /// @return Reference to this after AND operation
+    int256_t& operator&=(const int256_t& other) {
+        high &= other.high;
+        low &= other.low;
+        return *this;
+    }
+
+    /// Bitwise OR assignment operator
+    /// @param other Value to perform OR with
+    /// @return Reference to this after OR operation
+    int256_t& operator|=(const int256_t& other) {
+        high |= other.high;
+        low |= other.low;
+        return *this;
+    }
+
+    /// Bitwise XOR assignment operator
+    /// @param other Value to perform XOR with
+    /// @return Reference to this after XOR operation
+    int256_t& operator^=(const int256_t& other) {
+        high ^= other.high;
+        low ^= other.low;
+        return *this;
+    }
 
     // =============================================================================
     // Utility Methods
@@ -637,6 +717,12 @@ int256_t parse_int256(const std::string& str);
 // =============================================================================
 
 namespace std {
+
+/// Specialization of make_signed for int256_t
+template <>
+struct make_signed<starrocks::int256_t> {
+    using type = starrocks::int256_t;
+};
 
 /// Specialization of make_unsigned for int256_t
 template <>

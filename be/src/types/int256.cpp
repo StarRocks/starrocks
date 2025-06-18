@@ -247,52 +247,44 @@ int256_t::int256_t(float value) {
         return;
     }
 
-    // Check for overflow - float can represent up to ~2^127 precisely
-    constexpr float max_safe_float = 1.7014118346046923e+38f; // ~2^127
-    if (std::abs(value) >= max_safe_float) {
-        if (value > 0) {
-            *this = INT256_MAX;
-        } else {
-            *this = INT256_MIN;
-        }
+    if (value == 0.0f) {
+        low = 0;
+        high = 0;
         return;
     }
 
     bool negative = value < 0;
     float abs_value = std::abs(value);
 
-    // Convert to integer part only (truncate)
+    constexpr float max_safe_float = 16777216.0f; // 2^24
+    if (abs_value >= max_safe_float) {
+        if (abs_value >= 1e38f) {
+            *this = negative ? INT256_MIN : INT256_MAX;
+            return;
+        }
+
+        int64_t int_val = static_cast<int64_t>(value);
+        low = static_cast<uint128_t>(std::abs(int_val));
+        high = (int_val < 0) ? -1 : 0;
+        return;
+    }
+
     if (abs_value < 1.0f) {
         low = 0;
         high = 0;
         return;
     }
 
-    // Use bit manipulation for precise conversion
-    uint32_t bits = *reinterpret_cast<const uint32_t*>(&abs_value);
-    int32_t exponent = ((bits >> 23) & 0xFF) - 127;   // IEEE 754 bias
-    uint32_t mantissa = (bits & 0x7FFFFF) | 0x800000; // Add implicit 1
+    int64_t int_value = static_cast<int64_t>(value);
 
-    if (exponent < 0) {
-        low = 0;
+    if (int_value >= 0) {
+        low = static_cast<uint128_t>(int_value);
         high = 0;
-    } else if (exponent < 24) {
-        uint32_t int_value = mantissa >> (23 - exponent);
-        low = negative ? -int_value : int_value;
-        high = negative && int_value != 0 ? -1 : 0;
     } else {
-        // Large exponent case
-        uint128_t result = static_cast<uint128_t>(mantissa) << (exponent - 23);
-        if (exponent >= 128) {
-            low = 0;
-            high = negative ? -static_cast<int128_t>(result >> 128) : static_cast<int128_t>(result >> 128);
-        } else {
-            low = static_cast<uint128_t>(result);
-            high = 0;
-        }
-        if (negative) {
-            *this = -*this;
-        }
+        uint64_t abs_int = static_cast<uint64_t>(-int_value);
+        low = static_cast<uint128_t>(abs_int);
+        high = 0;
+        *this = -*this;
     }
 }
 
@@ -303,62 +295,51 @@ int256_t::int256_t(double value) {
         return;
     }
 
-    // Check for overflow - double can represent up to ~2^1023, but we limit to 2^255
-    constexpr double max_safe_double =
-            5.7896044618658097711785492504343953926634992332820282019728792003956564819968e+76; // 2^255
-    if (std::abs(value) >= max_safe_double) {
-        if (value > 0) {
-            *this = INT256_MAX;
-        } else {
-            *this = INT256_MIN;
-        }
+    if (value == 0.0) {
+        low = 0;
+        high = 0;
         return;
     }
 
     bool negative = value < 0;
     double abs_value = std::abs(value);
 
-    // Convert to integer part only (truncate)
+    constexpr double max_safe_double = 9007199254740992.0;
+
+    if (abs_value >= max_safe_double) {
+        constexpr double max_int256_double =
+                5.7896044618658097711785492504343953926634992332820282019728792003956564819968e+76;
+
+        if (abs_value >= max_int256_double) {
+            *this = negative ? INT256_MIN : INT256_MAX;
+            return;
+        }
+
+        int64_t high_part = static_cast<int64_t>(value / (1ULL << 32) / (1ULL << 32));
+        double remainder = value - static_cast<double>(high_part) * (1ULL << 32) * (1ULL << 32);
+        uint64_t low_part = static_cast<uint64_t>(std::abs(remainder));
+
+        high = static_cast<int128_t>(high_part);
+        low = static_cast<uint128_t>(low_part);
+        return;
+    }
+
     if (abs_value < 1.0) {
         low = 0;
         high = 0;
         return;
     }
 
-    // Use bit manipulation for precise conversion
-    uint64_t bits = *reinterpret_cast<const uint64_t*>(&abs_value);
-    int32_t exponent = ((bits >> 52) & 0x7FF) - 1023;                // IEEE 754 bias
-    uint64_t mantissa = (bits & 0xFFFFFFFFFFFFF) | 0x10000000000000; // Add implicit 1
+    int64_t int_value = static_cast<int64_t>(value);
 
-    if (exponent < 0) {
-        low = 0;
+    if (int_value >= 0) {
+        low = static_cast<uint128_t>(int_value);
         high = 0;
-    } else if (exponent < 53) {
-        uint64_t int_value = mantissa >> (52 - exponent);
-        low = negative ? -int_value : int_value;
-        high = negative && int_value != 0 ? -1 : 0;
     } else {
-        // Large exponent case - need to handle carefully
-        if (exponent >= 255) {
-            // Overflow case
-            *this = negative ? INT256_MIN : INT256_MAX;
-            return;
-        }
-
-        uint128_t result = static_cast<uint128_t>(mantissa);
-        int shift = exponent - 52;
-
-        if (shift >= 128) {
-            low = 0;
-            high = static_cast<int128_t>(result << (shift - 128));
-        } else {
-            low = result << shift;
-            high = static_cast<int128_t>(result >> (128 - shift));
-        }
-
-        if (negative) {
-            *this = -*this;
-        }
+        uint64_t abs_int = static_cast<uint64_t>(-int_value);
+        low = static_cast<uint128_t>(abs_int);
+        high = 0;
+        *this = -*this;
     }
 }
 
@@ -366,37 +347,37 @@ int256_t::int256_t(double value) {
 // Type Conversion Operators Implementation
 // =============================================================================
 
-// int256_t::operator double() const {
-//     if (*this == 0) return 0.0;
-//
-//     const bool negative = (high < 0);
-//     const int256_t abs_val = negative ? -*this : *this;
-//
-//     // Find the position of the most significant bit
-//     int bit_count = 0;
-//     int256_t temp = abs_val;
-//     while (temp > 0) {
-//         temp >>= 1;
-//         bit_count++;
-//     }
-//
-//     if (bit_count <= 53) {
-//         // Can represent exactly in double
-//         double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
-//         if (abs_val.high != 0) {
-//             result += static_cast<double>(static_cast<uint64_t>(abs_val.high)) * (1ULL << 32) * (1ULL << 32) *
-//                       (1ULL << 32) * (1ULL << 32);
-//         }
-//         return negative ? -result : result;
-//     } else {
-//         // Need to round to fit in double precision
-//         const int shift = bit_count - 53;
-//         const int256_t rounded = (abs_val + (int256_t(1) << (shift - 1))) >> shift;
-//         const double mantissa = static_cast<double>(static_cast<uint64_t>(rounded.low));
-//         const double result = mantissa * pow(2.0, shift);
-//         return negative ? -result : result;
-//     }
-// }
+int256_t::operator double() const {
+    if (*this == 0) return 0.0;
+
+    const bool negative = (high < 0);
+    const int256_t abs_val = negative ? -*this : *this;
+
+    // Find the position of the most significant bit
+    int bit_count = 0;
+    int256_t temp = abs_val;
+    while (temp > 0) {
+        temp >>= 1;
+        bit_count++;
+    }
+
+    if (bit_count <= 53) {
+        // Can represent exactly in double
+        double result = static_cast<double>(static_cast<uint64_t>(abs_val.low));
+        if (abs_val.high != 0) {
+            result += static_cast<double>(static_cast<uint64_t>(abs_val.high)) * (1ULL << 32) * (1ULL << 32) *
+                      (1ULL << 32) * (1ULL << 32);
+        }
+        return negative ? -result : result;
+    } else {
+        // Need to round to fit in double precision
+        const int shift = bit_count - 53;
+        const int256_t rounded = (abs_val + (int256_t(1) << (shift - 1))) >> shift;
+        const double mantissa = static_cast<double>(static_cast<uint64_t>(rounded.low));
+        const double result = mantissa * pow(2.0, shift);
+        return negative ? -result : result;
+    }
+}
 
 // =============================================================================
 // Multiplication Runtime Implementation - Helper Functions

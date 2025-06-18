@@ -59,7 +59,8 @@ template <>
 inline constexpr bool IsDateTime<DateValue> = true;
 
 template <typename T>
-using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
+using is_starrocks_arithmetic =
+        std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T> || std::is_same_v<T, int256_t>>;
 
 // If isArithmeticLT is true, means this type support +,-,*,/
 template <LogicalType logical_type>

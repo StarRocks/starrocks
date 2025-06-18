@@ -24,8 +24,10 @@ namespace starrocks {
 struct SumDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_decimal<lt>) {
+        if constexpr (lt_is_decimal<lt> && !lt_is_decimal256<lt>) {
             resolver->add_decimal_mapping<lt, TYPE_DECIMAL128, true>("decimal_sum");
+        } else if constexpr (lt_is_decimal256<lt>) {
+            resolver->add_decimal_mapping<lt, TYPE_DECIMAL256, true>("decimal_sum");
         } else if constexpr (lt_is_numeric<lt> || lt_is_decimalv2<lt>) {
             using SumState = SumAggregateState<RunTimeCppType<SumResultLT<lt>>>;
             resolver->add_aggregate_mapping<lt, SumResultLT<lt>, SumState>(

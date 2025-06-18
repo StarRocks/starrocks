@@ -385,7 +385,8 @@ public class ScalarType extends Type implements Cloneable {
         int integerPartWidth = Math.max(lhsIntegerPartWidth, rhsIntegerPartWidth);
         int scale = Math.max(lhsScale, rhsScale);
         int precision = integerPartWidth + scale;
-        if (precision > 38) {
+        boolean hasDecimal256 = lhs.isDecimal256() || rhs.isDecimal256();
+        if ((precision > 38 && !hasDecimal256) || (precision > 76)) {
             return ScalarType.DOUBLE;
         } else {
             // the common type's PrimitiveType of two decimal types should wide enough, i.e
@@ -422,6 +423,7 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return getCommonTypeForDecimalV3(decimalType, otherType);
 
             case BOOLEAN:
