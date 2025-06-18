@@ -332,26 +332,32 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
 
         // routine load jobs
-        RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
+<<<<<<< HEAD
             GaugeMetric<Long> gauge = new GaugeMetric<Long>("routine_load_jobs",
+=======
+            Metric<Long> gauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
+>>>>>>> bf5b387c44 ([BugFix] fix routine_load_job metrics on non-leaders (#59985))
                     MetricUnit.NOUNIT, "routine load jobs") {
                 @Override
-                public Long getValue() {
+                public Long getValueLeader() {
+                    RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
                     if (null == routineLoadManger) {
                         return 0L;
+                    } else {
+                        return (long) routineLoadManger.getRoutineLoadJobByState(Sets.newHashSet(state)).size();
                     }
-                    return (long) routineLoadManger.getRoutineLoadJobByState(Sets.newHashSet(state)).size();
                 }
             };
             gauge.addLabel(new MetricLabel("state", state.name()));
             STARROCKS_METRIC_REGISTER.addMetric(gauge);
         }
 
-        GaugeMetric<Long> routineLoadUnstableJobsGauge = new GaugeMetric<Long>("routine_load_jobs",
+        Metric<Long> routineLoadUnstableJobsGauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
                 MetricUnit.NOUNIT, "routine load jobs") {
             @Override
-            public Long getValue() {
+            public Long getValueLeader() {
+                RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
                 if (null == routineLoadManger) {
                     return 0L;
                 }

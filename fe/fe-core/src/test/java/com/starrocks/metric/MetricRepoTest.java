@@ -68,4 +68,77 @@ public class MetricRepoTest extends PlanTestBase {
         Assert.assertTrue(json.contains("brpc_pool_numactive"));
     }
 
+<<<<<<< HEAD
 }
+=======
+    @Test
+    public void testLeaderAwarenessMetric() {
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
+
+        List<Metric> metrics = MetricRepo.getMetricsByName("job");
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        for (Metric m : metrics) {
+            visitor.visit(m);
+        }
+        // _job{is_leader="true", job="load", type="INSERT", state="UNKNOWN"} 0
+        // _job{is_leader="true", job="load", type="INSERT", state="PENDING"} 0
+        // _job{is_leader="true", job="load", type="INSERT", state="ETL"} 0
+        // _job{is_leader="true", job="load", type="INSERT", state="LOADING"} 0
+        // _job{is_leader="true", job="load", type="INSERT", state="COMMITTED"} 0
+        // _job{is_leader="true", job="load", type="INSERT", state="FINISHED"} 0
+        // _job{is_leader="true", job="load", type="INSERT", state="CANCELLED"} 0
+        // _job{is_leader="true", job="load", type="INSERT", state="QUEUEING"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="UNKNOWN"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="PENDING"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="ETL"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="LOADING"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="COMMITTED"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="FINISHED"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="CANCELLED"} 0
+        // _job{is_leader="true", job="load", type="BROKER", state="QUEUEING"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="UNKNOWN"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="PENDING"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="ETL"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="LOADING"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="COMMITTED"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="FINISHED"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="CANCELLED"} 0
+        // _job{is_leader="true", job="load", type="SPARK", state="QUEUEING"} 0
+        // _job{is_leader="true", job="alter", type="ROLLUP", state="running"} 0
+        // _job{is_leader="true", job="alter", type="SCHEMA_CHANGE", state="running"} 0
+        String output = visitor.build();
+        String [] lines = output.split("\n");
+        for (String line : lines) {
+            if (line.startsWith("#")) {
+                continue;
+            }
+            Assert.assertTrue(line, line.contains("is_leader=\"true\""));
+        }
+    }
+
+    @Test
+    public void testRoutineLoadJobMetrics() {
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
+        List<Metric> metrics = MetricRepo.getMetricsByName("routine_load_jobs");
+        MetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        for (Metric m : metrics) {
+            visitor.visit(m);
+        }
+        // ut_routine_load_jobs{is_leader="true", state="NEED_SCHEDULE"} 0
+        // ut_routine_load_jobs{is_leader="true", state="RUNNING"} 0
+        // ut_routine_load_jobs{is_leader="true", state="PAUSED"} 0
+        // ut_routine_load_jobs{is_leader="true", state="STOPPED"} 0
+        // ut_routine_load_jobs{is_leader="true", state="CANCELLED"} 0
+        // ut_routine_load_jobs{is_leader="true", state="UNSTABLE"} 0
+        String output = visitor.build();
+        String[] lines = output.split("\n");
+        for (String line : lines) {
+            if (line.startsWith("#")) {
+                continue;
+            }
+            Assert.assertTrue(line, line.contains("is_leader=\"true\""));
+        }
+
+    }
+}
+>>>>>>> bf5b387c44 ([BugFix] fix routine_load_job metrics on non-leaders (#59985))
