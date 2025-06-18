@@ -518,10 +518,15 @@ public class SecurityPolicyMgr {
     }
 
     private void doRevokeMaskingPolicyContext(TableUID tableUID, ColumnId columnId) {
-        policyContextMap.computeIfPresent(tableUID, (k, v) -> {
-            v.revokeMaskingPolicy(columnId);
-            return v;
-        });
+        policyLock.writeLock().lock();
+        try {
+            policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+                v.revokeMaskingPolicy(columnId);
+                return v;
+            });
+        } finally {
+            policyLock.writeLock().unlock();
+        }
     }
 
     public void applyRowAccessPolicyContext(ConnectContext ctx, TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
@@ -581,46 +586,61 @@ public class SecurityPolicyMgr {
     public void revokeRowAccessPolicyContext(ConnectContext ctx,
                                              String catalog, String dbName, String tblName, PolicyName policyName) {
         SecurityPolicyMgr securityPolicyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
-        Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName);
-        if (policy == null) {
-            throw new SemanticException("Can't find masking policy : " + policyName.getName());
+        policyLock.writeLock().lock();
+        try {
+            Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName);
+            if (policy == null) {
+                throw new SemanticException("Can't find masking policy : " + policyName.getName());
+            }
+            long policyId = policy.getPolicyId();
+
+            TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
+            policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+                v.revokeRowAccessPolicy(policyId);
+                return v;
+            });
+
+            GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
+                    new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(policyId, null)));
+        } finally {
+            policyLock.writeLock().unlock();
         }
-        long policyId = policy.getPolicyId();
-
-        TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
-        policyContextMap.computeIfPresent(tableUID, (k, v) -> {
-            v.revokeRowAccessPolicy(policyId);
-            return v;
-        });
-
-        GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
-                new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(policyId, null)));
     }
 
     public void revokeALLRowAccessPolicyContext(ConnectContext ctx, String catalog, String dbName, String tblName) {
         TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
-        policyContextMap.computeIfPresent(tableUID, (k, v) -> {
-            v.clearRowAccessPolicy();
-            return v;
-        });
-
-        GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
-                new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(null, null)));
-    }
-
-    public void replayRevokeRowAccessPolicyContext(ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo) {
-        TableUID tableUID = applyRowAccessPolicyInfo.getTable();
-        if (applyRowAccessPolicyInfo.getRowAccessPolicyContext().policyId == null) {
+        policyLock.writeLock().lock();
+        try {
             policyContextMap.computeIfPresent(tableUID, (k, v) -> {
                 v.clearRowAccessPolicy();
                 return v;
             });
-        } else {
-            RowAccessPolicyContext rowAccessPolicyContext = applyRowAccessPolicyInfo.getRowAccessPolicyContext();
-            policyContextMap.computeIfPresent(tableUID, (k, v) -> {
-                v.revokeRowAccessPolicy(rowAccessPolicyContext.getPolicyId());
-                return v;
-            });
+
+            GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
+                    new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(null, null)));
+        } finally {
+            policyLock.writeLock().unlock();
+        }
+    }
+
+    public void replayRevokeRowAccessPolicyContext(ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo) {
+        policyLock.writeLock().lock();
+        try {
+            TableUID tableUID = applyRowAccessPolicyInfo.getTable();
+            if (applyRowAccessPolicyInfo.getRowAccessPolicyContext().policyId == null) {
+                policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+                    v.clearRowAccessPolicy();
+                    return v;
+                });
+            } else {
+                RowAccessPolicyContext rowAccessPolicyContext = applyRowAccessPolicyInfo.getRowAccessPolicyContext();
+                policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+                    v.revokeRowAccessPolicy(rowAccessPolicyContext.getPolicyId());
+                    return v;
+                });
+            }
+        } finally {
+            policyLock.writeLock().unlock();
         }
     }
 
@@ -646,7 +666,6 @@ public class SecurityPolicyMgr {
             }
             PasswordPolicy passwordPolicy = new PasswordPolicy(
                     log.getPolicyId(), log.getPolicyName(), log.getComment(), log.getProperties());
-
 
             passwordPolicyNameToId.put(log.getPolicyName(), log.getPolicyId());
             passwordPolicyMap.put(log.getPolicyId(), passwordPolicy);
