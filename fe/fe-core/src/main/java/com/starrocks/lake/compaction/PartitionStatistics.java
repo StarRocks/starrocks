@@ -17,6 +17,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 
 import javax.annotation.Nullable;
 
@@ -111,6 +112,9 @@ public class PartitionStatistics {
     }
     
     private void adjustPunishFactor(Quantiles newCompactionScore, boolean isPartialSuccess) {
+        if (!Config.lake_compaction_enable_punish_factor) {
+            return;
+        }
         if (compactionScore != null && newCompactionScore != null) {
             if (compactionScore.getMax() == newCompactionScore.getMax() && isPartialSuccess) {
                 // this means partial compaction succeeds, need increase punish factor,

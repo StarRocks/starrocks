@@ -3080,6 +3080,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_bind_compaction_with_load_warehouse = false;
 
+    @ConfField(mutable = true)
+    public static boolean lake_compaction_enable_punish_factor = false;
+
     /**
      * Lake compaction manager might punish compaction for a long time period, which will introduce confuse for diagnose,
      * We want to print warning log if delay time is too long. The default threshold is 10 minutes.
