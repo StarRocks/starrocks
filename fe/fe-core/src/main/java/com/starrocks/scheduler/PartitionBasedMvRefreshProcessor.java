@@ -286,7 +286,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * If it's tentative, only return the result rather than modify any state
      * IF it's not, it would modify the context state, like `NEXT_PARTITION_START`
      */
-    private Set<String> checkMvToRefreshedPartitions(TaskRunContext context, boolean tentative)
+    @VisibleForTesting
+    public Set<String> checkMvToRefreshedPartitions(TaskRunContext context, boolean tentative)
             throws AnalysisException, LockTimeoutException {
         Set<String> mvToRefreshedPartitions = null;
         Locker locker = new Locker();

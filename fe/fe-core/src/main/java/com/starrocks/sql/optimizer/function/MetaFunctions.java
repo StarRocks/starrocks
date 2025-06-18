@@ -164,10 +164,10 @@ public class MetaFunctions {
         @SerializedName(value = "tableToUpdatePartitions")
         private final Map<String, Set<String>> tableToUpdatePartitions;
         // olap table info
-        @SerializedName("baseTableVisibleVersionMap")
+        @SerializedName("baseOlapTableVisibleVersionMap")
         private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap;
         // external table info
-        @SerializedName("baseTableInfoVisibleVersionMap")
+        @SerializedName("baseExternalTableInfoVisibleVersionMap")
         private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableInfoVisibleVersionMap;
 
         public MVRefreshInfoMeta(
@@ -184,6 +184,9 @@ public class MetaFunctions {
     }
     @ConstantFunction(name = "inspect_mv_refresh_info", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspectMVRefreshInfo(ConstantOperator mvName) {
+        if (mvName == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, mvName);
+        }
         TableName tableName = TableName.fromString(mvName.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
         Table table = dbTable.getRight();
@@ -234,8 +237,11 @@ public class MetaFunctions {
     }
 
     @ConstantFunction(name = "inspect_table_partition_info", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspectTablePartitionInfo(ConstantOperator mvName) {
-        TableName tableName = TableName.fromString(mvName.getVarchar());
+    public static ConstantOperator inspectTablePartitionInfo(ConstantOperator input) {
+        if (input == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, input);
+        }
+        TableName tableName = TableName.fromString(input.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
         Table table = dbTable.getRight();
         if (table == null) {
