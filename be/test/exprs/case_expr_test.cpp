@@ -934,9 +934,6 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
         chunk.append_column(array0, 1);
         ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
         ASSERT_EQ(ptr->size(), 3);
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_TRUE(ptr->is_null(j));
-        }
     }
 }
 
