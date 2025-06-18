@@ -116,4 +116,28 @@ public class MetricRepoTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testRoutineLoadJobMetrics() {
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
+        List<Metric> metrics = MetricRepo.getMetricsByName("routine_load_jobs");
+        MetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        for (Metric m : metrics) {
+            visitor.visit(m);
+        }
+        // ut_routine_load_jobs{is_leader="true", state="NEED_SCHEDULE"} 0
+        // ut_routine_load_jobs{is_leader="true", state="RUNNING"} 0
+        // ut_routine_load_jobs{is_leader="true", state="PAUSED"} 0
+        // ut_routine_load_jobs{is_leader="true", state="STOPPED"} 0
+        // ut_routine_load_jobs{is_leader="true", state="CANCELLED"} 0
+        // ut_routine_load_jobs{is_leader="true", state="UNSTABLE"} 0
+        String output = visitor.build();
+        String[] lines = output.split("\n");
+        for (String line : lines) {
+            if (line.startsWith("#")) {
+                continue;
+            }
+            Assert.assertTrue(line, line.contains("is_leader=\"true\""));
+        }
+
+    }
 }
