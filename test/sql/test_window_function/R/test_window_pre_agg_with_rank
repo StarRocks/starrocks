@@ -94,3 +94,19 @@ WHERE _rowid <= 2 order by c4,c6;
 4	2	2	4	2	2	1	18	2.0
 4	2	2	5	2	22	2	18	2.0
 -- !result
+SELECT 1
+FROM (
+    SELECT
+        COUNT(*) OVER (PARTITION BY c1) as _count,
+        ROW_NUMBER() OVER ( PARTITION BY c1 ORDER BY RAND() ) as rn
+    FROM t1
+) as x
+WHERE rn <= 2;
+-- result:
+1
+1
+1
+1
+1
+1
+-- !result
