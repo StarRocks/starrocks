@@ -422,6 +422,8 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
         _num_threads_pending_start++;
     }
 
+    TEST_SYNC_POINT_CALLBACK("ThreadPool::do_submit:replace_task", &r);
+
     Task task;
     task.runnable = std::move(r);
     task.submit_time = submit_time;
@@ -708,7 +710,7 @@ Status ConcurrencyLimitedThreadPoolToken::submit(std::shared_ptr<Runnable> task,
         return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
     }
     auto token_task =
-            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); }, [sem = _sem] { sem->release(); });
+            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); }, [sem = _sem](Status) { sem->release(); });
     return _pool->submit(std::move(token_task));
 }
 

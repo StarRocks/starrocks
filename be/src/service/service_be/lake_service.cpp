@@ -262,17 +262,25 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     TRACE("finished");
                     g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
                 },
-                [&] { latch.count_down(); });
+                [&, tablet_id](Status executed_st) {
+                    if (!executed_st.ok()) {
+                        g_publish_version_failed_tasks << 1;
+                        LOG(WARNING) << "publish version task of tablet: " << tablet_id << " exit without execution, " << executed_st;
+                        std::lock_guard l(response_mtx);
+                        response->add_failed_tablets(tablet_id);
+                        if (response->status().status_code() == 0) {
+                            executed_st.to_protobuf(response->mutable_status());
+                        }
+                    }
+                    latch.count_down();
+                });
 
+        auto task_guard = task;
         auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
         if (!st.ok()) {
-            g_publish_version_failed_tasks << 1;
-            LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
-                         << " txn_ids=" << JoinInts(request->txn_ids(), ",");
-            std::lock_guard l(response_mtx);
-            response->add_failed_tablets(tablet_id);
-            st.to_protobuf(response->mutable_status());
+            task_guard->set_status(st);
         }
+        task_guard.reset();
     }
 
     latch.wait();
@@ -342,12 +350,19 @@ struct AggregatePublishContext {
                         [&] {
                             publish_status = env->lake_tablet_manager()->put_aggregate_tablet_metadata(tablet_metas);
                         },
-                        [&] { latch.count_down(); });
+                        [&](Status executed_st) {
+                            if (!executed_st.ok()) {
+                                LOG(WARNING) << "put_aggregate_tablet_metadata task exit without execution, " << executed_st;
+                                publish_status = executed_st;
+                            }
+                            latch.count_down();
+                        });
+                auto task_guard = task;
                 Status submit_st = thread_pool->submit(std::move(task));
                 if (!submit_st.ok()) {
-                    LOG(WARNING) << "Fail to submit put_aggregate_tablet_metadata task";
-                    publish_status = submit_st;
+                    task_guard->set_status(submit_st);
                 }
+                task_guard.reset();
                 latch.wait();
             }
         }
@@ -443,17 +458,23 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
                         response->add_failed_tablets(tablet_id);
                     }
                 },
-                [&] { latch.count_down(); });
-
+                [&, tablet_id](Status executed_st) {
+                    if (!executed_st.ok()) {
+                        g_publish_version_failed_tasks << 1;
+                        LOG(WARNING) << "publish log version task exit without execution: " << executed_st << " tablet_id=" << tablet_id
+                                    << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
+                                    << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
+                        std::lock_guard l(response_mtx);
+                        response->add_failed_tablets(tablet_id);
+                    }
+                    latch.count_down();
+                });
+        auto task_guard = task;
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
-            g_publish_version_failed_tasks << 1;
-            LOG(WARNING) << "Fail to submit publish log version task: " << st << " tablet_id=" << tablet_id
-                         << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
-                         << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
-            std::lock_guard l(response_mtx);
-            response->add_failed_tablets(tablet_id);
+            task_guard->set_status(st);
         }
+        task_guard.reset();
     }
 
     latch.wait();
@@ -577,11 +598,12 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
                     lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
                 }
             },
-            [&] { latch.count_down(); });
+            [&](Status) { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit abort transaction task: " << st;
     }
+    // This task does not return any status, do not need to check execution state of task.
 
     latch.wait();
 }
@@ -604,13 +626,13 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
     }
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<AutoCleanRunnable>([&] { lake::delete_tablets(_tablet_mgr, *request, response); },
-                                                    [&] { latch.count_down(); });
+                                                    [&](Status) { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit delete tablet task: " << st;
         st.to_protobuf(response->mutable_status());
     }
-
+    // This task does not return any status except submitting, do not need to check execution state of task.
     latch.wait();
 
     // Fill failed_tablets for backward compatibility
@@ -643,12 +665,13 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
 
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<AutoCleanRunnable>([&] { lake::delete_txn_log(_tablet_mgr, *request, response); },
-                                                    [&] { latch.count_down(); });
+                                                    [&](Status) { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
     } else {
+        // This task does not return any status except submitting, do not need to check execution state of task.
         Status::OK().to_protobuf(response->mutable_status());
     }
 
@@ -726,14 +749,23 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
                               << " path=" << request->path() << " is_not_found=" << st.is_not_found();
                 }
             },
-            [&] { latch.count_down(); });
+            [&](Status executed_st) {
+                if (!executed_st.ok()) {
+                    LOG(WARNING) << "drop table task exit without execution: " << executed_st << " tablet_id=" << request->tablet_id()
+                                << " path=" << request->path();
+                    if (response->status().status_code() == 0) {
+                        executed_st.to_protobuf(response->mutable_status());   
+                    }
+                }
+                latch.count_down();
+            });
 
+    auto task_guard = task;
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit drop table task: " << st << " tablet_id=" << request->tablet_id()
-                     << " path=" << request->path();
-        st.to_protobuf(response->mutable_status());
+        task_guard->set_status(st);
     }
+    task_guard.reset();
 
     latch.wait();
 }
@@ -778,14 +810,21 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
                         response->add_failed_tablets(tablet_id);
                     }
                 },
-                [&] { latch.count_down(); });
+                [&](Status executed_st) {
+                    if (!executed_st.ok()) {
+                        LOG(WARNING) << "delete data task exit without execution: " << executed_st;
+                        std::lock_guard l(response_mtx);
+                        response->add_failed_tablets(tablet_id);
+                    }
+                    latch.count_down();
+                });
 
+        auto task_guard = task;
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit delete data task: " << st;
-            std::lock_guard l(response_mtx);
-            response->add_failed_tablets(tablet_id);
+            task_guard->set_status(st);
         }
+        task_guard.reset();
     }
 
     latch.wait();
@@ -847,13 +886,14 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     tablet_stat->set_num_rows(num_rows);
                     tablet_stat->set_data_size(data_size);
                 },
-                [&] { latch.count_down(); });
+                [&](Status) { latch.count_down(); });
         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
         if (auto st = thread_pool_token.submit(std::move(task), timeout_deadline); !st.ok()) {
             LOG(WARNING) << "Fail to get tablet stats task: " << st;
         }
     }
 
+    // This task does not return any status, do not need to check execution state of task.
     latch.wait();
 }
 
@@ -897,7 +937,7 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
                     cntl->SetFailed("Fail to upload snapshot");
                 }
             },
-            [&] { latch.count_down(); });
+            [&](Status) { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit upload snapshots task: " << st;
@@ -928,7 +968,7 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
                     cntl->SetFailed("Fail to restore snapshot");
                 }
             },
-            [&] { latch.count_down(); });
+            [&](Status) { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit restore snapshots task: " << st;
@@ -997,13 +1037,22 @@ struct AggregateCompactContext {
             } else {
                 auto latch = BThreadCountDownLatch(1);
                 auto task = std::make_shared<AutoCleanRunnable>(
-                        [&] { final_status = starrocks::write_combined_txn_log(combined_txn_log); },
-                        [&] { latch.count_down(); });
+                        [&] {
+                            final_status = starrocks::write_combined_txn_log(combined_txn_log);
+                        },
+                        [&](Status executed_st) {
+                            if (!executed_st.ok()) {
+                                LOG(WARNING) << "write combined_txn_log task exit without execution: " << executed_st;
+                                final_status = executed_st;
+                            }
+                            latch.count_down();
+                        });
+                auto task_guard = task;
                 Status submit_st = thread_pool->submit(std::move(task));
                 if (!submit_st.ok()) {
-                    LOG(WARNING) << "Fail to submit write combined_txn_log task";
-                    final_status = submit_st;
+                    task_guard->set_status(submit_st);
                 }
+                task_guard.reset();
                 latch.wait();
             }
         }
@@ -1149,13 +1198,13 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
 
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<AutoCleanRunnable>([&] { lake::vacuum(_tablet_mgr, *request, response); },
-                                                    [&] { latch.count_down(); });
+                                                    [&](Status) { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
     }
-
+    // This task does not return any status except submitting, do not need to check execution state of task.
     latch.wait();
 }
 
@@ -1171,13 +1220,13 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     }
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<AutoCleanRunnable>([&] { lake::vacuum_full(_tablet_mgr, *request, response); },
-                                                    [&] { latch.count_down(); });
+                                                    [&](Status) { latch.count_down(); });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
     }
-
+    // This task does not return any status except submitting, do not need to check execution state of task.
     latch.wait();
 }
 
