@@ -107,7 +107,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
 
     // Now simulate GlobalDriverExecutor to cancel the driver due to source operator failure
     auto status = Status::NotFound("file not found");
-    _query_ctx->cancel(status, false);
+    _query_ctx->cancel(status);
     _runtime_state->set_is_cancelled(true);
     driver->cancel_operators(_runtime_state);
 
