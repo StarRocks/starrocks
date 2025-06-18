@@ -26,7 +26,7 @@ set global enable_query_history=true;
 set global query_history_load_interval_seconds=0;
 -- result:
 -- !result
-select count(1) from t1, t1;
+select count(1) from t1 as a, t1 as b;
 -- result:
 10000
 -- !result
