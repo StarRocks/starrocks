@@ -1245,10 +1245,23 @@ public class LineageStmtEventListener implements StmtEventListener {
         @Override
         public Map<ColumnInfo, List<ColumnInfo>> visitExpression(Expr node, List<ColumnInfo> context) {
             // make sure context is always passed
-            node.getChildren().forEach(child -> {
-                visit(child, context);
-            });
-            return node.accept(this, context);
+            if (node.getChildren() != null && !node.getChildren().isEmpty()) {
+                Map<ColumnInfo, List<ColumnInfo>> resultMap = new LinkedHashMap<>();
+                node.getChildren().forEach(child -> {
+                    Map<ColumnInfo, List<ColumnInfo>> ret = visit(child, context);
+                    if (MapUtils.isNotEmpty(ret)) {
+                        mergeIntoResultMap(ret, resultMap);
+                    }
+                });
+                return resultMap;
+            } else {
+                //skip all literal
+                if (node instanceof LiteralExpr) {
+                    return Collections.emptyMap();
+                } else {
+                    return node.accept(this, context);
+                }
+            }
         }
 
         @Override

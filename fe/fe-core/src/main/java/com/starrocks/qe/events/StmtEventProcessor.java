@@ -232,6 +232,9 @@ public class StmtEventProcessor {
                 } catch (Exception e) {
                     LOG.warn("encounter exception when getting stmt listener event from queue, "
                             + "queryId {}", stmtEvent == null ? "" : stmtEvent.getQueryId(), e);
+                } catch (Throwable e) {
+                    LOG.warn("encounter error when getting stmt listener event from queue, "
+                            + "queryId {}, make sure to check!!!", stmtEvent == null ? "" : stmtEvent.getQueryId(), e);
                 }
             }
         }
