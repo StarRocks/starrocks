@@ -450,6 +450,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return idToColumn;
     }
 
+    public boolean isHMSExternalTable() {
+        return false;
+    }
+
     public void setNewFullSchema(List<Column> newSchema) {
         this.fullSchema = newSchema;
         updateSchemaIndex();
