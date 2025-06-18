@@ -45,9 +45,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
-import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.utils.FileStatus;
@@ -61,13 +59,12 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class DeltaLakeScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
-    private final AtomicLong partitionIdGen = new AtomicLong(0L);
+
     private final DeltaLakeTable deltaLakeTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
@@ -168,7 +165,7 @@ public class DeltaLakeScanNode extends ScanNode {
                                        DescriptorTable descTbl, FileStatus fileStatus, Metadata metadata) {
         long partitionId = -1;
         if (!partitionKeys.containsKey(partitionKey)) {
-            partitionId = nextPartitionId();
+            partitionId = deltaLakeTable.nextPartitionId();
             Path filePath = new Path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8));
 
             DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
@@ -206,10 +203,6 @@ public class DeltaLakeScanNode extends ScanNode {
         scanRangeLocations.addToLocations(scanRangeLocation);
 
         scanRangeLocationsList.add(scanRangeLocations);
-    }
-
-    private long nextPartitionId() {
-        return partitionIdGen.getAndIncrement();
     }
 
     @Override

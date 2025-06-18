@@ -21,12 +21,18 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
+import io.delta.kernel.Table;
 import io.delta.kernel.data.ArrayValue;
 import io.delta.kernel.data.ColumnVector;
+import io.delta.kernel.engine.Engine;
+import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
@@ -42,6 +48,7 @@ import java.util.List;
 import java.util.Locale;
 
 import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class DeltaUtils {
@@ -55,20 +62,28 @@ public class DeltaUtils {
         }
     }
 
-    public static DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
-        String dbName = snapshot.getDbName();
-        String tblName = snapshot.getTableName();
-        DeltaLakeEngine deltaLakeEngine = snapshot.getDeltaLakeEngine();
-        SnapshotImpl snapshotImpl = snapshot.getSnapshot();
-        String path = snapshot.getPath();
+    public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
+                                                       Engine deltaEngine, long createTime) {
+        SnapshotImpl snapshot;
 
-        StructType deltaSchema = snapshotImpl.getSchema(deltaLakeEngine);
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
+            Table deltaTable = Table.forPath(deltaEngine, path);
+            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaEngine);
+        } catch (TableNotFoundException e) {
+            LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
+            throw new SemanticException("Failed to find Delta table for " + catalog + "." + dbName + "." + tblName);
+        } catch (Exception e) {
+            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
+            throw new SemanticException("Failed to get latest snapshot for " + catalog + "." + dbName + "." + tblName);
+        }
+
+        StructType deltaSchema = snapshot.getSchema(deltaEngine);
         if (deltaSchema == null) {
             throw new IllegalArgumentException(String.format("Unable to find Schema information in Delta log for " +
                     "%s.%s.%s", catalog, dbName, tblName));
         }
 
-        String columnMappingMode = ColumnMapping.getColumnMappingMode(snapshotImpl.getMetadata().getConfiguration());
+        String columnMappingMode = ColumnMapping.getColumnMappingMode(snapshot.getMetadata().getConfiguration());
         List<Column> fullSchema = Lists.newArrayList();
         for (StructField field : deltaSchema.fields()) {
             DataType dataType = field.getDataType();
@@ -84,10 +99,11 @@ public class DeltaUtils {
         }
 
         return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName, fullSchema,
-                loadPartitionColumnNames(snapshotImpl), snapshotImpl, path, deltaLakeEngine, snapshot.getCreateTime());
+                loadPartitionColumnNames(snapshot), snapshot, path,
+                deltaEngine, createTime);
     }
 
-    public static List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
+    private static List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
         ArrayValue partitionColumns = snapshot.getMetadata().getPartitionColumns();
         ColumnVector partitionColNameVector = partitionColumns.getElements();
         List<String> partitionColumnNames = Lists.newArrayList();
@@ -109,7 +125,7 @@ public class DeltaUtils {
 
         if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
                 field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
-            columnUniqueId = ((Long) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
+            columnUniqueId = ((Long)  field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
         }
         if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
                 field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {

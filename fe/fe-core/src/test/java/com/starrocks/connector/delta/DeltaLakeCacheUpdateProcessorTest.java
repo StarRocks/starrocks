@@ -27,6 +27,7 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
+import io.delta.kernel.engine.Engine;
 import mockit.Expectations;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -72,17 +73,10 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
-        new MockUp<CachingDeltaLakeMetastore>() {
-            @mockit.Mock
-            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
-                return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
-            }
-        };
-
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
@@ -113,25 +107,10 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
-        new MockUp<CachingDeltaLakeMetastore>() {
-            @mockit.Mock
-            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
-                return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
-            }
-        };
-
-        new MockUp<DeltaLakeMetastore>() {
-            @mockit.Mock
-            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
-                return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
-            }
-        };
-
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);

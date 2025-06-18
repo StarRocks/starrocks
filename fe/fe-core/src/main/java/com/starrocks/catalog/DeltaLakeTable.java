@@ -38,6 +38,7 @@ import io.delta.kernel.internal.actions.Metadata;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class DeltaLakeTable extends Table {
@@ -51,7 +52,7 @@ public class DeltaLakeTable extends Table {
 
 
     public static final String PARTITION_NULL_VALUE = "null";
-
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public DeltaLakeTable() {
         super(TableType.DELTALAKE);
@@ -177,6 +178,10 @@ public class DeltaLakeTable extends Table {
                 fullSchema.size(), 0, tableName, dbName);
         tTableDescriptor.setDeltaLakeTable(tDeltaLakeTable);
         return tTableDescriptor;
+    }
+
+    public long nextPartitionId() {
+        return partitionIdGen.getAndIncrement();
     }
 
     public String getTableIdentifier() {
