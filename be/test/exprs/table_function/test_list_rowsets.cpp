@@ -13,10 +13,8 @@
 // limitations under the License.
 
 #include "exprs/table_function/list_rowsets.h"
-
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
@@ -25,8 +23,7 @@ namespace starrocks {
 
 class MockRuntimeState : public RuntimeState {
 public:
-    MockRuntimeState(ExecEnv* execEnv) : RuntimeState(execEnv)   {
-    }
+    MockRuntimeState(ExecEnv* execEnv) : RuntimeState(execEnv) {}
     MOCK_METHOD((ExecEnv*), exec_env, ());
 };
 
