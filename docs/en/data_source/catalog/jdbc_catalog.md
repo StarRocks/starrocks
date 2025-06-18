@@ -15,7 +15,7 @@ A JDBC catalog is a kind of external catalog that enables you to query data from
 
 Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on JDBC catalogs.
 
-JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, and Oracle and SQLServer since v3.2.9 and v3.3.1.
+JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, and ClickHouse (Experimental) since v3.3.0.
 
 ## Prerequisites
 
@@ -64,9 +64,10 @@ The properties of the JDBC Catalog. `PROPERTIES` must include the following para
 
 ### Examples
 
-The following example creates two JDBC catalogs: `jdbc0` and `jdbc1`.
+The following example creates five different JDBC catalogs.
 
 ```SQL
+-- PostgresSQL
 CREATE EXTERNAL CATALOG jdbc0
 PROPERTIES
 (
@@ -77,7 +78,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
     "driver_class"="org.postgresql.Driver"
 );
-
+-- MySQL
 CREATE EXTERNAL CATALOG jdbc1
 PROPERTIES
 (
@@ -88,7 +89,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
- 
+-- Oracle
 CREATE EXTERNAL CATALOG jdbc2
 PROPERTIES
 (
@@ -99,7 +100,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
     "driver_class"="oracle.jdbc.driver.OracleDriver"
 );
-       
+-- SQL Server
 CREATE EXTERNAL CATALOG jdbc3
 PROPERTIES
 (
@@ -110,7 +111,16 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.4.2.jre11/mssql-jdbc-12.4.2.jre11.jar",
     "driver_class"="com.microsoft.sqlserver.jdbc.SQLServerDriver"
 );
-       
+-- ClickHouse
+CREATE EXTERNAL CATALOG jdbc4
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="default",
+    "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
+    "driver_url"="file:///path/to/clickhouse-jdbc-0.4.6.jar",
+    "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
+);
 ```
 
 ## View JDBC catalogs
