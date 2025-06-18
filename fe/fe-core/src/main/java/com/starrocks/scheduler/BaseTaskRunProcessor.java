@@ -29,7 +29,7 @@ public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
     }
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         throw new NotImplementedException("Method processTaskRun need to implement");
     }
 
