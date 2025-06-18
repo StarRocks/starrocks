@@ -45,7 +45,6 @@ import java.util.Map;
 import java.util.TimeZone;
 
 public class MultiRangePartitionDesc extends PartitionDesc {
-    private static final Logger LOG = LogManager.getLogger(MultiRangePartitionDesc.class);
 
     private final String defaultPrefix = "p";
     private final String defaultTempPartitionPrefix = "tp";
@@ -105,7 +104,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private List<SingleRangePartitionDesc> buildDateTypePartition(PartitionConvertContext context)
             throws AnalysisException {
         // int type does not support datekey int type
-        LOG.debug("buildDateTypePartition: partition column type: {}", context.getFirstPartitionColumnType());
 
         LocalDateTime beginTime;
         LocalDateTime endTime;
