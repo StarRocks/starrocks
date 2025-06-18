@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -218,8 +219,13 @@ public class StatementPlanner {
             }
         };
         try (Timer ignored = Tracers.watchScope("Analyzer")) {
-            if (statement instanceof InsertStmt) {
-                InsertStmt insertStmt = (InsertStmt) statement;
+            InsertStmt insertStmt = null;
+            if (statement instanceof SubmitTaskStmt) {
+                insertStmt = ((SubmitTaskStmt) statement).getInsertStmt();
+            } else if (statement instanceof InsertStmt) {
+                insertStmt = (InsertStmt) statement;
+            }
+            if (insertStmt != null) {
                 Map<Long, Database> dbs = Maps.newHashMap();
                 Map<Long, Set<Long>> tables = Maps.newHashMap();
                 PlannerMetaLocker.collectTablesNeedLock(insertStmt.getQueryStatement(), session, dbs, tables);
