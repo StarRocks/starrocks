@@ -671,7 +671,7 @@ void ExchangeSinkOperator::close(RuntimeState* state) {
         _buffer->update_profile(_unique_metrics.get());
     }
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->query_ctx()->incr_sent_bytes(_buffer->get_sent_bytes());
+        state->query_ctx()->incr_transmitted_bytes(_buffer->get_sent_bytes());
     }
     Operator::close(state);
 }

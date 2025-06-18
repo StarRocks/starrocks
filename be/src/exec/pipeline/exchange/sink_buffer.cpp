@@ -306,11 +306,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             return Status::OK();
         }
 
-        if (!request.attachment.empty()) {
-            incr_sent_bytes(static_cast<int64_t>(request.attachment.size()));
-            _request_sent++;
-        }
-
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id, &need_wait]() {
                 if (need_wait) {
@@ -339,11 +334,23 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     need_wait = true;
                     return Status::OK();
                 }
+
+                if (!request.attachment.empty()) {
+                    incr_sent_bytes(static_cast<int64_t>(request.attachment.size()));
+                    _request_sent++;
+                }
                 // this is the last eos query, set query stats
                 if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
                             _delta_bytes_sent.exchange(0))) {
                     final_stats->to_pb(request.params->mutable_query_statistics());
                 }
+            }
+        }
+
+        if (!request.params->eos() || context.num_sinker > 1) {
+            if (!request.attachment.empty()) {
+                incr_sent_bytes(static_cast<int64_t>(request.attachment.size()));
+                _request_sent++;
             }
         }
 
