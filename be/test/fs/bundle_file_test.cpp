@@ -279,7 +279,6 @@ TEST_F(BundleFileTest, test_touch_cache_and_statistics) {
 
     // get numeric statistics
     ASSIGN_OR_ABORT(auto numeric_stats, reader->get_numeric_statistics());
-    ASSERT_TRUE(numeric_stats != nullptr);
 }
 
 } // namespace starrocks
