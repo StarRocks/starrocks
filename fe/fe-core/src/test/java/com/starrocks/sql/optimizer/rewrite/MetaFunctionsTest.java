@@ -262,7 +262,8 @@ public class MetaFunctionsTest extends MVTestBase {
     @Test
     public void inspectTablePartitionInfoHandlesEmptyPartitions() throws Exception {
         starRocksAssert.withTable("create table empty_partition_table(k1 int, v1 int) properties('replication_num'='1')");
-        ConstantOperator result = MetaFunctions.inspectTablePartitionInfo(ConstantOperator.createVarchar("test.empty_partition_table"));
+        ConstantOperator result = MetaFunctions.inspectTablePartitionInfo(
+                ConstantOperator.createVarchar("test.empty_partition_table"));
         Assert.assertNotNull(result);
         Assert.assertTrue(result.getVarchar().contains("empty_partition_table"));
         starRocksAssert.dropTable("empty_partition_table");
