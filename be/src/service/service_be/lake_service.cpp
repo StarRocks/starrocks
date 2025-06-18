@@ -757,7 +757,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
                     LOG(WARNING) << "drop table task exit without execution: " << executed_st
                                  << " tablet_id=" << request->tablet_id() << " path=" << request->path();
                     if (response->status().status_code() == 0) {
-                        executed_st.to_protobuf(response->mutable_status());   
+                        executed_st.to_protobuf(response->mutable_status());
                     }
                 }
                 latch.count_down();
