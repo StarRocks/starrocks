@@ -39,7 +39,7 @@ select * from user_tags_mv1 order by user_id;
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv1';
 -- result:
-mv-12451
+mv-15039
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:
@@ -70,72 +70,39 @@ properties('partition_refresh_strategy' = 'force')
 refresh deferred manual
 as select user_id, time, count(tag_id) from user_tags group by user_id, time;
 -- result:
-E: (6013, 'Getting analyzing error. Detail message: Invalid parameter partition_refresh_strategy does not support non-partitioned materialized view..')
 -- !result
 refresh materialized view user_tags_mv2 with sync mode;
 select * from user_tags_mv2 order by user_id;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'db_482d138907ca4db99ca127e30156b0eb.user_tags_mv2'.")
+1	2023-04-13	2
+2	2023-04-14	1
+3	2023-04-14	1
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv2';
 -- result:
+mv-15098
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:
-20
+1
 -- !result
 SELECT `STATE` FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}' order by CREATE_TIME desc;
 -- result:
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
 SUCCESS
 -- !result
 refresh materialized view user_tags_mv2 with sync mode;
 select * from user_tags_mv2 order by user_id;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'db_482d138907ca4db99ca127e30156b0eb.user_tags_mv2'.")
+1	2023-04-13	2
+2	2023-04-14	1
+3	2023-04-14	1
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:
-20
+2
 -- !result
 SELECT `STATE` FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}' order by CREATE_TIME desc;
 -- result:
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
-SUCCESS
 SUCCESS
 SUCCESS
 -- !result
