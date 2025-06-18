@@ -15,7 +15,7 @@ JDBC catalog は、データを取り込むことなく、JDBC を通じてア�
 
 また、JDBC catalog を使用して、JDBC データソースからデータを直接変換してロードすることもできます。[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用します。
 
-JDBC catalog は v3.0 以降で MySQL と PostgreSQL をサポートし、v3.2.9 および v3.3.1 以降で Oracle と SQLServer をサポートしています。
+JDBC catalog は v3.0 から MySQL と PostgreSQL を、v3.2.9 と v3.3.1 から Oracle と SQLServer を、v3.3.0 から ClickHouse (実験的) をサポートしています。
 
 ## 前提条件
 
@@ -64,9 +64,10 @@ JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーター
 
 ### 例
 
-以下の例では、`jdbc0` と `jdbc1` の 2 つの JDBC catalog を作成します。
+以下の例では、5 つの異なる JDBC catalog を作成します。
 
 ```SQL
+-- PostgresSQL
 CREATE EXTERNAL CATALOG jdbc0
 PROPERTIES
 (
@@ -77,7 +78,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
     "driver_class"="org.postgresql.Driver"
 );
-
+-- MySQL
 CREATE EXTERNAL CATALOG jdbc1
 PROPERTIES
 (
@@ -88,7 +89,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
- 
+-- Oracle
 CREATE EXTERNAL CATALOG jdbc2
 PROPERTIES
 (
@@ -99,7 +100,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
     "driver_class"="oracle.jdbc.driver.OracleDriver"
 );
-       
+-- SQL Server
 CREATE EXTERNAL CATALOG jdbc3
 PROPERTIES
 (
@@ -110,7 +111,16 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.4.2.jre11/mssql-jdbc-12.4.2.jre11.jar",
     "driver_class"="com.microsoft.sqlserver.jdbc.SQLServerDriver"
 );
-       
+-- ClickHouse
+CREATE EXTERNAL CATALOG jdbc4
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="default",
+    "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
+    "driver_url"="file:///path/to/clickhouse-jdbc-0.4.6.jar",
+    "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
+);    
 ```
 
 ## JDBC catalog の表示
