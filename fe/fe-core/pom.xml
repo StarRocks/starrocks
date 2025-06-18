@@ -40,8 +40,9 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <paimon.version>1-ali-11.5</paimon.version>
-        <dlf.sdk.version>1-ali-11.0</dlf.sdk.version>
+        <jacoco.version>0.8.8</jacoco.version>
+        <paimon.version>1-ali-12.4</paimon.version>
+        <dlf.sdk.version>1-ali-12.4</dlf.sdk.version>
         <python>python</python>
     </properties>
 
@@ -688,6 +689,7 @@ under the License.
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-s3</artifactId>
+            <version>${paimon.version}</version>
         </dependency>
 
         <dependency>

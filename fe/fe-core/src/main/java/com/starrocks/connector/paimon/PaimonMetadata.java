@@ -307,6 +307,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
             throw new IllegalArgumentException(errorMsg);
         }
+        PaimonPartitionKey partitionKey = new PaimonPartitionKey();
 
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < partitionValues.length; i++) {
@@ -517,45 +518,48 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
 
             Statistics.Builder builder = Statistics.builder();
-            if (!session.getSessionVariable().enablePaimonColumnStatistics()) {
-                return defaultStatistics(columns, table, predicate, limit);
+            if (session.getSessionVariable().enablePaimonColumnStatistics()) {
+                org.apache.paimon.table.Table nativeTable = ((PaimonTable) table).getNativeTable();
+                Optional<org.apache.paimon.stats.Statistics> statistics = nativeTable.statistics();
+                if (!statistics.isPresent() || statistics.get().colStats() == null
+                        || !statistics.get().mergedRecordCount().isPresent()) {
+                    return defaultStatistics(session, columns, table, predicate, limit);
+                }
+                long rowCount = statistics.get().mergedRecordCount().getAsLong();
+                builder.setOutputRowCount(rowCount);
+                Map<String, ColStats<?>> colStatsMap = statistics.get().colStats();
+                for (ColumnRefOperator column : columns.keySet()) {
+                    builder.addColumnStatistic(column, buildColumnStatistic(columns.get(column), colStatsMap, rowCount));
+                }
+                return builder.build();
+            } else {
+                return defaultStatistics(session, columns, table, predicate, limit);
             }
-            org.apache.paimon.table.Table nativeTable = ((PaimonTable) table).getNativeTable();
-            Optional<org.apache.paimon.stats.Statistics> statistics = nativeTable.statistics();
-            if (!statistics.isPresent() || statistics.get().colStats() == null
-                    || !statistics.get().mergedRecordCount().isPresent()) {
-                return defaultStatistics(columns, table, predicate, limit);
-            }
-            long rowCount = statistics.get().mergedRecordCount().getAsLong();
-            builder.setOutputRowCount(rowCount);
-            Map<String, ColStats<?>> colStatsMap = statistics.get().colStats();
-            for (ColumnRefOperator column : columns.keySet()) {
-                builder.addColumnStatistic(column, buildColumnStatistic(columns.get(column), colStatsMap, rowCount));
-            }
-            return builder.build();
         }
     }
 
-    private Statistics defaultStatistics(Map<ColumnRefOperator, Column> columns, Table table, ScalarOperator predicate,
-                                         long limit) {
+    private Statistics defaultStatistics(OptimizerContext session, Map<ColumnRefOperator, Column> columns, Table table,
+                                         ScalarOperator predicate, long limit) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
-        List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
-        GetRemoteFilesParams params =
-                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
-        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
-        List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
-        long rowCount = getRowCount(splits);
-        if (rowCount == 0) {
-            builder.setOutputRowCount(1);
+        if (session.getSessionVariable().enablePaimonEstimatedStatistics()) {
+            List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                    catalogName, table, null, -1, predicate, fieldNames, limit);
+            PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+            List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
+            long rowCount = getRowCount(splits);
+            if (rowCount == 0) {
+                builder.setOutputRowCount(1);
+            } else {
+                builder.setOutputRowCount(rowCount);
+            }
         } else {
-            builder.setOutputRowCount(rowCount);
+            builder.setOutputRowCount(1);
         }
         return builder.build();
-
     }
 
 

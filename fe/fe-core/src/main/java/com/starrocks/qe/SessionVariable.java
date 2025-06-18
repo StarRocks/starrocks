@@ -486,6 +486,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_QUERY_TRIGGER_ANALYZE = "enable_query_trigger_analyze";
 
     public static final String ENABLE_PAIMON_COLUMN_STATISTICS = "enable_paimon_column_statistics";
+    public static final String ENABLE_PAIMON_ESTIMATED_STATISTICS = "enable_paimon_estimated_statistics";
 
     public static final String PLAN_MODE = "plan_mode";
 
@@ -1527,7 +1528,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private double broadcastRightTableScaleFactor = 10.0;
 
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
-    private long optimizerExecuteTimeout = 3000;
+    private long optimizerExecuteTimeout = 10000;
 
     @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
     private String queryDebugOptions = "";
@@ -2571,6 +2572,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PAIMON_COLUMN_STATISTICS)
     private boolean enablePaimonColumnStatistics = false;
 
+    @VarAttr(name = ENABLE_PAIMON_ESTIMATED_STATISTICS)
+    private boolean enablePaimonEstimatedStatistics = false;
+
     @VarAttr(name = PLAN_MODE)
     private String planMode = PlanMode.AUTO.modeName();
 
@@ -2811,6 +2815,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePaimonColumnStatistics(boolean enablePaimonColumnStatistics) {
         this.enablePaimonColumnStatistics = enablePaimonColumnStatistics;
+    }
+
+    public boolean enablePaimonEstimatedStatistics() {
+        return this.enablePaimonEstimatedStatistics;
     }
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)

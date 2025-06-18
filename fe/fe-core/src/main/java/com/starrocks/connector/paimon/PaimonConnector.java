@@ -16,6 +16,7 @@ package com.starrocks.connector.paimon;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.util.DlfUtil;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -57,6 +58,8 @@ public class PaimonConnector implements Connector {
     public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATALOG_ID = "dlf.catalog.id";
+    private static final String DLF_USER_AGENT_KEY = "header.User-Agent";
+    private static final String OSS_USER_AGENT_KEY = "fs.oss.user.agent.extended";
     private final HdfsEnvironment hdfsEnvironment;
     private final Map<String, Catalog> nativePaimonCatalogs = new ConcurrentHashMap<>();
     private final String catalogName;
@@ -214,17 +217,22 @@ public class PaimonConnector implements Connector {
                         throw new StarRocksConnectorException("Failed to find a valid RAM user from {} and {}.",
                                 qualifiedUser, user);
                     } else {
-                        if (this.nativePaimonCatalogs.get(ramUser) != null) {
-                            return this.nativePaimonCatalogs.get(ramUser);
-                        } else {
-                            this.paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);
-                        }
+                        this.paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);
                     }
                 }
                 catalogKey = this.catalogName + "-" + ramUser;
             } else {
                 catalogKey = "base";
             }
+
+            if (Util.isRootUser()) {
+                this.paimonOptions.set(DLF_USER_AGENT_KEY, "starrocks/internal");
+                this.paimonOptions.set(OSS_USER_AGENT_KEY, "starrocks/internal");
+            } else {
+                this.paimonOptions.set(DLF_USER_AGENT_KEY, "starrocks/user");
+                this.paimonOptions.set(OSS_USER_AGENT_KEY, "starrocks/user");
+            }
+
             if (this.nativePaimonCatalogs.get(catalogKey) != null) {
                 return this.nativePaimonCatalogs.get(catalogKey);
             }
