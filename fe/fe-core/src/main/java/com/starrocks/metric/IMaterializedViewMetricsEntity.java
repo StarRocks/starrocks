@@ -15,7 +15,7 @@
 
 package com.starrocks.metric;
 
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.Constants;
 
 import java.util.List;
 
@@ -60,7 +60,7 @@ public interface IMaterializedViewMetricsEntity {
      * Increase the refresh job status count
      * @param status: refresh job 's final status: SUCCESS, FAILED, EMPTY
      */
-    void increaseRefreshJobStatus(PartitionBasedMvRefreshProcessor.RefreshJobStatus status);
+    void increaseRefreshJobStatus(Constants.TaskRunState status);
 
     /**
      * Increase the refresh meta retry count

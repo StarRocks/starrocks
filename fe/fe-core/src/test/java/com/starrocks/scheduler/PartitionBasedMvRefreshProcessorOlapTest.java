@@ -530,7 +530,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
-            public void processTaskRun(TaskRunContext context) throws Exception {
+            public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
                 throw new RuntimeException("new exception");
             }
         };

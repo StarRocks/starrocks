@@ -25,7 +25,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRunScheduler;
@@ -337,10 +337,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     }
 
     @Override
-    public void increaseRefreshJobStatus(PartitionBasedMvRefreshProcessor.RefreshJobStatus status) {
+    public void increaseRefreshJobStatus(Constants.TaskRunState status) {
         this.counterRefreshJobTotal.increase(1L);
         switch (status) {
-            case EMPTY:
+            case SKIPPED:
                 this.counterRefreshJobEmptyTotal.increase(1L);
                 break;
             case SUCCESS:
