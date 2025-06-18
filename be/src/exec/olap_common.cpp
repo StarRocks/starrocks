@@ -63,6 +63,15 @@ inline size_t difference<Slice>(const Slice& low, const Slice& high) {
 }
 
 template <>
+inline size_t difference<int256_t>(const int256_t& low, const int256_t& high) {
+    DCHECK_LE(low, high);
+    if (high - low > static_cast<int256_t>(SIZE_MAX)) {
+        return SIZE_MAX;
+    }
+    return static_cast<size_t>(high - low);
+}
+
+template <>
 inline size_t difference<DateValue>(const DateValue& low, const DateValue& high) {
     DCHECK_LE(low, high);
     return high.julian() - low.julian();
@@ -134,6 +143,14 @@ inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType lt, [[ma
     }
     case TYPE_DECIMAL128: {
         using CppType = RunTimeCppType<TYPE_DECIMAL128>;
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
+    }
+    case TYPE_DECIMAL256: {
+        using CppType = RunTimeCppType<TYPE_DECIMAL256>;
         if constexpr (use_static_cast) {
             return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
         } else {

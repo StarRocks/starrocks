@@ -66,6 +66,8 @@ using Int64AggHashMap = phmap::flat_hash_map<int64_t, AggDataPtr, StdHashWithSee
 template <PhmapSeed seed>
 using Int128AggHashMap = phmap::flat_hash_map<int128_t, AggDataPtr, Hash128WithSeed<seed>>;
 template <PhmapSeed seed>
+using Int256AggHashMap = phmap::flat_hash_map<int256_t, AggDataPtr, Hash256WithSeed<seed>>;
+template <PhmapSeed seed>
 using DateAggHashMap = phmap::flat_hash_map<DateValue, AggDataPtr, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;

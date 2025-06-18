@@ -191,12 +191,24 @@ inline bool mul_overflow(const int256_t a, const int256_t b, int256_t* c) {
     const int abs_a_bits = count_bits(abs_a);
     const int abs_b_bits = count_bits(abs_b);
 
-    if (abs_a_bits + abs_b_bits < 255) {
+    if (abs_a_bits + abs_b_bits <= 255) {
         *c = a * b;
         return false;
     }
-    if (abs_a_bits + abs_b_bits > 255) {
-        return true;
+
+    if (abs_a_bits + abs_b_bits > 256) {
+        if (negative) {
+            if (abs_a_bits + abs_b_bits == 257) {
+                const int256_t product_abs = abs_a * abs_b;
+                if (product_abs == INT256_MIN) {
+                    *c = INT256_MIN;
+                    return false;
+                }
+            }
+            return true;
+        } else {
+            return true;
+        }
     }
 
     const int256_t& larger = (abs_a >= abs_b) ? abs_a : abs_b;
@@ -205,24 +217,6 @@ inline bool mul_overflow(const int256_t a, const int256_t b, int256_t* c) {
     const int256_t quotient = INT256_MAX / smaller;
 
     if (larger > quotient) {
-        return true;
-    }
-
-    if (larger == quotient) {
-        const int256_t remainder = INT256_MAX % smaller;
-
-        if (negative) {
-            if (remainder == smaller - 1) {
-                *c = INT256_MIN;
-                return false;
-            }
-            return true;
-        }
-
-        if (remainder == 0) {
-            *c = INT256_MAX;
-            return false;
-        }
         return true;
     }
 

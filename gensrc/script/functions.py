@@ -46,6 +46,7 @@ vectorized_functions = [
     [100470, "abs", True, False, "DECIMAL32", ["DECIMAL32"], "MathFunctions::abs_decimal32"],
     [100471, "abs", True, False, "DECIMAL64", ["DECIMAL64"], "MathFunctions::abs_decimal64"],
     [100472, "abs", True, False, "DECIMAL128", ["DECIMAL128"], "MathFunctions::abs_decimal128"],
+    [100473, "abs", True, False, "DECIMAL256", ["DECIMAL256"], "MathFunctions::abs_decimal256"],
 
     [10050, "sin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::sin"],
     [10060, "asin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::asin"],
