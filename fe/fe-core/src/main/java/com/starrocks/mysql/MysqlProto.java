@@ -42,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -268,6 +269,20 @@ public class MysqlProto {
     private static boolean isLDAPUser(String user, ConnectContext context) {
         Map.Entry<UserIdentity, UserAuthenticationInfo> localUser = context.getGlobalStateMgr().getAuthenticationMgr()
                 .getBestMatchedUserIdentity(user, context.getMysqlChannel().getRemoteIp());
+
+        // if user configured with AUTHENTICATION_LDAP_SIMPLE or AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL
+        // mark it as ldap user.
+        if (localUser != null &&
+                localUser.getValue() != null && (
+                AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name()
+                        .equalsIgnoreCase(localUser.getValue().getAuthPlugin()) ||
+                AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name()
+                        .equalsIgnoreCase(localUser.getValue().getAuthPlugin())
+            )
+        ) {
+            return true;
+        }
+
         // If the user can not be found in local, and there is more than 1 auth type in authentication_chain.
         // It is speculated that the user may be a ldap user.
         return localUser == null && Config.authentication_chain.length > 1;
