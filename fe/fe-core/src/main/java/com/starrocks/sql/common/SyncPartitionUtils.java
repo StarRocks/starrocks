@@ -122,20 +122,24 @@ public class SyncPartitionUtils {
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
+        Map<String, Range<PartitionKey>> virtualRange = Maps.newHashMap();
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
+            MVRangePartitionMapper.PartitionRangeWrapper rangeWrapper =
+                    toMappingRanges(baseRangeMap, granularity, partitionColumnType, differ.mv);
+            rollupRange = rangeWrapper.getPartitionRangeMap();
+            virtualRange = rangeWrapper.getVirtualPartitionRangeMap();
         } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
-        return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
+        return getRangePartitionDiff(mvRangeMap, rollupRange, virtualRange, differ);
     }
 
-    public static Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
+    public static MVRangePartitionMapper.PartitionRangeWrapper toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                    String granularity,
-                                                                   PrimitiveType partitionType) {
+                                                                   PrimitiveType partitionType, MaterializedView mv) {
         MVRangePartitionMapper mapper = MVRangePartitionMapper.getInstance(granularity);
-        return mapper.toMappingRanges(baseRangeMap, granularity, partitionType);
+        return mapper.toMappingRanges(baseRangeMap, granularity, partitionType, mv);
     }
 
     private static Map<String, Range<PartitionKey>> mappingRangeListForDate(
@@ -156,10 +160,12 @@ public class SyncPartitionUtils {
     @NotNull
     private static PartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
                                                        Map<String, Range<PartitionKey>> rollupRange,
+                                                       Map<String, Range<PartitionKey>> virtualRange,
                                                        RangePartitionDiffer differ) {
         // TODO: Callers may use `List<PartitionRange>` directly.
         PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
                 RangePartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
+        diff.setVirtualPartitionMapping(virtualRange);
         return diff;
     }
 
@@ -502,31 +508,75 @@ public class SyncPartitionUtils {
     }
 
     @NotNull
-    public static LocalDateTime nextUpperDateTime(LocalDateTime upperDateTime, String granularity) {
+    public static LocalDateTime nextUpperDateTime(LocalDateTime upperDateTime, String granularity, String dateFunc) {
         LocalDateTime truncUpperDateTime;
         switch (granularity) {
             case MINUTE:
-                truncUpperDateTime = upperDateTime.plusMinutes(1).withNano(0).withSecond(0);
+                if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+                    truncUpperDateTime = upperDateTime.plusMinutes(1).withNano(0).withSecond(0);
+                } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+                    truncUpperDateTime = upperDateTime.minusMinutes(1).withNano(0).withSecond(0);
+                } else {
+                    throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+                }
                 break;
             case HOUR:
-                truncUpperDateTime = upperDateTime.plusHours(1).withNano(0).withSecond(0).withMinute(0);
+                if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+                    truncUpperDateTime = upperDateTime.plusHours(1).withNano(0).withSecond(0).withMinute(0);
+                } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+                    truncUpperDateTime = upperDateTime.minusHours(1).withNano(0).withSecond(0).withMinute(0);
+                } else {
+                    throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+                }
                 break;
             case DAY:
-                truncUpperDateTime = upperDateTime.plusDays(1).with(LocalTime.MIN);
+                if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+                    truncUpperDateTime = upperDateTime.plusDays(1).with(LocalTime.MIN);
+                } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+                    truncUpperDateTime = upperDateTime.minusDays(1).with(LocalTime.MIN);
+                } else {
+                    throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+                }
                 break;
             case WEEK:
-                truncUpperDateTime = upperDateTime.plusWeeks(1).with(LocalTime.MIN);
+                if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+                    truncUpperDateTime = upperDateTime.plusWeeks(1).with(LocalTime.MIN);
+                } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+                    truncUpperDateTime = upperDateTime.minusWeeks(1).with(LocalTime.MIN);
+                } else {
+                    throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+                }
                 break;
             case MONTH:
-                truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+                    truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+                    truncUpperDateTime = upperDateTime.minusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                } else {
+                    throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+                }
                 break;
             case QUARTER:
-                LocalDateTime nextDateTime = upperDateTime.plusMonths(3);
-                truncUpperDateTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
-                        .with(TemporalAdjusters.firstDayOfMonth());
+                if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+                    LocalDateTime nextDateTime = upperDateTime.plusMonths(3);
+                    truncUpperDateTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
+                            .with(TemporalAdjusters.firstDayOfMonth());
+                } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+                    LocalDateTime nextDateTime = upperDateTime.minusMonths(3);
+                    truncUpperDateTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
+                            .with(TemporalAdjusters.firstDayOfMonth());
+                } else {
+                    throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+                }
                 break;
             case YEAR:
-                truncUpperDateTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear());
+                if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
+                    truncUpperDateTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear());
+                } else if (dateFunc.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
+                    truncUpperDateTime = upperDateTime.minusYears(1).with(TemporalAdjusters.firstDayOfYear());
+                } else {
+                    throw new SemanticException("Do not support date_trunc format string:{}, dateFunc", granularity, dateFunc);
+                }
                 break;
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);

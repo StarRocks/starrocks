@@ -21,6 +21,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
@@ -551,6 +552,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // and in each round of checkpoint
     private boolean reloaded = false;
 
+    private transient Map<String, Range<PartitionKey>> virtualPartitionMapping;
+    private transient List<Expr> unionOtherOutputExpression;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -762,6 +766,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setReloaded(boolean reloaded) {
         this.reloaded = reloaded;
+    }
+
+    public List<Expr> getUnionOtherOutputExpression() {
+        return unionOtherOutputExpression;
+    }
+
+    public void setUnionOtherOutputExpression(List<Expr> unionOtherOutputExpression) {
+        this.unionOtherOutputExpression = unionOtherOutputExpression;
+    }
+
+    public Map<String, Range<PartitionKey>> getVirtualPartitionMapping() {
+        return virtualPartitionMapping;
+    }
+
+    public void setVirtualPartitionMapping(
+            Map<String, Range<PartitionKey>> virtualPartitionMapping) {
+        this.virtualPartitionMapping = virtualPartitionMapping;
     }
 
     /**

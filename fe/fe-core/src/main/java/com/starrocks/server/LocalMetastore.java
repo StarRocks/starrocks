@@ -3088,6 +3088,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 buildPartitions(db, materializedView, new ArrayList<>(partition.getSubPartitions()), computeResource);
                 materializedView.addPartition(partition);
             } else {
+                materializedView.setUnionOtherOutputExpression(stmt.getUnionOtherOutputExpression());
                 List<Expr> mvPartitionExprs = stmt.getPartitionByExprs();
                 LinkedHashMap<Expr, SlotRef> partitionExprMaps = MVPartitionExprResolver.getMVPartitionExprsChecked(
                         mvPartitionExprs, stmt.getQueryStatement(), stmt.getBaseTableInfos());

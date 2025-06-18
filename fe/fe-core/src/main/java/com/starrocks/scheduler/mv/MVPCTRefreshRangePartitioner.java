@@ -119,6 +119,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
         DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         addRangePartitions(db, mv, adds, partitionProperties, distributionDesc);
+        mv.setVirtualPartitionMapping(result.diff.getVirtualPartitionMapping());
         adds.entrySet().stream().forEach(entry -> mvPartitionToCells.put(entry.getKey(), entry.getValue()));
         logger.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 mv.getName(), adds);
@@ -293,6 +294,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
         // check the related partition table
         Set<String> mvToRefreshPartitionNames = getMvPartitionNamesToRefresh(mvRangePartitionNames);
+        mvToRefreshPartitionNames.addAll(mv.getVirtualPartitionMapping().keySet());
         if (mvToRefreshPartitionNames.isEmpty()) {
             logger.info("No need to refresh materialized view partitions");
             return mvToRefreshPartitionNames;

@@ -16,6 +16,7 @@
 package com.starrocks.sql.common.mv;
 
 import com.google.common.collect.Range;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 
@@ -43,9 +44,10 @@ public abstract class MVRangePartitionMapper {
      * @param partitionType mv partition expr's type
      * @return mv partition range map
      */
-    public abstract Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
+    public abstract PartitionRangeWrapper toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                      String granularity,
-                                                                     PrimitiveType partitionType);
+                                                                     PrimitiveType partitionType,
+                                                                     MaterializedView mv);
 
     /**
      * Get the mv range partition mapper instance.
@@ -57,6 +59,32 @@ public abstract class MVRangePartitionMapper {
             return MVLazyRangePartitionMapper.INSTANCE;
         } else {
             return MVEagerRangePartitionMapper.INSTANCE;
+        }
+    }
+
+    public static class PartitionRangeWrapper {
+        private Map<String, Range<PartitionKey>> partitionRangeMap;
+        private Map<String, Range<PartitionKey>> virtualPartitionRangeMap;
+
+        public PartitionRangeWrapper() {
+        }
+
+        public PartitionRangeWrapper(Map<String, Range<PartitionKey>> partitionRangeMap) {
+            this.partitionRangeMap = partitionRangeMap;
+        }
+
+        public PartitionRangeWrapper(Map<String, Range<PartitionKey>> partitionRangeMap,
+                                     Map<String, Range<PartitionKey>> virtualPartitionRangeMap) {
+            this.partitionRangeMap = partitionRangeMap;
+            this.virtualPartitionRangeMap = virtualPartitionRangeMap;
+        }
+
+        public Map<String, Range<PartitionKey>> getPartitionRangeMap() {
+            return partitionRangeMap;
+        }
+
+        public Map<String, Range<PartitionKey>> getVirtualPartitionRangeMap() {
+            return virtualPartitionRangeMap;
         }
     }
 }

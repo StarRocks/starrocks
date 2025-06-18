@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class UnionRelation extends SetOperationRelation {
     public UnionRelation(List<QueryRelation> relations, SetQualifier qualifier) {
@@ -25,6 +28,14 @@ public class UnionRelation extends SetOperationRelation {
 
     public UnionRelation(List<QueryRelation> relations, SetQualifier qualifier, NodePosition pos) {
         super(relations, qualifier, pos);
+    }
+
+    public List<Expr> getOtherOutputExpression() {
+        return super.getRelations().stream()
+                .skip(1)
+                .map(QueryRelation::getOutputExpression)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

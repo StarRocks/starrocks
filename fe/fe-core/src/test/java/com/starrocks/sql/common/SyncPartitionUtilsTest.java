@@ -363,7 +363,8 @@ public class SyncPartitionUtilsTest {
 
     public static Map<String, Range<PartitionKey>> toEagerMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                         String granularity, PrimitiveType partitionType) {
-        return MVEagerRangePartitionMapper.INSTANCE.toMappingRanges(baseRangeMap, granularity, partitionType);
+        return MVEagerRangePartitionMapper.INSTANCE.toMappingRanges(baseRangeMap, granularity,
+                partitionType, null).getPartitionRangeMap();
     }
 
     private static List<PartitionMapping> toPartitionMappings(Range<PartitionKey> baseRange, String granularity) {
