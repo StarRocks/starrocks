@@ -28,7 +28,6 @@ import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
