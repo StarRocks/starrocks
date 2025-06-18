@@ -106,6 +106,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
                         txnState.getTransactionId(), isPartialSuccess);
             } else {
+                // record the last warehouse id so compaction and other background jobs can execute in it
+                table.setLastTransactionWarehouseId(txnState.getWarehouseId());
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {

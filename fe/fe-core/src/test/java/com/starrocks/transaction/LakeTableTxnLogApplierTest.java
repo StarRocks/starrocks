@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,6 +35,8 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assert.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
         Assert.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
 
+        WarehouseComputeResource resource = new WarehouseComputeResource(100);
+        state.setComputeResource(resource);
         state.setTransactionStatus(TransactionStatus.VISIBLE);
         partitionCommitInfo.setVersionTime(System.currentTimeMillis());
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
@@ -41,6 +44,7 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assert.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
         Assert.assertEquals(partitionCommitInfo.getVersionTime(), table.getPartition(partitionId).getDefaultPhysicalPartition()
                 .getVisibleVersionTime());
+        Assert.assertEquals(100, table.getLastTransactionWarehouseId());
     }
 
     @Test

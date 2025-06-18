@@ -65,6 +65,7 @@ public class WarehouseManager implements Writable {
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
+    public static final long INVALID_WAREHOUSE_ID = -1L;
 
     // default compute resource
     public static final ComputeResource DEFAULT_RESOURCE = WarehouseComputeResource.DEFAULT;

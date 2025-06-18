@@ -90,6 +90,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.LastTransactionWarehouseInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -98,6 +99,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -271,6 +273,11 @@ public class OlapTable extends Table {
     // the id of the session that created this table, only used in temporary table
     @SerializedName(value = "sessionId")
     protected UUID sessionId = null;
+
+    // stores warehouse info of last transaction for this table,
+    // used in shared-data cluster for lake table and lake mv
+    @SerializedName(value = "lastTransactionWarehouseInfo")
+    protected LastTransactionWarehouseInfo lastTransactionWarehouseInfo = new LastTransactionWarehouseInfo();
 
     protected BinlogConfig curBinlogConfig;
 
@@ -3820,5 +3827,19 @@ public class OlapTable extends Table {
             }
         }
         return true;
+    }
+
+    public void setLastTransactionWarehouseId(long warehouseId) {
+        if (lastTransactionWarehouseInfo == null) {
+            lastTransactionWarehouseInfo = new LastTransactionWarehouseInfo();
+        }
+        lastTransactionWarehouseInfo.setWarehouseId(warehouseId);
+    }
+
+    public long getLastTransactionWarehouseId() {
+        if (lastTransactionWarehouseInfo == null) {
+            return WarehouseManager.INVALID_WAREHOUSE_ID;
+        }
+        return lastTransactionWarehouseInfo.getWarehouseId();
     }
 }

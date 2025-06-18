@@ -433,4 +433,12 @@ public class OlapTableTest {
         Assert.assertTrue(result.get(0).getIndexName().equals("index1"));
         Assert.assertTrue(result.get(1).getIndexName().equals("index2"));
     }
+
+    @Test
+    public void testLastTransactionWarehouseInfo() {
+        OlapTable table = new OlapTable();
+        Assert.assertEquals(table.getLastTransactionWarehouseId(), -1);
+        table.setLastTransactionWarehouseId(100);
+        Assert.assertEquals(table.getLastTransactionWarehouseId(), 100);
+    }
 }
