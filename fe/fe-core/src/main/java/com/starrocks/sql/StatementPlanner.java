@@ -220,7 +220,7 @@ public class StatementPlanner {
         };
         try (Timer ignored = Tracers.watchScope("Analyzer")) {
             InsertStmt insertStmt = null;
-            if (statement instanceof SubmitTaskStmt) {
+            if (statement instanceof SubmitTaskStmt submitTaskStmt && submitTaskStmt.getInsertStmt() != null) {
                 insertStmt = ((SubmitTaskStmt) statement).getInsertStmt();
             } else if (statement instanceof InsertStmt) {
                 insertStmt = (InsertStmt) statement;
@@ -236,7 +236,12 @@ public class StatementPlanner {
             }
 
             if (deferredLock) {
-                InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+                if (statement instanceof SubmitTaskStmt) {
+                    InsertAnalyzer.analyzeWithDeferredLock(insertStmt, session, takeLock);
+                    Analyzer.AnalyzerVisitor.analyzeSubmitTaskOnly(insertStmt, (SubmitTaskStmt) statement, session);
+                } else {
+                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+                }
             } else {
                 takeLock.run();
                 Analyzer.analyze(statement, session);
