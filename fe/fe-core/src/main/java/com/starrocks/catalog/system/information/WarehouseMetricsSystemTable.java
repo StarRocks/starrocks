@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;

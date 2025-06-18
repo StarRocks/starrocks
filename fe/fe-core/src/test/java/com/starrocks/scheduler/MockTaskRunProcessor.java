@@ -38,11 +38,12 @@ public class MockTaskRunProcessor implements TaskRunProcessor {
     }
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         if (sleepTimeMs > 0) {
             Thread.sleep(sleepTimeMs);
         }
         LOG.info("running a task. currentTime:" + LocalDateTime.now());
+        return Constants.TaskRunState.SUCCESS;
     }
 
     @Override

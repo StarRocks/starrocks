@@ -752,4 +752,52 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=1/1");
     }
+
+    @Test
+    public void testMVWithEmptyRefresh1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE t2 (dt2 date, int2 int);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 PARTITION BY dt1 " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from t1 group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from t2 group by dt2;");
+        String mvName = "mv2";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        Constants.TaskRunState state = taskRun.executeTaskRun();
+        Assert.assertEquals(Constants.TaskRunState.SKIPPED, state);
+    }
+
+    @Test
+    public void testMVWithEmptyRefresh2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 PARTITION BY dt1 " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from t1 group by dt1;");
+        String mvName = "mv2";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        Constants.TaskRunState state = taskRun.executeTaskRun();
+        Assert.assertEquals(Constants.TaskRunState.SKIPPED, state);
+    }
 }

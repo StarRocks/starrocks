@@ -35,7 +35,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(SqlTaskRunProcessor.class);
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         StmtExecutor executor = null;
         try {
             ConnectContext ctx = context.getCtx();
@@ -71,6 +71,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
             ctx.setThreadLocalInfo();
             executor.addRunningQueryDetail(sqlStmt);
             executor.execute();
+            return Constants.TaskRunState.SUCCESS;
         } finally {
             Tracers.close();
             if (executor != null) {
