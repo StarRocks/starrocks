@@ -1191,6 +1191,7 @@ struct THdfsScanNode {
 
     13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 
+    // deprecated. not used any more.
     14: optional bool can_use_any_column;
 
     15: optional bool can_use_min_max_count_opt;
