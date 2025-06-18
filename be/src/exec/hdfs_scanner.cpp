@@ -190,8 +190,8 @@ Status HdfsScanner::_build_scanner_context() {
             new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
 
     RETURN_IF_ERROR(ctx.update_return_count_columns());
-    if (ctx.scan_range->__isset.file_record_count) {
-        ctx.has_file_record_count = true;
+    if (ctx.scan_range->__isset.file_record_count && ctx.scan_range->delete_files.empty()) {
+        ctx.can_use_file_record_count = true;
     }
     return Status::OK();
 }
@@ -201,7 +201,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
 
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.return_count_column && _scanner_ctx.has_file_record_count) {
+    if (_scanner_ctx.return_count_column && _scanner_ctx.can_use_file_record_count) {
         if (_scanner_ctx.emit_count_column) {
             return Status::EndOfFile("");
         }
@@ -241,7 +241,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     _opened = true;
     RETURN_IF_ERROR(_build_scanner_context());
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.return_count_column && _scanner_ctx.has_file_record_count) {
+    if (_scanner_ctx.return_count_column && _scanner_ctx.can_use_file_record_count) {
         return Status::OK();
     }
     RETURN_IF_ERROR(do_open(runtime_state));
@@ -257,7 +257,7 @@ void HdfsScanner::close() noexcept {
         return;
     }
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.return_count_column && _scanner_ctx.has_file_record_count) {
+    if (_scanner_ctx.return_count_column && _scanner_ctx.can_use_file_record_count) {
         return;
     }
     VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["

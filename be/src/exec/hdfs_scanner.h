@@ -343,9 +343,10 @@ struct HdfsScannerContext {
     bool orc_use_column_names = false;
 
     bool can_use_min_max_count_opt = false;
+
     bool return_count_column = false;
-    bool has_file_record_count = false;
     bool emit_count_column = false;
+    bool can_use_file_record_count = false;
 
     bool use_file_metacache = false;
     bool use_file_pagecache = false;
