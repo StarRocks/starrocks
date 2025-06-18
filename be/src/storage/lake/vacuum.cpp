@@ -688,14 +688,14 @@ enum class BundleTabletMetaState {
     NOT_BUNDLE_TABLET_META = 3,
 };
 
-static bool can_bundle_data_file_to_be_deleted(const BundleTabletMetaState& state) {
+static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& state) {
     // if there are some tablets in this bundle meta that are not to be deleted,
     // we can not delete the bundle file.
     return state == BundleTabletMetaState::ALL_TABLETS_TO_BE_DELETED;
 }
 
-static StatusOr<BundleTabletMetaState> bundle_tablet_meta_checker(const std::string& meta_path,
-                                                                  const std::vector<int64_t>& to_delete_tablet_ids) {
+static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
+        const std::string& meta_path, const std::vector<int64_t>& to_delete_tablet_ids) {
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
     ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, meta_path));
@@ -758,7 +758,7 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
                 RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
             }
         }
-        // delete delvec files
+        // delete del files
         for (const auto& f : op.dels()) {
             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f)));
         }
@@ -914,7 +914,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
         // Check the state of the bundle tablet metadata for this version
         // This tells us whether all tablets in this bundle are being deleted or not
-        ASSIGN_OR_RETURN(auto bundle_meta_state, bundle_tablet_meta_checker(path, tablet_ids));
+        ASSIGN_OR_RETURN(auto bundle_meta_state, check_bundle_tablet_meta_state(path, tablet_ids));
 
         // If there are any tablets to be deleted in this bundle (not NO_TABLETS_TO_BE_DELETED),
         // we need to record this state for each tablet in tablet_ids
@@ -955,7 +955,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 int64_t dummy_file_size = 0;
                 RETURN_IF_ERROR(
                         collect_garbage_files(*metadata, data_dir, &deleter,
-                                              can_bundle_data_file_to_be_deleted(versions_and_states[garbage_version])
+                                              can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version])
                                                       ? nullptr
                                                       : &dummy_bundle_file_deleter,
                                               &dummy_file_size));
@@ -972,7 +972,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 for (const auto& segment : rowset.segments()) {
                     // if the segment file is not shared by other alive tablets, we can delete the segments directly.
                     if (rowset.bundle_file_offsets_size() == 0 ||
-                        can_bundle_data_file_to_be_deleted(versions_and_states[latest_metadata->version()])) {
+                        can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()])) {
                         RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
                     }
                 }
