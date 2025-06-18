@@ -30,8 +30,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
