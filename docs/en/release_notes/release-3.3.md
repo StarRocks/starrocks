@@ -10,6 +10,43 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.15
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Missing double quotes for string parameters in statistics INSERT statements. [#59713](https://github.com/StarRocks/starrocks/pull/59713)
+- Downgrade failure caused by Rollup tasks. [#59735](https://github.com/StarRocks/starrocks/pull/59735)
+- Incorrect function parameters in the result of `SHOW CREATE VIEW`. [#59714](https://github.com/StarRocks/starrocks/pull/59714)
+- A security issue where SQL statements with syntax errors exposed sensitive information in the Audit Log. [#59442](https://github.com/StarRocks/starrocks/pull/59442)
+- Error "Query version not found". [#59194](https://github.com/StarRocks/starrocks/pull/59194)
+- Failure to change data distribution using the `ALTER TABLE` statement. [#59360](https://github.com/StarRocks/starrocks/pull/59360)
+- An issue where root user processes were still visible when admin protection was enabled. [#59435](https://github.com/StarRocks/starrocks/pull/59435)
+- Failure of `INSERT OVERWRITE` into Hive. [#59469](https://github.com/StarRocks/starrocks/pull/59469)
+- Missing Tablet ID in the `max_tablet_rowset_num` log item. [#59467](https://github.com/StarRocks/starrocks/pull/59467)
+- An error caused by misconfigured Persistent Index parameters on a Duplicate table. [#56040](https://github.com/StarRocks/starrocks/pull/56040)
+- TaskRun history being archived on FE Follower nodes. [#59393](https://github.com/StarRocks/starrocks/pull/59393)
+- External catalog-based materialized view refresh errors. [#59369](https://github.com/StarRocks/starrocks/pull/59369)
+- Missing minimum version in Tablet information on shared-data clusters. [#59373](https://github.com/StarRocks/starrocks/pull/59373)
+- Abnormal maximum column unique ID in native tables of shared-data clusters due to version compatibility logic errors. [#59190](https://github.com/StarRocks/starrocks/pull/59190)
+- Materialized view refresh failure on Iceberg catalogs when the source Iceberg table is dropped and recreated, and manual refresh also fails after the materialized view is set to active. [#59287](https://github.com/StarRocks/starrocks/pull/59287)
+- Contamination of parameters in materialized view refresh tasks. [#59052](https://github.com/StarRocks/starrocks/pull/59052)
+- Data loss caused by Persistent Index when loading snapshot fails. [#59247](https://github.com/StarRocks/starrocks/pull/59247)
+- Issues caused when subcolumns of STRUCT appear in multiple predicates. [#59216](https://github.com/StarRocks/starrocks/pull/59216)
+- Query failure after renaming columns. [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+- Loading failure due to multiple Stream Load requests. [#59181](https://github.com/StarRocks/starrocks/pull/59181)
+- Inability to refresh Hive table-based materialized views at the partition level in Unified Catalog. [#59139](https://github.com/StarRocks/starrocks/pull/59139)
+- Incorrect UNION plan causing FE out-of-memory (OOM). [#59030](https://github.com/StarRocks/starrocks/pull/59030)
+- Version loss during data loading. [#59006](https://github.com/StarRocks/starrocks/pull/59006)
+- Predicate loss when queries are rewritten to synchronous materialized views. [#58831](https://github.com/StarRocks/starrocks/pull/58831)
+- Issues with BITMAP/HLL/PERCENTILE data types in window functions. [#58776](https://github.com/StarRocks/starrocks/pull/58776)
+- Metadata changes to the external tables in Hive Catalog cannot be refreshed. [#54596](https://github.com/StarRocks/starrocks/pull/54596)
+
+### Behavior Changes
+
+- Introduced FE configuration parameter `task_runs_max_history_number` to control the number of historical TaskRuns retained in the `information_schema.task_runs` view, reducing memory usage. [#59161](https://github.com/StarRocks/starrocks/pull/59161)
+
 ## 3.3.14
 
 Release Date: May 14, 2025

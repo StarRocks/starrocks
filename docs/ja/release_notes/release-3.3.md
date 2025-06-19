@@ -10,6 +10,43 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 
 :::
 
+## 3.3.15
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- 統計情報の INSERT ステートメントにおける文字列パラメータに二重引用符が使用されていない問題を修正しました。[#59713](https://github.com/StarRocks/starrocks/pull/59713)
+- Rollup タスクに起因するダウングレード失敗を修正しました。[#59735](https://github.com/StarRocks/starrocks/pull/59735)
+- `SHOW CREATE VIEW` の返り値において関数パラメータが誤っていた問題を修正しました。[#59714](https://github.com/StarRocks/starrocks/pull/59714)
+- SQL 構文エラーによる失敗時に、Audit Log に機密情報が出力される問題を修正しました。[#59442](https://github.com/StarRocks/starrocks/pull/59442)
+- 「Query version not found」エラーを修正しました。[#59194](https://github.com/StarRocks/starrocks/pull/59194)
+- `ALTER TABLE` でデータ分布方式の変更に失敗する問題を修正しました。[#59360](https://github.com/StarRocks/starrocks/pull/59360)
+- 管理者保護が有効でも root ユーザーのプロセスが表示される問題を修正しました。[#59435](https://github.com/StarRocks/starrocks/pull/59435)
+- `INSERT OVERWRITE` による Hive への書き込み失敗を修正しました。[#59469](https://github.com/StarRocks/starrocks/pull/59469)
+- ログの `max_tablet_rowset_num` 項目に Tablet ID が表示されない問題を修正しました。[#59467](https://github.com/StarRocks/starrocks/pull/59467)
+- 重複キーテーブルにおける Persistent Index パラメータの誤設定によるエラーを修正しました。[#56040](https://github.com/StarRocks/starrocks/pull/56040)
+- FE Follower ノードで TaskRun 履歴がアーカイブされる問題を修正しました。[#59393](https://github.com/StarRocks/starrocks/pull/59393)
+- 外部カタログベースのマテリアライズドビューのリフレッシュエラー。[#59369](https://github.com/StarRocks/starrocks/pull/59369)
+- 共有データクラスタにおける Tablet 情報に最小バージョンがない問題を修正しました。[#59373](https://github.com/StarRocks/starrocks/pull/59373)
+- 内部テーブルでのバージョン互換性ロジックの誤りにより、列の最大ユニーク ID が異常になる問題を修正しました。[#59190](https://github.com/StarRocks/starrocks/pull/59190)
+- Iceberg カタログを基にしたマテリアライズドビューが、元の Iceberg テーブルを削除・再作成した場合に正しくリフレッシュされず、active にしても手動でリフレッシュできない問題を修正しました。[#59287](https://github.com/StarRocks/starrocks/pull/59287)
+- マテリアライズドビューのリフレッシュタスクにおけるパラメータの汚染を修正しました。[#59052](https://github.com/StarRocks/starrocks/pull/59052)
+- スナップショット読み込み失敗時に Persistent Index によりデータが失われる問題を修正しました。[#59247](https://github.com/StarRocks/starrocks/pull/59247)
+- STRUCT のサブカラムが複数の述語に現れることによる問題を修正しました。[#59216](https://github.com/StarRocks/starrocks/pull/59216)
+- 列のリネーム後にクエリが失敗する問題を修正しました。[#59178](https://github.com/StarRocks/starrocks/pull/59178)
+- 複数の Stream Load リクエストによりデータのインポートが失敗する問題を修正しました。[#59181](https://github.com/StarRocks/starrocks/pull/59181)
+- Unified Catalog における Hive テーブルのマテリアライズドビューがパーティション単位でリフレッシュできない問題を修正しました。[#59139](https://github.com/StarRocks/starrocks/pull/59139)
+- 誤った UNION プランにより FE が OOM（メモリ不足）になる問題を修正しました。[#59030](https://github.com/StarRocks/starrocks/pull/59030)
+- データロード時のバージョン欠損を修正しました。[#59006](https://github.com/StarRocks/starrocks/pull/59006)
+- クエリが同期マテリアライズドビューに書き換えられた際に述語が失われる問題を修正しました。[#58831](https://github.com/StarRocks/starrocks/pull/58831)
+- ウィンドウ関数における BITMAP/HLL/PERCENTILE データ型の問題を修正しました。[#58776](https://github.com/StarRocks/starrocks/pull/58776)
+- Hive Catalog の外部テーブルへのメタデータの変更を更新できません。[#54596](https://github.com/StarRocks/starrocks/pull/54596)
+
+### 動作の変更
+
+- FE 設定項目 `task_runs_max_history_number` を追加し、`information_schema.task_runs` ビューに保存される TaskRun 履歴数を制御できるようにしました。これによりメモリ消費が削減されます。[#59161](https://github.com/StarRocks/starrocks/pull/59161)
+
 ## 3.3.14
 
 リリース日： 2025年5月14日
