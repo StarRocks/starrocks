@@ -67,8 +67,10 @@ public class ShowMaterializedViewStatus {
         private long taskId;
         private String taskName;
         private String taskOwner;
+        private String jobId;
         private Constants.TaskRunState refreshState;
         private long mvRefreshStartTime;
+        private long mvRefreshProcessTime;
         private long mvRefreshEndTime;
         private long totalProcessDuration;
         private boolean isForce;
@@ -90,6 +92,14 @@ public class ShowMaterializedViewStatus {
 
         public void setMvRefreshStartTime(long mvRefreshStartTime) {
             this.mvRefreshStartTime = mvRefreshStartTime;
+        }
+
+        public long getMvRefreshProcessTime() {
+            return mvRefreshProcessTime;
+        }
+
+        public void setMvRefreshProcessTime(long mvRefreshProcessTime) {
+            this.mvRefreshProcessTime = mvRefreshProcessTime;
         }
 
         public long getMvRefreshEndTime() {
@@ -162,6 +172,14 @@ public class ShowMaterializedViewStatus {
 
         public void setErrorMsg(String errorMsg) {
             this.errorMsg = errorMsg;
+        }
+
+        public String getJobId() {
+            return jobId;
+        }
+
+        public void setJobId(String jobId) {
+            this.jobId = jobId;
         }
 
         public Constants.TaskRunState getRefreshState() {
@@ -441,8 +459,15 @@ public class ShowMaterializedViewStatus {
         }
 
         // start time
+        long mvRefreshCreateTime = firstTaskRunStatus.getCreateTime();
+        status.setMvRefreshStartTime(mvRefreshCreateTime);
+
+        // process time
         long mvRefreshStartTime = firstTaskRunStatus.getProcessStartTime();
-        status.setMvRefreshStartTime(mvRefreshStartTime);
+        status.setMvRefreshProcessTime(mvRefreshStartTime);
+
+        /// last refresh job id
+        status.setJobId(lastTaskRunStatus.getStartTaskRunId());
 
         // last refresh state
         status.setRefreshState(lastTaskRunStatus.getLastRefreshState());
@@ -518,6 +543,10 @@ public class ShowMaterializedViewStatus {
         status.setTask_name(refreshJobStatus.getTaskName());
         // start time
         status.setLast_refresh_start_time(TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshStartTime()));
+        // process time
+        status.setLast_refresh_process_time(TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
+        // last_refresh_job_id
+        status.setLast_refresh_job_id(refreshJobStatus.getJobId());
         // LAST_REFRESH_STATE
         status.setLast_refresh_state(String.valueOf(refreshJobStatus.getRefreshState()));
         // is force
@@ -587,12 +616,16 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, refreshJobStatus.getTaskId());
         // task name
         addField(resultRow, Strings.nullToEmpty(refreshJobStatus.getTaskName()));
-        // process start time
+        // start time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshStartTime()));
+        // process start time
+        addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
         // process finish time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshEndTime()));
         // process duration
         addField(resultRow, formatDuration(refreshJobStatus.getTotalProcessDuration()));
+        // last refresh job id
+        addField(resultRow, refreshJobStatus.getJobId());
         // last refresh state
         addField(resultRow, refreshJobStatus.getRefreshState());
         // whether it's force refresh
