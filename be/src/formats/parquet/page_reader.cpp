@@ -21,7 +21,6 @@
 #include <vector>
 
 #include "cache/datacache.h"
-#include "cache/object_cache/object_cache.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/status.h"
