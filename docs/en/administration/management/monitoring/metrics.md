@@ -1669,6 +1669,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: The total number of error rows encountered during data loading by all Routine Load jobs.
 
+### starrocks_fe_routine_load_max_lag_of_partition
+
+- Unit: -
+- Description: The maximum Kafka partition offset lag for each Routine Load job. It is collected only when the FE configuration `enable_routine_load_lag_metrics` is set to `true` and the offset lag is greater than or equal to the FE configuration `min_routine_load_lag_for_metrics`. By default, `enable_routine_load_lag_metrics` is `false`, and `min_routine_load_lag_for_metrics` is `10000`.
+
 ### starrocks_fe_sql_block_hit_count
 
 - Unit: Count

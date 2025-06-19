@@ -170,7 +170,7 @@ public class CompactionMgrTest {
                 Quantiles.compute(Lists.newArrayList(1d)));
         Assert.assertEquals(1, compactionMgr.getMaxCompactionScore(), delta);
         compactionMgr.handleCompactionFinished(partition1, 3, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(2d)), 1234);
+                Quantiles.compute(Lists.newArrayList(2d)), 1234, false);
         Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
 
         compactionMgr.handleLoadingFinished(partition2, 2, System.currentTimeMillis(),

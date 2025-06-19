@@ -15,7 +15,7 @@ JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执�
 
 此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
 
-JDBC Catalog 自 3.0 版本开始支持 MySQL、PostgreSQL，自 3.2.9、3.3.1 版本开始支持 Oracle 和 SQLServer。
+JDBC Catalog 自 3.0 版本开始支持 MySQL、PostgreSQL，自 3.2.9、3.3.1 版本开始支持 Oracle 和 SQLServer。自 3.3.0 开始支持 ClickHouse（试验性）。
 
 ## 前提条件
 
@@ -65,20 +65,21 @@ JDBC Catalog 的属性，包含如下必填配置项：
 
 ### 创建示例
 
-以下示例创建了两个 JDBC Catalog：`jdbc0` 和 `jdbc1`。
+以下示例创建了五个不同的 JDBC Catalog。
 
 ```SQL
+-- PostgresSQL
 CREATE EXTERNAL CATALOG jdbc0
 PROPERTIES
 (
-    "type"="jdbc",
+    "type"="jdbc", 
     "user"="postgres",
     "password"="changeme",
     "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/jdbc_test",
     "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
     "driver_class"="org.postgresql.Driver"
 );
-
+-- MySQL
 CREATE EXTERNAL CATALOG jdbc1
 PROPERTIES
 (
@@ -89,7 +90,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
- 
+-- Oracle
 CREATE EXTERNAL CATALOG jdbc2
 PROPERTIES
 (
@@ -100,7 +101,7 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
     "driver_class"="oracle.jdbc.driver.OracleDriver"
 );
-       
+-- SQL Server
 CREATE EXTERNAL CATALOG jdbc3
 PROPERTIES
 (
@@ -111,7 +112,16 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.4.2.jre11/mssql-jdbc-12.4.2.jre11.jar",
     "driver_class"="com.microsoft.sqlserver.jdbc.SQLServerDriver"
 );
-
+-- ClickHouse
+CREATE EXTERNAL CATALOG jdbc4
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="default",
+    "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
+    "driver_url"="file:///path/to/clickhouse-jdbc-0.4.6.jar",
+    "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
+);
 ```
 
 ## 查看 JDBC Catalog

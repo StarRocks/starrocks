@@ -90,4 +90,15 @@ public class LakeTableTestHelper {
         transactionState.setWriteEndTimeMs(currentTimeMs);
         return transactionState;
     }
+
+    TransactionState newCompactionTransactionState() {
+        long txnId = nextTxnId++;
+        long currentTimeMs = System.currentTimeMillis();
+        TransactionState transactionState =
+                new TransactionState(dbId, Lists.newArrayList(tableId), txnId, "label", null,
+                        TransactionState.LoadJobSourceType.LAKE_COMPACTION, null, 0, 60_000);
+        transactionState.setPrepareTime(currentTimeMs - 10_000);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        return transactionState;
+    }
 }

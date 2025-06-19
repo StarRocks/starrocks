@@ -163,8 +163,19 @@ Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const 
 }
 
 dev_t DataCacheUtils::disk_device_id(const std::string& disk_path) {
+    std::filesystem::path cur_path(disk_path);
+    cur_path = std::filesystem::absolute(cur_path);
+
+    // Traverse from the current path to the ancestor node and find the first existing path
+    while (!cur_path.empty()) {
+        if (std::filesystem::exists(cur_path) || cur_path == cur_path.root_path()) {
+            break;
+        }
+        cur_path = cur_path.parent_path();
+    }
+
     struct stat s;
-    if (stat(disk_path.c_str(), &s) != 0) {
+    if (stat(cur_path.c_str(), &s) != 0) {
         return 0;
     }
     return s.st_dev;

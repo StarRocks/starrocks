@@ -134,6 +134,18 @@ TEST_F(DataCacheUtilsTest, parse_cache_space_paths) {
     fs::remove_all(cache_dir).ok();
 }
 
+TEST_F(DataCacheUtilsTest, get_device_id_func) {
+    ASSERT_GT(DataCacheUtils::disk_device_id("/"), 0);
+    ASSERT_GT(DataCacheUtils::disk_device_id("/not_exist1/not_exist2"), 0);
+    ASSERT_EQ(DataCacheUtils::disk_device_id("/"), DataCacheUtils::disk_device_id("/not_exist/not_exist2"));
+
+    // Get the device id for relative path
+    ASSERT_GT(DataCacheUtils::disk_device_id("not_exist"), 0);
+    ASSERT_GT(DataCacheUtils::disk_device_id("./not_exist"), 0);
+    ASSERT_GT(DataCacheUtils::disk_device_id("./not_exist1/not_exist2"), 0);
+    ASSERT_EQ(DataCacheUtils::disk_device_id("./not_exist"), DataCacheUtils::disk_device_id("./not_exist1/not_exist2"));
+}
+
 TEST_F(DataCacheUtilsTest, change_cache_path_suc) {
     const std::string old_dir = "./old_disk_cache_path";
     const std::string new_dir = "./new_disk_cache_path";
@@ -146,15 +158,38 @@ TEST_F(DataCacheUtilsTest, change_cache_path_suc) {
     fs::remove_all(new_dir);
 }
 
-TEST_F(DataCacheUtilsTest, change_cache_path_fail) {
-    const std::string old_dir = "./old_disk_cache_path2";
-    const std::string new_dir = "./old_disk_cache_path2/subdir";
+TEST_F(DataCacheUtilsTest, change_cache_path_to_sub_path) {
+    const std::string old_dir = "./old_disk_cache_path";
+    const std::string new_dir = "./old_disk_cache_path/subdir";
     ASSERT_TRUE(fs::create_directories(old_dir).ok());
     ASSERT_TRUE(fs::create_directories(new_dir).ok());
 
     ASSERT_FALSE(DataCacheUtils::change_disk_path(old_dir, new_dir).ok());
 
     fs::remove_all(old_dir);
+    fs::remove_all(new_dir);
+}
+
+TEST_F(DataCacheUtilsTest, change_cache_path_to_nonexist_dest) {
+    const std::string old_dir = "./old_disk_cache_path";
+    const std::string new_dir = "./new_disk_cache_path";
+    ASSERT_TRUE(fs::create_directories(old_dir).ok());
+
+    ASSERT_TRUE(DataCacheUtils::change_disk_path(old_dir, new_dir).ok());
+
+    fs::remove_all(old_dir);
+    fs::remove_all(new_dir);
+}
+
+TEST_F(DataCacheUtilsTest, change_cache_path_from_nonexist_src) {
+    const std::string old_dir = "./old_disk_cache_path";
+    const std::string new_dir = "./new_disk_cache_path";
+    ASSERT_TRUE(fs::create_directories(new_dir).ok());
+
+    ASSERT_TRUE(DataCacheUtils::change_disk_path(old_dir, new_dir).ok());
+
+    fs::remove_all(old_dir);
+    fs::remove_all(new_dir);
 }
 
 } // namespace starrocks

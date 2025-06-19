@@ -65,7 +65,7 @@ public:
     // Client should call create_global_cache before.
     static StoragePageCache* instance() { return DataCache::GetInstance()->page_cache(); }
 
-    StoragePageCache(ObjectCache* obj_cache) : _cache(obj_cache) {}
+    StoragePageCache(LocalCacheEngine* cache_engine) : _cache(cache_engine) {}
 
     // Lookup the given page in the cache.
     //
@@ -87,7 +87,7 @@ public:
     Status insert(const std::string& key, void* data, int64_t size, ObjectCacheDeleter deleter,
                   const ObjectCacheWriteOptions& opts, PageCacheHandle* handle);
 
-    size_t memory_usage() const { return _cache->usage(); }
+    size_t memory_usage() const { return _cache->mem_usage(); }
 
     void set_capacity(size_t capacity);
 
@@ -102,7 +102,7 @@ public:
     void prune();
 
 private:
-    ObjectCache* _cache = nullptr;
+    LocalCacheEngine* _cache = nullptr;
 };
 
 // A handle for StoragePageCache entry. This class make it easy to handle
@@ -111,7 +111,7 @@ private:
 class PageCacheHandle {
 public:
     PageCacheHandle() = default;
-    PageCacheHandle(ObjectCache* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
+    PageCacheHandle(LocalCacheEngine* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
     ~PageCacheHandle() {
         if (_handle != nullptr) {
             _cache->release(_handle);
@@ -130,11 +130,11 @@ public:
         return *this;
     }
 
-    ObjectCache* cache() const { return _cache; }
+    LocalCacheEngine* cache() const { return _cache; }
     const void* data() const { return _cache->value(_handle); }
 
 private:
-    ObjectCache* _cache = nullptr;
+    LocalCacheEngine* _cache = nullptr;
     ObjectCacheHandle* _handle = nullptr;
 
     // Don't allow copy and assign

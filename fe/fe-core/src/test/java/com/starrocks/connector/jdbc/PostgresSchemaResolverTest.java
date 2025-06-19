@@ -56,13 +56,14 @@ public class PostgresSchemaResolverTest {
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
         columnResult.addColumn("DATA_TYPE", Arrays.asList(Types.BIT, Types.INTEGER, Types.INTEGER, Types.REAL, Types.DOUBLE,
-                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP));
+                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.VARBINARY));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("BOOL", "INTEGER", "SERIAL", "FLOAT4", "FLOAT8",
-                "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"));
-        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"));
+                "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP", "UUID"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29, 36));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6, 0));
+        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"));
+        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO",
+                "NO", "NO"));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "org.postgresql.Driver");
         properties.put(JDBCResource.URI, "jdbc:postgresql://127.0.0.1:5432/t1");
@@ -169,8 +170,9 @@ public class PostgresSchemaResolverTest {
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
             Assert.assertEquals("tbl1", table.getName());
             Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            Assert.assertEquals(11, table.getColumns().size());
+            Assert.assertEquals(12, table.getColumns().size());
             Assert.assertTrue(table.getColumn("h").getType().isStringType());
+            Assert.assertTrue(table.getColumn("l").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
