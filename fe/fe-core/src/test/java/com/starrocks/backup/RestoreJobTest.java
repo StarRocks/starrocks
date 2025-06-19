@@ -135,11 +135,14 @@ public class RestoreJobTest {
         }
     }
 
+<<<<<<< HEAD
     @Mocked
     private EditLog editLog;
     @Mocked
     private SystemInfoService systemInfoService;
 
+=======
+>>>>>>> c7aade84be ([UT] Fix unstable ut for Restore cause by @Mocked annotation for SystemInfoService (#60078))
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
                 new BlobStorage("broker", Maps.newHashMap()));
@@ -171,6 +174,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupMultiSubPartitionTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
@@ -195,7 +199,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -354,6 +358,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupRangeTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
@@ -378,7 +383,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -523,6 +528,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupListTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
@@ -547,7 +553,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -739,6 +745,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreView() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
@@ -836,7 +843,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
