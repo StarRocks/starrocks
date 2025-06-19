@@ -77,7 +77,7 @@ public class MVLazyRangePartitionMapper extends MVRangePartitionMapper {
         // deal overlap
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         if (timePointList.size() < 2) {
-            return new PartitionRangeWrapper();
+            return new PartitionRangeWrapper(result);
         }
         for (int i = 1; i < timePointList.size(); i++) {
             try {

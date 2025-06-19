@@ -66,9 +66,6 @@ public abstract class MVRangePartitionMapper {
         private Map<String, Range<PartitionKey>> partitionRangeMap;
         private Map<String, Range<PartitionKey>> virtualPartitionRangeMap;
 
-        public PartitionRangeWrapper() {
-        }
-
         public PartitionRangeWrapper(Map<String, Range<PartitionKey>> partitionRangeMap) {
             this.partitionRangeMap = partitionRangeMap;
         }
