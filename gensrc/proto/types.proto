@@ -183,10 +183,11 @@ message IsNullPredicatePB {
 
 message RecordPredicateNodePB {
     enum NodeType {
-        NOT = 0;
-        AND = 1;
-        OR = 2;
-        LEAF = 3;
+        UNKNOWN = 0;
+        NOT = 1;
+        AND = 2;
+        OR = 3;
+        LEAF = 4;
     }
 
     optional NodeType type = 1;
