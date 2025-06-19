@@ -81,20 +81,34 @@ class AutoCleanRunnable : public Runnable {
 public:
     AutoCleanRunnable(std::function<void()> runner, std::function<void(Status)> cleaner)
             : _runnable(std::move(runner)), _cleaner(std::move(cleaner)), _st(Status::Unknown("Not yet executed")) {}
-    virtual ~AutoCleanRunnable() { _cleaner(_st); }
+    virtual ~AutoCleanRunnable() { _cleaner(get_status()); }
 
     virtual void run() override {
         set_status(Status::OK());
         _runnable();
     }
 
-    void set_status(Status st) { _st = st; }
+    void set_status(Status st) {
+        std::unique_lock l(_lock);
+        if (_st.ok()) {
+            return;
+        }
+        _st = st;
+    }
+
+    Status get_status() {
+        std::unique_lock l(_lock);
+        return _st;
+    }
 
 protected:
     std::function<void()> _runnable;
     std::function<void(Status)> _cleaner;
+
     // _st will keep abnormal until the run() has been called.
+    // this status is used to indicate the schedule status before run() is called
     Status _st;
+    mutable std::mutex _lock; 
 };
 
 // ThreadPool takes a lot of arguments. We provide sane defaults with a builder.
