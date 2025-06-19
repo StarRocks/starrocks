@@ -741,7 +741,7 @@ public class DefaultCoordinator extends Coordinator {
                         String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
                         failure);
             default:
-                throw new UserException(status.getErrorMsg(), failure);
+                dealStatusToTryRetry(status);
         }
     }
 
@@ -880,6 +880,42 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    private void dealStatusToTryRetry(Status status) throws RpcException, UserException {
+        if (!status.ok()) {
+            if (Strings.isNullOrEmpty(status.getErrorMsg())) {
+                status.rewriteErrorMsg();
+            }
+
+            if (status.isRemoteFileNotFound()) {
+                throw new RemoteFileNotFoundException(status.getErrorMsg());
+            }
+
+            if (status.isRpcError()) {
+                throw new RpcException("unknown", status.getErrorMsg());
+            } else {
+                String errMsg = status.getErrorMsg();
+                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
+
+                // hide host info
+                int hostIndex = errMsg.indexOf("host");
+                if (hostIndex != -1) {
+                    errMsg = errMsg.substring(0, hostIndex);
+                }
+                InternalErrorCode ec = InternalErrorCode.INTERNAL_ERR;
+                if (status.isCancelled() &&
+                        status.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                    ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
+                } else if (status.isTimeout()) {
+                    ErrorReport.reportTimeoutException(
+                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
+                            String.format("please increase the '%s' session variable and retry",
+                                    SessionVariable.QUERY_TIMEOUT));
+                }
+                throw new UserException(ec, errMsg);
+            }
+        }
+    }
+
     @Override
     public RowBatch getNext() throws Exception {
         if (isShortCircuit) {
@@ -908,39 +944,7 @@ public class DefaultCoordinator extends Coordinator {
             unlock();
         }
 
-        if (!copyStatus.ok()) {
-            if (Strings.isNullOrEmpty(copyStatus.getErrorMsg())) {
-                copyStatus.rewriteErrorMsg();
-            }
-
-            if (copyStatus.isRemoteFileNotFound()) {
-                throw new RemoteFileNotFoundException(copyStatus.getErrorMsg());
-            }
-
-            if (copyStatus.isRpcError()) {
-                throw new RpcException("unknown", copyStatus.getErrorMsg());
-            } else {
-                String errMsg = copyStatus.getErrorMsg();
-                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
-
-                // hide host info
-                int hostIndex = errMsg.indexOf("host");
-                if (hostIndex != -1) {
-                    errMsg = errMsg.substring(0, hostIndex);
-                }
-                InternalErrorCode ec = InternalErrorCode.INTERNAL_ERR;
-                if (copyStatus.isCancelled() &&
-                        copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
-                    ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
-                } else if (copyStatus.isTimeout()) {
-                    ErrorReport.reportTimeoutException(
-                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
-                            String.format("please increase the '%s' session variable and retry",
-                                    SessionVariable.QUERY_TIMEOUT));
-                }
-                throw new UserException(ec, errMsg);
-            }
-        }
+        dealStatusToTryRetry(copyStatus);
 
         if (resultBatch.isEos()) {
             this.returnedAllResults = true;
