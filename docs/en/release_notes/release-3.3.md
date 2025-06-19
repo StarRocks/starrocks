@@ -41,6 +41,7 @@ Fixed the following issues:
 - Version loss during data loading. [#59006](https://github.com/StarRocks/starrocks/pull/59006)
 - Predicate loss when queries are rewritten to synchronous materialized views. [#58831](https://github.com/StarRocks/starrocks/pull/58831)
 - Issues with BITMAP/HLL/PERCENTILE data types in window functions. [#58776](https://github.com/StarRocks/starrocks/pull/58776)
+- Metadata changes to the external tables in Hive Catalog cannot be refreshed. [#54596](https://github.com/StarRocks/starrocks/pull/54596)
 
 ### Behavior Changes
 
