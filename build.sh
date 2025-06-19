@@ -685,7 +685,7 @@ fi
 
 if [ ${FIX_CVE} == "ON" ]; then
     echo "Fix CVE"
-    python3 fix-cve/fix-cve.py --jar-exec-path ${STARROCKS_THIRDPARTY}/installed/open_jdk/bin/jar --output-dir ${STARROCKS_OUTPUT}
+    python3 fix-cve/fix-cve.py --jar-exec-path ${JAVA_HOME}/bin/jar --output-dir ${STARROCKS_OUTPUT}
 fi
 
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
