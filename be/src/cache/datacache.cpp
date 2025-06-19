@@ -16,8 +16,8 @@
 
 #include "cache/datacache_utils.h"
 #include "cache/disk_space_monitor.h"
-#include "cache/mem_space_monitor.h"
 #include "cache/lrucache_engine.h"
+#include "cache/mem_space_monitor.h"
 #include "cache/object_cache/page_cache.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
@@ -104,7 +104,7 @@ Status DataCache::_init_lrucache_engine() {
     ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_limit());
     storage_cache_limit = check_storage_page_cache_limit(storage_cache_limit);
 
-    CacheOptions cache_options {.mem_space_size = static_cast<size_t>(storage_cache_limit)};
+    CacheOptions cache_options{.mem_space_size = static_cast<size_t>(storage_cache_limit)};
     _lru_cache = std::make_shared<LRUCacheEngine>();
     RETURN_IF_ERROR(_lru_cache->init(cache_options));
     LOG(INFO) << "object cache init successfully";
