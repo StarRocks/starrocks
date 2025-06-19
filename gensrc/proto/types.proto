@@ -181,16 +181,38 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
-message ColumnHashModulusPredicatePB {
-    enum ColumnHashTypePB {
-        UNKNOWN = 0;
-        CRC32 = 1;
+message RecordPredicateTreeNodePB {
+    NodeType {
+        AND = 0;
+        OR = 1;
+        LEAF 2;
     }
 
-    optional ColumnHashTypePB type = 1;
-    optional int64 modulus = 2;
-    optional int64 remainder = 3;
-    repeated string hash_column_names = 4;
+    optional NodeType type = 1;
+    repeated RecordPredicatePB children = 2;
+}
+
+message RecordPredicatePB {
+    enum TypePB {
+        UNKNOWN = 0;
+        SELECT = 1;
+        FILTER = 2;
+    }
+
+    message ColumnHashModulusPredicatePB {
+        enum ColumnHashTypePB {
+            UNKNOWN = 0;
+            CRC32 = 1;
+        }
+
+        optional ColumnHashTypePB type = 1;
+        optional int64 modulus = 2;
+        optional int64 remainder = 3;
+        repeated string hash_column_names = 4;
+    }
+
+    optional TypePB type = 1;
+    optional ColumnHashModulusPredicatePB column_hash_modulus_predicate = 2;
 }
 
 message IndexValueWithVerPB {
