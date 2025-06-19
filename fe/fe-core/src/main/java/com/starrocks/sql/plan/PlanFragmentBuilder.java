@@ -3652,7 +3652,6 @@ public class PlanFragmentBuilder {
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
             eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).collect(Collectors.toList());
-            Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             for (BinaryPredicateOperator s : eqOnPredicates) {
                 if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
