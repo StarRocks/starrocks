@@ -190,8 +190,11 @@ Status HdfsScanner::_build_scanner_context() {
             new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
 
     RETURN_IF_ERROR(ctx.update_return_count_columns());
-    if (ctx.scan_range->__isset.file_record_count && ctx.scan_range->delete_files.empty()) {
+    if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
         ctx.can_use_file_record_count = true;
+    }
+    if (ctx.scan_range->__isset.is_first_split && ctx.scan_range->is_first_split) {
+        ctx.is_first_split = true;
     }
     return Status::OK();
 }
@@ -206,8 +209,8 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             return Status::EndOfFile("");
         }
         int64_t file_record_count = 0;
-        if (_scanner_ctx.scan_range->offset == 0) {
-            file_record_count = _scanner_ctx.scan_range->file_record_count;
+        if (_scanner_ctx.is_first_split) {
+            file_record_count = _scanner_ctx.scan_range->record_count;
         }
         _scanner_ctx.append_or_update_count_column_to_chunk(chunk, file_record_count);
         _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, 1);

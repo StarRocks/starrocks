@@ -427,7 +427,9 @@ struct THdfsScanRange {
 
     32: optional string candidate_node
 
-    33: optional i64 file_record_count
+    33: optional i64 record_count
+
+    34: optional bool is_first_split
 }
 
 struct TBinlogScanRange {
