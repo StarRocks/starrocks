@@ -832,13 +832,13 @@ TEST_F(ThreadPoolTest, TestAutoCleanRunnable) {
     int run_count = 0;
     int exit_count = 0;
 
-    auto run1 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    auto run1 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&](Status) { ++exit_count; });
     run1.reset();
     // run1 doesn't run but will definitely exit
     EXPECT_EQ(0, run_count);
     EXPECT_EQ(1, exit_count);
 
-    auto run2 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    auto run2 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&](Status) { ++exit_count; });
     run2->run();
     run2.reset();
     // run2 runs and exits
@@ -852,7 +852,7 @@ TEST_F(ThreadPoolTest, ConcurrencyLimitedThreadPoolTokenTest) {
 
     int run_count = 0;
     int exit_count = 0;
-    auto task = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    auto task = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&](Status) { ++exit_count; });
 
     auto deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(400);
     auto st = thread_token->submit(std::move(task), deadline);
@@ -892,7 +892,7 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
                     ++run_count;
                     ++run_count_A;
                 },
-                [&] {
+                [&](Status) {
                     ++exit_count;
                     ++exit_count_A;
                 }));
@@ -907,7 +907,7 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
                     ++run_count;
                     ++run_count_B;
                 },
-                [&] {
+                [&](Status) {
                     ++exit_count;
                     ++exit_count_B;
                 }));
