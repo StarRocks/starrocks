@@ -191,7 +191,13 @@ public class MaterializedViewsSystemTable extends SystemTable {
                 obj = ""; // Convert null string to empty string
             }
             ConstantOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
-            scalar = mayCast(scalar, column.getType());
+            try {
+                scalar = mayCast(scalar, column.getType());
+            } catch (Exception e) {
+                LOG.warn("Failed to cast scalar operator for column: {}, value: {}, type: {}",
+                        column.getName(), obj, valueType, e);
+                scalar = ConstantOperator.createNull(column.getType());
+            }
             result.add(scalar);
         }
         return result;
