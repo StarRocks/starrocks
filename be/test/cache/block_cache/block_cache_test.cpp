@@ -104,9 +104,9 @@ TEST_F(BlockCacheTest, hybrid_cache) {
 
     // remove cache
     char value[1024] = {0};
-    ASSERT_OK(cache->remove(cache_key, 0, batch_size));
+    ASSERT_OK(cache->remove(cache_key + std::to_string(0), 0, batch_size));
 
-    auto res = cache->read(cache_key, 0, batch_size, value);
+    auto res = cache->read(cache_key + std::to_string(0), 0, batch_size, value);
     ASSERT_TRUE(res.status().is_not_found());
 
     // not found

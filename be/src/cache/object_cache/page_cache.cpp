@@ -67,12 +67,12 @@ void StoragePageCache::prune() {
 }
 
 void StoragePageCache::set_capacity(size_t capacity) {
-    Status st = _cache->set_capacity(capacity);
+    Status st = _cache->update_mem_quota(capacity, false);
     LOG_IF(INFO, !st.ok()) << "Fail to set cache capacity to " << capacity << ", reason: " << st.message();
 }
 
 size_t StoragePageCache::get_capacity() const {
-    return _cache->capacity();
+    return _cache->mem_quota();
 }
 
 uint64_t StoragePageCache::get_lookup_count() const {
@@ -84,7 +84,7 @@ uint64_t StoragePageCache::get_hit_count() const {
 }
 
 bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
-    Status st = _cache->adjust_capacity(delta, min_capacity);
+    Status st = _cache->adjust_mem_quota(delta, min_capacity);
     if (!st.ok()) {
         LOG_IF(INFO, !st.ok()) << "Fail to adjust cache capacity, delta: " << delta << ", reason: " << st.message();
         return false;

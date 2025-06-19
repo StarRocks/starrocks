@@ -22,7 +22,6 @@
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/test_cache_utils.h"
-#include "cache/object_cache/starcache_module.h"
 #include "cache/starcache_engine.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -3351,8 +3350,7 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
     auto local_cache = std::make_shared<StarCacheEngine>();
     ASSERT_OK(local_cache->init(options));
-    auto starcache_module = std::make_shared<StarCacheModule>(local_cache->starcache_instance());
-    auto cache = std::make_shared<StoragePageCache>(starcache_module.get());
+    auto cache = std::make_shared<StoragePageCache>(local_cache.get());
 
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),

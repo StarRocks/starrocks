@@ -16,7 +16,6 @@
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/local_cache_engine.h"
-#include "cache/object_cache/object_cache.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -46,8 +45,6 @@ public:
     LocalCacheEngine* local_cache() { return _local_cache.get(); }
     BlockCache* block_cache() const { return _block_cache.get(); }
     void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
-    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
-    ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
     std::shared_ptr<StoragePageCache> page_cache_ptr() const { return _page_cache; }
     bool page_cache_available() const;
@@ -61,8 +58,7 @@ public:
 private:
     StatusOr<CacheOptions> _init_cache_options();
     Status _init_datacache();
-    Status _init_starcache_based_object_cache();
-    Status _init_lru_base_object_cache();
+    Status _init_lrucache_engine();
     Status _init_page_cache();
 
     GlobalEnv* _global_env;
@@ -71,11 +67,9 @@ private:
     // cache engine
     std::shared_ptr<LocalCacheEngine> _local_cache;
     std::shared_ptr<RemoteCacheEngine> _remote_cache;
-    std::shared_ptr<Cache> _lru_cache;
+    std::shared_ptr<LocalCacheEngine> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;
-    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
-    std::shared_ptr<ObjectCache> _lru_based_object_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
 
     std::shared_ptr<DiskSpaceMonitor> _disk_space_monitor;

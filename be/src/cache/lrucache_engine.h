@@ -14,17 +14,16 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "cache/local_cache_engine.h"
-#include "common/status.h"
-#include "starcache/star_cache.h"
-#include "starcache/time_based_cache_adaptor.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
-
-class StarCacheEngine : public LocalCacheEngine {
+class LRUCacheEngine final : public LocalCacheEngine {
 public:
-    StarCacheEngine() = default;
-    virtual ~StarCacheEngine() override = default;
+    LRUCacheEngine() = default;
+    virtual ~LRUCacheEngine() override = default;
 
     Status init(const CacheOptions& options) override;
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
@@ -34,42 +33,32 @@ public:
 
     Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
                   ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) override;
-
     Status lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) override;
 
-    void release(ObjectCacheHandlePtr handle) override;
-
-    const void* value(ObjectCacheHandlePtr handle) override;
-
     bool exist(const std::string& key) const override;
-
     Status remove(const std::string& key) override;
 
-    Status adjust_mem_quota(int64_t delta, size_t min_capacity) override;
-
     Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
-
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
 
-    const StarCacheMetrics starcache_metrics(int level) const;
-
     const DataCacheMetrics cache_metrics() const override;
-
-    void record_read_remote(size_t size, int64_t latency_us) override;
-
-    void record_read_cache(size_t size, int64_t latency_us) override;
+    void record_read_remote(size_t size, int64_t latency_us) override {}
+    void record_read_cache(size_t size, int64_t latency_us) override {}
 
     Status shutdown() override;
+    LocalCacheEngineType engine_type() override { return LocalCacheEngineType::LRUCACHE; }
+    bool has_mem_cache() const override { return _cache->get_capacity() > 0; }
+    bool has_disk_cache() const override { return false; }
 
-    LocalCacheEngineType engine_type() override { return LocalCacheEngineType::STARCACHE; }
-
-    std::shared_ptr<starcache::StarCache> starcache_instance() { return _cache; }
-    bool has_mem_cache() const override { return _mem_quota.load(std::memory_order_relaxed) > 0; }
-    bool has_disk_cache() const override { return _disk_quota.load(std::memory_order_relaxed) > 0; }
-    bool available() const override { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
+    bool available() const override { return is_initialized() && has_mem_cache(); }
     bool mem_cache_available() const override { return is_initialized() && has_mem_cache(); }
 
-    void disk_spaces(std::vector<DirSpace>* spaces) const override;
+    void disk_spaces(std::vector<DirSpace>* spaces) const override {}
+
+    void release(ObjectCacheHandlePtr handle) override;
+    const void* value(ObjectCacheHandlePtr handle) override;
+
+    Status adjust_mem_quota(int64_t delta, size_t min_capacity) override;
 
     size_t mem_quota() const override;
     size_t mem_usage() const override;
@@ -83,16 +72,9 @@ public:
     Status prune() override;
 
 private:
-    void _refresh_quota();
-    void _try_release_obj_handle(ObjectCacheHandlePtr handle);
+    bool _check_write(size_t charge, const ObjectCacheWriteOptions& options) const;
 
-    std::shared_ptr<starcache::StarCache> _cache;
-    std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
-    bool _enable_tiered_cache = false;
-    bool _enable_datacache_persistence = false;
     std::atomic<bool> _initialized = false;
-
-    std::atomic<size_t> _mem_quota = 0;
-    std::atomic<size_t> _disk_quota = 0;
+    std::unique_ptr<ShardedLRUCache> _cache;
 };
 } // namespace starrocks
