@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -30,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -211,7 +213,9 @@ public class StatementPlanner {
      * 1. Optimization for INSERT-SELECT: if the SELECT doesn't need the lock, we can defer the lock acquisition
      * after analyzing the SELECT. That can help the case which SELECT is a time-consuming external table access.
      */
-    private static void analyzeStatement(StatementBase statement, ConnectContext session, PlannerMetaLocker locker) {
+    @VisibleForTesting
+    protected static boolean analyzeStatement(StatementBase statement, ConnectContext session,
+                                              PlannerMetaLocker locker) {
         boolean deferredLock = false;
         Runnable takeLock = () -> {
             try (Timer lockerTime = Tracers.watchScope("Lock")) {
@@ -230,7 +234,7 @@ public class StatementPlanner {
                 Map<Long, Set<Long>> tables = Maps.newHashMap();
                 PlannerMetaLocker.collectTablesNeedLock(insertStmt.getQueryStatement(), session, dbs, tables);
 
-                if (tables.isEmpty()) {
+                if (tables.isEmpty() || FeConstants.runningUnitTest) {
                     deferredLock = true;
                 }
             }
@@ -242,9 +246,11 @@ public class StatementPlanner {
                 } else {
                     InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
                 }
+                return true;
             } else {
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                return false;
             }
         }
     }
