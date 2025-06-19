@@ -1170,12 +1170,6 @@ public class NodeMgr {
         return statisticsItems;
     }
 
-    public void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity) throws DdlException {
-        for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
-        }
-    }
-
     public Frontend getMySelf() {
         return frontends.get(nodeName);
     }
