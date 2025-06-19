@@ -69,7 +69,7 @@ public class StmtExecutorPrepareStmtIdTest {
     }
 
     @BeforeClass
-    public static void setupCluster() throws Exception {
+    public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster();
     }
 
@@ -97,8 +97,7 @@ public class StmtExecutorPrepareStmtIdTest {
         ByteBuffer first = channel.getPackets().get(0).duplicate();
         // Read OK header byte
         MysqlCodec.readByte(first);
-        int stmtId = MysqlCodec.readInt4(first);
-        return stmtId;
+        return MysqlCodec.readInt4(first);
     }
 
     @Test
