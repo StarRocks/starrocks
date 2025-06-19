@@ -190,7 +190,7 @@ message RecordPredicateNodePB {
     }
 
     optional NodeType type = 1;
-    repeated RecordPredicateNodePB children = 2;
+    repeated RecordPredicateNodePB children = 2; // only set if NodeType is not LEAF
     optional RecordPredicatePB record_predicate = 3; // only set if NodeType is LEAF
 }
 
