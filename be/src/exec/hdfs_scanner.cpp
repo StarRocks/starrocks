@@ -193,8 +193,8 @@ Status HdfsScanner::_build_scanner_context() {
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
         ctx.can_use_file_record_count = true;
     }
-    if (ctx.scan_range->__isset.is_first_split && ctx.scan_range->is_first_split) {
-        ctx.is_first_split = true;
+    if (ctx.scan_range->__isset.is_first_split) {
+        ctx.is_first_split = ctx.scan_range->is_first_split;
     }
     return Status::OK();
 }
@@ -203,11 +203,12 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
 
+    if (_scanner_ctx.no_more_chunks) {
+        return Status::EndOfFile("");
+    }
+
     // short circuit for ___count___ optimization.
     if (_scanner_ctx.return_count_column && _scanner_ctx.can_use_file_record_count) {
-        if (_scanner_ctx.emit_count_column) {
-            return Status::EndOfFile("");
-        }
         int64_t file_record_count = 0;
         if (_scanner_ctx.is_first_split) {
             file_record_count = _scanner_ctx.scan_range->record_count;
@@ -215,7 +216,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         _scanner_ctx.append_or_update_count_column_to_chunk(chunk, file_record_count);
         _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, 1);
         _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, 1);
-        _scanner_ctx.emit_count_column = true;
+        _scanner_ctx.no_more_chunks = true;
         _app_stats.rows_read += 1;
         return Status::OK();
     }

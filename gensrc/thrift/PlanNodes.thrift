@@ -427,8 +427,11 @@ struct THdfsScanRange {
 
     32: optional string candidate_node
 
+    // how many records are in this file?
+    // could be used for optimization like count(1)
     33: optional i64 record_count
 
+    // is this scan range the first split of this file?
     34: optional bool is_first_split
 }
 
