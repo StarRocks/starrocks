@@ -109,19 +109,8 @@ FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }
 
-void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
+void QueryContext::cancel(const Status& status) {
     _is_cancelled = true;
-    if (cancelled_by_fe) {
-        // only update when confirm cancelled from fe
-        set_cancelled_by_fe();
-    }
-    if (_cancelled_status.load() != nullptr) {
-        return;
-    }
-    Status* old_status = nullptr;
-    if (_cancelled_status.compare_exchange_strong(old_status, &_s_status)) {
-        _s_status = status;
-    }
     _fragment_mgr->cancel(status);
 }
 
@@ -368,8 +357,7 @@ QueryContextManager::~QueryContextManager() {
         return nullptr;                         \
     }
 
-StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& query_id,
-                                                             bool return_error_if_not_exist) {
+QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -402,10 +390,6 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
                 context_map.emplace(query_id, std::move(ctx));
                 return raw_ctx_ptr;
             }
-        }
-
-        if (return_error_if_not_exist) {
-            return Status::Cancelled("Query terminates prematurely");
         }
 
         // finally, find no query contexts, so create a new one

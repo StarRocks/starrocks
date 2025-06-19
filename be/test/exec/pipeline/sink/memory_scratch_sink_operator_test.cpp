@@ -63,7 +63,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     pipeline::FragmentContext* _fragment_ctx;
     ExecEnv* _exec_env = ExecEnv::GetInstance();
 
-    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
+    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(60);
@@ -107,7 +107,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
 
     // Now simulate GlobalDriverExecutor to cancel the driver due to source operator failure
     auto status = Status::NotFound("file not found");
-    _query_ctx->cancel(status, false);
+    _query_ctx->cancel(status);
     _runtime_state->set_is_cancelled(true);
     driver->cancel_operators(_runtime_state);
 

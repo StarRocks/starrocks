@@ -16,7 +16,6 @@
 
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 class TableFunctionTableSinkOperatorTest : public testing::Test {
@@ -68,7 +67,7 @@ TEST_F(TableFunctionTableSinkOperatorTest, prepare_with_parquet_format) {
     pipeline::FragmentContext* _fragment_ctx;
     ExecEnv* _exec_env = ExecEnv::GetInstance();
 
-    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
+    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(600);
@@ -124,7 +123,7 @@ TEST_F(TableFunctionTableSinkOperatorTest, prepare_with_orc_format) {
     pipeline::FragmentContext* _fragment_ctx;
     ExecEnv* _exec_env = ExecEnv::GetInstance();
 
-    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
+    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(600);
