@@ -50,3 +50,4 @@ PROPERTIES (
 );
 
 insert into t_non_replicated_storage_multi_replica_pk (k,v2) select "abc", 10;
+select * from t_non_replicated_storage_multi_replica_pk;
