@@ -98,7 +98,7 @@ DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
               "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_txn_log, print_lake_schema");
+              "print_lake_txn_log, print_lake_schema, print_lake_shared_metadata");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -169,6 +169,8 @@ std::string get_usage(const std::string& progname) {
       cat <tablet_transaction_log_file.log> | {progname} --operation=print_lake_txn_log
     print_lake_schema:
       cat <tablet_schema_file> | {progname} --operation=print_lake_schema
+    print_lake_shared_metadata:
+      cat <tablet_schema_file> | {progname} --operation=print_lake_shared_metadata
     lake_datafile_gc:
       {progname} --operation=lake_datafile_gc --root_path=<path> --expired_sec=<86400> --conf_file=<path> --audit_file=<path> --do_delete=<true|false>
     )";
@@ -1196,6 +1198,34 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(schema, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_shared_metadata") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
+        if (input_data.size() < sizeof(uint64_t)) {
+            std::cerr << "Input data is too small to contain footer" << std::endl;
+            return -1;
+        }
+        const uint8_t* footer_ptr =
+                reinterpret_cast<const uint8_t*>(input_data.data() + input_data.size() - sizeof(uint64_t));
+        uint64_t shared_metadata_size = starrocks::decode_fixed64_le(footer_ptr);
+        if (input_data.size() < sizeof(uint64_t) + shared_metadata_size) {
+            std::cerr << "Input data size is inconsistent with footer metadata size" << std::endl;
+            return -1;
+        }
+        const char* metadata_ptr = input_data.data() + input_data.size() - sizeof(uint64_t) - shared_metadata_size;
+        starrocks::SharedTabletMetadataPB metadata;
+        if (!metadata.ParseFromArray(metadata_ptr, shared_metadata_size)) {
+            std::cerr << "Fail to parse shared tablet metadata from array\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(metadata, &json, options, &error)) {
             std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }
