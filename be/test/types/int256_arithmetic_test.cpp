@@ -322,4 +322,629 @@ TEST_F(Int256ArithmeticTest, multiplication_correctness) {
     EXPECT_TRUE(max_times_2.high < 0);
 }
 
+// =============================================================================
+// Division Basic Cases Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_basic_cases) {
+    // Zero divided by any non-zero number should be zero
+    auto test_values = getTestValues();
+    for (const auto& value : test_values) {
+        if (value != int256_t(0)) {
+            ASSERT_EQ(int256_t(0), int256_t(0) / value);
+        }
+    }
+
+    // Any number divided by 1 should be itself
+    for (const auto& value : test_values) {
+        ASSERT_EQ(value, value / int256_t(1));
+    }
+
+    // Any number divided by itself should be 1
+    for (const auto& value : test_values) {
+        if (value != int256_t(0)) {
+            ASSERT_EQ(int256_t(1), value / value);
+        }
+    }
+
+    // Basic division cases
+    ASSERT_EQ(int256_t(5), int256_t(10) / int256_t(2));
+    ASSERT_EQ(int256_t(3), int256_t(15) / int256_t(5));
+    ASSERT_EQ(int256_t(0), int256_t(7) / int256_t(10));
+    ASSERT_EQ(int256_t(123), int256_t(123456) / int256_t(1000));
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_zero_exception) {
+    auto test_values = getTestValues();
+
+    for (const auto& value : test_values) {
+        ASSERT_THROW(value / int256_t(0), std::domain_error)
+                << "Division by zero should throw domain_error for value: " << value.to_string();
+        break;
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_sign_handling) {
+    std::vector<std::tuple<int256_t, int256_t, int256_t>> sign_test_cases = {
+            // positive / positive = positive
+            {int256_t(100), int256_t(10), int256_t(10)},
+            {int256_t(42), int256_t(6), int256_t(7)},
+
+            // negative / positive = negative
+            {int256_t(-100), int256_t(10), int256_t(-10)},
+            {int256_t(-42), int256_t(6), int256_t(-7)},
+
+            // positive / negative = negative
+            {int256_t(100), int256_t(-10), int256_t(-10)},
+            {int256_t(42), int256_t(-6), int256_t(-7)},
+
+            // negative / negative = positive
+            {int256_t(-100), int256_t(-10), int256_t(10)},
+            {int256_t(-42), int256_t(-6), int256_t(7)},
+    };
+
+    for (const auto& [dividend, divisor, expected] : sign_test_cases) {
+        const int256_t result = dividend / divisor;
+        ASSERT_EQ(expected, result) << dividend.to_string() << " / " << divisor.to_string() << " = "
+                                    << result.to_string() << ", expected " << expected.to_string();
+    }
+}
+
+// =============================================================================
+// Division Power of Two Optimization Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_power_of_two_optimization) {
+    // Test division by powers of 2 (should use shift optimization)
+    std::vector<std::pair<int256_t, int>> power_of_two_cases = {
+            {int256_t(1024), 2},    // 1024 / 2 = 512
+            {int256_t(1024), 4},    // 1024 / 4 = 256
+            {int256_t(1024), 8},    // 1024 / 8 = 128
+            {int256_t(1024), 16},   // 1024 / 16 = 64
+            {int256_t(1024), 32},   // 1024 / 32 = 32
+            {int256_t(1024), 64},   // 1024 / 64 = 16
+            {int256_t(1024), 128},  // 1024 / 128 = 8
+            {int256_t(1024), 256},  // 1024 / 256 = 4
+            {int256_t(1024), 512},  // 1024 / 512 = 2
+            {int256_t(1024), 1024}, // 1024 / 1024 = 1
+    };
+
+    for (const auto& [dividend, power] : power_of_two_cases) {
+        const int256_t divisor(power);
+        const int256_t expected = dividend / divisor;
+        const int256_t shift_result = dividend >> (__builtin_ctz(power));
+
+        ASSERT_EQ(expected, shift_result);
+
+        ASSERT_EQ(int256_t(1024 / power), expected);
+    }
+
+    // Test large power of 2 divisions
+    const int256_t large_dividend = parse_int256("1208925819614629174706176");          // 2^80
+    ASSERT_EQ(parse_int256("604462909807314587353088"), large_dividend / int256_t(2));  // 2^79
+    ASSERT_EQ(parse_int256("151115727451828646838272"), large_dividend / int256_t(8));  // 2^77
+    ASSERT_EQ(parse_int256("1180591620717411303424"), large_dividend / int256_t(1024)); // 2^70
+
+    // Test negative dividends with power of 2
+    const int256_t neg_dividend(-1024);
+    ASSERT_EQ(int256_t(-512), neg_dividend / int256_t(2));
+    ASSERT_EQ(int256_t(-128), neg_dividend / int256_t(8));
+    ASSERT_EQ(int256_t(-32), neg_dividend / int256_t(32));
+}
+
+// =============================================================================
+// Division Algorithm Branch Tests: Different size combinations
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_small_dividend_various_divisors) {
+    // Small dividends (< 64-bit) with various divisor sizes
+    std::vector<std::tuple<std::string, std::string, std::string>> cases_small_various = {
+            {"98765432", "12345", "8000"},
+            {"87654321", "9876", "8875"},
+            {"123456789", "456789", "270"},
+            {"999888777", "111222", "8990"},
+
+            {"987654321098", "234567890", "4210"},
+            {"876543210987", "234567890", "3736"},
+            {"765432109876", "456789012", "1675"},
+
+            {"12345678", "98765432109876543210", "0"},
+            {"87654321", "87654321098765432109", "0"},
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : cases_small_various) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t result = dividend / divisor;
+
+        ASSERT_EQ(expected_str, result.to_string());
+
+        if (dividend >= divisor) {
+            ASSERT_TRUE(result >= int256_t(1)) << "Small/Various division should be >= 1 when dividend >= divisor";
+        } else {
+            ASSERT_EQ(int256_t(0), result) << "Small/Various division should be 0 when dividend < divisor";
+        }
+
+        const int256_t remainder = dividend % divisor;
+        ASSERT_EQ(dividend, result * divisor + remainder) << "Division-modulo relationship failed";
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_medium_dividend_algorithm_branches) {
+    // Medium dividends (64-bit range) testing different algorithm paths
+    std::vector<std::tuple<std::string, std::string, std::string>> cases_medium_branches = {
+            {"9876543210987654", "98765", "100000437513"}, {"8765432109876543", "87654", "100000366325"},
+            {"7654321098765432", "76543", "100000275645"}, {"6543210987654321", "65432", "100000167924"},
+
+            {"9876543210987654", "1234567890", "8000000"}, {"8765432109876543", "2345678901", "3736842"},
+            {"7654321098765432", "3456789012", "2214286"}, {"6543210987654321", "4567890123", "1432436"},
+
+            {"9876543210987654", "9876543210987655", "0"}, // dividend < divisor
+            {"8765432109876543", "8765432109876542", "1"}, // dividend > divisor by 1
+            {"7654321098765432", "3827160549382716", "2"}, // dividend = 2 * divisor
+            {"6543210987654321", "2181070329218107", "3"}, // dividend ≈ 3 * divisor
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : cases_medium_branches) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t result = dividend / divisor;
+
+        ASSERT_EQ(expected_str, result.to_string());
+
+        const int256_t remainder = dividend % divisor;
+        ASSERT_EQ(dividend, result * divisor + remainder)
+                << "Division-modulo relationship failed for medium branch test";
+        ASSERT_TRUE(abs(remainder) < abs(divisor)) << "Remainder should be smaller than divisor";
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_large_dividend_multi_precision_branches) {
+    // Large dividends testing multi-precision division branches
+    std::vector<std::tuple<std::string, std::string, std::string>> cases_large_branches = {
+            {"12345678901234567890123", "98765", "125000545752387666"},
+            {"98765432109876543210987", "43210", "2285707755377841777"},
+            {"87654321098765432109876", "87654", "1000003663252851348"},
+            {"76543210987654321098765", "32109", "2383855336125519981"},
+
+            {"12345678901234567890123", "9876543210", "1249999988734"},
+            {"98765432109876543210987", "4321098765", "22856555122011"},
+            {"87654321098765432109876", "8765432109", "10000000001000"},
+            {"76543210987654321098765", "3210987654", "23837902613017"},
+
+            {"12345678901234567890123", "1234567890123456", "10000000"},
+            {"98765432109876543210987", "9876543210987654", "10000000"},
+            {"87654321098765432109876", "8765432109876543", "10000000"},
+            {"76543210987654321098765", "7654321098765432", "10000000"},
+
+            {"123456789012345678901234567890", "98765432109876543", "1249999988609"},
+            {"987654321098765432109876543210", "87654321098765432", "11267605620787"},
+            {"876543210987654321098765432109", "76543210987654321", "11451612751508"},
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : cases_large_branches) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t result = dividend / divisor;
+        ASSERT_EQ(expected_str, result.to_string());
+        ASSERT_TRUE(result >= int256_t(0)) << "Large division result should be non-negative";
+
+        const int256_t remainder = dividend % divisor;
+        ASSERT_EQ(dividend, result * divisor + remainder)
+                << "Division-modulo relationship failed for large branch test";
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_very_large_dividend_edge_branches) {
+    // Very large dividends (approaching 256-bit limits)
+    std::vector<std::tuple<std::string, std::string, std::string>> cases_very_large = {
+            {"1234567890123456789012345678901234567890123456789012345678901234567890", "98765",
+             "12500054575238766658354130298195054603251389224816608572661380393"},
+            {"9876543210987654321098765432109876543210987654321098765432109876543210", "43210",
+             "228570775537784177762063536961580109771140653883848617575378613203"},
+            {"8765432109876543210987654321098765432109876543210987654321098765432109", "87654",
+             "100000366325285134859648781813708050198620445652348867756418403785"},
+
+            {"1234567890123456789012345678901234567890123456789012345678901234567890", "9876543210987",
+             "124999998860945781265568137254382428446850079635501469858"},
+            {"9876543210987654321098765432109876543210987654321098765432109876543210", "4321098765432",
+             "2285655511972601519541199742901057771651680980952438975705"},
+            {"8765432109876543210987654321098765432109876543210987654321098765432109", "8765432109876",
+             "1000000000000061971957667926723753525828588270295066217772"},
+
+            {"1234567890123456789012345678901234567890123456789012345678901234567890", "98765432109876543210987",
+             "12499999886093750001423910937495500702996996606"},
+            {"9876543210987654321098765432109876543210987654321098765432109876543210", "43210987654321098765432",
+             "228565551197254340008125806261053145748410388169"},
+            {"8765432109876543210987654321098765432109876543210987654321098765432109", "87654321098765432109876",
+             "100000000000000000000000619719576679228832299890"},
+
+            {"987654321098765432109876543210987654321098765432109876543210987654321098765",
+             "123456789012345678901234567890123456789012345678901234567890", "8000000072900000"},
+            {"876543210987654321098765432109876543210987654321098765432109876543210987654",
+             "987654321098765432109876543210987654321098765432109876543", "887500001025156249"},
+            {"765432109876543210987654321098765432109876543210987654321098765432109876543",
+             "876543210987654321098765432109876543210987654321098765432", "873239448188851404"},
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : cases_very_large) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t result = dividend / divisor;
+        ASSERT_EQ(expected_str, result.to_string());
+        ASSERT_TRUE(result >= int256_t(0)) << "Very large division result should be non-negative";
+
+        const int256_t remainder = dividend % divisor;
+        ASSERT_EQ(dividend, result * divisor + remainder) << "Division-modulo relationship failed for very large case";
+        ASSERT_TRUE(abs(remainder) < abs(divisor)) << "Remainder should be smaller than divisor in very large case";
+    }
+}
+
+// =============================================================================
+// Algorithm Branch Boundary Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_algorithm_transition_boundaries) {
+    std::vector<std::tuple<std::string, std::string, std::string>> boundary_cases = {
+
+            {"9876543", "9876544", "0"},
+            {"123456789", "123456788", "1"},
+
+            {"4294967295", "4294967294", "1"}, // 2^32-1 cases
+            {"4294967296", "2147483648", "2"}, // Just over 32-bit
+            {"8589934591", "4294967295", "2"}, // 2*2^32-1
+
+            {"18446744073709551615", "9223372036854775808", "1"},  // 2^64-1 / 2^63
+            {"18446744073709551616", "9223372036854775808", "2"},  // 2^64 / 2^63
+            {"36893488147419103231", "18446744073709551615", "2"}, // (2^65-1) / (2^64-1)
+
+            {"340282366920938463463374607431768211455", "170141183460469231731687303715884105727",
+             "2"}, // 2^128-1 / (2^127-1)
+            {"340282366920938463463374607431768211456", "170141183460469231731687303715884105728",
+             "2"}, // 2^128 / 2^127
+
+            {"99999999999999999999", "10000000000", "9999999999"},                 // 20-digit / 11-digit
+            {"999999999999999999999999", "1000000000000", "999999999999"},         // 24-digit / 13-digit
+            {"9999999999999999999999999999", "100000000000000", "99999999999999"}, // 28-digit / 15-digit
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : boundary_cases) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t result = dividend / divisor;
+        ASSERT_EQ(expected_str, result.to_string());
+        const int256_t remainder = dividend % divisor;
+        ASSERT_EQ(dividend, result * divisor + remainder);
+    }
+}
+
+// =============================================================================
+// Special Pattern Tests for Algorithm Branches
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_special_patterns_algorithm_stress) {
+    // Patterns that might stress different algorithm paths
+    std::vector<std::tuple<std::string, std::string, std::string>> pattern_cases = {
+            {"1048576000000", "1048576", "1000000"},
+            {"2097152000000", "2097152", "1000000"},
+            {"4194304000000", "4194304", "1000000"},
+
+            {"123456789000000000", "1000000000", "123456789"},
+            {"987654321000000000", "10000000000", "98765432"},
+            {"456789123000000000", "100000000000", "4567891"},
+
+            {"11235813213455891442333776109", "1123581321345589", "10000000000000"},
+            {"112358132134558914423337761", "11235813213455891", "10000000000"},
+            {"1123581321345589144233377", "1123581321345589", "1000000000"},
+
+            {"121212121212121212121212", "121212121212", "1000000000001"},
+            {"343434343434343434343434", "343434343434", "1000000000001"},
+            {"565656565656565656565656", "565656565656", "1000000000001"},
+
+            {"1000000000000000003000000000000000037", "1000000000000000003", "1000000000000000000"},
+            {"9999999999999999989999999999999999989", "9999999999999999989", "1000000000000000000"},
+            {"7777777777777777777777777777777777777", "7777777777777777777", "1000000000000000000"},
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : pattern_cases) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t result = dividend / divisor;
+
+        ASSERT_EQ(expected_str, result.to_string());
+        ASSERT_TRUE(result >= int256_t(0)) << "Pattern division result should be non-negative";
+
+        const int256_t remainder = dividend % divisor;
+        ASSERT_EQ(dividend, result * divisor + remainder) << "Division-modulo relationship failed for pattern case";
+        ASSERT_TRUE(abs(remainder) < abs(divisor)) << "Remainder should be smaller than divisor for pattern case";
+    }
+}
+
+// =============================================================================
+// Division 64-bit Optimization Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_64bit_optimization) {
+    std::vector<std::tuple<std::string, uint64_t, std::string>> test_cases_64bit = {
+            {"123456789012345678901234567890", 1000000ULL, "123456789012345678901234"},
+            {"999999999999999999999999999999", 999999999ULL, "1000000001000000001000"},
+            {"340282366920938463463374607431768211456", 1000000000ULL, "340282366920938463463374607431"},
+            {"18446744073709551616", 4294967296ULL, "4294967296"},
+            {"602214076000000000000000000000000000000000000", 299792458ULL, "2008769933765311734426621232746288767"},
+            {"4294967295000000000", 4294967295ULL, "1000000000"},
+            {"18446744073709551615000000000000000000", 18446744073709551615ULL, "1000000000000000000"},
+    };
+
+    for (const auto& [dividend_str, divisor_val, expected_str] : test_cases_64bit) {
+        const int256_t dividend = parse_int256(dividend_str);
+
+        const int256_t divisor = int256_t(0, static_cast<uint128_t>(divisor_val));
+        const int256_t expected = parse_int256(expected_str);
+        const int256_t result = dividend / divisor;
+
+        ASSERT_EQ(expected, result) << "64-bit division failed: " << dividend_str << " / " << divisor_val << " = "
+                                    << result.to_string() << ", expected " << expected_str;
+    }
+}
+
+// =============================================================================
+// Division 128-bit Optimization Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_128bit_optimization) {
+    // Test 128-bit by 128-bit division
+    std::vector<std::tuple<std::string, std::string, std::string>> test_cases_128bit = {
+            {"340282366920938463463374607431768211455", "170141183460469231731687303715884105727", "2"},
+            {"123456789012345678901234567890", "12345678901234567890", "10000000000"},
+
+            {"1134903170373294346240", "433494437", "2618033989611"},
+
+            {"170141183460469231731687303715884105727", "3", "56713727820156410577229101238628035242"},
+            {"340282366920938463463374607431768211455", "7", "48611766702991209066196372490252601636"},
+
+            {"602214076000000000000000000000", "299792458000000", "2008769933765311"},
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : test_cases_128bit) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t expected = parse_int256(expected_str);
+        const int256_t result = dividend / divisor;
+
+        ASSERT_EQ(expected, result) << "128-bit division failed: " << dividend_str << " / " << divisor_str << " = "
+                                    << result.to_string() << ", expected " << expected_str;
+    }
+}
+
+// =============================================================================
+// Division 256-bit Full Algorithm Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_256bit_full_algorithm) {
+    // Test full 256-bit by 256-bit division
+    std::vector<std::tuple<std::string, std::string, std::string>> test_cases_256bit = {
+            {"12345678901234567890123456789012345678901234567890123456789012345678",
+             "987654321098765432109876543210987654321098765432109876543210", "12499999"},
+
+            {"792089237316195423570985008687907853269984665640564039457584007913129639935",
+             "792089237316195423570985008687907853269984665640564039457584007913129639934", "1"},
+
+            {INT256_MAX.to_string(), "170141183460469231731687303715884105728",
+             "340282366920938463463374607431768211455"},
+
+            {"618970019642690137449562111", "162259276829213363391578010288127", "0"},
+
+            {"162259276829213363391578010288128618970019642690137449562111", "162259276829213363391578010288127",
+             "1000000000000000000000000000"},
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : test_cases_256bit) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t expected = parse_int256(expected_str);
+        const int256_t result = dividend / divisor;
+
+        ASSERT_EQ(expected, result) << "256-bit division failed: " << dividend_str << " / " << divisor_str << " = "
+                                    << result.to_string() << ", expected " << expected_str;
+    }
+}
+
+// =============================================================================
+// Division Boundary Value Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_boundary_values) {
+    // Division involving maximum and minimum values
+    ASSERT_EQ(int256_t(0), INT256_MAX / (INT256_MAX + int256_t(1))); // This wraps to MIN
+    ASSERT_EQ(INT256_MAX, INT256_MAX / int256_t(1));
+    ASSERT_EQ(int256_t(-1), INT256_MAX / (-INT256_MAX));
+
+    // Division of minimum value
+    ASSERT_EQ(INT256_MIN, INT256_MIN / int256_t(1));
+    ASSERT_EQ(INT256_MIN, INT256_MIN / int256_t(-1)); // Special overflow case
+
+    // Near boundary divisions
+    const int256_t near_max = int256_t(INT256_MAX.high, INT256_MAX.low - 1);
+    ASSERT_EQ(int256_t(0), near_max / INT256_MAX);
+
+    const int256_t half_max = INT256_MAX / int256_t(2);
+    ASSERT_EQ(int256_t(2), INT256_MAX / half_max);
+
+    // Powers of 2 near boundaries
+    const int256_t power_254 = int256_t(1) << 254; // 2^254
+    ASSERT_EQ(int256_t(2), power_254 / (power_254 / int256_t(2)));
+
+    // Large prime-like divisions
+    const int256_t large_prime_like = parse_int256("170141183460469231731687303715884105727");
+    ASSERT_EQ(int256_t(2), (large_prime_like * int256_t(2)) / large_prime_like);
+}
+
+// =============================================================================
+// Modulo Operation Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, modulo_basic_cases) {
+    // Basic modulo operations
+    ASSERT_EQ(int256_t(0), int256_t(10) % int256_t(2));
+    ASSERT_EQ(int256_t(1), int256_t(10) % int256_t(3));
+    ASSERT_EQ(int256_t(2), int256_t(17) % int256_t(5));
+    ASSERT_EQ(int256_t(0), int256_t(100) % int256_t(10));
+
+    // Zero modulo any non-zero number should be zero
+    auto test_values = getTestValues();
+    for (const auto& value : test_values) {
+        if (value != int256_t(0)) {
+            ASSERT_EQ(int256_t(0), int256_t(0) % value) << "0 % " << value.to_string() << " should be 0";
+        }
+    }
+
+    // Any number modulo itself should be zero
+    for (const auto& value : test_values) {
+        if (value != int256_t(0)) {
+            ASSERT_EQ(int256_t(0), value % value) << value.to_string() << " % " << value.to_string() << " should be 0";
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, modulo_sign_handling) {
+    // Test modulo with different sign combinations
+    std::vector<std::tuple<int256_t, int256_t, int256_t>> modulo_sign_cases = {
+            {int256_t(17), int256_t(5), int256_t(2)},    // 17 % 5 = 2
+            {int256_t(-17), int256_t(5), int256_t(-2)},  // -17 % 5 = -2 (dividend sign)
+            {int256_t(17), int256_t(-5), int256_t(2)},   // 17 % -5 = 2 (dividend sign)
+            {int256_t(-17), int256_t(-5), int256_t(-2)}, // -17 % -5 = -2 (dividend sign)
+
+            {int256_t(100), int256_t(7), int256_t(2)},    // 100 % 7 = 2
+            {int256_t(-100), int256_t(7), int256_t(-2)},  // -100 % 7 = -2
+            {int256_t(100), int256_t(-7), int256_t(2)},   // 100 % -7 = 2
+            {int256_t(-100), int256_t(-7), int256_t(-2)}, // -100 % -7 = -2
+    };
+
+    for (const auto& [dividend, divisor, expected] : modulo_sign_cases) {
+        const int256_t result = dividend % divisor;
+        ASSERT_EQ(expected, result) << dividend.to_string() << " % " << divisor.to_string() << " = "
+                                    << result.to_string() << ", expected " << expected.to_string();
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, modulo_large_numbers) {
+    // Test modulo with large numbers
+    const int256_t large_dividend = parse_int256("123456789012345678901234567890123456789");
+    const int256_t large_divisor = parse_int256("987654321098765432109876543210");
+    const int256_t expected_remainder = parse_int256("850308642085030864208626543209");
+
+    ASSERT_EQ(expected_remainder, large_dividend % large_divisor) << "Large number modulo failed";
+
+    // Test with scientific-like constants
+    const int256_t avogadro_like = parse_int256("602214076000000000000000000");
+    const int256_t planck_like = parse_int256("6626070040000000000000000000000000");
+    const int256_t result = planck_like % avogadro_like;
+
+    // Verify: quotient * divisor + remainder = dividend
+    const int256_t quotient = planck_like / avogadro_like;
+    ASSERT_EQ(planck_like, quotient * avogadro_like + result)
+            << "Division-modulo relationship failed for large numbers";
+}
+
+// =============================================================================
+// Division-Modulo Relationship Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_modulo_relationship) {
+    // Verify the fundamental relationship: dividend = quotient * divisor + remainder
+    std::vector<std::pair<int256_t, int256_t>> test_pairs = {
+            {int256_t(123456), int256_t(789)},
+            {int256_t(-123456), int256_t(789)},
+            {int256_t(123456), int256_t(-789)},
+            {int256_t(-123456), int256_t(-789)},
+            {parse_int256("123456789012345678901234567890"), parse_int256("987654321098765432109")},
+            {parse_int256("-123456789012345678901234567890"), parse_int256("987654321098765432109")},
+            {INT256_MAX / int256_t(3), int256_t(7)},
+            {INT256_MIN / int256_t(3), int256_t(11)},
+    };
+
+    for (const auto& [dividend, divisor] : test_pairs) {
+        const int256_t quotient = dividend / divisor;
+        const int256_t remainder = dividend % divisor;
+        const int256_t reconstructed = quotient * divisor + remainder;
+
+        ASSERT_EQ(dividend, reconstructed)
+                << "Division-modulo relationship failed: " << dividend.to_string() << " != " << quotient.to_string()
+                << " * " << divisor.to_string() << " + " << remainder.to_string();
+
+        // Verify remainder is smaller in absolute value than divisor
+        ASSERT_TRUE(abs(remainder) < abs(divisor))
+                << "Remainder " << remainder.to_string() << " should be smaller than divisor " << divisor.to_string();
+    }
+}
+
+// =============================================================================
+// Division Precision Tests
+// =============================================================================
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_precision_tests) {
+    // Test division precision with known exact results
+    std::vector<std::tuple<std::string, std::string, std::string>> precision_cases = {
+            {"1000000000000000000000000000000", "1000000000000000", "1000000000000000"},
+            {"999999999999999999999999999999", "333333333333333333333333333333", "3"},
+
+            {"12345678987654321012345678987654321", "12345678987654321", "1000000000000000001"},
+
+            {"620448401733239439360000", "479001600", "1295295050649600"},
+    };
+
+    for (const auto& [dividend_str, divisor_str, expected_str] : precision_cases) {
+        const int256_t dividend = parse_int256(dividend_str);
+        const int256_t divisor = parse_int256(divisor_str);
+        const int256_t expected = parse_int256(expected_str);
+        const int256_t result = dividend / divisor;
+
+        ASSERT_EQ(expected, result) << "Precision test failed: " << dividend_str << " / " << divisor_str << " = "
+                                    << result.to_string() << ", expected " << expected_str;
+
+        // Verify no remainder for exact divisions
+        ASSERT_EQ(int256_t(0), dividend % divisor) << "Should be exact division with no remainder";
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, division_truncation_behavior) {
+    // Test that division truncates towards zero (not floor division)
+    std::vector<std::tuple<int256_t, int256_t, int256_t>> truncation_cases = {
+            {int256_t(7), int256_t(3), int256_t(2)},   // 7/3 = 2.33... -> 2
+            {int256_t(-7), int256_t(3), int256_t(-2)}, // -7/3 = -2.33... -> -2
+            {int256_t(7), int256_t(-3), int256_t(-2)}, // 7/-3 = -2.33... -> -2
+            {int256_t(-7), int256_t(-3), int256_t(2)}, // -7/-3 = 2.33... -> 2
+
+            {int256_t(999), int256_t(100), int256_t(9)},   // 999/100 = 9.99 -> 9
+            {int256_t(-999), int256_t(100), int256_t(-9)}, // -999/100 = -9.99 -> -9
+    };
+
+    for (const auto& [dividend, divisor, expected] : truncation_cases) {
+        const int256_t result = dividend / divisor;
+        ASSERT_EQ(expected, result) << "Truncation test failed: " << dividend.to_string() << " / "
+                                    << divisor.to_string() << " = " << result.to_string() << ", expected "
+                                    << expected.to_string();
+    }
+}
+
 } // end namespace starrocks
