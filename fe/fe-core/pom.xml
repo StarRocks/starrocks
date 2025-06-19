@@ -873,6 +873,10 @@ under the License.
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
         </dependency>
+        <dependency>
+            <groupId>tools.profiler</groupId>
+            <artifactId>async-profiler</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
