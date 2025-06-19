@@ -134,6 +134,15 @@ StatusOr<std::string> BundleSeekableInputStream::read_all() {
     return std::move(result);
 }
 
+Status BundleSeekableInputStream::touch_cache(int64_t offset, size_t length) {
+    // Touch the cache for the underlying stream.
+    return _stream->touch_cache(_offset + offset, length);
+}
+
+StatusOr<std::unique_ptr<io::NumericStatistics>> BundleSeekableInputStream::get_numeric_statistics() {
+    return _stream->get_numeric_statistics();
+}
+
 const std::string& BundleSeekableInputStream::filename() const {
     return _stream->filename();
 }
