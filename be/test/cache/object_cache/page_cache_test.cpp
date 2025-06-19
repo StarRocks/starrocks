@@ -54,7 +54,7 @@ protected:
 };
 
 void StoragePageCacheTest::SetUp() {
-    CacheOptions opts {.mem_space_size = _capacity};
+    CacheOptions opts{.mem_space_size = _capacity};
     _lru_cache = std::make_shared<LRUCacheEngine>();
     ASSERT_OK(_lru_cache->init(opts));
     _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());
