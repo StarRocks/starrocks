@@ -57,6 +57,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
+#include "util/failpoint/fail_point.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
@@ -647,14 +648,9 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
     timer.start();
 
     // Lock schema_change_lock util schema change info is stored in tablet header
-    if (!StorageEngine::instance()->tablet_manager()->try_schema_change_lock(request.base_tablet_id)) {
-        VLOG(2) << _alter_msg_header << "failed to obtain schema change lock. "
-                << "base_tablet=" << request.base_tablet_id;
-        _task_detail_msg +=
-                fmt::format("[failed to obtain schema change lock. base_tablet:{}]", request.base_tablet_id);
-        return Status::InternalError(_alter_msg_header + "failed to obtain schema change lock");
-    }
-
+    bool hold_lock = StorageEngine::instance()->tablet_manager()->try_schema_change_lock(request.base_tablet_id);
+    RETURN_ERROR_IF_FALSE(hold_lock,
+                          string::Substitute("failed to obtain schema change lock, tablet:$0", request.base_tablet_id));
     DeferOp release_lock(
             [&] { StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id); });
 
@@ -671,25 +667,19 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
     return status;
 }
 
+DEFINE_FAIL_POINT(base_tablet_max_version_greater_than_alter_version);
+DEFINE_FAIL_POINT(add_rowset_already_exist);
+DEFINE_FAIL_POINT(add_rowset_failed);
 Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& request) {
     TabletSharedPtr base_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.base_tablet_id);
-    if (base_tablet == nullptr) {
-        VLOG(2) << _alter_msg_header << "fail to find base tablet. base_tablet=" << request.base_tablet_id
-                << ", base_schema_hash=" << request.base_schema_hash;
-        _task_detail_msg +=
-                fmt::format("[fail to find base_tablet: {}/{}]", request.base_tablet_id, request.base_schema_hash);
-        return Status::InternalError("failed to find base tablet");
-    }
-
+    RETURN_IF((base_tablet == nullptr),
+              Status::InternalError(fmt::format("[fail to find base_tablet: {}/{}]", request.base_tablet_id,
+                                                request.base_schema_hash)));
     // new tablet has to exist
     TabletSharedPtr new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.new_tablet_id);
-    if (new_tablet == nullptr) {
-        VLOG(2) << _alter_msg_header << "fail to find new tablet."
-                << " new_tablet=" << request.new_tablet_id << ", new_schema_hash=" << request.new_schema_hash;
-        _task_detail_msg +=
-                fmt::format("[fail to find new tablet: {}/{}]", request.new_tablet_id, request.new_schema_hash);
-        return Status::InternalError(_alter_msg_header + "failed to find new tablet");
-    }
+    RETURN_IF((new_tablet == nullptr),
+              Status::InternalError(
+                      fmt::format("[fail to find new tablet: {}/{}]", request.new_tablet_id, request.new_schema_hash)));
 
     // check if tablet's state is not_ready, if it is ready, it means the tablet already finished
     // check whether the tablet's max continuous version == request.version
@@ -806,6 +796,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
         // pk table can handle the case that convert version > request version, duplicate versions will be skipped
         int64_t request_version = request.alter_version;
         int64_t base_max_version = base_tablet->max_version().second;
+        FAIL_POINT_TRIGGER_EXECUTE(base_tablet_max_version_greater_than_alter_version,
+                                   { request_version = base_max_version - 1; });
         if (base_max_version > request_version) {
             VLOG(2) << _alter_msg_header << " base_tablet's max_version:" << base_max_version
                     << " > request_version:" << request_version
@@ -854,12 +846,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
         std::lock_guard l4(new_tablet->get_header_lock());
 
         std::vector<Version> versions_to_be_changed;
-        status = _get_versions_to_be_changed(base_tablet, &versions_to_be_changed);
-        if (!status.ok()) {
-            _task_detail_msg += fmt::format("[fail to get version to be changed: {}]", status.to_string());
-            VLOG(2) << _alter_msg_header << "fail to get version to be changed. status: " << status;
-            return status;
-        }
+        RETURN_IF_ERROR(_get_versions_to_be_changed(base_tablet, &versions_to_be_changed));
         VLOG(3) << "versions to be changed size:" << versions_to_be_changed.size();
 
         auto base_tablet_schema = sc_params.base_tablet_schema;
@@ -896,14 +883,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
 
         Version max_version = base_tablet->max_version();
         max_rowset = base_tablet->rowset_with_max_version();
-        if (max_rowset == nullptr || max_version.second < request.alter_version) {
-            VLOG(2) << _alter_msg_header
-                    << "base tablet's max version=" << (max_rowset == nullptr ? 0 : max_rowset->end_version())
-                    << " is less than request version=" << request.alter_version;
-            return Status::InternalError(fmt::format("base tablet's max_version: {} is less than request_version:{}",
-                                                     (max_rowset == nullptr ? 0 : max_rowset->end_version()),
-                                                     request.alter_version));
-        }
+        RETURN_IF((max_rowset == nullptr || max_version.second < request.alter_version),
+                  Status::InternalError(fmt::format("base tablet's max_version: {} is less than request_version:{}",
+                                                    (max_rowset == nullptr ? 0 : max_rowset->end_version()),
+                                                    request.alter_version)));
 
         VLOG(2) << _alter_msg_header << "begin to remove all data from new tablet to prevent rewrite."
                 << " new_tablet=" << new_tablet->full_name();
@@ -1015,7 +998,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         std::unique_lock new_wlock(sc_params.new_tablet->get_header_lock());
         sc_params.new_tablet->save_meta();
     });
-
     std::unique_ptr<SchemaChange> sc_procedure;
     auto chunk_changer = sc_params.chunk_changer.get();
     if (sc_params.sc_sorting) {
@@ -1092,6 +1074,9 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             RETURN_IF_ERROR((*new_rowset)->verify());
         }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
+        FAIL_POINT_TRIGGER_EXECUTE(add_rowset_already_exist,
+                                   { status = Status::AlreadyExist("rowset already exist"); });
+        FAIL_POINT_TRIGGER_EXECUTE(add_rowset_failed, { status = Status::InternalError("add rowset failed"); });
         if (status.is_already_exist()) {
             VLOG(2) << _alter_msg_header << "version already exist, version revert occurred. "
                     << "tablet=" << sc_params.new_tablet->full_name() << ", version='" << sc_params.version.first << "-"

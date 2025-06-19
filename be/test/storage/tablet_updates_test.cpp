@@ -3593,49 +3593,6 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
     ASSERT_TRUE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
     _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
     ASSERT_TRUE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
-
-    /*
-    _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-    std::vector<int64_t> keys;
-    int N = 10;
-    for (int i = 0; i < N; i++) {
-        keys.push_back(i);
-    }
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
-    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
-    _tablet->updates()->wait_apply_done();
-
-    // skip_alter_version
-    _tablet2->set_tablet_state(TABLET_NOTREADY);
-     auto chunk_changer = std::make_unique<ChunkChanger>(_tablet2->tablet_schema());
-    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("skip_alter_version");
-    PFailPointTriggerMode trigger_mode;
-    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    fp->setMode(trigger_mode);
-    ASSERT_TRUE(_tablet2->updates()->link_from(_tablet.get(), 4, chunk_changer.get(), _tablet->tablet_schema()).ok());
-    _tablet2->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(_tablet2->updates()->convert_from(_tablet.get(), 4, chunk_changer.get(), _tablet->tablet_schema()).ok());
-    _tablet2->set_tablet_state(TABLET_NOTREADY);
-     ASSERT_TRUE(_tablet2->updates()->reorder_from(_tablet.get(), 4, chunk_changer.get(), _tablet->tablet_schema()).ok());
-    _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-    ASSERT_TRUE(_tablet->updates()->convert_from(_tablet2, 2, chunk_changer.get(), _tablet2->tablet_schema(), "").ok());
-    _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-    ASSERT_TRUE(_tablet->updates()->reorder_from(_tablet2, 2, chunk_changer.get(), _tablet2->tablet_schema(), "").ok());
-    _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(trigger_mode);
-
-    // write meta failed.
-    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("enable_rowset_verify");
-    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    fp->setMode(trigger_mode);
-    ASSERT_FALSE(_tablet->updates()->link_from(_tablet2.get(), 2, nullptr, _tablet2->tablet_schema(), "").ok());
-    ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 2, nullptr, _tablet2->tablet_schema(), "").ok());
-    ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 2, nullptr, _tablet2->tablet_schema(), "").ok());
-    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(trigger_mode);
-    */
 }
 
 TEST_F(TabletUpdatesTest, test_normal_apply_retry) {

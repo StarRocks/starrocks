@@ -116,8 +116,15 @@ void TabletUpdatesTest::test_schema_change_optimiazation_adding_generated_column
     std::string alter_msg_header = strings::Substitute("[Alter Job:$0, tablet:$1]: ", 999, base_tablet->tablet_id());
     SchemaChangeHandler handler;
     handler.set_alter_msg_header(alter_msg_header);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+            "base_tablet_max_version_greater_than_alter_version");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
     auto res = handler.process_alter_tablet(request);
     ASSERT_TRUE(res.ok()) << res.to_string();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
 }
 
 TEST_F(TabletUpdatesTest, test_schema_change_optimiazation_adding_generated_column) {

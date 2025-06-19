@@ -472,7 +472,7 @@ void DataDir::load() {
 }
 
 // gc unused tablet schemahash dir
-const size_t LOG_GC_BATCH_SIZE = 10;
+const size_t LOG_GC_BATCH_SIZE = 50;
 void DataDir::perform_path_gc_by_tablet() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
     if (_stop_bg_worker || _all_tablet_schemahash_paths.empty()) {
