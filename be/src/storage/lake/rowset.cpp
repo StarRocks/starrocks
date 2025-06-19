@@ -212,6 +212,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.enable_gin_filter = options.enable_gin_filter;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(

@@ -266,6 +266,10 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_plugin.cpp
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
+    index/inverted/clucene/clucene_file_manager.cpp
+    index/inverted/clucene/clucene_file_reader.cpp
+    index/inverted/clucene/clucene_file_writer.cpp
+    index/inverted/clucene/clucene_fs_directory.cpp
     index/inverted/clucene/match_operator.cpp
     index/vector/empty_index_reader.cpp
     index/vector/vector_index_builder_factory.cpp

@@ -46,6 +46,10 @@
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_file_manager.h"
+#include "storage/index/inverted/clucene/clucene_file_writer.h"
+#include "storage/index/inverted/inverted_index_common.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/json_column_writer.h"
@@ -183,10 +187,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
         if (opts.need_inverted_index) {
-            opts.standalone_index_file_paths.emplace(
-                    GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
-                                                                   _opts.segment_file_mark.rowset_id, _segment_id,
-                                                                   opts.tablet_index.at(GIN).index_id()));
+            ASSIGN_OR_RETURN(const auto& index_file_path,
+                             _get_inverted_index_file_path(opts.tablet_index.at(GIN).index_id()));
+            opts.standalone_index_file_paths.emplace(GIN, index_file_path);
         } else if (opts.need_vector_index) {
             opts.standalone_index_file_paths.emplace(
                     IndexType::VECTOR,
@@ -341,6 +344,9 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // reset to release memory
         column_writer.reset();
     }
+
+    RETURN_IF_ERROR(_write_inverted_index_if_necessary());
+
     _column_writers.clear();
     _column_indexes.clear();
 
@@ -351,6 +357,38 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         _index_builder.reset();
     }
     return Status::OK();
+}
+
+Status SegmentWriter::_write_inverted_index_if_necessary() {
+    std::unordered_set<std::string> paths;
+    for (const auto* indexes = _tablet_schema->indexes(); const auto& index : *indexes) {
+        if (index.index_type() == GIN) {
+            ASSIGN_OR_RETURN(const auto& imp_type, get_inverted_imp_type(index));
+            if (imp_type == InvertedImplementType::CLUCENE) {
+                ASSIGN_OR_RETURN(const auto& path, _get_inverted_index_file_path(index.index_id()));
+                paths.emplace(path);
+            }
+        }
+    }
+    auto& clucene_file_manager = CLuceneFileManager::getInstance();
+    for (const auto& path : paths) {
+        ASSIGN_OR_RETURN(const auto file, clucene_file_manager.get_or_create_clucene_file_writer(path));
+        RETURN_IF_ERROR(file->close());
+        RETURN_IF_ERROR(clucene_file_manager.remove_clucene_file_writer(path));
+    }
+    return Status::OK();
+}
+
+StatusOr<std::string> SegmentWriter::_get_inverted_index_file_path(const int64_t& index_id) const {
+    if (const auto* rowset_info = std::get_if<std::pair<std::string, std::string>>(&_opts.segment_file_mark)) {
+        return IndexDescriptor::inverted_index_file_path(rowset_info->first, rowset_info->second, _segment_id,
+                                                         index_id);
+    }
+    if (const auto* segment_location = std::get_if<std::string>(&_opts.segment_file_mark)) {
+        // for cloud native mode.
+        return IndexDescriptor::inverted_index_file_path(*segment_location, index_id);
+    }
+    return Status::InvalidArgument("Need inverted index file, but no any index file path info.");
 }
 
 Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position) {

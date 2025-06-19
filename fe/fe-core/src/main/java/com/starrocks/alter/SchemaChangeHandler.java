@@ -2859,7 +2859,7 @@ public class SchemaChangeHandler extends AlterHandler {
         IndexDef indexDef = alterClause.getIndexDef();
         Index newIndex;
         // Only assign meaningful indexId for OlapTable
-        if (olapTable.isOlapTableOrMaterializedView()) {
+        if (olapTable.isNativeTableOrMaterializedView()) {
             long indexId = IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType()) ? 
                     olapTable.incAndGetMaxIndexId() : -1;
             newIndex = new Index(indexId, indexDef.getIndexName(),

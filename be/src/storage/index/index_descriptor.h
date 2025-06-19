@@ -39,6 +39,43 @@ public:
         }
     }
 
+    inline static const std::unordered_map<std::string, int32_t> index_file_info_map = {
+            {"null_bitmap", 1}, {"segments.gen", 2}, {"segments_", 3}, {"fnm", 4},
+            {"tii", 5},         {"bkd_meta", 6},     {"bkd_index", 7}};
+
+    static std::string get_inverted_index_file_parent(const std::string& inverted_index_file_path) {
+        auto idx = inverted_index_file_path.find_last_of('/');
+        if (idx == std::string::npos) {
+            return inverted_index_file_path;
+        }
+        return inverted_index_file_path.substr(0, idx);
+    }
+
+    static std::string get_inverted_index_file_name(const std::string& inverted_index_file_path) {
+        auto idx = inverted_index_file_path.find_last_of('/');
+        if (idx == std::string::npos) {
+            return inverted_index_file_path;
+        }
+        return inverted_index_file_path.substr(idx + 1);
+    }
+
+    static std::string tmp_inverted_index_file_path(const std::string& tmp_dir_path,
+                                                    const std::string& inverted_index_file_name) {
+        // temporary inverted index is a directory, it's path like below:
+        // {tmp_dir}/{rowset_id}_{seg_id}_{index_id}.ivt
+        // NOTE: maybe should add tablet id for easier deletion?
+        return fmt::format("{}/{}", tmp_dir_path, inverted_index_file_name);
+    }
+
+    static std::string inverted_index_file_path(const std::string& segment_location, int index_id) {
+        // segment location will end with '.dat', should remove first.
+        std::string segment_path = segment_location;
+        if (segment_path.ends_with(".dat")) {
+            segment_path = segment_path.substr(0, segment_path.find_last_of('.'));
+        }
+        return fmt::format("{}_{}.{}", segment_path, index_id, INVERTED_INDEX_MARK_NAME);
+    }
+
     static std::string inverted_index_file_path(const std::string& rowset_dir, const std::string& rowset_id,
                                                 int segment_id, int64_t index_id) {
         // inverted index is a directory, it's path likes below
@@ -52,7 +89,7 @@ public:
         return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, "vi");
     }
 
-    static const std::string get_temporary_null_bitmap_file_name() { return "null_bitmap"; }
+    static std::string get_temporary_null_bitmap_file_name() { return "null_bitmap"; }
 };
 
 } // namespace starrocks

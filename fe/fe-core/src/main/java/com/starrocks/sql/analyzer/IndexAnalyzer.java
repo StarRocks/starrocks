@@ -161,9 +161,6 @@ public class IndexAnalyzer {
         if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
         }
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("The inverted index does not support shared data mode");
-        }
         if (!Config.enable_experimental_gin) {
             throw new SemanticException(
                     "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");

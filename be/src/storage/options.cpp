@@ -161,4 +161,25 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
     return Status::OK();
 }
 
+TmpFileDirs::TmpFileDirs(const std::vector<StorePath>& store_paths) {
+    for (const auto& store_path : store_paths) {
+        _tmp_file_dirs.emplace_back(store_path.path + "/" + config::tmp_file_dir);
+    }
+}
+
+Status TmpFileDirs::init() {
+    auto* fs = FileSystem::Default();
+    for (auto& tmp_file_dir : _tmp_file_dirs) {
+        // delete the tmp dir to avoid the tmp files left by last crash
+        RETURN_IF_ERROR(fs->delete_dir_recursive(tmp_file_dir));
+        RETURN_IF_ERROR(fs->create_dir_recursive(tmp_file_dir));
+    }
+    return Status::OK();
+}
+
+std::string TmpFileDirs::get_tmp_file_dir() {
+    size_t cur_index = _next_index.fetch_add(1);
+    return _tmp_file_dirs[cur_index % _tmp_file_dirs.size()];
+}
+
 } // end namespace starrocks

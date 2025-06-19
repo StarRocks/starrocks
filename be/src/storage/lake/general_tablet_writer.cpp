@@ -112,8 +112,15 @@ void HorizontalGeneralTabletWriter::close() {
 
 Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     DCHECK(_schema != nullptr);
-    auto name = gen_segment_filename(_txn_id);
+    std::string segment_location;
+    if (_location_provider && _fs) {
+        segment_location = _location_provider->segment_location(_tablet_id, gen_segment_filename(_txn_id));
+    } else {
+        segment_location = _tablet_mgr->segment_location(_tablet_id, gen_segment_filename(_txn_id));
+    }
+    VLOG(10) << "Create segment writer for " << segment_location;
     SegmentWriterOptions opts;
+    opts.segment_file_mark = segment_location;
     opts.is_compaction = _is_compaction;
 
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
@@ -133,9 +140,9 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     std::unique_ptr<WritableFile> of;
     auto create_file_fn = [&]() {
         if (_location_provider && _fs) {
-            return _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name));
+            return _fs->new_writable_file(wopts, segment_location);
         } else {
-            return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
+            return fs::new_writable_file(wopts, segment_location);
         }
     };
     if (_bundle_file_context != nullptr && _files.empty() && eos) {
@@ -347,8 +354,15 @@ void VerticalGeneralTabletWriter::close() {
 StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
-    auto name = gen_segment_filename(_txn_id);
+    std::string segment_location;
+    if (_location_provider && _fs) {
+        segment_location = _location_provider->segment_location(_tablet_id, gen_segment_filename(_txn_id));
+    } else {
+        segment_location = _tablet_mgr->segment_location(_tablet_id, gen_segment_filename(_txn_id));
+    }
+    VLOG(10) << "Create segment writer for " << segment_location;
     SegmentWriterOptions opts;
+    opts.segment_file_mark = segment_location;
     opts.is_compaction = _is_compaction;
 
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
@@ -365,9 +379,9 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     }
     std::unique_ptr<WritableFile> of;
     if (_location_provider && _fs) {
-        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, segment_location));
     } else {
-        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, segment_location));
     }
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));

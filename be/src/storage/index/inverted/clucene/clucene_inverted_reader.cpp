@@ -16,11 +16,13 @@
 
 #include <fmt/format.h>
 
-#include <boost/locale/encoding_utf.hpp>
 #include <memory>
 
-#include "clucene_inverted_util.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_file_manager.h"
+#include "storage/index/inverted/clucene/clucene_file_reader.h"
+#include "storage/index/inverted/clucene/clucene_fs_directory.h"
+#include "storage/index/inverted/clucene/clucene_inverted_util.h"
 #include "storage/index/inverted/clucene/match_operator.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -36,11 +38,15 @@ Status CLuceneInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> in
 
 Status CLuceneInvertedReader::create(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index,
                                      LogicalType field_type, std::unique_ptr<InvertedReader>* res) {
+    if (tablet_index == nullptr) {
+        return Status::InvalidArgument(fmt::format("Cannot create CLuceneInvertedReader due to null tablet index."));
+    }
     if (is_string_type(field_type)) {
+        ASSIGN_OR_RETURN(auto file_reader, CLuceneFileManager::getInstance().get_or_create_clucene_file_reader(path));
         InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(tablet_index->index_properties()));
         // Only support full text search for now
-        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index->index_id(), parser_type);
+        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index, std::move(file_reader), parser_type);
         return Status::OK();
     } else {
         return Status::InvalidArgument(fmt::format("Not supported type {}", field_type));
@@ -67,11 +73,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
 
     std::unique_ptr<MatchOperator> match_operator;
 
-    auto* directory = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
-    // defer must define before IndexSearcher. Because the destroy order is matter.
-    // Make sure IndexSearcher destroy first and decrement __cl_refcount first.
-    DeferOp defer([&]() { CLOSE_DIR(directory) });
-    lucene::search::IndexSearcher index_searcher(directory);
+    ASSIGN_OR_RETURN(const auto dir, _inverted_index_reader->open(_tablet_index));
+    lucene::search::IndexSearcher index_searcher(dir.get());
 
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY:
