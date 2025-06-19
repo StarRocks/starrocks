@@ -575,7 +575,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_cloud_native_persistent_index) 
     EXPECT_EQ(TPersistentIndexType::CLOUD_NATIVE, metadata->persistent_index_type());
 }
 
-TEST_F(LakeTabletManagerTest, put_aggregate_tablet_metadata) {
+TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     std::map<int64_t, TabletMetadataPB> metadatas;
     TabletSchemaPB schema_pb1;
     {
@@ -646,7 +646,7 @@ TEST_F(LakeTabletManagerTest, put_aggregate_tablet_metadata) {
 
     metadatas.emplace(1, metadata1);
     metadatas.emplace(2, metadata2);
-    EXPECT_OK(_tablet_manager->put_aggregate_tablet_metadata(metadatas));
+    EXPECT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
 
     {
         auto res = _tablet_manager->get_tablet_metadata(1, 2);
@@ -657,7 +657,7 @@ TEST_F(LakeTabletManagerTest, put_aggregate_tablet_metadata) {
     }
 
     {
-        std::string fp_name = "tablet_schema_not_found_in_shared_metadata";
+        std::string fp_name = "tablet_schema_not_found_in_bundle_metadata";
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
         PFailPointTriggerMode trigger_mode;
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
