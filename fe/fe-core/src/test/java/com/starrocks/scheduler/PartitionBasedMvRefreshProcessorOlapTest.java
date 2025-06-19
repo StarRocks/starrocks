@@ -186,6 +186,19 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl17\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view test.union_all_mv\n" +
                         "partition by dt \n" +
                         "distributed by hash(k2) buckets 10\n" +
@@ -204,6 +217,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         "refresh deferred manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl4.k1, tbl4.k2 from tbl4;")
+                .withMaterializedView("create materialized view test.mv3\n" +
+                        "partition by date_trunc('month',k1) \n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh deferred manual\n" +
+                        "properties('replication_num' = '1')\n" +
+                        "as select tbl17.k1, tbl17.k2 from tbl17;")
                 .withMaterializedView("create materialized view test.mv_inactive\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
@@ -552,6 +571,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     @Test
     public void testRefreshWithRetry() {
         List<TUniqueId> retryExecutorIds = new ArrayList<>();
+        int originalRetryNum = connectContext.getSessionVariable().getQueryDebugOptions().getMaxRefreshMaterializedViewRetryNum();
         connectContext.getSessionVariable().getQueryDebugOptions().setMaxRefreshMaterializedViewRetryNum(2);
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             int runNum = 0;
@@ -569,16 +589,17 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         };
         try {
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-            String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
+            String insertSql = "insert into tbl17 partition(p0) values('2021-12-01', 2, 10);";
             executeInsertSql(connectContext, insertSql);
             MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), "mv1"));
+                    .getTable(testDb.getFullName(), "mv3"));
             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(taskRun);
         } catch (Exception e) {
             e.printStackTrace();
         }
+        connectContext.getSessionVariable().getQueryDebugOptions().setMaxRefreshMaterializedViewRetryNum(originalRetryNum);
         Assert.assertEquals(1, retryExecutorIds.size());
     }
 
