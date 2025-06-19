@@ -152,6 +152,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public enum PartitionRefreshStrategy {
         /**
+         * FORCE: Force strategy.
+         * always refresh all partitions regardless of their last refresh time.
+         */
+        FORCE,
+
+        /**
          * STRICT: Traditional strategy.
          * Selects a fixed number of candidate partitions based on partition_refresh_number.
          */

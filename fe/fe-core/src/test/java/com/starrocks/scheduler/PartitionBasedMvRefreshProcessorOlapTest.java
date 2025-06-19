@@ -2699,4 +2699,89 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 }
         );
     }
+
+    @Test
+    public void partitionsToRefreshReturnsEmptySetWhenNoPartitionsExist() {
+        starRocksAssert.withMTables(ImmutableList.of(new MTable("tt1", "k1",
+                List.of(
+                        "k1 date",
+                        "k2 int",
+                        "v1 int"
+                ),
+
+                "k1",
+                List.of(
+                        "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                        "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                        "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                        "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                        "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                )
+                )),
+                () -> {
+                    starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv1 \n" +
+                            "partition by date_trunc('day',k1) \n" +
+                            "distributed by random \n" +
+                            "refresh deferred manual\n" +
+                            "as select * from tt1;");
+                    TaskRunContext taskRunContext = new TaskRunContext();
+                    MaterializedView mv = getMv("test_mv1");
+                    taskRunContext.setCtx(connectContext);
+                    Map<String, String> props = Maps.newHashMap();
+                    props.put(MV_ID, String.valueOf(mv.getId()));
+                    taskRunContext.setProperties(props);
+                    taskRunContext.setTaskType(Constants.TaskType.MANUAL);
+
+                    PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+                    processor.prepare(taskRunContext);
+
+                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
+                    Set<String> result = processor.checkMvToRefreshedPartitions(mvTaskRunContext, false);
+                    Assert.assertTrue(result.isEmpty());
+                });
+    }
+
+    @Test
+    public void partitionsToRefreshReturnsNoneEmptyWithForceRefreshStrategy() {
+        starRocksAssert.withMTables(ImmutableList.of(new MTable("tt1", "k1",
+                        List.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                )),
+                () -> {
+                    starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv1 \n" +
+                            "partition by k1 \n" +
+                            "distributed by random \n" +
+                            "refresh deferred manual\n" +
+                            "properties('partition_refresh_strategy' = 'force')\n" +
+                            "as select * from tt1;");
+                    TaskRunContext taskRunContext = new TaskRunContext();
+                    MaterializedView mv = getMv("test_mv1");
+                    taskRunContext.setCtx(connectContext);
+                    Map<String, String> props = Maps.newHashMap();
+                    props.put(MV_ID, String.valueOf(mv.getId()));
+                    taskRunContext.setProperties(props);
+                    taskRunContext.setTaskType(Constants.TaskType.MANUAL);
+
+                    PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+                    processor.prepare(taskRunContext);
+
+                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
+                    Set<String> result = processor.checkMvToRefreshedPartitions(mvTaskRunContext, false);
+                    Assert.assertFalse(result.isEmpty());
+                    Set<String> expect = ImmutableSet.of("p0", "p1", "p2", "p3", "p4");
+                    Assert.assertEquals(expect, result);
+                });
+    }
 }
