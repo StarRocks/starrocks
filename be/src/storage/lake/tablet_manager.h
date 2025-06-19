@@ -182,7 +182,7 @@ public:
 
     UpdateManager* update_mgr();
 
-    CompactionScheduler* compaction_scheduler() {return _compaction_scheduler.get(); }
+    CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
     void update_metacache_limit(size_t limit);
 
