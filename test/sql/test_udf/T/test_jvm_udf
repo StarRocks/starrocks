@@ -107,9 +107,6 @@ select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3))
 select count(*) from t0 where exception_test(c1) is null;
 -- run two times
 select count(*) from t0 where shared_exception_test(c1) is null;
-<<<<<<< HEAD
-select count(*) from t0 where shared_exception_test(c1) is null;
-=======
 select count(*) from t0 where shared_exception_test(c1) is null;
 
 -- test array and map
@@ -169,4 +166,3 @@ RETURNS bigint
 symbol = "SumbigintInvalid"
 type = "StarrocksJar"
 file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
->>>>>>> 7cc84870d9 ([BugFix] Fix the error message when create udf failed (#60020))
