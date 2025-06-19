@@ -592,6 +592,18 @@ constexpr int256_t INT256_MIN{
         static_cast<uint128_t>(0)                                // low:  0
 };
 
+/// Constant value 1 for int256_t
+constexpr int256_t INT256_ONE{
+        static_cast<int128_t>(0), // high: 0
+        static_cast<uint128_t>(1) // low:  1
+};
+
+/// Constant value -1 for int256_t
+constexpr int256_t INT256_NEGATIVE_ONE{
+        static_cast<int128_t>(-1), // high: -1 (all bits set)
+        static_cast<uint128_t>(-1) // low:  all bits set (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+};
+
 // =============================================================================
 // Utility Functions
 // =============================================================================
