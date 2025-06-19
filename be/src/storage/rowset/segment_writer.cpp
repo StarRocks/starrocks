@@ -46,6 +46,10 @@
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_file_manager.h"
+#include "storage/index/inverted/clucene/clucene_file_writer.h"
+#include "storage/index/inverted/inverted_index_common.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
@@ -328,6 +332,13 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // reset to release memory
         column_writer.reset();
     }
+
+    if (!_enable_index_group) {
+        // must write inverted index before clear column writers, because we delete temporary directory when
+        // column_writer destruct.
+        RETURN_IF_ERROR(_write_inverted_index_if_necessary());
+    }
+
     _column_writers.clear();
     _column_indexes.clear();
 
@@ -336,6 +347,28 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(_write_short_key_index());
         *index_size += _wfile->size() - index_offset;
         _index_builder.reset();
+    }
+    return Status::OK();
+}
+
+Status SegmentWriter::_write_inverted_index_if_necessary() {
+    std::unordered_set<std::string> paths;
+    for (const auto* indexes = _tablet_schema->indexes(); const auto& index : *indexes) {
+        if (index.index_type() == GIN) {
+            ASSIGN_OR_RETURN(const auto& imp_type, get_inverted_imp_type(index));
+            if (imp_type == InvertedImplementType::CLUCENE) {
+                const auto& path = IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                                             _opts.segment_file_mark.rowset_id,
+                                                                             _segment_id, index.index_id());
+                paths.emplace(path);
+            }
+        }
+    }
+    auto& clucene_file_manager = CLuceneFileManager::getInstance();
+    for (const auto& path : paths) {
+        ASSIGN_OR_RETURN(const auto file, clucene_file_manager.get_or_create_clucene_file_writer(path));
+        RETURN_IF_ERROR(file->close());
+        RETURN_IF_ERROR(clucene_file_manager.remove_clucene_file_writer(path));
     }
     return Status::OK();
 }
@@ -352,6 +385,12 @@ Status SegmentWriter::_flush_index(uint64_t* index_size) {
             RETURN_IF_ERROR(column_writer->write_inverted_index());
             segment_index_size += _wfile->size() - index_offset;
         }
+    }
+
+    if (_enable_index_group) {
+        // must write inverted index before clear column writers, because we delete temporary directory when
+        // column_writer destruct.
+        RETURN_IF_ERROR(_write_inverted_index_if_necessary());
     }
 
     if (index_size != nullptr) {

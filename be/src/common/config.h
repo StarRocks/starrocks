@@ -537,6 +537,13 @@ CONF_Int32(fragment_pool_queue_size, "2048");
 // Writable scratch directories, splitted by ";"
 CONF_String(query_scratch_dirs, "${STARROCKS_HOME}");
 
+CONF_String(tmp_file_dir, "tmp");
+
+// set enable may reduce IO costs, but it will increase memory pressure.
+CONF_mBool(inverted_index_ram_dir_enable, "false");
+
+CONF_mInt32(inverted_index_read_buffer_size, "4096");
+
 // For each io buffer size, the maximum number of buffers the IoMgr will hold onto
 // With 1024B through 8MB buffers, this is up to ~2GB of buffers.
 CONF_Int32(max_free_io_buffers, "128");

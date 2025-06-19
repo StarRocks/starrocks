@@ -387,6 +387,7 @@ public:
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
+    TmpFileDirs* get_tmp_file_dirs() { return _tmp_file_dirs.get(); }
 
     ThreadPool* delete_file_thread_pool();
     MonitorManager* get_monitor_manager() { return _monitor_manager; }
@@ -400,6 +401,7 @@ private:
     size_t _get_running_fragments_count() const;
 
     std::vector<StorePath> _store_paths;
+    std::unique_ptr<TmpFileDirs> _tmp_file_dirs;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     MetricRegistry* _metrics = nullptr;

@@ -158,6 +158,7 @@ private:
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
     void _verify_footer();
+    Status _write_inverted_index_if_necessary();
 
     uint32_t _segment_id;
     TabletSchemaCSPtr _tablet_schema;
