@@ -41,6 +41,7 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 - データロード時のバージョン欠損を修正しました。[#59006](https://github.com/StarRocks/starrocks/pull/59006)
 - クエリが同期マテリアライズドビューに書き換えられた際に述語が失われる問題を修正しました。[#58831](https://github.com/StarRocks/starrocks/pull/58831)
 - ウィンドウ関数における BITMAP/HLL/PERCENTILE データ型の問題を修正しました。[#58776](https://github.com/StarRocks/starrocks/pull/58776)
+- Hive Catalog の外部テーブルへのメタデータの変更を更新できません。[#54596](https://github.com/StarRocks/starrocks/pull/54596)
 
 ### 動作の変更
 
