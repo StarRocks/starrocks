@@ -1635,7 +1635,7 @@ TEST(LakeVacuumTest2, test_delete_files_retry4) {
     EXPECT_GT(attempts, 1);
 }
 
-TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
+TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
@@ -1730,17 +1730,17 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
     t600_v1->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v1[600] = *t600_v1;
     tablet_metas_v1[601] = *t601_v1;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v1));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
     t600_v2->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v2[600] = *t600_v2;
     tablet_metas_v2[601] = *t601_v2;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v2));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
     t600_v3->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v3[600] = *t600_v3;
     tablet_metas_v3[601] = *t601_v3;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v3));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
@@ -2013,17 +2013,17 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     t600_v1->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v1[600] = *t600_v1;
     tablet_metas_v1[601] = *t601_v1;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v1));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
     t600_v2->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v2[600] = *t600_v2;
     tablet_metas_v2[601] = *t601_v2;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v2));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
     t600_v3->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v3[600] = *t600_v3;
     tablet_metas_v3[601] = *t601_v3;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v3));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
@@ -2099,7 +2099,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     t600_v4->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v4[600] = *t600_v4;
     tablet_metas_v4[601] = *t601_v4;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v4));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v4));
 
     // shared files will be deleted.
     {
