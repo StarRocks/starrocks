@@ -609,7 +609,7 @@ TEST_F(AlterTabletMetaTest, test_skip_load_pindex) {
     }
 }
 
-TEST_F(AlterTabletMetaTest, test_aggregate_tablet_metadata) {
+TEST_F(AlterTabletMetaTest, test_bundle_tablet_metadata) {
     lake::SchemaChangeHandler handler(_tablet_mgr.get());
     TUpdateTabletMetaInfoReq update_tablet_meta_req;
     int64_t txn_id = next_id();
@@ -618,7 +618,7 @@ TEST_F(AlterTabletMetaTest, test_aggregate_tablet_metadata) {
     TTabletMetaInfo tablet_meta_info;
     auto tablet_id = _tablet_metadata->id();
     tablet_meta_info.__set_tablet_id(tablet_id);
-    tablet_meta_info.__set_aggregate_tablet_metadata(true);
+    tablet_meta_info.__set_bundle_tablet_metadata(true);
 
     update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
     ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
@@ -626,8 +626,8 @@ TEST_F(AlterTabletMetaTest, test_aggregate_tablet_metadata) {
     ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
     ASSERT_TRUE(txn_log->has_op_alter_metadata());
     for (const auto& alter_meta : txn_log->op_alter_metadata().metadata_update_infos()) {
-        ASSERT_TRUE(alter_meta.has_aggregate_tablet_metadata());
-        ASSERT_TRUE(alter_meta.aggregate_tablet_metadata());
+        ASSERT_TRUE(alter_meta.has_bundle_tablet_metadata());
+        ASSERT_TRUE(alter_meta.bundle_tablet_metadata());
     }
     auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
     ASSERT_OK(new_tablet_meta.status());
