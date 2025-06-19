@@ -118,7 +118,7 @@ public class AnalyticAnalyzer {
                 if (theThirdChild instanceof UserVariableExpr) {
                     theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
                 }
-                if (theThirdChild.isNullable()) {
+                if (theThirdChild.isNullable() && theThirdChild.isConstant()) {
                     throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
                     analyticFunction.getChild(2).getPos());
                 }

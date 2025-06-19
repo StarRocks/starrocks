@@ -536,7 +536,7 @@ struct LeadLagState<LT, true> {
     bool default_is_null = false;
     int64_t target_not_null_index = 0;      // recored the 'offset' not null value's position
     size_t non_null_count;                  // only used for lag
-    bool default_value_is_constant = false; // only used for lag
+    bool default_value_is_constant = false;
 };
 
 template <LogicalType LT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<LT>>
@@ -559,17 +559,19 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
 
         // get default value
         const Column* arg2 = args[2].get();
-        if(arg2 != nullptr && arg2->is_constant()) {
-            this->data(state).default_value_is_constant = true;
-            const auto* default_column = down_cast<const ConstColumn*>(arg2);
-            if (default_column->is_nullable()) {
-                this->data(state).default_is_null = true;
+        if(arg2 != nullptr) {
+            if (arg2->is_constant()) {
+                this->data(state).default_value_is_constant = true;
+                const auto* default_column = down_cast<const ConstColumn*>(arg2);
+                if (default_column->is_nullable()) {
+                    this->data(state).default_is_null = true;
+                } else {
+                    auto value = ColumnHelper::get_const_value<LT>(arg2);
+                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+                }
             } else {
-                auto value = ColumnHelper::get_const_value<LT>(arg2);
-                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+                this->data(state).default_value_is_constant = false;
             }
-        } else {
-            this->data(state).default_value_is_constant = false;
         }
 
         if constexpr (ignoreNulls) {
@@ -672,6 +674,8 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             DCHECK_GE(value_index, peer_group_start - 1);
             DCHECK_LE(value_index, peer_group_end);
             if (!found_target || columns[0]->is_null(value_index)) {
+                std::cout << "todo by jiajingzhe view def 2  is " << this->data(state).default_value_is_constant << "value index is " << value_index << "frame start is " 
+                            << frame_start << "  peer group start is " << peer_group_start <<  "current_row is " << current_row << "frame end is " << frame_end << std::endl;
                 if (this->data(state).default_value_is_constant) {
                     if (this->data(state).default_is_null) {
                         this->data(state).is_null = true;
@@ -679,11 +683,16 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                         this->data(state).value = this->data(state).default_value;
                     }
                 } else {
-                    const Column* data_column = ColumnHelper::get_data_column(columns[2]);
-                    const auto* column = down_cast<const InputColumnType*>(data_column);
-                    this->data(state).is_null = columns[2]->is_null(value_index);
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                        AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
+                    std::cout << "todo by jiajingzhe view def 3 value index is " << value_index << std::endl;
+                    if (!columns[2]->is_null(current_row)) {
+                        this->data(state).is_null = false;
+                        const Column* data_column = ColumnHelper::get_data_column(columns[2]);
+                        const auto* column = down_cast<const InputColumnType*>(data_column);
+                        AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                        AggDataTypeTraits<LT>::get_row_ref(*column, current_row));
+                    } else {
+                        this->data(state).is_null = true;
+                    }
                 }
                 
             } else {
@@ -700,8 +709,22 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 if (this->data(state).default_is_null) {
                     this->data(state).is_null = true;
                 } else {
-                    this->data(state).is_null = false;
-                    this->data(state).value = this->data(state).default_value;
+                    if (this->data(state).default_value_is_constant) {
+                        this->data(state).is_null = false;
+                        this->data(state).value = this->data(state).default_value;
+                    } else {
+                        size_t target_index = isLag ? (frame_start + this->data(state).offset) : (frame_end - 1 - this->data(state).offset);
+                        std::cout << "todo by jiajingzhe view def 5 , frame start is " << frame_start << "  peer group start is " << peer_group_start << " isLag "<< isLag << " index " << target_index << std::endl;
+                        if (!columns[2]->is_null(target_index)) {
+                            this->data(state).is_null = false;
+                            const Column* data_column = ColumnHelper::get_data_column(columns[2]);
+                            const auto* column = down_cast<const InputColumnType*>(data_column);
+                            AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                            AggDataTypeTraits<LT>::get_row_ref(*column, target_index));
+                        } else {
+                            this->data(state).is_null = true;
+                        }
+                    }
                 }
                 return;
             }
