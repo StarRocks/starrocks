@@ -527,7 +527,7 @@ set(EXEC_FILES
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
         ./util/byte_stream_split_test.cpp
-	./util/url_coding_test.cpp
+        ./util/url_coding_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
@@ -548,8 +548,6 @@ set(EXEC_FILES
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp
-        ./cache/object_cache/lrucache_module_test.cpp
-        ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
@@ -563,9 +561,9 @@ endif()
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./cache/disk_space_monitor_test.cpp)
+    list(APPEND EXEC_FILES ./cache/lrucache_engine_test.cpp)
+    list(APPEND EXEC_FILES ./cache/starcache_engine_test.cpp)
     list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./cache/object_cache/starcache_module_test.cpp)
-    list(APPEND EXEC_FILES ./cache/object_cache/object_cache_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 
