@@ -163,10 +163,10 @@ message MetadataUpdateInfoPB {
     optional bool enable_persistent_index = 1;
     optional TabletSchemaPB tablet_schema = 2;
     optional PersistentIndexTypePB persistent_index_type = 3;
-    optional bool aggregate_tablet_metadata = 4;
+    optional bool bundle_tablet_metadata = 4;
 }
 
-message SharedTabletMetadataPB {
+message BundleTabletMetadataPB {
     map<int64, int64> tablet_to_schema = 1; // tablet id -> schema id
     map<int64, TabletSchemaPB> schemas = 2;
     map<int64, PagePointerPB> tablet_meta_pages = 3;

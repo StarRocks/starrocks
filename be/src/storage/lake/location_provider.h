@@ -69,7 +69,7 @@ public:
         return join_path(metadata_root_location(tablet_id), tablet_initial_metadata_filename());
     }
 
-    std::string aggregate_tablet_metadata_location(int64_t tablet_id, int64_t version) const {
+    std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const {
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(0, version));
     }
 

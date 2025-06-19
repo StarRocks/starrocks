@@ -339,13 +339,11 @@ struct AggregatePublishContext {
             } else {
                 auto latch = BThreadCountDownLatch(1);
                 auto task = std::make_shared<AutoCleanRunnable>(
-                        [&] {
-                            publish_status = env->lake_tablet_manager()->put_aggregate_tablet_metadata(tablet_metas);
-                        },
+                        [&] { publish_status = env->lake_tablet_manager()->put_bundle_tablet_metadata(tablet_metas); },
                         [&] { latch.count_down(); });
                 Status submit_st = thread_pool->submit(std::move(task));
                 if (!submit_st.ok()) {
-                    LOG(WARNING) << "Fail to submit put_aggregate_tablet_metadata task";
+                    LOG(WARNING) << "Fail to submit put_bundle_tablet_metadata task";
                     publish_status = submit_st;
                 }
                 latch.wait();
