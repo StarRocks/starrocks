@@ -1749,7 +1749,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
     if (!GetParam().enable_persistent_index ||
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
-        return;
     }
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -1791,7 +1790,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
     if (!GetParam().enable_persistent_index ||
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
-        return;
     }
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -1834,7 +1832,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     if (!GetParam().enable_persistent_index ||
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
-        return;
     }
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();

@@ -1462,7 +1462,6 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
 TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
         GTEST_SKIP() << "this case only for partial update row mode";
-        return;
     }
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
