@@ -143,8 +143,6 @@ public class RestoreJobTest {
         }
     }
 
-    private SystemInfoService systemInfoService = new SystemInfoService();
-
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
@@ -232,6 +230,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupMultiSubPartitionTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
 
@@ -419,6 +418,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupRangeTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -590,6 +590,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupListTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -808,6 +809,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreView() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
