@@ -181,24 +181,20 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
-message RecordPredicateTreeNodePB {
-    NodeType {
-        AND = 0;
-        OR = 1;
-        LEAF 2;
+message RecordPredicateNodePB {
+    enum NodeType {
+        NOT = 0;
+        AND = 1;
+        OR = 2;
+        LEAF = 3;
     }
 
     optional NodeType type = 1;
-    repeated RecordPredicatePB children = 2;
+    repeated RecordPredicateNodePB children = 2;
+    optional RecordPredicatePB record_predicate = 3; // only set if NodeType is LEAF
 }
 
 message RecordPredicatePB {
-    enum TypePB {
-        UNKNOWN = 0;
-        SELECT = 1;
-        FILTER = 2;
-    }
-
     message ColumnHashModulusPredicatePB {
         enum ColumnHashTypePB {
             UNKNOWN = 0;
@@ -211,8 +207,7 @@ message RecordPredicatePB {
         repeated string hash_column_names = 4;
     }
 
-    optional TypePB type = 1;
-    optional ColumnHashModulusPredicatePB column_hash_modulus_predicate = 2;
+    optional ColumnHashModulusPredicatePB column_hash_modulus_predicate = 1;
 }
 
 message IndexValueWithVerPB {
