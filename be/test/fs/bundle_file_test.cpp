@@ -247,4 +247,38 @@ TEST_F(BundleFileTest, test_concurrent_write) {
     }
 }
 
+TEST_F(BundleFileTest, test_touch_cache_and_statistics) {
+    std::string test_data1 = "Hello, SharedFile!";
+    std::string bundle_file_path = _test_dir + "/test_touch_cache_bundle_file.dat";
+
+    auto shared_context = std::make_shared<BundleWritableFileContext>();
+    shared_context->try_create_bundle_file([&]() {
+        WritableFileOptions opts;
+        return fs::new_writable_file(opts, bundle_file_path);
+    });
+    shared_context->try_create_bundle_file([&]() {
+        WritableFileOptions opts;
+        return fs::new_writable_file(opts, bundle_file_path);
+    });
+
+    WritableFileOptions wopts;
+    auto shared_writer = std::make_unique<BundleWritableFile>(shared_context.get(), wopts.encryption_info);
+    shared_context->increase_active_writers();
+    // write some data
+    ASSERT_OK(shared_writer->append(test_data1));
+    ASSERT_OK(shared_writer->sync());
+    ASSERT_OK(shared_writer->close());
+    shared_context->decrease_active_writers();
+
+    // touch cache
+    RandomAccessFileOptions ropts;
+    FileInfo file_info2{.path = bundle_file_path, .size = test_data1.size(), .bundle_file_offset = 0};
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(bundle_file_path));
+    ASSIGN_OR_ABORT(auto reader, fs->new_random_access_file_with_bundling(ropts, file_info2));
+    ASSERT_OK(reader->touch_cache(0, sizeof(test_data1))); // touch the first 30 bytes
+
+    // get numeric statistics
+    ASSIGN_OR_ABORT(auto numeric_stats, reader->get_numeric_statistics());
+}
+
 } // namespace starrocks

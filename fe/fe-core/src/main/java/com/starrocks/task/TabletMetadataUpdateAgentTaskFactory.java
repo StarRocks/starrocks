@@ -278,7 +278,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
             for (Long tabletId : tablets) {
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(tabletId);
-                metaInfo.setAggregate_tablet_metadata(enableFileBundling);
+                metaInfo.setBundle_tablet_metadata(enableFileBundling);
                 metaInfos.add(metaInfo);
             }
             return metaInfos;

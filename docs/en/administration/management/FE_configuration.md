@@ -2254,6 +2254,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Routine Load job is set to the UNSTABLE state if any task within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed and the current time exceeds this threshold, and unconsumed messages exist in the data source.
 - Introduced in: -
 
+##### enable_routine_load_lag_metrics
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect Routine Load Kafka partition offset lag metrics. Please note that set this item to `true` will call the Kafka API to get the partition's latest offset.
+- Introduced in: -
+
+##### min_routine_load_lag_for_metrics
+
+- Default: 10000
+- Type: INT
+- Unit: -
+- Is mutable: Yes
+- Description: The minimum offset lag of Routine Load jobs to be shown in monitoring metrics. Routine Load jobs whose offset lags are greater than this value will be displayed in the metrics.
+- Introduced in: -
+
 ##### max_tolerable_backend_down_num
 
 - Default: 0

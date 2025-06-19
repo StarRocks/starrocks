@@ -213,44 +213,59 @@ public class SyncPartitionUtils {
         if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             throw new SemanticException("Do not support function: %s", functionCallExpr.getFnName().getFunction());
         }
+        Preconditions.checkState(baseRange.lowerEndpoint().getTypes().size() == 1);
 
         String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
         // assume expr partition must be DateLiteral and only one partition
         LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
         LiteralExpr upperExpr = baseRange.upperEndpoint().getKeys().get(0);
-        Preconditions.checkArgument(lowerExpr instanceof DateLiteral);
-        DateLiteral lowerDate = (DateLiteral) lowerExpr;
-        LocalDateTime lowerDateTime = lowerDate.toLocalDateTime();
-        LocalDateTime truncLowerDateTime = getLowerDateTime(lowerDateTime, granularity);
 
-        DateLiteral upperDate;
-        LocalDateTime truncUpperDateTime;
-        if (upperExpr instanceof MaxLiteral) {
-            upperDate = new DateLiteral(Type.DATE, true);
-            truncUpperDateTime = upperDate.toLocalDateTime();
-        } else {
-            upperDate = (DateLiteral) upperExpr;
-            truncUpperDateTime = getUpperDateTime(upperDate.toLocalDateTime(), granularity);
-        }
-
-        Preconditions.checkState(baseRange.lowerEndpoint().getTypes().size() == 1);
         PrimitiveType partitionType = baseRange.lowerEndpoint().getTypes().get(0);
-
         PartitionKey lowerPartitionKey = new PartitionKey();
         PartitionKey upperPartitionKey = new PartitionKey();
         try {
-            if (partitionType == PrimitiveType.DATE) {
-                lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATE), partitionType);
-                upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATE), partitionType);
-            } else {
-                lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATETIME), partitionType);
-                upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATETIME), partitionType);
-            }
+            DateLiteral lowerDate = transferDateLiteral(lowerExpr, granularity, true);
+            DateLiteral upperDate = transferDateLiteral(upperExpr, granularity, false);
+            lowerPartitionKey.pushColumn(lowerDate, partitionType);
+            upperPartitionKey.pushColumn(upperDate, partitionType);
         } catch (AnalysisException e) {
             throw new SemanticException("Convert partition with date_trunc expression to date failed, lower:%s, upper:%s",
-                    truncLowerDateTime, truncUpperDateTime);
+                    lowerExpr, upperExpr);
         }
         return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
+    }
+
+    /**
+     * Transfer date literal to the lower or upper key of the partition range.
+     * @param literalExpr: the date literal to be transferred
+     * @param granularity: the granularity of the partition, such as "day", "month", etc.
+     * @param isLowerKey: if true, transfer to the lower key of the partition range,
+     * @return the transferred date literal
+     * @throws AnalysisException: if the literalExpr is not a date or datetime type,
+     */
+    private static DateLiteral transferDateLiteral(LiteralExpr literalExpr,
+                                                   String granularity,
+                                                   boolean isLowerKey) throws AnalysisException {
+        if (literalExpr == null) {
+            return null;
+        }
+        if (literalExpr.getType() != Type.DATE && literalExpr.getType() != Type.DATETIME) {
+            throw new SemanticException("Do not support date_trunc for type: %s", literalExpr.getType());
+        }
+        DateLiteral dateLiteral = (DateLiteral) literalExpr;
+        if (dateLiteral.isMinValue()) {
+            return dateLiteral;
+        } else if (literalExpr instanceof MaxLiteral) {
+            return dateLiteral;
+        }
+        LocalDateTime dateTime = dateLiteral.toLocalDateTime();
+        LocalDateTime localDateTime;
+        if (isLowerKey) {
+            localDateTime = getLowerDateTime(dateTime, granularity);
+        } else {
+            localDateTime = getUpperDateTime(dateTime, granularity);
+        }
+        return new DateLiteral(localDateTime, literalExpr.getType());
     }
 
     /**

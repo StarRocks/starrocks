@@ -77,3 +77,13 @@ FROM (
         ) t3
 ) t4
 WHERE _rowid <= 2 order by c4,c6;
+
+-- case 4: count * + row number with same partition and predicate
+SELECT 1
+FROM (
+    SELECT
+        COUNT(*) OVER (PARTITION BY c1) as _count,
+        ROW_NUMBER() OVER ( PARTITION BY c1 ORDER BY RAND() ) as rn
+    FROM t1
+) as x
+WHERE rn <= 2;

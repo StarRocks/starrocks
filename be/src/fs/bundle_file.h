@@ -101,6 +101,8 @@ public:
     StatusOr<std::string> read_all() override;
     const std::string& filename() const override;
     StatusOr<int64_t> read(void* data, int64_t count) override;
+    Status touch_cache(int64_t offset, size_t length) override;
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;

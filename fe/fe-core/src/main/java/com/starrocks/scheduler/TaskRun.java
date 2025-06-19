@@ -259,7 +259,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return context;
     }
 
-    public boolean executeTaskRun() throws Exception {
+    public Constants.TaskRunState executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
@@ -309,7 +309,7 @@ public class TaskRun implements Comparable<TaskRun> {
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         processor.prepare(taskRunContext);
         // process task run
-        processor.processTaskRun(taskRunContext);
+        Constants.TaskRunState taskRunState = processor.processTaskRun(taskRunContext);
 
         QueryState queryState = runCtx.getState();
         LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
@@ -321,16 +321,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 errorCode = queryState.getErrorCode().getCode();
             }
             status.setErrorCode(errorCode);
-            return false;
+            return Constants.TaskRunState.FAILED;
         }
-
-        // Execute post task action, but ignore any exception
-        try {
-            processor.postTaskRun(taskRunContext);
-        } catch (Exception ignored) {
-            LOG.warn("Execute post taskRun failed {} ", status, ignored);
-        }
-        return true;
+        return taskRunState;
     }
 
     public ConnectContext getRunCtx() {

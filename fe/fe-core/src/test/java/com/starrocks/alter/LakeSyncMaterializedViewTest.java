@@ -232,19 +232,19 @@ public class LakeSyncMaterializedViewTest {
     @Test
     public void testSelectFromSyncMV() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
+        String sql = "create materialized view sync_mv as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
-        sql = "select * from sync_mv1 [_SYNC_MV_];";
+        sql = "select * from sync_mv [_SYNC_MV_];";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
         Assert.assertTrue(explainString.contains("partitions=2/2\n" +
-                "     rollup: sync_mv1\n" +
+                "     rollup: sync_mv\n" +
                 "     tabletRatio=6/6"));
-        starRocksAssert.dropMaterializedView("sync_mv1");
+        starRocksAssert.dropMaterializedView("sync_mv");
     }
 
     // create sync mv that mv's name already existed in the db
@@ -265,7 +265,7 @@ public class LakeSyncMaterializedViewTest {
     // create sync mv that mv's name already existed in the same table
     @Test
     public void testCreateSyncMV2() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
+        String sql = "create materialized view sync_mv2 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
@@ -273,26 +273,26 @@ public class LakeSyncMaterializedViewTest {
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
         Assert.assertTrue(tbl1 != null);
-        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
+        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv2"));
 
-        // sync_mv1 already existed in the tbl1
-        sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
+        // sync_mv2 already existed in the tbl1
+        sql = "create materialized view sync_mv2 as select k1, sum(v1) from tbl1 group by k1;";
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Throwable e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
+            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv2] already exists in " +
                     "the table tbl1"));
         }
-        starRocksAssert.dropMaterializedView("sync_mv1");
+        starRocksAssert.dropMaterializedView("sync_mv2");
     }
 
     // create sync mv that mv's name already existed in other table
     @Test
     public void testCreateSyncMV3() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
+        String sql = "create materialized view sync_mv3 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
@@ -300,19 +300,19 @@ public class LakeSyncMaterializedViewTest {
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
         Assert.assertTrue(tbl1 != null);
-        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
-        // sync_mv1 already existed in tbl1
-        sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl3 group by k1;";
+        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv3"));
+        // sync_mv3 already existed in tbl1
+        sql = "create materialized view sync_mv3 as select k1, sum(v1) from tbl3 group by k1;";
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Throwable e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists " +
+            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv3] already exists " +
                     "in table tbl1"));
         }
-        starRocksAssert.dropMaterializedView("sync_mv1");
+        starRocksAssert.dropMaterializedView("sync_mv3");
     }
 
     @Test

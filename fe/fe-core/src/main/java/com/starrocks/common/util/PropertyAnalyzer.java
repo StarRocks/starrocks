@@ -1672,10 +1672,6 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, strategy);
                 materializedView.getTableProperty().setPartitionRefreshStrategy(strategy);
-                if (isNonPartitioned) {
-                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY
-                            + " does not support non-partitioned materialized view.");
-                }
             }
             // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
