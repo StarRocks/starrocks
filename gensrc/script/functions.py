@@ -206,16 +206,15 @@ vectorized_functions = [
      'StringFunctions::left_or_right_prepare', 'StringFunctions::left_or_right_close'],
     [10346, '__iceberg_transform_truncate', True, False, 'VARBINARY', ['VARBINARY', 'INT'], 'BinaryFunctions::iceberg_truncate_binary'],
      
-
     [10350, '__iceberg_transform_bucket', True, False, 'INT', ['INT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_INT>'],
     [10351, '__iceberg_transform_bucket', True, False, 'INT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_BIGINT>'],
     [10352, '__iceberg_transform_bucket', True, False, 'INT', ['DATE', 'INT'], 'MathFunctions::iceberg_bucket_date'],
     [10353, '__iceberg_transform_bucket', True, False, 'INT', ['DATETIME', 'INT'], 'MathFunctions::iceberg_bucket_datetime'],
     [10354, '__iceberg_transform_bucket', True, False, 'INT', ['VARCHAR', 'INT'], 'MathFunctions::iceberg_bucket_string'],
     [10355, '__iceberg_transform_bucket', True, False, 'INT', ['VARBINARY', 'INT'], 'MathFunctions::iceberg_bucket_string'],
-    [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
-    [10357, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL64'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>'],
-    [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
+    [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
+    [10357, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL64', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>'],
+    [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
 
 
     # 20xxx: bit functions
