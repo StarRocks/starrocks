@@ -120,6 +120,7 @@ private:
 
 private:
     mutable std::shared_mutex _mtx;
+    std::shared_mutex _cache_mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
 };
