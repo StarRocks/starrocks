@@ -71,7 +71,7 @@ insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');
 -- name: test_non_replicated_storage_multi_replica_pk
 CREATE TABLE `t_non_replicated_storage_multi_replica_pk` (
   `k` STRING NOT NULL COMMENT "",
-  `v1` int,
+  `v1` int DEFAULT "10",
   `v2` int
 ) ENGINE=OLAP 
 PRIMARY KEY(`k`)
