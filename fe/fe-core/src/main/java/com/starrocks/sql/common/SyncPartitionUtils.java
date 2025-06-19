@@ -126,7 +126,8 @@ public class SyncPartitionUtils {
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             MVRangePartitionMapper.PartitionRangeWrapper rangeWrapper =
-                    toMappingRanges(baseRangeMap, granularity, partitionColumnType, differ.mv);
+                    toMappingRanges(baseRangeMap, granularity, partitionColumnType, differ == null || differ.mv == null ? null :
+                            differ.mv);
             rollupRange = rangeWrapper.getPartitionRangeMap();
             virtualRange = rangeWrapper.getVirtualPartitionRangeMap();
         } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {

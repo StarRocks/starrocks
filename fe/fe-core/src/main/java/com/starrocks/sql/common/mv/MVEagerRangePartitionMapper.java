@@ -107,7 +107,8 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
                                                                    Set<PartitionMapping> originMappings,
                                                                    MaterializedView mv) {
         Set<PartitionMapping> result = Sets.newHashSet();
-        if (CollectionUtils.isEmpty(originMappings) || CollectionUtils.isEmpty(mv.getUnionOtherOutputExpression())) {
+        if (mv == null || CollectionUtils.isEmpty(originMappings)
+                || CollectionUtils.isEmpty(mv.getUnionOtherOutputExpression())) {
             return result;
         }
         SlotRef mvPartitionSlotRef = mv.getPartitionExprMaps().entrySet().stream()
