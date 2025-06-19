@@ -172,3 +172,11 @@ select count(*) from t0 where shared_exception_test(c1) is null;
 -- result:
 [REGEX].*java.lang.NullPointerException.*
 -- !result
+CREATE FUNCTION invalid_func(bigint)
+RETURNS bigint
+symbol = "SumbigintInvalid"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
+-- result:
+[REGEX].*not found in object_file.*
+-- !result
