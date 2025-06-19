@@ -65,7 +65,10 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 namespace fslib = staros::starlet::fslib;
 
 StarOSWorker::StarOSWorker()
-        : _mtx(), _shards(), _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+        : _mtx(),
+          _cache_mtx(),
+          _shards(),
+          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
 
 StarOSWorker::~StarOSWorker() = default;
 
@@ -341,9 +344,12 @@ StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration
     std::shared_ptr<fslib::FileSystem> fs = std::move(fs_or).value();
 
     // Put the FileSysatem into LRU cache
-    //
-    // TODO: need to handle the race condition properly by double check if the key exists
-    // before insert under lock protection.
+    std::unique_lock l(_cache_mtx);
+    value_or = find_fs_cache(cache_key);
+    if (value_or.ok()) {
+        VLOG(9) << "Share filesystem";
+        return value_or;
+    }
     auto fs_cache_key = insert_fs_cache(cache_key, fs);
 
     return std::make_pair(std::move(fs_cache_key), std::move(fs));
