@@ -81,6 +81,7 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
+        <async-profiler.version>4.0</async-profiler.version>
     </properties>
 
     <profiles>
@@ -1488,6 +1489,13 @@ under the License.
                 <groupId>it.unimi.dsi</groupId>
                 <artifactId>fastutil</artifactId>
                 <version>${fastutil.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/tools.profiler/async-profiler -->
+            <dependency>
+                <groupId>tools.profiler</groupId>
+                <artifactId>async-profiler</artifactId>
+                <version>${async-profiler.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

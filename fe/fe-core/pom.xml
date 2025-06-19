@@ -898,6 +898,11 @@ under the License.
             <groupId>it.unimi.dsi</groupId>
             <artifactId>fastutil</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>tools.profiler</groupId>
+            <artifactId>async-profiler</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
