@@ -287,6 +287,11 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         return Status::InternalError("tablet_metas cannot be empty");
     }
 
+    // For compatibility
+    // tablets under the same partition should be in the same directory.
+    // However, due to a bug in the LakeRollup implementation(https://github.com/StarRocks/starrocks/pull/60073),
+    // the rollup and base tables might not be in the same directory.
+    // When upgrading from an old version and enabling file bundling, publishing may incorrectly reference the directory.
     std::map<std::string, std::set<int64_t>> partition_location_to_tablets;
     for (auto& [tablet_id, _] : tablet_metas) {
         auto real_location = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
@@ -310,11 +315,12 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         int64_t commit_version = 0;
         for (auto& tablet_id : tablets) {
             auto iter = tablet_metas.find(tablet_id);
-            RETURN_ERROR_IF_FALSE((iter != tablet_metas.end()),
-                                  strings::Substitute("tablet {} metadata not found", tablet_id));
+            RETURN_IF((iter == tablet_metas.end()),
+                      Status::InternalError(strings::Substitute("tablet {} metadata not found", tablet_id)));
             const auto& meta = iter->second;
-            RETURN_ERROR_IF_FALSE((commit_version == 0 || commit_version == meta.version()),
-                                  strings::Substitute("commit version not match: $0 vs $1", version, meta.version()));
+            RETURN_IF((commit_version != 0 && commit_version != meta.version()),
+                      Status::InternalError(strings::Substitute("commit version not match: $0 vs $1", commit_version,
+                                                                meta.version())));
             commit_version = meta.version();
             (*bundle_meta.mutable_tablet_to_schema())[tablet_id] = meta.schema().id();
             unique_schemas.emplace(meta.schema().id(), meta.schema());
