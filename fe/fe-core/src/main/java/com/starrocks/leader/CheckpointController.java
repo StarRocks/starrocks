@@ -192,6 +192,9 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     private Pair<Boolean, String> createImage() {
+        // reset the cluster snapshot info before sending the checkpoint request
+        this.clusterSnapshotInfo = null;
+
         result = new ArrayBlockingQueue<>(1);
         workerNodeName = selectWorker();
         if (workerNodeName == null) {
@@ -223,8 +226,10 @@ public class CheckpointController extends FrontendDaemon {
                 return Pair.create(false, workerNodeName);
             }
 
-            // set cluter snapshot versions info
-            this.clusterSnapshotInfo = ret.clusterSnapshotInfo;
+            if (this.needClusterSnapshotInfo) {
+                // set cluter snapshot versions info
+                this.clusterSnapshotInfo = ret.clusterSnapshotInfo;
+            }
 
             // download Image
             downloadImage();
@@ -306,9 +311,6 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     private boolean doCheckpoint(Frontend frontend) {
-        // reset the cluster snapshot info before sending the checkpoint request
-        this.clusterSnapshotInfo = null;
-
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {
@@ -461,7 +463,7 @@ public class CheckpointController extends FrontendDaemon {
                     this.journalId, journalId));
         }
 
-        if (result.offer(new FinishCheckpointResult(false, "", clusterSnapshotInfo))) {
+        if (result.offer(new FinishCheckpointResult(true, "", clusterSnapshotInfo))) {
             LOG.info("finish checkpoint successfully, journalId: {}, nodeName: {}", journalId, nodeName);
         } else {
             LOG.warn("There are already other values in the result queue");
