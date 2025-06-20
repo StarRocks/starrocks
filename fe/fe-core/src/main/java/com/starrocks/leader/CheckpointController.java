@@ -99,7 +99,10 @@ public class CheckpointController extends FrontendDaemon {
     private volatile long journalId;
     private volatile BlockingQueue<FinishCheckpointResult> result;
 
+    // if this param is true, the checkpoint worker will get cluster snapshot info
+    // and send it back to CheckpointController.
     private volatile boolean needClusterSnapshotInfo;
+    // save the cluster snapshot info getted from the checkpoint worker.
     private volatile ClusterSnapshotInfo clusterSnapshotInfo;
 
     public CheckpointController(String name, Journal journal, String subDir) {
