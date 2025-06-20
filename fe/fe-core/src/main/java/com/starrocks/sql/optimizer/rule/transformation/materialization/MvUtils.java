@@ -1377,11 +1377,38 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        try {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        } catch (Exception e) {
+            // For hive catalog, when meets NoSuchObjectException, we should return empty
+            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
+            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
+            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+                return Optional.empty();
+            }
+            throw e;
+        }
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+        try {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+        } catch (Exception e) {
+            // For hive catalog, when meets NoSuchObjectException, we should return empty
+            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
+            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
+            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
+            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            LOG.warn("Failed to get table with baseTableInfo: {}, error: {}", baseTableInfo, e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+                return Optional.empty();
+            }
+            throw e;
+        }
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {

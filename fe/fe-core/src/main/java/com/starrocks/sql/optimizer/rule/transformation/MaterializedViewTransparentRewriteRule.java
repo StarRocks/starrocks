@@ -91,8 +91,14 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                     mv.getName());
             return Collections.emptyList();
         }
-        OptExpression result = doTransform(connectContext, context, olapScanOperator, input, mv.getMvId());
-        return Collections.singletonList(result);
+        try {
+            OptExpression result = doTransform(connectContext, context, olapScanOperator, input, mv.getMvId());
+            return Collections.singletonList(result);
+        } catch (Exception e) {
+            LOG.warn("Failed to generate transparent rewrite plan for mv: {}, error: {}",
+                    mv.getName(), e.getMessage(), e);
+            return Collections.emptyList();
+        }
     }
 
     private OptExpression doTransform(ConnectContext connectContext,
