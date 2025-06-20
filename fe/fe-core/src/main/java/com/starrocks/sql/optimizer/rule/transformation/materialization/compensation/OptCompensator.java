@@ -22,6 +22,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -36,6 +37,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.iceberg.PartitionField;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -47,6 +50,8 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
  * Compensate the scan operator with the partition compensation.
  */
 public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
+    private static final Logger LOG = LogManager.getLogger(OptCompensator.class);
+
     private final OptimizerContext optimizerContext;
     private final MaterializedView mv;
     private final Map<Table, BaseCompensation<?>> compensations;
@@ -89,6 +94,9 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                 partitionKeys = externalTableCompensation.getCompensations();
             }
             LogicalScanOperator newScanOperator = getExternalTableCompensatePlan(scanOperator, partitionKeys);
+            if (newScanOperator == null) {
+                return optExpression;
+            }
             return OptExpression.create(newScanOperator);
         } else {
             return optExpression;
@@ -108,6 +116,17 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
 
     private LogicalScanOperator getExternalTableCompensatePlan(LogicalScanOperator scanOperator,
                                                                List<PRangeCell> partitionKeys) {
+        try {
+            return getExternalTableCompensatePlanImpl(scanOperator, partitionKeys);
+        } catch (AnalysisException e) {
+            LOG.warn("Failed to get external table compensate plan for scan operator: {}, partition keys: {}",
+                    scanOperator, partitionKeys, e);
+            return null;
+        }
+    }
+
+    private LogicalScanOperator getExternalTableCompensatePlanImpl(LogicalScanOperator scanOperator,
+                                                                   List<PRangeCell> partitionKeys) throws AnalysisException {
 
         Table refBaseTable = scanOperator.getTable();
         final LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
