@@ -26,19 +26,44 @@ insert into user_tags values('2023-04-13', 3, 'e', 6);
 create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;
 -- result:
 -- !result
+[UC]select inspect_mv_refresh_info('user_tags_mv1');
+-- result:
+{"tableToUpdatePartitions":{"user_tags":["p1"]},"baseTableVisibleVersionMap":{"user_tags":{}},"baseTableInfoVisibleVersionMap":{}}
+-- !result
+[UC]select inspect_table_partition_info('user_tags');
+-- result:
+{"p1":{"id":12210,"version":8,"lastRefreshTime":1750235292626,"lastFileModifiedTime":-1,"fileNumber":-1}}
+-- !result
 refresh materialized view user_tags_mv1 with sync mode;
-select inspect_mv_plan('user_tags_mv1');
+[UC]select inspect_mv_plan('user_tags_mv1');
 -- result:
-[REGEX]plan 0.*
+plan 0: 
+LogicalAggregation {type=GLOBAL ,aggregations={5: bitmap_agg=bitmap_agg(4: tag_id)} ,groupKeys=[2: user_id] ,projection=null ,predicate=null}
+->  LogicalOlapScanOperator {table=12211, selectedPartitionId=null, selectedIndexId=12212, outputColumns=[2: user_id, 4: tag_id], predicate=null, prunedPartitionPredicates=[], limit=-1}
 
 -- !result
-select inspect_mv_plan('user_tags_mv1', true);
+[UC]select inspect_mv_plan('user_tags_mv1', true);
 -- result:
-[REGEX]plan 0.*
+plan 0: 
+LogicalAggregation {type=GLOBAL ,aggregations={5: bitmap_agg=bitmap_agg(4: tag_id)} ,groupKeys=[2: user_id] ,projection=null ,predicate=null}
+->  LogicalOlapScanOperator {table=12211, selectedPartitionId=null, selectedIndexId=12212, outputColumns=[2: user_id, 4: tag_id], predicate=null, prunedPartitionPredicates=[], limit=-1}
 
 -- !result
-select inspect_mv_plan('user_tags_mv1', false);
+[UC]select inspect_mv_plan('user_tags_mv1', false);
 -- result:
-[REGEX]plan 0:.* 
+plan 0: 
+LogicalAggregation {type=GLOBAL ,aggregations={5: bitmap_agg=bitmap_agg(4: tag_id)} ,groupKeys=[2: user_id] ,projection=null ,predicate=null}
+->  LogicalOlapScanOperator {table=12211, selectedPartitionId=null, selectedIndexId=12212, outputColumns=[2: user_id, 4: tag_id], predicate=null, prunedPartitionPredicates=[], limit=-1}
 
+-- !result
+insert into user_tags values('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+[UC]select inspect_mv_refresh_info('user_tags_mv1');
+-- result:
+{"tableToUpdatePartitions":{"user_tags":["p1"]},"baseTableVisibleVersionMap":{"user_tags":{"p1":{"id":12210,"version":8,"lastRefreshTime":1750235292626,"lastFileModifiedTime":-1,"fileNumber":-1}}},"baseTableInfoVisibleVersionMap":{}}
+-- !result
+[UC]select inspect_table_partition_info('user_tags');
+-- result:
+{"p1":{"id":12210,"version":9,"lastRefreshTime":1750235294261,"lastFileModifiedTime":-1,"fileNumber":-1}}
 -- !result
