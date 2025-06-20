@@ -916,7 +916,7 @@ public class InsertPlanner {
             return new PhysicalPropertySet();
         }
 
-        List<Column> columns = table.getFullSchema();
+        List<Column> columns = outputFullSchema;
         Preconditions.checkState(columns.size() == outputColumns.size(),
                 "outputColumn's size must equal with table's column size");
 
