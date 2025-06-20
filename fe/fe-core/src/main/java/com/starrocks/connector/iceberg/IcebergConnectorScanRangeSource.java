@@ -190,6 +190,7 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
         }
         return res;
     }
+
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -201,6 +202,12 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
 
         hdfsScanRange.setOffset(file.content() == FileContent.DATA ? task.start() : 0);
         hdfsScanRange.setLength(file.content() == FileContent.DATA ? task.length() : file.fileSizeInBytes());
+
+        boolean isFirstSplit = (hdfsScanRange.getOffset() == 0);
+        // But sometimes first task offset is 4. For example, the first four bytes are magic bytes in parquet file.
+        if (file.splitOffsets() != null && !file.splitOffsets().isEmpty()) {
+            isFirstSplit |= (file.splitOffsets().get(0) == hdfsScanRange.getOffset());
+        }
 
         if (!partitionSlotIdsCache.containsKey(file.specId())) {
             hdfsScanRange.setPartition_id(-1);
@@ -243,6 +250,8 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
         }
 
         hdfsScanRange.setExtended_columns(extendedColumns);
+        hdfsScanRange.setRecord_count(file.recordCount());
+        hdfsScanRange.setIs_first_split(isFirstSplit);
         return hdfsScanRange;
     }
 
@@ -319,7 +328,7 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
     }
 
     private PartitionKey getPartitionKey(StructLike partition, PartitionSpec spec, List<Integer> indexes,
-                                           BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
+                                         BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
         List<String> partitionValues = new ArrayList<>();
         List<Column> cols = new ArrayList<>();
         indexes.forEach((index) -> {
