@@ -685,24 +685,7 @@ public class MvRewritePreprocessor {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
                 }
-<<<<<<< HEAD
-                Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-                if (!checkMvPartitionNamesToRefresh(mv, partitionNamesToRefresh, mvPlanContext)) {
-                    continue;
-                }
-                logMVPrepare(mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
-                        MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
-
-                MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
-                        mvUpdateInfo, queryTables, wrapper.getLevel());
-                if (materializationContext == null) {
-                    continue;
-                }
-                queryMaterializationContext.addValidCandidateMV(materializationContext);
-                logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
-=======
                 mvInfos.add(Pair.create(wrapper, mvUpdateInfo));
->>>>>>> e838337a53 ([Enhancement] Support materialized view concurrent prepare (#58836))
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), DebugUtil.getStackTrace(e));
