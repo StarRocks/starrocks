@@ -393,6 +393,17 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
+    // There are several possible cases for getting tablet metadata:
+    // 1. If the partition is an bundle partition (in cache), and version is kInitialVersion
+    //    then we will read the initial metadata from the initial metadata location.
+    // 2. If the partition is an bundle partition (in cache), and version is not kInitialVersion
+    //    then we will first try to read the metadata from the bundle metadata location,
+    //    if not found, then we will read the metadata from the tablet metadata.
+    //    That is because bundle file table may be altered, so bundle partition cache may wasn't correct.
+    // 3. If the partition is not an bundle partition (not in cache), then we will read the metadata from the tablet
+    //    metadata location directly.
+    //    If not found, then we will read the metadata from the tablet initial metadata location,
+    //    That is also because bundle file table may be altered, so bundle partition cache may wasn't correct.
     if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
         if (version == kInitialVersion) {
             // Handle tablet initial metadata
@@ -408,17 +419,6 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
     } else {
         tablet_metadata_or =
                 get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
-        if (!tablet_metadata_or.status().is_not_found()) {
-            return tablet_metadata_or;
-        }
-        if (tablet_metadata_or.status().is_not_found() && version == kInitialVersion) {
-            // Handle tablet initial metadata
-            tablet_metadata_or =
-                    get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
-        } else if (tablet_metadata_or.status().is_not_found()) {
-            // get single tablet metadata
-            tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
-        }
     }
 
     if (!tablet_metadata_or.ok()) {
@@ -449,6 +449,12 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         if (metadata_or.status().is_not_found()) {
             metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
         }
+    }
+
+    if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion) {
+        // If the metadata is not found, we will try to read the initial metadata at least
+        std::string new_path = join_path(prefix_name(path), tablet_initial_metadata_filename());
+        metadata_or = get_tablet_metadata(new_path, fill_cache, expected_gtid, fs);
     }
 
     if (!metadata_or.ok()) {
