@@ -907,12 +907,13 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
 }
 
 TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
+    expr_node.type = type_arr_int.to_thrift();
+    expr_node.is_nullable = true;
 
     std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_BOOLEAN));
-
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
 
     auto array0 = ColumnHelper::create_column(type_arr_int, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
@@ -938,12 +939,13 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
 }
 
 TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnElse) {
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
+    expr_node.type = type_arr_int.to_thrift();
+    expr_node.is_nullable = true;
 
     std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_BOOLEAN));
-
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
 
     auto array0 = ColumnHelper::create_column(type_arr_int, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
