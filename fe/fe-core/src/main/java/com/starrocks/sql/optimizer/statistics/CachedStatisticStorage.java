@@ -614,7 +614,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     public MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
-        if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
+        if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
             return MultiColumnCombinedStatistics.EMPTY;
         }
 
@@ -636,6 +637,11 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     @Override
     public void refreshMultiColumnStatistics(Long tableId,  boolean isSync) {
         try {
+            if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
+                    !StatisticUtils.checkStatisticTableStateNormal()) {
+                return;
+            }
+
             MultiColumnCombinedStatsCacheLoader loader = new MultiColumnCombinedStatsCacheLoader();
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> future =
                     loader.asyncLoad(tableId, statsCacheRefresherExecutor);

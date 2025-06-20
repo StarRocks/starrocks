@@ -164,6 +164,12 @@ message MetadataUpdateInfoPB {
     optional PersistentIndexTypePB persistent_index_type = 3;
 }
 
+message SharedTabletMetadataPB {
+    map<int64, int64> tablet_to_schema = 1; // tablet id -> schema id
+    map<int64, TabletSchemaPB> schemas = 2;
+    map<int64, PagePointerPB> tablet_meta_pages = 3;
+}
+
 message TxnLogPB {
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;

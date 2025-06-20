@@ -39,3 +39,240 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
+
+
+
+
+
+
+-- name: test_multi_partition_ttl
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE ss(event_day DATETIME, pv BIGINT) PARTITION BY pv, date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "event_day >= current_date() - interval 3 day");
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT "",
+  `__generated_partition_column_0` datetime NULL AS date_trunc('day', `event_day`) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`, `pv`)
+PARTITION BY (`pv`,`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_retention_condition" = "event_day >= current_date() - interval 3 day",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+CREATE TABLE ss1(event_day DATETIME, pv BIGINT) PARTITION BY pv, date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "event_day >= current_date() - interval 3 day and pv = 1");
+-- result:
+-- !result
+show create table ss1;
+-- result:
+ss1	CREATE TABLE `ss1` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT "",
+  `__generated_partition_column_0` datetime NULL AS date_trunc('day', `event_day`) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`, `pv`)
+PARTITION BY (`pv`,`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_retention_condition" = "event_day >= current_date() - interval 3 day and pv = 1",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+insert into ss1 values(current_date(), 1);
+-- result:
+-- !result
+insert into ss1 values(current_date() - interval 4 day, 1);
+-- result:
+-- !result
+insert into ss1 values(current_date(), 2);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss1"
+-- result:
+0
+Success
+-- !result
+select count(*) from ss1;
+-- result:
+1
+-- !result
+-- name: test_alter_multi_partition_ttl
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE ss1(event_day DATETIME, pv BIGINT) PARTITION BY pv, date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "event_day >= current_date() - interval 3 day");
+-- result:
+-- !result
+show create table ss1;
+-- result:
+ss1	CREATE TABLE `ss1` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT "",
+  `__generated_partition_column_0` datetime NULL AS date_trunc('day', `event_day`) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`, `pv`)
+PARTITION BY (`pv`,`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_retention_condition" = "event_day >= current_date() - interval 3 day",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+insert into ss1 values(current_date(), 1);
+-- result:
+-- !result
+insert into ss1 values(current_date() - interval 4 day, 1);
+-- result:
+-- !result
+insert into ss1 values(current_date(), 2);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss1"
+-- result:
+0
+Success
+-- !result
+select count(*) from ss1;
+-- result:
+2
+-- !result
+ALTER TABLE ss1 set ("partition_retention_condition" = "event_day >= current_date() - interval 3 day and pv = 1");
+-- result:
+-- !result
+show create table ss1;
+-- result:
+ss1	CREATE TABLE `ss1` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT "",
+  `__generated_partition_column_0` datetime NULL AS date_trunc('day', `event_day`) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`, `pv`)
+PARTITION BY (`pv`,`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_retention_condition" = "event_day >= current_date() - interval 3 day and pv = 1",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss1"
+-- result:
+0
+Success
+-- !result
+select count(*) from ss1;
+-- result:
+1
+-- !result
+-- name: test_multi_partition_ttl_with_str2date
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE ss(event_day string, pv BIGINT) PARTITION BY pv, date_trunc('day', str2date(event_day, '%Y-%m-%d')) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "str2date(event_day, '%Y-%m-%d') >= current_date() - interval 3 day");
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` varchar(65533) NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT "",
+  `__generated_partition_column_0` date NULL AS date_trunc('day', str2date(`event_day`, '%Y-%m-%d')) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+PARTITION BY (`pv`,`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_retention_condition" = "str2date(event_day, '%Y-%m-%d') >= current_date() - interval 3 day",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+insert into ss values(current_date(), 1);
+-- result:
+-- !result
+insert into ss values(current_date() - interval 4 day, 1);
+-- result:
+-- !result
+insert into ss values(current_date(), 2);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss"
+-- result:
+0
+Success
+-- !result
+select count(*) from ss;
+-- result:
+2
+-- !result
+DROP TABLE ss;
+-- result:
+-- !result
+CREATE TABLE ss(event_day string, pv BIGINT) PARTITION BY pv, str2date(event_day, '%Y-%m-%d') DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "str2date(event_day, '%Y-%m-%d') >= current_date() - interval 3 day");
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` varchar(65533) NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT "",
+  `__generated_partition_column_0` date NULL AS str2date(`event_day`, '%Y-%m-%d') COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+PARTITION BY (`pv`,`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_retention_condition" = "str2date(event_day, '%Y-%m-%d') >= current_date() - interval 3 day",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+insert into ss values(current_date(), 1);
+-- result:
+-- !result
+insert into ss values(current_date() - interval 4 day, 1);
+-- result:
+-- !result
+insert into ss values(current_date(), 2);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss"
+-- result:
+0
+Success
+-- !result
+select count(*) from ss;
+-- result:
+2
+-- !result

@@ -30,6 +30,7 @@
 #include "gflags/gflags.h"
 #include "util/await.h"
 #include "util/debug_util.h"
+#include "util/defer_op.h"
 #include "util/lru_cache.h"
 #include "util/sha.h"
 #include "util/starrocks_metrics.h"
@@ -64,7 +65,10 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 namespace fslib = staros::starlet::fslib;
 
 StarOSWorker::StarOSWorker()
-        : _mtx(), _shards(), _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+        : _mtx(),
+          _cache_mtx(),
+          _shards(),
+          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
 
 StarOSWorker::~StarOSWorker() = default;
 
@@ -304,6 +308,9 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
     case staros::FileStoreType::ADLS2:
         scheme = "adls2://";
         break;
+    case staros::FileStoreType::GS:
+        scheme = "gs://";
+        break;
     default:
         return absl::InvalidArgumentError("Unknown shard storage scheme!");
     }
@@ -337,9 +344,12 @@ StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration
     std::shared_ptr<fslib::FileSystem> fs = std::move(fs_or).value();
 
     // Put the FileSysatem into LRU cache
-    //
-    // TODO: need to handle the race condition properly by double check if the key exists
-    // before insert under lock protection.
+    std::unique_lock l(_cache_mtx);
+    value_or = find_fs_cache(cache_key);
+    if (value_or.ok()) {
+        VLOG(9) << "Share filesystem";
+        return value_or;
+    }
     auto fs_cache_key = insert_fs_cache(cache_key, fs);
 
     return std::make_pair(std::move(fs_cache_key), std::move(fs));
@@ -411,17 +421,24 @@ absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::Fi
         return absl::NotFoundError(key + " not found");
     }
 
+    DeferOp op([this, handle] { _fs_cache->release(handle); });
+
     auto value = static_cast<CacheValue*>(_fs_cache->value(handle));
+
+    auto fs_cache_ttl_sec = config::starlet_filesystem_instance_cache_ttl_sec;
+    if (fs_cache_ttl_sec >= 0) {
+        int32_t duration = MonotonicSeconds() - value->created_time_sec;
+        if (duration > fs_cache_ttl_sec) {
+            return absl::NotFoundError(key + " is expired");
+        }
+    }
+
     // The value->key may be expired in a very short critical moment.
     // At that moment, the value->key is not referenced by anyone but it's shared_ptr deleter haven't be executed,
     // so the item haven't be removed from cache yet.
     // In this situation, this function will return a null key and a valid fs instance.
     // So the caller cannot assume the returned key always valid.
-    auto ret = std::make_pair(value->key.lock(), value->fs);
-
-    _fs_cache->release(handle);
-
-    return ret;
+    return std::make_pair(value->key.lock(), value->fs);
 }
 
 Status to_status(const absl::Status& absl_status) {

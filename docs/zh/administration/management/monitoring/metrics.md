@@ -603,7 +603,7 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：Warehouse 下运行中的 RESTORE 任务的数量。对于存算一体集群，此项仅监控 Default Warehouse。对于存算分离集群，该值始终为 `0`。
 
-### starrocks_fe_memory
+### starrocks_fe_memory_usage
 
 - 单位：Byte 或个
 - 类型：瞬时值
@@ -1667,3 +1667,13 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：所有 Routine Load 作业导入错误数据的总行数。
+
+### starrocks_fe_routine_load_max_lag_of_partition
+
+- 单位：-
+- 描述：每个 Routine Load 作业最大的 Kafka Partition Offset Lag。只有当 FE 配置 `enable_routine_load_lag_metrics` 为 `true` 并且 Offset Lag 大于等于 FE 配置 `min_routine_load_lag_for_metrics` 时才会收集。`enable_routine_load_lag_metrics` 默认为 `false`，`min_routine_load_lag_for_metrics` 默认为 `10000`。
+
+### starrocks_fe_sql_block_hit_count
+
+- 单位：个
+- 描述: 黑名单 SQL 被拦截的次数。

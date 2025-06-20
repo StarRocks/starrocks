@@ -10,7 +10,7 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
-# BE Configuration
+# BE 設定
 
 <BEConfigMethod />
 
@@ -1553,6 +1553,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: パフォーマンスを向上させるために Parquet ファイルのページインデックスを有効にするかどうかを制御するブール値。`true` はページインデックスを有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: v3.3
 
+##### parquet_reader_bloom_filter_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: パフォーマンスを向上させるために Parquet ファイルのブルームフィルターを有効にするかどうかを制御するブール値。`true` はブルームフィルタを有効にすることを示し、`false` は無効にすることを示す。システム変数 `enable_parquet_reader_bloom_filter` を使用して、セッションレベルでこの動作を制御することもできます。Parquet におけるブルームフィルタは、**各行グループ内のカラムレベルで管理されます**。Parquet ファイルに特定の列に対するブルームフィルタが含まれている場合、クエリはそれらの列に対する述語を使用して行グループを効率的にスキップすることができます。
+- 導入バージョン: v3.5
+
 ##### io_coalesce_adaptive_lazy_active
 
 - デフォルト: true
@@ -1699,6 +1708,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: `object_storage_request_timeout_ms` の別名。詳細は [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) を参照してください。
 - 導入バージョン: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンスのキャッシュ容量。
+- 導入バージョン: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンス キャッシュの有効期限。
+- 導入バージョン: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - デフォルト: 1048576
@@ -1757,11 +1784,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_mem_size
 
-- デフォルト: 10%
+- デフォルト: 0
 - タイプ: String
 - 単位: -
 - 可変: いいえ
-- 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。このパラメータの値を少なくとも 10 GB に設定することをお勧めします。
+- 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。
 - 導入バージョン: -
 
 ##### datacache_disk_size

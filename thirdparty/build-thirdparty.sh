@@ -302,13 +302,13 @@ build_llvm() {
 
     check_if_source_exist $LLVM_SOURCE
 
-    cd $TP_SOURCE_DIR
+    cd ${TP_SOURCE_DIR}/${LLVM_SOURCE}
     mkdir -p llvm-build
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
 
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -S ../${LLVM_SOURCE}/llvm -G "${CMAKE_GENERATOR}" \
+    $CMAKE_CMD -S ../llvm -G "${CMAKE_GENERATOR}" \
     -DLLVM_ENABLE_EH:Bool=True \
     -DLLVM_ENABLE_RTTI:Bool=True \
     -DLLVM_ENABLE_PIC:Bool=True \
@@ -322,11 +322,11 @@ build_llvm() {
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
     -DBUILD_SHARED_LIBS:BOOL=False \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
+    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
     # TODO(yueyang): Add more targets.
     # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
+    REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
 
@@ -637,7 +637,7 @@ build_pulsar() {
     cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
-        -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
+        -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
     ${BUILD_SYSTEM} -j$PARALLEL
 
     cp lib/libpulsar.a $TP_INSTALL_DIR/lib/
@@ -1388,6 +1388,48 @@ build_icu() {
     restore_compile_flags
 }
 
+build_libxml2() {
+    check_if_source_exist $LIBXML2_SOURCE
+    cd $TP_SOURCE_DIR/$LIBXML2_SOURCE
+
+    ${CMAKE_CMD} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DLIBXML2_WITH_ICONV=OFF \
+        -DLIBXML2_WITH_LZMA=OFF \
+        -DLIBXML2_WITH_PYTHON=OFF \
+        -DLIBXML2_WITH_ZLIB=OFF \
+        -DLIBXML2_WITH_TESTS=OFF \
+        -DCMAKE_INSTALL_LIBDIR=lib
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+build_azure() {
+    check_if_source_exist $AZURE_SOURCE
+    cd $TP_SOURCE_DIR/$AZURE_SOURCE
+
+    export AZURE_SDK_DISABLE_AUTO_VCPKG=true
+    export PKG_CONFIG_LIBDIR=$TP_INSTALL_DIR
+
+    ${CMAKE_CMD} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DDISABLE_AZURE_CORE_OPENTELEMETRY=ON \
+        -DWARNINGS_AS_ERRORS=OFF \
+        -DCURL_INCLUDE_DIR=$TP_INSTALL_DIR/include \
+        -DCURL_LIBRARY=$TP_INSTALL_DIR/lib/libcurl.a \
+        -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DLibXml2_ROOT=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+
+    unset AZURE_SDK_DISABLE_AUTO_VCPKG
+    unset PKG_CONFIG_LIBDIR
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1484,6 +1526,8 @@ build_clucene
 build_simdutf
 build_poco
 build_icu
+build_libxml2
+build_azure
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

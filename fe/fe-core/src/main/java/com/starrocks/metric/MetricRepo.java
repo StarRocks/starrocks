@@ -256,13 +256,10 @@ public final class MetricRepo {
             }
 
             for (JobState state : JobState.values()) {
-                GaugeMetric<Long> gauge = new GaugeMetric<Long>("job",
+                Metric<Long> gauge = new LeaderAwareGaugeMetricLong("job",
                         MetricUnit.NOUNIT, "job statistics") {
                     @Override
-                    public Long getValue() {
-                        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                            return 0L;
-                        }
+                    public Long getValueLeader() {
                         return loadManger.getLoadJobNum(state, jobType);
                     }
                 };
@@ -280,13 +277,10 @@ public final class MetricRepo {
                 continue;
             }
 
-            GaugeMetric<Long> gauge = new GaugeMetric<Long>("job",
+            Metric<Long> gauge = new LeaderAwareGaugeMetricLong("job",
                     MetricUnit.NOUNIT, "job statistics") {
                 @Override
-                public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                        return 0L;
-                    }
+                public Long getValueLeader() {
                     if (jobType == AlterJobV2.JobType.SCHEMA_CHANGE) {
                         return alter.getSchemaChangeHandler()
                                 .getAlterJobV2Num(AlterJobV2.JobState.RUNNING);
@@ -327,39 +321,38 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
         // scheduled tablet num
-        GaugeMetric<Long> scheduledTabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(
+        Metric<Long> scheduledTabletNum = new LeaderAwareGaugeMetricLong(
                 "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
             @Override
-            public Long getValue() {
-                if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                    return 0L;
-                }
+            public Long getValueLeader() {
                 return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
 
         // routine load jobs
-        RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
-            GaugeMetric<Long> gauge = new GaugeMetric<Long>("routine_load_jobs",
+            Metric<Long> gauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
                     MetricUnit.NOUNIT, "routine load jobs") {
                 @Override
-                public Long getValue() {
+                public Long getValueLeader() {
+                    RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
                     if (null == routineLoadManger) {
                         return 0L;
+                    } else {
+                        return (long) routineLoadManger.getRoutineLoadJobByState(Sets.newHashSet(state)).size();
                     }
-                    return (long) routineLoadManger.getRoutineLoadJobByState(Sets.newHashSet(state)).size();
                 }
             };
             gauge.addLabel(new MetricLabel("state", state.name()));
             STARROCKS_METRIC_REGISTER.addMetric(gauge);
         }
 
-        GaugeMetric<Long> routineLoadUnstableJobsGauge = new GaugeMetric<Long>("routine_load_jobs",
+        Metric<Long> routineLoadUnstableJobsGauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
                 MetricUnit.NOUNIT, "routine load jobs") {
             @Override
-            public Long getValue() {
+            public Long getValueLeader() {
+                RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
                 if (null == routineLoadManger) {
                     return 0L;
                 }
@@ -701,13 +694,10 @@ public final class MetricRepo {
             }
 
             // tablet number of each backend
-            GaugeMetric<Long> tabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(TABLET_NUM,
+            Metric<Long> tabletNum = new LeaderAwareGaugeMetricLong(TABLET_NUM,
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
-                public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                        return 0L;
-                    }
+                public Long getValueLeader() {
                     return invertedIndex.getTabletNumByBackendId(beId);
                 }
             };
@@ -716,14 +706,10 @@ public final class MetricRepo {
             STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
 
             // max compaction score of tablets on each backend
-            GaugeMetric<Long> tabletMaxCompactionScore = (GaugeMetric<Long>) new GaugeMetric<Long>(
-                    TABLET_MAX_COMPACTION_SCORE, MetricUnit.NOUNIT,
-                    "tablet max compaction score") {
+            Metric<Long> tabletMaxCompactionScore = new LeaderAwareGaugeMetricLong(
+                    TABLET_MAX_COMPACTION_SCORE, MetricUnit.NOUNIT, "tablet max compaction score") {
                 @Override
-                public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                        return 0L;
-                    }
+                public Long getValueLeader() {
                     return be.getTabletMaxCompactionScore();
                 }
             };
@@ -792,6 +778,8 @@ public final class MetricRepo {
                 Collectors.groupingBy(RoutineLoadJob::getWarehouseId)
         );
 
+        List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
+
         // get all partitions offset in a batch api
         for (Map.Entry<Long, List<RoutineLoadJob>> entry : kafkaJobsMp.entrySet()) {
             long warehouseId = entry.getKey();
@@ -822,8 +810,6 @@ public final class MetricRepo {
                 LOG.warn("get batch offsets failed", e);
                 return;
             }
-
-            List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
 
             for (int i = 0; i < kafkaJobs.size(); i++) {
                 KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) kafkaJobs.get(i);
@@ -857,9 +843,9 @@ public final class MetricRepo {
                     routineLoadLags.add(metric);
                 }
             }
-
-            GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
         }
+
+        GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {

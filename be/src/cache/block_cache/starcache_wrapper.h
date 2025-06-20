@@ -14,14 +14,14 @@
 
 #pragma once
 
-#include "cache/block_cache/kv_cache.h"
-#include "cache/status.h"
+#include "cache/block_cache/local_cache.h"
+#include "common/status.h"
 #include "starcache/star_cache.h"
 #include "starcache/time_based_cache_adaptor.h"
 
 namespace starrocks {
 
-class StarCacheWrapper : public KvCache {
+class StarCacheWrapper : public LocalCache {
 public:
     StarCacheWrapper() = default;
     ~StarCacheWrapper() override = default;

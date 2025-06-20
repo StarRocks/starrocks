@@ -2863,6 +2863,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: A boolean value to control whether to enable the pageindex of Parquet file to improve performance. `true` indicates enabling pageindex, and `false` indicates disabling it.
 - Introduced in: v3.3
 
+##### parquet_reader_bloom_filter_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on session level using the system variable `enable_parquet_reader_bloom_filter`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
+- Introduced in: v3.5
+
 <!--
 ##### io_coalesce_read_max_buffer_size
 
@@ -3592,6 +3601,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
 - Introduced in: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The cache capacity of starlet filesystem instances.
+- Introduced in: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The cache expiration time of starlet filesystem instances.
+- Introduced in: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3795,6 +3822,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The number of loops to be waited when the BE/CN process exits. Each loop is a fixed interval of 10 seconds. You can set it to `0` to disable the loop wait. From v3.4 onwards, this item is changed to mutable and its default value is changed from `0` to `2`.
 - Introduced in: v2.5
 
+##### graceful_exit_wait_for_frontend_heartbeat
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit. When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC, ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
+- Introduced in: v3.4.5
+
 ### Data Lake
 
 ##### jdbc_connection_pool_size
@@ -3945,11 +3981,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_mem_size
 
-- Default: 10%
+- Default: 0
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). It is recommended to set the value of this parameter to at least 10 GB.
+- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`).
 - Introduced in: -
 
 ##### datacache_disk_size
@@ -4079,6 +4115,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
 - Introduced in: v3.1.0
+
+##### rocksdb_write_buffer_memory_percent
+
+- Default: 5
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the memory percent of write buffer for meta in rocksdb. default is 5% of system memory. However, aside from this, the final calculated size of the write buffer memory will not be less than 64MB nor exceed 1G (rocksdb_max_write_buffer_memory_bytes)
+- Introduced in: v3.5.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- Default: 1073741824
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the max size of the write buffer for meta in rocksdb. Default is 1GB.
+- Introduced in: v3.5.0
 
 <!--
 ##### datacache_block_size
@@ -5267,3 +5321,21 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
 - Introduced in: -
+
+##### load_replica_status_check_interval_ms_on_success
+
+- Default: 15000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc successes.
+- Introduced in: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
+- Introduced in: 3.5.1

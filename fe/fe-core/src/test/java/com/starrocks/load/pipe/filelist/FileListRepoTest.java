@@ -16,6 +16,11 @@ package com.starrocks.load.pipe.filelist;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -48,6 +53,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.starrocks.load.pipe.PipeFileRecord.JSON_FIELD_ERROR_MESSAGE;
 
 public class FileListRepoTest {
 
@@ -120,6 +127,15 @@ public class FileListRepoTest {
                         "NULL, '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')",
                 valueList);
+
+        // test error message
+        InvalidOlapTableStateException exp = InvalidOlapTableStateException.of(OlapTable.OlapTableState.SCHEMA_CHANGE, "my_tbl");
+        String errorInfo = exp.getMessage();
+        json = "{\"errorMessage\":\"" + errorInfo + "\"}";
+        JsonObject infoJson = (JsonObject) JsonParser.parseString(json);
+        JsonElement errorMessageElement = infoJson.get(JSON_FIELD_ERROR_MESSAGE);
+        Assert.assertTrue(errorMessageElement.getAsString().contains(
+                "A schema change operation is in progress on the table my_tbl"));
     }
 
     @Test
@@ -149,11 +165,11 @@ public class FileListRepoTest {
         // add files
         sql = RepoAccessor.getInstance().buildSqlAddFiles(records);
         Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list" +
-                        "(`id`, `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, " +
+                        "(`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, " +
                         "`staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label`) VALUES " +
-                "(DEFAULT, 1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
+                "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')," +
-                "(DEFAULT, 1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
+                "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')",
                 sql);
 
@@ -298,10 +314,10 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "INSERT INTO _statistics_.pipe_file_list(`id`, `pipe_id`, `file_name`, `file_version`, " +
+                        "INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
                                 "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
                                 "`error_info`, `insert_label`) VALUES " +
-                                "(DEFAULT, 1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, " +
+                                "(1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, " +
                                 "NULL, NULL, '{\"errorMessage\":null}', '')");
                 result = Lists.newArrayList();
             }
@@ -386,11 +402,10 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        String.format("INSERT INTO _statistics_.pipe_file_list(`id`, `pipe_id`, `file_name`, `file_version`, " +
-                            "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
-                                    "`error_info`, `insert_label`) VALUES (DEFAULT, 1, '%d.parquet', '%d', %d, 'UNLOADED', " +
-                                        "NULL, NULL, NULL, NULL, '{\"errorMessage\":null}', '')",
-                                            recordSize, recordSize, recordSize));
+                        String.format("INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
+                                "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
+                                "`error_info`, `insert_label`) VALUES (1, '%d.parquet', '%d', %d, 'UNLOADED', NULL, NULL, " +
+                                "NULL, NULL, '{\"errorMessage\":null}', '')", recordSize, recordSize, recordSize));
                 times = 1;
                 result = null;
             }

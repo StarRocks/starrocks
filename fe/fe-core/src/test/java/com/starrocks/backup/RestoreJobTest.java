@@ -143,9 +143,6 @@ public class RestoreJobTest {
         }
     }
 
-    @Mocked
-    private SystemInfoService systemInfoService;
-
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
@@ -233,6 +230,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupMultiSubPartitionTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
 
@@ -256,7 +254,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -420,6 +418,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupRangeTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -440,7 +439,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -591,6 +590,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupListTable() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -611,7 +611,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -809,6 +809,7 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreView() {
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -890,7 +891,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
@@ -1007,5 +1008,32 @@ public class RestoreJobTest {
         job.addRestoredFunctions(db);
         job.run();
         job.run();
+    }
+
+    @Test
+    public void testReplayAddExpiredJob() {
+        RestoreJob job1 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL2_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
+        RestoreJob job3 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupHandler localBackupHandler = new BackupHandler();
+        job1.setState(RestoreJob.RestoreJobState.PENDING);
+        localBackupHandler.replayAddJob(job1);
+        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isPending());
+        int oldVal = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = 0;
+        job3.setState(RestoreJob.RestoreJobState.FINISHED);
+        localBackupHandler.replayAddJob(job3);
+        Config.history_job_keep_max_second = oldVal;
+        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
     }
 }

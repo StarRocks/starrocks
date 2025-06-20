@@ -463,6 +463,11 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayDropBackend(be);
                     break;
                 }
+                case OperationType.OP_UPDATE_HISTORICAL_NODE: {
+                    UpdateHistoricalNodeLog log = (UpdateHistoricalNodeLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayUpdateHistoricalNode(log);
+                    break;
+                }
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.data();
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
@@ -969,6 +974,11 @@ public class EditLog {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.data();
                     globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+                    break;
+                }
+                case OperationType.OP_MODIFY_COLUMN_COMMENT: {
+                    ModifyColumnCommentLog modifyColumnCommentLog = (ModifyColumnCommentLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyColumnComment(opCode, modifyColumnCommentLog);
                     break;
                 }
                 case OperationType.OP_CREATE_CATALOG: {
@@ -1491,6 +1501,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
     }
 
+    public void logUpdateHistoricalNode(UpdateHistoricalNodeLog log) {
+        logEdit(OperationType.OP_UPDATE_HISTORICAL_NODE, log);
+    }
+
     public void logAddFrontend(Frontend fe) {
         logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
     }
@@ -1882,6 +1896,10 @@ public class EditLog {
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
+
+    public void logModifyColumnComment(ModifyColumnCommentLog log) {
+        logEdit(OperationType.OP_MODIFY_COLUMN_COMMENT, log);
     }
 
     public void logCreateCatalog(Catalog log) {

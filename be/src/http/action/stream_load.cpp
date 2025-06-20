@@ -48,6 +48,7 @@
 
 #include "agent/master_info.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -354,6 +355,12 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
     if (ctx->enable_batch_write) {
         return Status::OK();
+    }
+
+    // Check if the process is going to quit before beginning the transaction, to avoid
+    // creating a dangling transaction on FE side.
+    if (process_exit_in_progress()) {
+        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
     }
 
     // begin transaction

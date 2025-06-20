@@ -50,6 +50,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -65,14 +66,14 @@ import java.util.Optional;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MaterializedViewTest {
+public class MaterializedViewTest extends StarRocksTestBase {
 
     private static List<Column> columns = new LinkedList<Column>();
     private ConnectContext connectContext;
     private StarRocksAssert starRocksAssert;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
@@ -84,6 +85,25 @@ public class MaterializedViewTest {
         columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
         columns.add(new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", ""));
         columns.add(new Column("v1", ScalarType.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
+
+        super.before();
+
+        starRocksAssert
+                .withDatabase("test")
+                .useDatabase("test")
+                .withTable("CREATE TABLE base_t1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
     }
 
     @Test
@@ -704,6 +724,46 @@ public class MaterializedViewTest {
         System.out.println(showResultSet.getResultRows());
     }
 
+    private String getShowMVResult(String mvName) throws Exception {
+        String showCreateSql = "show create materialized view " + mvName + ";";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
+        ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+        System.out.println(showResultSet.getResultRows());
+        List<List<String>> result = showResultSet.getResultRows();
+        Assert.assertEquals(1, result.size());
+        String actual = result.get(0).get(1);
+        System.out.println(actual);
+        return actual;
+    }
+
+    private void assertShowMVContains(String mvName, String expect) throws Exception {
+        String actual = getShowMVResult(mvName);
+        Assert.assertTrue(actual.contains(expect));
+    }
+
+    private void assertShowMVNotContains(String mvName, String expect) throws Exception {
+        String actual = getShowMVResult(mvName);
+        Assert.assertFalse(actual.contains(expect));
+    }
+
+    @Test
+    public void testAlterMVBloomFilterIndexes1() throws Exception {
+        String sql = "create materialized view test_mv1 " +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replication_num\" = \"1\""
+                + ")" +
+                "as select k2, sum(v1) as total from base_t1 group by k2;";
+        starRocksAssert.withMaterializedView(sql);
+        assertShowMVNotContains("test_mv1", "bloom_filter_columns");
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW test_mv1 SET (" +
+                "\"bloom_filter_columns\" = \"k2\");");
+        assertShowMVContains("test_mv1", "\"bloom_filter_columns\" = \"k2\"");
+    }
+
     @Test
     public void testCreateMVWithIndex() throws Exception {
         String mvSqlWithBitMapAndBloomfilter = "create materialized view index_mv_to_check " +
@@ -895,7 +955,7 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testMaterializedViewReload() throws Exception {
+    public void testMaterializedViewReloadNotPostLoadImage() throws Exception {
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE base_table\n" +
                         "(\n" +
@@ -926,6 +986,7 @@ public class MaterializedViewTest {
                         "REFRESH manual\n" +
                         "as select k1,k2,v1 from base_mv;");
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "base_table");
         MaterializedView baseMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "base_mv"));
         MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -934,26 +995,123 @@ public class MaterializedViewTest {
                 .getTable(testDb.getFullName(), "mv2"));
 
         {
-            // before post image reload, all materialized views has `reloaded` flag set to false
-            Assert.assertFalse(mv1.isReloaded());
-            Assert.assertFalse(mv2.isReloaded());
-            Assert.assertFalse(baseMv.isReloaded());
+            Config.enable_mv_post_image_reload_cache = false;
+            boolean postLoadImage = false;
 
-            GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+            baseMv.setReloaded(false);
+            baseTable.removeRelatedMaterializedView(baseMv.getMvId());
+            baseMv.removeRelatedMaterializedView(mv1.getMvId());
+            baseMv.removeRelatedMaterializedView(mv2.getMvId());
 
-            // after post image reload, all materialized views should have `reloaded` flag reset to false
-            Assert.assertFalse(mv1.isReloaded());
-            Assert.assertFalse(mv2.isReloaded());
-            Assert.assertFalse(baseMv.isReloaded());
+            mv1.onReload(postLoadImage);
+            mv2.onReload(postLoadImage);
+
+            Assert.assertFalse(baseMv.hasReloaded());
+            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+            Assert.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
+            Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));
+            Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv2.getMvId()));
         }
 
         {
+            Config.enable_mv_post_image_reload_cache = true;
             boolean postLoadImage = true;
+
+            baseMv.setReloaded(false);
+            baseTable.removeRelatedMaterializedView(baseMv.getMvId());
+            baseMv.removeRelatedMaterializedView(mv1.getMvId());
+            baseMv.removeRelatedMaterializedView(mv2.getMvId());
+
             mv1.onReload(postLoadImage);
             mv2.onReload(postLoadImage);
-            Assert.assertTrue(mv1.isReloaded());
-            Assert.assertTrue(mv2.isReloaded());
-            Assert.assertTrue(baseMv.isReloaded());
+
+            Assert.assertTrue(baseMv.hasReloaded());
+            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+            Assert.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
+            Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));
+            Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv2.getMvId()));
         }
+
+        {
+            Config.enable_mv_post_image_reload_cache = true;
+            boolean postLoadImage = false;
+
+            baseMv.setReloaded(false);
+            baseTable.removeRelatedMaterializedView(baseMv.getMvId());
+            baseMv.removeRelatedMaterializedView(mv1.getMvId());
+            baseMv.removeRelatedMaterializedView(mv2.getMvId());
+
+            mv1.onReload(postLoadImage);
+            mv2.onReload(postLoadImage);
+
+            Assert.assertFalse(baseMv.hasReloaded());
+            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+            Assert.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
+            Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));
+            Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv2.getMvId()));
+        }
+    }
+
+
+    @Test
+    public void testMaterializedViewReloadPostLoadImage() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE base_table\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH manual\n" +
+                        "as select k1,k2,v1 from base_table;")
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH manual\n" +
+                        "as select k1,k2,v1 from base_mv;")
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv2\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH manual\n" +
+                        "as select k1,k2,v1 from base_mv;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "base_table");
+        MaterializedView baseMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "base_mv"));
+        MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv1"));
+        MaterializedView mv2 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv2"));
+
+        baseTable.removeRelatedMaterializedView(baseMv.getMvId());
+        baseMv.removeRelatedMaterializedView(mv1.getMvId());
+        baseMv.removeRelatedMaterializedView(mv2.getMvId());
+
+        Assert.assertFalse(mv1.hasReloaded());
+        Assert.assertFalse(mv2.hasReloaded());
+        Assert.assertFalse(baseMv.hasReloaded());
+
+        Config.enable_mv_post_image_reload_cache = true;
+        // do post image reload
+        GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+
+        // after post image reload, all materialized views should have `reloaded` flag reset to false
+        Assert.assertFalse(mv1.hasReloaded());
+        Assert.assertFalse(mv2.hasReloaded());
+        Assert.assertFalse(baseMv.hasReloaded());
+        Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+        Assert.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
+        Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));
+        Assert.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv2.getMvId()));
     }
 }

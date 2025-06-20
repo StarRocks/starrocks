@@ -56,6 +56,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -570,4 +571,46 @@ TEST_F(SegmentReaderWriterTest, TestTypeConversion) {
         EXPECT_EQ(10, read_chunk->get(0)[1].get_int64());
     }
 }
+
+TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema();
+
+    SegmentWriterOptions opts;
+    shared_ptr<Segment> res;
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    // enable hook_publish_primary_key_tablet
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("ingest_duplicate_column_unique_id");
+    fp->setMode(trigger_mode);
+
+    static int seg_id = 0;
+    std::string filename = strings::Substitute("$0/seg_$1.dat", kSegmentDir, seg_id++);
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+    ASSERT_OK(writer.init());
+
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkHelper::new_chunk(schema, 100);
+    for (size_t rid = 0; rid < 100; ++rid) {
+        auto& cols = chunk->columns();
+        for (int cid = 0; cid < tablet_schema->num_columns(); ++cid) {
+            int row_block_id = rid / opts.num_rows_per_block;
+            cols[cid]->append_datum(DefaultIntGenerator(rid, cid, row_block_id));
+        }
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+
+    uint64_t file_size, index_size, footer_position;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    auto result = Segment::open(_fs, FileInfo{filename}, 0, tablet_schema);
+    ASSERT_TRUE(!result.ok());
+
+    Status st = result.status();
+    EXPECT_EQ(st.code(), TStatusCode::INTERNAL_ERROR)
+            << "Expected InternalError, got: " << st.code() << ", message: " << st.message();
+    EXPECT_EQ(st.message(), "Duplicate column id found in tablet schema")
+            << "Error message should indicate duplicate column id in tablet schema.";
+}
+
 } // namespace starrocks

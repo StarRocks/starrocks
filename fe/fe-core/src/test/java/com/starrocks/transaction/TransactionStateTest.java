@@ -21,7 +21,12 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
@@ -144,27 +149,46 @@ public class TransactionStateTest {
     }
 
     @Test
-    public void testCommitInfos() {
-        UUID uuid = UUID.randomUUID();
-        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
-                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.NORMAL));
-        TabletCommitInfo info1 = new TabletCommitInfo(10001, 10001);
-        TabletCommitInfo info2 = new TabletCommitInfo(10001, 10002);
-        TabletCommitInfo info3 = new TabletCommitInfo(10002, 10002);
+    public void testCheckReplicaNeedSkip() {
+        TransactionState state = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L), 3000, "label123",
+                UUIDUtil.genTUniqueId(), LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"),
+                50000L, 60 * 1000L);
+
+        PartitionCommitInfo pcInfo = new PartitionCommitInfo(1L, 100L, 1L);
+
+        Tablet tablet0 = new LocalTablet(1001L);
+        Tablet tablet1 = new LocalTablet(10001L);
+        Tablet tablet2 = new LocalTablet(10002L);
+
+        TabletCommitInfo info1 = new TabletCommitInfo(10001L, 10001L);
+        TabletCommitInfo info2 = new TabletCommitInfo(10001L, 10002L);
+        TabletCommitInfo info3 = new TabletCommitInfo(10002L, 10002L);
         List<TabletCommitInfo> infos = new ArrayList<>();
         infos.add(info1);
         infos.add(info2);
         infos.add(info3);
-        transactionState.setTabletCommitInfos(infos);
-        Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.NORMAL));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10001, ReplicaState.NORMAL));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10002, ReplicaState.NORMAL));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10002, 10002, ReplicaState.NORMAL));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.ALTER));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.SCHEMA_CHANGE));
-        Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.CLONE));
+        state.setTabletCommitInfos(infos);
+
+        // replica state is not normal and clone
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.ALTER, 1L, 0), pcInfo));
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.SCHEMA_CHANGE, 1L, 0), pcInfo));
+        Assert.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+        Assert.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.CLONE, 1L, 0), pcInfo));
+
+        // replica is in tabletCommitInfos
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(2L, 10001L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(3L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet2, new Replica(4L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+
+        // replica current version >= commit version
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 100L, 0), pcInfo));
+
+        // follower tabletCommitInfos is null
+        Deencapsulation.setField(state, "tabletCommitInfos", null);
+        Assert.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+
+        // follower tabletCommitInfos is null and unknownReplicas contains the replica
+        state.addUnknownReplica(5L);
+        Assert.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
     }
 }

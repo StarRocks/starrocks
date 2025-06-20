@@ -12,13 +12,13 @@ create security integration oidc properties("jwks_url"="jwks.json", "principal_f
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: missing required property: type.')
 -- !result
-create security integration oidc properties("type"="authentication_openid_connect", "jwks_url"="jwks.json", "principal_field"="sub");
+create security integration oidc properties("type"="authentication_jwt", "jwks_url"="jwks.json", "principal_field"="sub");
 -- result:
 -- !result
 show create security integration oidc;
 -- result:
 oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
-"type" = "authentication_openid_connect",
+"type" = "authentication_jwt",
 "principal_field" = "sub",
 "jwks_url" = "jwks.json"
 )
@@ -29,7 +29,7 @@ alter security integration oidc set ("principal_field"="preferred_name");
 show create security integration oidc;
 -- result:
 oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
-"type" = "authentication_openid_connect",
+"type" = "authentication_jwt",
 "principal_field" = "preferred_name",
 "jwks_url" = "jwks.json"
 )
@@ -53,7 +53,7 @@ alter security integration oidc set ("principal_field"="preferred_name");
 -- result:
 E: (5203, 'Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
-create security integration oidc2 properties("type"="authentication_openid_connect", "jwks_url"="jwks.json", "principal_field"="sub");
+create security integration oidc2 properties("type"="authentication_jwt", "jwks_url"="jwks.json", "principal_field"="sub");
 -- result:
 E: (5203, 'Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result

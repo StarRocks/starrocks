@@ -273,12 +273,17 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         partition.setLastVacuumTime(startTime);
         if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
-            // hasError is false means that the vacuum operation on all tablets was successful.
-            // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
-            // means that all the garbage files before the vacuumVersion have been deleted.
-            partition.setLastSuccVacuumVersion(vacuumedVersion);
-            long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
-            partition.setExtraFileSize(extraFileSize + incrementExtraFileSize);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            try {
+                // hasError is false means that the vacuum operation on all tablets was successful.
+                // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
+                // means that all the garbage files before the vacuumVersion have been deleted.
+                partition.setLastSuccVacuumVersion(vacuumedVersion);
+                long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
+                partition.setExtraFileSize(extraFileSize + incrementExtraFileSize);
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            }
         }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",

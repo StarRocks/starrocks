@@ -146,9 +146,6 @@ Status BufferControlBlock::add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& 
     }
 
     std::unique_lock<std::mutex> l(_lock);
-    while ((_arrow_batch_queue.size() > _buffer_limit || _arrow_rows > _arrow_rows_limit) && !_is_cancelled) {
-        _data_removal.wait(l);
-    }
 
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
@@ -231,6 +228,9 @@ bool BufferControlBlock::is_full() const {
     }
     std::unique_lock<std::mutex> l(_lock);
     if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
+        return true;
+    }
+    if ((_arrow_batch_queue.size() > _buffer_limit || _arrow_rows > _arrow_rows_limit) && !_is_cancelled) {
         return true;
     }
     if (_is_cancelled) {
@@ -328,6 +328,7 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
 }
 
 Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result) {
+    auto notify = defer_notify();
     std::unique_lock<std::mutex> l(_lock);
     if (!_status.ok()) {
         return _status;
@@ -355,6 +356,7 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
     }
 
     if (_is_close) {
+        *result = nullptr;
         return Status::OK();
     }
 

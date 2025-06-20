@@ -6,9 +6,7 @@ displayed_sidebar: docs
 
 import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
-## Description
-
-Stops a Routine Load job.
+STOP ROUTINE LOAD stops a Routine Load job.
 
 <RoutineLoadPrivNote />
 

@@ -157,13 +157,13 @@ public class CreateFunctionAnalyzer {
                 }
 
             } catch (IOException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT,
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Failed to load object_file: " + objectFile, e);
             } catch (ClassNotFoundException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT,
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Class '" + className + "' not found in object_file :" + objectFile, e);
             } catch (Exception e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT,
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "other exception when load class. exception:", e);
             }
         } finally {

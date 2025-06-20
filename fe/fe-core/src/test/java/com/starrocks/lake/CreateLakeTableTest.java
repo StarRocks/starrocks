@@ -43,6 +43,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -387,17 +388,38 @@ public class CreateLakeTableTest {
                         "distributed by hash(c0) buckets 2\n" +
                         "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
         LakeTable lakeTable = getLakeTable("lake_test", "test_unique_id");
-        // Clear unique id first
-        lakeTable.setMaxColUniqueId(-1);
-        for (Column column : lakeTable.getColumns()) {
-            column.setUniqueId(-1);
+        {
+            // case 1:
+            // table created on version v3.2, then upgraded to v3.3 upwards,
+            // all unique ids include max unique id is -1
+            lakeTable.setMaxColUniqueId(-1);
+            for (Column column : lakeTable.getColumns()) {
+                column.setUniqueId(-1);
+            }
+            lakeTable.gsonPostProcess();
+            Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
+            Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
+            Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
+            Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
+            Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
         }
-        lakeTable.gsonPostProcess();
-        Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
-        Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
-        Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
-        Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
-        Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
+
+        {
+            // case 1:
+            // 1. table created on version v3.3
+            // 2. cluster downgraded to v3.2
+            // 3. add one column on version v3.2, the column's unique id is -1
+            // 4. cluster upgraded to v3.3
+            lakeTable.setMaxColUniqueId(2);
+            lakeTable.getColumns().get(3).setUniqueId(-1);
+
+            lakeTable.gsonPostProcess();
+            Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
+            Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
+            Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
+            Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
+            Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
+        }
     }
 
     @Test
@@ -435,5 +457,60 @@ public class CreateLakeTableTest {
         Map<String, String> nationProps = nation.getProperties();
         Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
         Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT));
+    }
+
+    @Test
+    public void testRangeTableWithRetentionCondition2() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable("CREATE TABLE lake_test.r1 \n" +
+                "(\n" +
+                "    dt date,\n" +
+                "    k2 int,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(\n" +
+                "    PARTITION p0 values [('2024-01-29'),('2024-01-30')),\n" +
+                "    PARTITION p1 values [('2024-01-30'),('2024-01-31')),\n" +
+                "    PARTITION p2 values [('2024-01-31'),('2024-02-01')),\n" +
+                "    PARTITION p3 values [('2024-02-01'),('2024-02-02')) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1',\n" +
+                "'partition_retention_condition' = 'dt > current_date() - interval 1 month'\n" +
+                ")"));
+        LakeTable r1 = getLakeTable("lake_test", "r1");
+        String retentionCondition = r1.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+
+        String sql = "show create table lake_test.r1";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+        List<List<String>> result = resultSet.getResultRows();
+        Assert.assertTrue(result.size() == 1);
+        Assert.assertTrue(result.get(0).size() == 2);
+        final String expect = "CREATE TABLE `r1` (\n" +
+                "  `dt` date NULL COMMENT \"\",\n" +
+                "  `k2` int(11) NULL COMMENT \"\",\n" +
+                "  `v1` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`dt`, `k2`, `v1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p0 VALUES [(\"2024-01-29\"), (\"2024-01-30\")),\n" +
+                "PARTITION p1 VALUES [(\"2024-01-30\"), (\"2024-01-31\")),\n" +
+                "PARTITION p2 VALUES [(\"2024-01-31\"), (\"2024-02-01\")),\n" +
+                "PARTITION p3 VALUES [(\"2024-02-01\"), (\"2024-02-02\")))\n" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"datacache.enable\" = \"true\",\n" +
+                "\"enable_async_write_back\" = \"false\",\n" +
+                "\"partition_retention_condition\" = \"dt > current_date() - interval 1 month\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_volume\" = \"builtin_storage_volume\"\n" +
+                ");";
+        Assert.assertTrue(result.get(0).get(1).equals(expect));
     }
 }

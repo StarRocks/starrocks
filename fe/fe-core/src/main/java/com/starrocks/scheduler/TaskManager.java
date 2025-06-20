@@ -720,6 +720,9 @@ public class TaskManager implements MemoryTrackable {
             case SUCCESS:
                 status.setProgress(100);
                 taskRunManager.getTaskRunHistory().addHistory(status);
+            case SKIPPED:
+                status.setProgress(0);
+                taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
         }
     }
@@ -747,12 +750,6 @@ public class TaskManager implements MemoryTrackable {
                     status.setState(Constants.TaskRunState.RUNNING);
                     taskRunScheduler.addRunningTaskRun(pendingTaskRun);
                 }
-                // for fe restart, should keep logic same as clearUnfinishedTaskRun
-            } else if (toStatus == Constants.TaskRunState.FAILED) {
-                status.setErrorMessage(statusChange.getErrorMessage());
-                status.setErrorCode(statusChange.getErrorCode());
-                status.setState(Constants.TaskRunState.FAILED);
-                taskRunManager.getTaskRunHistory().addHistory(status);
             } else if (toStatus == Constants.TaskRunState.MERGED) {
                 // This only happened when the task run is merged by others and no run ever.
                 LOG.info("Replay update pendingTaskRun which is merged by others, query_id:{}, taskId:{}",
@@ -762,6 +759,11 @@ public class TaskManager implements MemoryTrackable {
                 status.setState(Constants.TaskRunState.MERGED);
                 status.setProgress(100);
                 status.setFinishTime(statusChange.getFinishTime());
+                taskRunManager.getTaskRunHistory().addHistory(status);
+            } else if (toStatus.isFinishState()) {
+                status.setErrorMessage(statusChange.getErrorMessage());
+                status.setErrorCode(statusChange.getErrorCode());
+                status.setState(toStatus);
                 taskRunManager.getTaskRunHistory().addHistory(status);
             } else {
                 LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
@@ -857,8 +859,8 @@ public class TaskManager implements MemoryTrackable {
         dropTasks(taskIdToDelete, true);
     }
 
-    public void removeExpiredTaskRuns() {
-        taskRunManager.getTaskRunHistory().vacuum();
+    public void removeExpiredTaskRuns(boolean archiveHistory) {
+        taskRunManager.getTaskRunHistory().vacuum(archiveHistory);
     }
 
     @Override

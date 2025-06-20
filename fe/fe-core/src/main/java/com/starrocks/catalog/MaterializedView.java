@@ -39,6 +39,7 @@ import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -737,7 +738,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.queryOutputIndices = queryOutputIndices;
     }
 
-    public boolean isReloaded() {
+    public boolean hasReloaded() {
         return reloaded;
     }
 
@@ -1069,9 +1070,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
         }
-        if (postLoadImage) {
-            reloaded = true;
-        }
     }
 
     /**
@@ -1148,12 +1146,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 continue;
             } else if (table.isMaterializedView()) {
                 MaterializedView baseMV = (MaterializedView) table;
-                // skip reloading only when postLoadImage is true
-                if (postLoadImage && baseMV.isReloaded()) {
-                    continue;
+                // only consider skipping reload when postLoadImage is true
+                if (Config.enable_mv_post_image_reload_cache && postLoadImage) {
+                    if (!baseMV.hasReloaded()) {
+                        // recursive reload MV, to guarantee the order of hierarchical MV
+                        baseMV.onReload(postLoadImage);
+                        baseMV.setReloaded(true);
+                    } else {
+                        LOG.info("baseMv: {} has reloaded before, skip reload it again", baseMV.getName());
+                    }
+                } else {
+                    // recursive reload MV, to guarantee the order of hierarchical MV
+                    baseMV.onReload(postLoadImage);
                 }
-                // recursive reload MV, to guarantee the order of hierarchical MV
-                baseMV.onReload(postLoadImage);
                 if (!baseMV.isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
@@ -1959,8 +1964,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache
                 // the newest table info.
-                Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(table));
-                result.put(refreshedTable, e.getValue());
+                // NOTE: use getTable rather getTableChecked to avoid throwing exception when table has changed/recreated.
+                // If the table has changed, MVPCTMetaRepairer will handle it rather than throwing exception here.
+                Optional<Table> refreshedTableOpt = MvUtils.getTable(tableToBaseTableInfoCache.get(table));
+                if (refreshedTableOpt.isEmpty()) {
+                    LOG.warn("The table {} is not found in metadata catalog", table.getName());
+                    throw MaterializedViewExceptions.reportBaseTableNotExists(table.getName());
+                }
+                result.put(refreshedTableOpt.get(), e.getValue());
             } else {
                 result.put(table, e.getValue());
             }

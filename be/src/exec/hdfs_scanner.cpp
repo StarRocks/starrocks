@@ -133,8 +133,8 @@ Status HdfsScanner::_build_scanner_context() {
             column.slot_desc = slot;
             column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
             column.decode_needed =
-                    slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
-                                                        _scanner_params.slots_of_mutli_slot_conjunct.end();
+                    slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
+                                                        _scanner_params.slots_of_multi_field_conjunct.end();
             ctx.materialized_columns.emplace_back(std::move(column));
         }
     }
@@ -227,7 +227,8 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     _opened = true;
     VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
-              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset) << "]";
+              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
+              << "], candidate node = " << _scanner_params.scan_range->candidate_node;
     return Status::OK();
 }
 
@@ -320,6 +321,9 @@ Status HdfsScanner::open_random_access_file() {
                             .compression_type = _compression_type};
 
     ASSIGN_OR_RETURN(_file, create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, options));
+    if (_cache_input_stream) {
+        _cache_input_stream->set_peer_cache_node(_scanner_params.scan_range->candidate_node);
+    }
     return Status::OK();
 }
 
@@ -447,6 +451,11 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_read_timer, stats.read_cache_ns);
         COUNTER_UPDATE(profile->datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(profile->datacache_skip_read_bytes, stats.skip_read_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_peer_bytes, stats.read_peer_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_peer_counter, stats.read_peer_cache_count);
+        COUNTER_UPDATE(profile->datacache_read_peer_timer, stats.read_peer_cache_ns);
+        COUNTER_UPDATE(profile->datacache_skip_read_peer_counter, stats.skip_read_peer_cache_count);
+        COUNTER_UPDATE(profile->datacache_skip_read_peer_bytes, stats.skip_read_peer_cache_bytes);
         COUNTER_UPDATE(profile->datacache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(profile->datacache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(profile->datacache_write_timer, stats.write_cache_ns);

@@ -45,3 +45,17 @@ select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;
 2020-06-02	SZ	3
 2020-07-02	SH	2
 -- !result
+INSERT INTO t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2,'2020-07-02','SH');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
+-- result:
+False
+-- !result
+select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;
+-- result:
+2020-06-02	BJ	2
+2020-06-02	SZ	6
+2020-07-02	SH	4
+-- !result

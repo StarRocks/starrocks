@@ -190,6 +190,7 @@
                     ]
                 },
                 "loading/InsertInto",
+                "loading/SQL_transaction",
                 "loading/Stream_Load_transaction_interface",
                 "loading/Flink_cdc_load",
                 "loading/Flink-connector-starrocks",
@@ -269,7 +270,8 @@
                     "items": [
                         "data_source/data_cache",
                         "data_source/data_cache_warmup",
-                        "data_source/data_cache_observe"
+                        "data_source/data_cache_observe",
+                        "data_source/data_cache_troubleshooting"
                     ]
                 },
                 "data_source/External_table",
@@ -497,6 +499,7 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
+                "administration/http_interface",
         {
             "type": "category",
             "label": "User Privileges and Authentication",

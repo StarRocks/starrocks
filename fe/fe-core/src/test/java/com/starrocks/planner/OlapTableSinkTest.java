@@ -20,6 +20,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
@@ -50,24 +51,34 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.system.Backend;
+import com.starrocks.system.BackendHbResponse;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TOlapTableLocationParam;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
 import mockit.Mocked;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -308,6 +319,25 @@ public class OlapTableSinkTest {
         long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
+        
+        //init be node
+        Backend be1 = new Backend(1001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(1002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(1003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+        
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
@@ -320,9 +350,9 @@ public class OlapTableSinkTest {
 
         for (int i = 0; i < 9; i++) {
             // Replica
-            Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
-            Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
-            Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica1 = new Replica(replicaId, be1.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica2 = new Replica(replicaId + 1, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica3 = new Replica(replicaId + 2, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
 
             // Tablet
             LocalTablet tablet = new LocalTablet(tabletId);
@@ -552,5 +582,161 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testFindPrimaryReplica() throws StarRocksException {
+
+        //init be node
+        Backend be1 = new Backend(1001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(1002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(1003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(false);
+        be3.setAlive(true);
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+        //init primary replica num for be node
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 2L);
+        bePrimaryMap.put(be2.getId(), 0L);
+        bePrimaryMap.put(be3.getId(), 1L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.check primary replica selection in multiple replica
+        Replica replica1 = new Replica(11L, be1.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica2 = new Replica(22L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica3 = new Replica(33L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        replica1.setLastWriteFail(false);
+        replica2.setLastWriteFail(false);
+        replica3.setLastWriteFail(false);
+        List<Replica> multipleReplicaList = new ArrayList<>();
+        multipleReplicaList.add(replica1);
+        multipleReplicaList.add(replica2);
+        multipleReplicaList.add(replica3);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, multipleReplicaList);
+        //note: even though in bePrimaryMap, primary replica num in be2 < primary replica num in be3,
+        //      but be2 is in shutting down, so choose replica3 as primary replica.
+        Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getId(), replica3.getId());
+        Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getBackendId(), be3.getId());
+
+        //2.check primary replica selection in single replica
+        Replica replica4 = new Replica(44L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        replica4.setLastWriteFail(false);
+        List<Replica> singleReplicaList = new ArrayList<>();
+        singleReplicaList.add(replica4);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, singleReplicaList);
+        //note: even though be2 is in shutting down, to ensure the load job can be loaded normally,
+        //      be2 SHUTDOWN status could not be checked, so choose replica4 as primary replica. 
+        Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getId(), replica4.getId());
+        Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getBackendId(), be2.getId());
+    }
+
+    @Test
+    public void testCreateLocationWithSharedDataMode(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        // create two ComputeNodes
+        ComputeNode node1 = new ComputeNode(10001L, "127.0.0.1", 9071);
+        node1.updateOnce(1, 2, 3);
+        BackendHbResponse shutdownResponse =
+                new BackendHbResponse(node1.getId(), TStatusCode.SHUTDOWN, "BE is in shutting down");
+        // Set node1 to status:SHUTDOWN
+        Assert.assertTrue(node1.handleHbResponse(shutdownResponse, false));
+        Assert.assertEquals(node1.getStatus(), ComputeNode.Status.SHUTDOWN);
+        Assert.assertFalse(node1.isAlive());
+
+        ComputeNode node2 = new ComputeNode(10002L, "127.0.0.1", 9072);
+        node2.updateOnce(1, 2, 3);
+
+        warehouseManager.setAllComputeNodeIds(Lists.newArrayList(node1.getId(), node2.getId()));
+        warehouseManager.setAliveComputeNodes(Lists.newArrayList(node2));
+        warehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(node1));
+
+        sysInfoService.addComputeNode(node1);
+        sysInfoService.addComputeNode(node2);
+
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tabletId = 5L;
+        long physicalPartitionId = 6L;
+
+        // Columns
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        columns.add(k1);
+
+        LakeTablet tablet = new LakeTablet(tabletId);
+        // Partition info and distribution info
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setIsInMemory(partitionId, false);
+        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, 0, TStorageMedium.SSD);
+        index.addTablet(tablet, tabletMeta);
+        // Partition
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+        // Table
+        OlapTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(table, partitionParam, false);
+        LOG.warn("TableLocationParam: {}", param);
+        // Check
+        List<TTabletLocation> locations = param.getTablets();
+        Assert.assertEquals(1, locations.size());
+        TTabletLocation location = locations.get(0);
+        List<Long> nodes = location.getNode_ids();
+        Assert.assertEquals(1, nodes.size());
+        Assert.assertEquals((Long) node2.getId(), nodes.get(0));
     }
 }

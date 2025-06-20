@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
@@ -77,9 +78,13 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -840,6 +845,35 @@ public class OlapTableSink extends DataSink {
             }
         }
 
+        // Double-check the tablet location backend alive info
+        if (RunMode.isSharedDataMode()) {
+            // NOTE: shared-nothing workerProvider.allowUsingBackupNode() == false, so don't bother to create it
+            WorkerProvider.Factory workerProviderFactory = new DefaultSharedDataWorkerProvider.Factory();
+            WorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false, 0,
+                    SessionVariableConstants.ComputationFragmentSchedulingPolicy.ALL_NODES, warehouseId);
+            if (workerProvider.allowUsingBackupNode()) {
+                for (TTabletLocation location : locationParam.getTablets()) {
+                    Map<Long, Long> replacePair = new HashMap<>();
+                    List<Long> nodeIds = location.getNode_ids();
+                    for (long id : nodeIds) {
+                        if (!workerProvider.isDataNodeAvailable(id)) {
+                            long backupId = workerProvider.selectBackupWorker(id);
+                            if (backupId == -1) {
+                                // error out
+                                workerProvider.reportWorkerNotFoundException();
+                            }
+                            replacePair.put(id, backupId);
+                        }
+                    }
+                    for (Map.Entry<Long, Long> entry : replacePair.entrySet()) {
+                        nodeIds.remove(entry.getKey());
+                        nodeIds.add(entry.getValue());
+                    }
+                }
+            }
+        }
+
         // check if disk capacity reach limit
         // this is for load process, so use high water mark to check
         Status st = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
@@ -849,6 +883,17 @@ public class OlapTableSink extends DataSink {
         }
         LOG.debug("location param: {}", locationParam);
         return locationParam;
+    }
+
+    @VisibleForTesting
+    public static int findPrimaryReplica(OlapTable table,
+                                         Map<Long, Long> bePrimaryMap,
+                                         SystemInfoService infoService,
+                                         MaterializedIndex index,
+                                         List<Long> selectedBackedIds,
+                                         List<Replica> replicas) {
+        return findPrimaryReplica(table, bePrimaryMap, infoService,
+                index, selectedBackedIds, 0, replicas);
     }
 
     private static int findPrimaryReplica(OlapTable table,
@@ -871,15 +916,23 @@ public class OlapTableSink extends DataSink {
         int lowUsageIndex = -1;
         for (int i = 0; i < replicas.size(); i++) {
             Replica replica = replicas.get(i);
-            if (lowUsageIndex == -1 && !replica.getLastWriteFail()
-                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+            boolean isHealthy = !replica.getLastWriteFail()
+                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
+            
+            // The isAlive() flag indicates node availability during shutdown sequences.
+            // For single-replica configurations, we bypass node status checks to maintain
+            // loading operation continuity despite shutdown transitions.
+            if (replicas.size() > 1) {
+                isHealthy = isHealthy && infoService.getBackend(replica.getBackendId()).isAlive();
+            }
+            
+            if (lowUsageIndex == -1 && isHealthy) {
                 lowUsageIndex = i;
             }
             if (lowUsageIndex != -1
                     && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
                     .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
-                    && !replica.getLastWriteFail()
-                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                    && isHealthy) {
                 lowUsageIndex = i;
             }
         }

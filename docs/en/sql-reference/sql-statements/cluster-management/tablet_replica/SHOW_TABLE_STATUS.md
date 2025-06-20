@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW TABLE STATUS
 
-## Description
-
-This statement is used to view some of the information in Table.
+SHOW TABLE STATUS is used to view some of the information in Table.
 
 :::tip
 
