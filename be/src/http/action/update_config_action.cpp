@@ -90,7 +90,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
-            ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_storage_page_cache_limit());
+            ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_datacache_limit());
             cache_limit = DataCache::GetInstance()->check_storage_page_cache_limit(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
             return Status::OK();
@@ -99,7 +99,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
-                ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_storage_page_cache_limit());
+                ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_datacache_limit());
                 cache_limit = DataCache::GetInstance()->check_storage_page_cache_limit(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }

@@ -113,7 +113,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             _evict_datacache(static_cast<int64_t>(bytes_to_dec));
         } else {
-            auto ret = _datacache->get_storage_page_cache_limit();
+            auto ret = _datacache->get_datacache_limit();
             if (!ret.ok()) {
                 LOG(ERROR) << "Failed to get storage page size: " << ret.status();
                 continue;

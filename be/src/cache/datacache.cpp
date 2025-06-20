@@ -260,8 +260,8 @@ void DataCache::try_release_resource_before_core_dump() {
     }
 }
 
-StatusOr<int64_t> DataCache::get_storage_page_cache_limit() {
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), _global_env->process_mem_limit());
+StatusOr<int64_t> DataCache::get_datacache_limit() {
+    return ParseUtil::parse_mem_spec(config::datacache_mem_size.value(), _global_env->process_mem_limit());
 }
 
 bool DataCache::page_cache_available() const {
