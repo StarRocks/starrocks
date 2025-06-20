@@ -268,20 +268,17 @@ bool DataCache::page_cache_available() const {
     return !config::disable_storage_page_cache && _page_cache != nullptr && _page_cache->get_capacity() > 0;
 }
 
-int64_t DataCache::check_storage_page_cache_limit(int64_t storage_cache_limit) {
-    if (storage_cache_limit > _global_env->process_mem_limit()) {
-        LOG(WARNING) << "Config storage_page_cache_limit is greater process memory limit, config="
-                     << config::storage_page_cache_limit.value() << ", memory=" << _global_env->process_mem_limit();
-        storage_cache_limit = _global_env->process_mem_limit();
+int64_t DataCache::check_datacache_limit(int64_t datacache_limit) {
+    if (datacache_limit > _global_env->process_mem_limit()) {
+        LOG(WARNING) << "Config datacache_limit is greater process memory limit, config="
+                     << config::datacache_mem_size.value() << ", memory=" << _global_env->process_mem_limit();
+        datacache_limit = _global_env->process_mem_limit();
     }
-    if (!config::disable_storage_page_cache) {
-        if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, use default size.";
-            storage_cache_limit = kcacheMinSize;
-        }
-        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+    if (datacache_limit < kcacheMinSize) {
+        LOG(WARNING) << "Data cache limit is too small, use default size.";
+        datacache_limit = kcacheMinSize;
     }
-    return storage_cache_limit;
+    return datacache_limit;
 }
 
 } // namespace starrocks

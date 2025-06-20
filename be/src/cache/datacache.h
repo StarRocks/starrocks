@@ -50,7 +50,7 @@ public:
     bool page_cache_available() const;
 
     StatusOr<int64_t> get_datacache_limit();
-    int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
+    int64_t check_datacache_limit(int64_t datacache_limit);
 
     bool adjust_mem_capacity(int64_t delta, size_t min_capacity);
     size_t get_mem_capacity() const;
