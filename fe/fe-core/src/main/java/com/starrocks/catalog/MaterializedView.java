@@ -52,6 +52,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.ExpressionSerializedObject;
@@ -630,10 +631,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public synchronized void setActive() {
         LOG.info("set {} to active", name);
-        // reset mv rewrite cache when it is active again
-        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, true);
         this.active = true;
         this.inactiveReason = null;
+        // reset mv rewrite cache when it is active again
+        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, true);
     }
 
     public synchronized void setInactiveAndReason(String reason) {
@@ -1022,8 +1023,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     private void onDropImpl(Database db, boolean replay) {
-        // 1. Remove from plan cache
         MvId mvId = new MvId(db.getId(), getId());
+
+        // remove materialized view metrics from MetricsRepository
+        MaterializedViewMetricsRegistry.getInstance().remove(mvId);
+
+        // 1. Remove from plan cache
         CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
 
         // 2. Remove from base tables
@@ -1279,6 +1284,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return: true if it is configured to enable mv rewrite, otherwise false.
      */
     public boolean isEnableRewrite() {
+        if (!isActive()) {
+            return false;
+        }
         TableProperty tableProperty = getTableProperty();
         if (tableProperty == null) {
             return true;
@@ -1291,6 +1299,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return: true if it is configured to enable transparent rewrite, otherwise false.
      */
     public boolean isEnableTransparentRewrite() {
+        if (!isActive()) {
+            return false;
+        }
         TableProperty tableProperty = getTableProperty();
         if (tableProperty == null) {
             // default is false
@@ -2001,11 +2012,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // NOTE: use getTable rather getTableChecked to avoid throwing exception when table has changed/recreated.
                 // If the table has changed, MVPCTMetaRepairer will handle it rather than throwing exception here.
                 Optional<Table> refreshedTableOpt = MvUtils.getTable(tableToBaseTableInfoCache.get(table));
+                // when meets a table that has been dropped, no throw exception here so that
                 if (refreshedTableOpt.isEmpty()) {
                     LOG.warn("The table {} is not found in metadata catalog", table.getName());
-                    throw MaterializedViewExceptions.reportBaseTableNotExists(table.getName());
+                    result.put(table, e.getValue());
+                } else {
+                    result.put(refreshedTableOpt.get(), e.getValue());
                 }
-                result.put(refreshedTableOpt.get(), e.getValue());
             } else {
                 result.put(table, e.getValue());
             }
