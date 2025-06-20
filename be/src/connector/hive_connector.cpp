@@ -372,9 +372,6 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.case_sensitive) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
-    if (hdfs_scan_node.__isset.can_use_any_column) {
-        _can_use_any_column = hdfs_scan_node.can_use_any_column;
-    }
     if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
         _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
     }
@@ -385,16 +382,11 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // The reason why we need double check here is for iceberg table.
     // for some partitions, partition column maybe is not constant value.
     // If partition column is not constant value, we can not use this optimization,
-    // And we can not use `can_use_any_column` either.
     // So checks are:
-    // 1. can_use_any_column = true
-    // 2. only one materialized slot
-    // 3. besides that, all slots are partition slots.
-    // 4. scan iceberg data file without equality delete files.
+    // 1. only one materialized slot
+    // 2. besides that, all slots are partition slots.
+    // 3. scan iceberg data file without equality delete files.
     auto check_opt_on_iceberg = [&]() {
-        if (!_can_use_any_column) {
-            return false;
-        }
         if ((_partition_slots.size() + 1) != slots.size()) {
             return false;
         }
@@ -408,7 +400,6 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     };
     if (!check_opt_on_iceberg()) {
         _use_partition_column_value_only = false;
-        _can_use_any_column = false;
     }
 }
 
@@ -741,7 +732,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_metacache = _use_file_metacache;
     scanner_params.use_file_pagecache = _use_file_pagecache;
 
-    scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
 
@@ -778,7 +768,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (_datacache_options.enable_cache_select) {
         scanner = new CacheSelectScanner();
     } else if (_use_partition_column_value_only) {
-        DCHECK(_can_use_any_column);
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();

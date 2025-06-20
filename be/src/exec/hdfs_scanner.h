@@ -272,7 +272,6 @@ struct HdfsScannerParams {
     bool use_file_pagecache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
-    bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
@@ -343,11 +342,16 @@ struct HdfsScannerContext {
 
     bool orc_use_column_names = false;
 
-    bool can_use_any_column = false;
-
     bool can_use_min_max_count_opt = false;
 
+    bool is_first_split = false;
     bool return_count_column = false;
+    bool can_use_file_record_count = false;
+
+    // used by short circuit cases:
+    // get_next just returns chunk for once.
+    // and it returns EOF the next time.
+    bool no_more_chunks = false;
 
     bool use_file_metacache = false;
     bool use_file_pagecache = false;
@@ -371,6 +375,8 @@ struct HdfsScannerContext {
     // update none_existed_slot
     // update conjunct
     void update_with_none_existed_slot(SlotDescriptor* slot);
+
+    Status update_return_count_columns();
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
