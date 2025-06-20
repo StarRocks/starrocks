@@ -70,7 +70,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         if (!config::enable_datacache_mem_auto_adjust) {
             continue;
         }
-        if (config::disable_storage_page_cache) {
+        if (!config::datacache_enable) {
             continue;
         }
         MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
@@ -113,12 +113,8 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             _evict_datacache(static_cast<int64_t>(bytes_to_dec));
         } else {
-            auto ret = _datacache->get_storage_page_cache_limit();
-            if (!ret.ok()) {
-                LOG(ERROR) << "Failed to get storage page size: " << ret.status();
-                continue;
-            }
-            int64_t max_cache_size = std::max(ret.value(), kcacheMinSize);
+            size_t mem_quota = _datacache->get_mem_capacity();
+            int64_t max_cache_size = std::max(mem_quota, kcacheMinSize);
             int64_t cur_cache_size = _datacache->get_mem_capacity();
             if (cur_cache_size >= max_cache_size) {
                 continue;
