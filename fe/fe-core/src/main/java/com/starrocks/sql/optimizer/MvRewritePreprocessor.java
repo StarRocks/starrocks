@@ -725,7 +725,7 @@ public class MvRewritePreprocessor {
         MaterializedView mv = mvWithPlanContext.getMV();
         MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
         Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-        if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
+        if (!checkMvPartitionNamesToRefresh(mv, partitionNamesToRefresh, mvPlanContext)) {
             return null;
         }
         logMVPrepare(tracers, mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
