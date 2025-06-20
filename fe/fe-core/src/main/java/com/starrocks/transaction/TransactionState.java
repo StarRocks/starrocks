@@ -80,7 +80,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -314,10 +313,10 @@ public class TransactionState implements Writable {
     // For a transaction, we need to ensure that different clients obtain consistent partition information,
     // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
     // Therefore, a snapshot of this information is maintained here.
-    private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
+    private Map<Long, ConcurrentMap<String, TOlapTablePartition>> tableToPartitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
-    private List<String> createdPartitionNames = Lists.newArrayList();
+    private Map<Long, List<String>> tableToCreatedPartitionNames = Maps.newHashMap();
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
@@ -1068,18 +1067,23 @@ public class TransactionState implements Writable {
         return useCombinedTxnLog;
     }
 
-    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
-        return partitionNameToTPartition;
+    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition(long tableId) {
+        writeLock();
+        try {
+            return tableToPartitionNameToTPartition.computeIfAbsent(tableId, k -> Maps.newConcurrentMap());
+        } finally {
+            writeUnlock();
+        }
     }
 
     public ConcurrentMap<Long, TTabletLocation> getTabletIdToTTabletLocation() {
         return tabletIdToTTabletLocation;
     }
 
-    public List<String> getCreatedPartitionNames() {
+    public List<String> getCreatedPartitionNames(long tableId) {
         writeLock();
         try {
-            return createdPartitionNames;
+            return tableToCreatedPartitionNames.computeIfAbsent(tableId, k -> new ArrayList<>());
         } finally {
             writeUnlock();
         }
@@ -1088,12 +1092,16 @@ public class TransactionState implements Writable {
     public void clearAutomaticPartitionSnapshot() {
         writeLock();
         try {
-            createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
+            tableToPartitionNameToTPartition.forEach((tableId, partitionNameToTPartition) -> {
+                List<String> createdPartitionNames = tableToCreatedPartitionNames.computeIfAbsent(
+                        tableId, k -> new ArrayList<>());
+                createdPartitionNames.addAll(partitionNameToTPartition.keySet());
+            });
+            tabletIdToTTabletLocation.clear();
+            tableToPartitionNameToTPartition.clear();
         } finally {
             writeUnlock();
         }
-        partitionNameToTPartition.clear();
-        tabletIdToTTabletLocation.clear();
     }
 
     public void setIsCreatePartitionFailed(boolean v) {
