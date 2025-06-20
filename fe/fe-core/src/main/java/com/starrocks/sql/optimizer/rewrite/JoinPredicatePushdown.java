@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -116,7 +117,16 @@ public class JoinPredicatePushdown {
                     if (join.getJoinType().isRightAntiJoin()) {
                         continue;
                     }
-                    rightPushDown.add(predicate);
+                    if (join.getJoinType().isNullAwareLeftAntiJoin()) {
+                        final IsNullPredicateOperator isNull =
+                                new IsNullPredicateOperator(false, predicate);
+                        final CompoundPredicateOperator orPredicate =
+                                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, predicate,
+                                        isNull);
+                        rightPushDown.add(orPredicate);
+                    } else {
+                        rightPushDown.add(predicate);
+                    }
                 }
             }
         }

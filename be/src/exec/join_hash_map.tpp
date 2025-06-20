@@ -1867,6 +1867,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
                 }
             }
         }
+        _probe_state->cur_nullaware_build_index = _table_items->row_count + 1;
 
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
@@ -1889,6 +1890,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
             RETURN_IF_CHUNK_FULL()
         }
         _probe_state->cur_row_match_count = 0;
+        _probe_state->cur_nullaware_build_index = 1;
     }
     PROBE_OVER()
 }

@@ -176,3 +176,7 @@ select count(*) from aware3 l where null not in (select k2 from build2 r);
 -- result:
 0
 -- !result
+select count(*) from aware3 l where 5 not in (select k2 from build2 r);
+-- result:
+0
+-- !result
