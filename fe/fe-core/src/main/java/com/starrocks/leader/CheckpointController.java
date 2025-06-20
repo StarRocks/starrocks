@@ -44,6 +44,7 @@ import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.Journal;
+import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.MetaCleaner;
@@ -96,7 +97,10 @@ public class CheckpointController extends FrontendDaemon {
     private volatile String workerNodeName;
     private volatile long workerSelectedTime;
     private volatile long journalId;
-    private volatile BlockingQueue<Pair<Boolean, String>> result;
+    private volatile BlockingQueue<FinishCheckpointResult> result;
+
+    private volatile boolean needClusterSnapshotInfo;
+    private volatile ClusterSnapshotInfo clusterSnapshotInfo;
 
     public CheckpointController(String name, Journal journal, String subDir) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
@@ -104,6 +108,8 @@ public class CheckpointController extends FrontendDaemon {
         this.subDir = subDir;
         this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
         nodesToPushImage = new HashSet<>();
+        this.needClusterSnapshotInfo = false;
+        this.clusterSnapshotInfo = null;
     }
 
     public static void exclusiveLock() {
@@ -203,7 +209,7 @@ public class CheckpointController extends FrontendDaemon {
 
         try {
             long startNs = System.nanoTime();
-            Pair<Boolean, String> ret = null;
+            FinishCheckpointResult ret = null;
             while (ret == null
                     && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
                 ret = result.poll(1, TimeUnit.SECONDS);
@@ -212,10 +218,13 @@ public class CheckpointController extends FrontendDaemon {
                 LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
                 return Pair.create(false, workerNodeName);
             }
-            if (!ret.first) {
-                LOG.warn("do checkpoint failed on node: {}, reason: {}", workerNodeName, ret.second);
+            if (!ret.success) {
+                LOG.warn("do checkpoint failed on node: {}, reason: {}", workerNodeName, ret.reason);
                 return Pair.create(false, workerNodeName);
             }
+
+            // set cluter snapshot versions info
+            this.clusterSnapshotInfo = ret.clusterSnapshotInfo;
 
             // download Image
             downloadImage();
@@ -263,7 +272,7 @@ public class CheckpointController extends FrontendDaemon {
 
     private String selectWorker() {
         List<Frontend> workers;
-        if (Config.checkpoint_only_on_leader) {
+        if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/) {
             workers = new ArrayList<>();
         } else {
             workers = GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends();
@@ -297,12 +306,15 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     private boolean doCheckpoint(Frontend frontend) {
+        // reset the cluster snapshot info before sending the checkpoint request
+        this.clusterSnapshotInfo = null;
+
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {
             CheckpointWorker worker = getCheckpointWorker();
             try {
-                worker.setNextCheckpoint(epoch, journalId);
+                worker.setNextCheckpoint(epoch, journalId, needClusterSnapshotInfo);
                 return true;
             } catch (CheckpointException e) {
                 LOG.warn("set next checkpoint failed", e);
@@ -438,7 +450,8 @@ public class CheckpointController extends FrontendDaemon {
         return minReplayedJournalId;
     }
 
-    public void finishCheckpoint(long journalId, String nodeName) throws CheckpointException {
+    public void finishCheckpoint(long journalId, String nodeName,
+                                 ClusterSnapshotInfo clusterSnapshotInfo) throws CheckpointException {
         if (!nodeName.equals(workerNodeName)) {
             throw new CheckpointException(String.format("worker node name node match, current worker is: %s, param worker is: %s",
                     workerNodeName, nodeName));
@@ -448,7 +461,7 @@ public class CheckpointController extends FrontendDaemon {
                     this.journalId, journalId));
         }
 
-        if (result.offer(Pair.create(true, ""))) {
+        if (result.offer(new FinishCheckpointResult(false, "", clusterSnapshotInfo))) {
             LOG.info("finish checkpoint successfully, journalId: {}, nodeName: {}", journalId, nodeName);
         } else {
             LOG.warn("There are already other values in the result queue");
@@ -457,7 +470,7 @@ public class CheckpointController extends FrontendDaemon {
 
     public void cancelCheckpoint(String nodeName, String reason) {
         if (nodeName.equals(workerNodeName)) {
-            result.offer(Pair.create(false, reason));
+            result.offer(new FinishCheckpointResult(false, reason, null));
             LOG.warn("cancel checkpoint on node: {}, because: {}", nodeName, reason);
         }
     }
@@ -470,5 +483,25 @@ public class CheckpointController extends FrontendDaemon {
 
     public Journal getJournal() {
         return journal;
+    }
+
+    public void setNeedClusterSnapshotInfo(boolean needClusterSnapshotInfo) {
+        this.needClusterSnapshotInfo = needClusterSnapshotInfo;
+    }
+
+    public ClusterSnapshotInfo getClusterSnapshotInfo() {
+        return this.clusterSnapshotInfo;
+    }
+
+    static class FinishCheckpointResult {
+        private final boolean success;
+        private final String reason;
+        private final ClusterSnapshotInfo clusterSnapshotInfo;
+
+        public FinishCheckpointResult(boolean success, String reason, ClusterSnapshotInfo clusterSnapshotInfo) {
+            this.success = success;
+            this.reason = reason;
+            this.clusterSnapshotInfo = clusterSnapshotInfo;
+        }
     }
 }

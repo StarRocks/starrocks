@@ -94,6 +94,18 @@ public class ClusterSnapshot {
         return id;
     }
 
+    public boolean isAutomated() {
+        return type == ClusterSnapshotType.AUTOMATED;
+    }
+
+    public boolean needClusterSnapshotInfo() {
+        return false;
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        return;
+    }
+
     public TClusterSnapshotsItem getInfo() {
         TClusterSnapshotsItem item = new TClusterSnapshotsItem();
         item.setSnapshot_name(snapshotName);
