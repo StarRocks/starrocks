@@ -630,9 +630,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         }
     }
 
+    public Table getTable(String dbName, String tableName, boolean isCheckTableExist)
+            throws MetaException, TException, NoSuchObjectException {
+        try {
+            return getTable(null, dbName, tableName);
+        } catch (NoSuchObjectException e) {
+            // Do not log warning if it's checking table existence.
+            if (!isCheckTableExist) {
+                LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
+            }
+            throw e;
+        }
+    }
+
     @Override
     public Table getTable(String dbName, String tableName) throws MetaException, TException, NoSuchObjectException {
-        return getTable(null, dbName, tableName);
+        return getTable(dbName, tableName, false);
     }
 
     @Override
@@ -643,7 +656,6 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             return client.get_table(dbName, tableName);
         } catch (NoSuchObjectException e) {
             // NoSuchObjectException need to be thrown when creating iceberg table.
-            LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
             throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
@@ -1052,7 +1064,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     public boolean tableExists(String databaseName, String tableName)
         throws MetaException, TException, UnknownDBException {
         try {
-            Table table = getTable(databaseName, tableName);
+            Table table = getTable(databaseName, tableName, true);
             return table != null;
         } catch (UnknownDBException | NoSuchObjectException e) {
             return false;
