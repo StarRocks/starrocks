@@ -19,10 +19,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -31,8 +33,8 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.summary.QueryHistory;
 import com.starrocks.summary.QueryHistoryMgr;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -103,6 +105,12 @@ public class SPMAutoCapturer extends FrontendDaemon {
         for (QueryHistory queryHistory : histories) {
             try {
                 connect.changeCatalogDb(queryHistory.getDb());
+            } catch (Exception e) {
+                // if the db isn't exists, we just skip this query
+                AuditLog.getInternalAudit().info("SPM auto capture failed, db not exists: {}", queryHistory.getDb());
+                continue;
+            }
+            try {
                 connect.setThreadLocalInfo();
                 List<StatementBase> stmt = SqlParser.parse(queryHistory.getOriginSQL(), connect.getSessionVariable());
                 Preconditions.checkState(stmt.size() == 1);
@@ -112,10 +120,21 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 if (tables.size() < 2) {
                     continue;
                 }
-                if (!tables.keySet().stream().allMatch(t -> {
-                    String s = t.getDb() + "." + t.getTbl();
-                    return checkPattern.matcher(s).find();
-                })) {
+                if (!tables.keySet().stream()
+                        .allMatch(t -> checkPattern.matcher(t.getDb() + "." + t.getTbl()).find())) {
+                    continue;
+                }
+
+                MetadataMgr metadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
+                boolean allTableExists = true;
+                for (TableName tableName : tables.keySet()) {
+                    if (metadata.getTable(connect, tableName).isEmpty()) {
+                        AuditLog.getInternalAudit()
+                                .info("SPM auto capture failed, table not exists: {}", tableName.toSql());
+                        allTableExists = false;
+                    }
+                }
+                if (!allTableExists) {
                     continue;
                 }
 
@@ -129,7 +148,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 base.setUpdateTime(queryHistory.getDatetime());
                 plans.put(queryHistory.getSqlDigest(), base);
             } catch (Exception e) {
-                LOG.warn("sql plan capture failed. sql: " + queryHistory.getOriginSQL(), e);
+                LOG.warn("sql plan capture failed. sql: {}", queryHistory.getOriginSQL(), e);
             }
         }
 
