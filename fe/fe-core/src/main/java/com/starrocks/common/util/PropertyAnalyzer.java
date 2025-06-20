@@ -1543,6 +1543,7 @@ public class PropertyAnalyzer {
                             + " does not support non-partitioned materialized view.");
                 }
             }
+
             // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
