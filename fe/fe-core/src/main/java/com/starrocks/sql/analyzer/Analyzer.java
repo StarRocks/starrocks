@@ -335,6 +335,16 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
+            analyzeSubmitTask(statement, context);
+            return null;
+        }
+
+        public static void analyzeSubmitTask(SubmitTaskStmt statement, ConnectContext context) {
+            StatementBase workhouse = analyzeSubmitTaskWorkhorse(statement, context);
+            analyzeSubmitTaskOnly(workhouse, statement, context);
+        }
+
+        public static StatementBase analyzeSubmitTaskWorkhorse(SubmitTaskStmt statement, ConnectContext context) {
             StatementBase taskStmt = null;
             if (statement.getCreateTableAsSelectStmt() != null) {
                 CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
@@ -351,7 +361,12 @@ public class Analyzer {
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }
-            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(taskStmt);
+            return taskStmt;
+        }
+
+        public static void analyzeSubmitTaskOnly(StatementBase taskStatement, SubmitTaskStmt statement,
+                                                 ConnectContext context) {
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(taskStatement);
             if (hasTemporaryTable) {
                 throw new SemanticException("Cannot submit task based on temporary table");
             }
@@ -360,7 +375,6 @@ public class Analyzer {
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
             TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
-            return null;
         }
 
         @Override
