@@ -187,7 +187,6 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testSetPassword() {
         String sql = "SET PASSWORD FOR 'testUser' = PASSWORD('testPass')";
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
@@ -209,10 +208,7 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
-    public void testSetResourceGroupName() {
-=======
     public void testSetResourceGroupName() throws Exception {
->>>>>>> b0fca2d460 ([UT] Fix testSetResourceGroupName (#59076))
         String rg1Name = "rg1";
 
         String createRgSql = "create resource group rg1\n" +
