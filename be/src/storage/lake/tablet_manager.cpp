@@ -280,6 +280,8 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
     return put_tablet_metadata(std::move(metadata_ptr));
 }
 
+DEFINE_FAIL_POINT(get_real_location_failed);
+DEFINE_FAIL_POINT(tablet_meta_not_found);
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
 Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
@@ -295,6 +297,8 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     std::map<std::string, std::set<int64_t>> partition_location_to_tablets;
     for (auto& [tablet_id, _] : tablet_metas) {
         auto real_location = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
+        FAIL_POINT_TRIGGER_EXECUTE(get_real_location_failed,
+                                   { real_location = Status::InternalError("get location failed"); });
         if (!real_location.ok()) {
             std::string msg = strings::Substitute("tablet:$0 get real location failed, $1", tablet_id,
                                                   real_location.status().to_string());
@@ -315,6 +319,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         int64_t commit_version = 0;
         for (auto& tablet_id : tablets) {
             auto iter = tablet_metas.find(tablet_id);
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_meta_not_found, { iter = tablet_metas.end(); });
             RETURN_IF((iter == tablet_metas.end()),
                       Status::InternalError(strings::Substitute("tablet {} metadata not found", tablet_id)));
             const auto& meta = iter->second;
