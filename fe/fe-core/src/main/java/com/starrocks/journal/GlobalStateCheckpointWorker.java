@@ -14,7 +14,6 @@
 
 package com.starrocks.journal;
 
-import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.lake.snapshot.SnapshotInfoHelper;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricRepo;
@@ -55,7 +54,7 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
 
             if (needClusterSnapshotInfo) {
                 this.clusterSnapshotInfo = SnapshotInfoHelper.buildClusterSnapshotInfo(
-                        globalStateMgr.getLocalMetastore().getAllDatabases());
+                        globalStateMgr.getLocalMetastore().getAllDbs());
                 LOG.info("get cluster snapshot info successfully");
             }
 
