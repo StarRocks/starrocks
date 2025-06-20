@@ -106,6 +106,7 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             String nodeAddress = randomNodeAddress();
             String warehouseName = randomWarehouseName();
             ensureWarehouseCreated(warehouseName);
+            ensureCnGroupDropped(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
             { // Invalid cngroup name.
                 // Invalid cngroup name will be only checked during cngroup creation, so fallback to non-exist error.
                 String sql = addNodeSql(nodeAddress, warehouseName, "addnode_cgroup%1", isCnNode);
@@ -228,8 +229,7 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
     @ParameterizedTest
     @MethodSource("nodeTypes")
     public void addNodeCompatibilityTest(String nodeType) {
-        // CNGROUP name can be omitted only when the warehouse has one cnGroup and
-        // the cngroup name is LocalWarehouse.DEFAULT_CLUSTER_NAME
+        // CNGROUP name can be omitted only when the warehouse has one cnGroup
         boolean isCnNode = Objects.equals(nodeType, "CN");
         { // default warehouse
             { // 1 cngroup, DEFAULT_CLUSTER_NAME, single warehouse, UPGRADE FROM community version. OK!
@@ -262,6 +262,7 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             String warehouseName = randomWarehouseName();
 
             LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+            ensureCnGroupDropped(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
             { // 0 cngroup, no CNGroup. FAIL
                 String nodeAddress = randomNodeAddress();
                 String sql = addNodeSql(nodeAddress, warehouseName, null, isCnNode);
@@ -272,7 +273,6 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
                 Assertions.assertEquals(0L, wh.getClusters().size());
             }
             { // 1 cngroup == DEFAULT_CLUSTER_NAME, UPGRADE FROM enterprise version
-                // NOTE: create an cngroup with name DEFAULT_CLUSTER_NAME should not be allowed.
                 String nodeAddress = randomNodeAddress();
                 Cluster cluster = ensureCnGroupCreated(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
                 Assertions.assertEquals(1L, wh.getClusters().size());
@@ -295,6 +295,7 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
 
                 // Add node to the warehouse without cngroup name, FAIL!
                 String sql = addNodeSql(nodeAddress, warehouseName, null, isCnNode);
+                Assertions.assertThrows(DdlException.class, () -> starRocksAssert.ddl(sql));
                 Assertions.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, connectContext.getState().getErrorCode(),
                         sql);
                 Assertions.assertNull(getNode(nodeAddress, isCnNode));
@@ -304,20 +305,20 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             }
             ensureWarehouseDropped(warehouseName);
         }
-        { // non-default warehouse
-            // 1 cngroup != DEFAULT_CLUSTER_NAME
+        { // non-default warehouse, cngroup[0] != DEFAULT_CLUSTER_NAME
             String warehouseName = randomWarehouseName();
             String nodeAddress = randomNodeAddress();
             String cngroupName = randomCNGroupName();
 
             LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
-            Cluster cluster = ensureCnGroupCreated(warehouseName, cngroupName);
+            ensureCnGroupDropped(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
+            ensureCnGroupCreated(warehouseName, cngroupName);
             Assertions.assertEquals(1L, wh.getClusters().size());
 
-            // Add node to the warehouse without cngroup name, FAIL!
+            // Add node to the warehouse without cngroup name, OK!
             String sql = addNodeSql(nodeAddress, warehouseName, null, isCnNode);
-            Assertions.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, connectContext.getState().getErrorCode(), sql);
-            Assertions.assertNull(getNode(nodeAddress, isCnNode));
+            ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(sql));
+            Assertions.assertNotNull(getNode(nodeAddress, isCnNode));
 
             ensureCnGroupDropped(warehouseName, cngroupName);
             ensureWarehouseDropped(warehouseName);
@@ -363,9 +364,8 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             String warehouseName = randomWarehouseName();
             LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
             { // 1 cngroup == DEFAULT_CLUSTER_NAME, UPGRADE FROM enterprise version
-                // NOTE: create an cngroup with name DEFAULT_CLUSTER_NAME should not be allowed.
                 String nodeAddress = randomNodeAddress();
-                ensureCnGroupCreated(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
+                // DEFAULT_CLUSTER_NAME is created along with the warehouse. No explicit creation required.
                 Assertions.assertEquals(1L, wh.getClusters().size());
                 cngroupNames.add(LocalWarehouse.DEFAULT_CLUSTER_NAME);
 
@@ -410,6 +410,8 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             String cngroupName = randomCNGroupName();
 
             LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+            // drop the builtin cngroup and create a new cngroup
+            ensureCnGroupDropped(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
             ensureCnGroupCreated(warehouseName, cngroupName);
             Assertions.assertEquals(1L, wh.getClusters().size());
 
@@ -434,14 +436,28 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
         String cnGroupName = randomCNGroupName();
         String warehouseName = randomWarehouseName();
         LocalWarehouse warehouse = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        // CNGroup is available because the _builtin_cngroup_0 is created
+        Cluster builtinCLuster = warehouse.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assertions.assertNotNull(builtinCLuster);
+        Assertions.assertEquals(warehouse.getAnyWorkerGroupId(), builtinCLuster.getWorkerGroupId());
+        Assertions.assertEquals(warehouse.getAnyAvailableCluster(), builtinCLuster);
+
+        // create a second cluster
+        Cluster cluster = ensureCnGroupCreated(warehouseName, cnGroupName);
+        // no changes
+        Assertions.assertEquals(warehouse.getAnyWorkerGroupId(), builtinCLuster.getWorkerGroupId());
+        Assertions.assertEquals(warehouse.getAnyAvailableCluster(), builtinCLuster);
+
+        // Drop the builtin cluster, switch to the second cluster
+        ensureCnGroupDropped(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assertions.assertEquals(warehouse.getAnyWorkerGroupId(), cluster.getWorkerGroupId());
+        Assertions.assertEquals(warehouse.getAnyAvailableCluster(), cluster);
+
+        // Drop the last cluster
+        ensureCnGroupDropped(warehouseName, cnGroupName);
         Assertions.assertNull(warehouse.getAnyWorkerGroupId());
         Assertions.assertNull(warehouse.getAnyAvailableCluster());
 
-        Cluster cluster = ensureCnGroupCreated(warehouseName, cnGroupName);
-        Assertions.assertEquals((Long) cluster.getWorkerGroupId(), warehouse.getAnyWorkerGroupId());
-        Assertions.assertEquals(cluster, warehouse.getAnyAvailableCluster());
-
-        ensureCnGroupDropped(warehouseName, cnGroupName);
         ensureWarehouseDropped(warehouseName);
     }
 

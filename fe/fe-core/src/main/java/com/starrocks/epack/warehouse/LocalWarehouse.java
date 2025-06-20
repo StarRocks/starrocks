@@ -211,11 +211,10 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
 
     boolean isEmptyCNGroupNameAllowed() {
         // An empty CNGroupName is permitted only under the following condition:
-        // 1. The warehouse contains exactly one CNGroup whose ID matches the DEFAULT_CLUSTER_NAME.
-        //    - This typically indicates the CNGroup was auto-created during warehouse creation (pre-upgrade).
+        // 1. The warehouse contains exactly one CNGroup
         //
         // Note: This validation ensures backward compatibility for systems upgraded from pre-CNGroup-managed states.
-        return clusters.size() == 1 && cluster != null && LocalWarehouse.DEFAULT_CLUSTER_NAME.equals(cluster.getName());
+        return clusters.size() == 1 && cluster != null;
     }
 
     @Override
@@ -377,6 +376,27 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
         if (cluster != null) {
             throw ErrorReportException.report(ErrorCode.ERR_CNGROUP_EXISTS, cnGroupName);
         }
+    }
+
+    /**
+     * Create the builtin cngroup along with the warehouse without EditLog.
+     * It will be persistent along with the warehouse creation EditLog.
+     *
+     * @throws DdlException
+     * @apiNote This interface should be only called when the warehouse is created. The CNGroup created here
+     * is not persistent and will be lost otherwise.
+     *
+     * Make this interface package accessible by intention
+     */
+    void initializeBuiltinCNGroup() throws DdlException {
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        ReplicationType replicationType = WarehouseProperty.toStarOSReplicationType(property.getReplicationType());
+        WarmupLevel warmupLevel = WarehouseProperty.toStarOSWarmupLevel(property.getWarmupLevel());
+        long clusterId = GlobalStateMgr.getCurrentState().getNextId();
+        long workerGroupId =
+                starOSAgent.createWorkerGroup("x0", property.getComputeReplica(), replicationType, warmupLevel);
+        cluster = new Cluster(clusterId, DEFAULT_CLUSTER_NAME, workerGroupId);
+        clusters.add(cluster);
     }
 
     @Override

@@ -20,9 +20,12 @@ import com.staros.proto.WarmupLevel;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogDeserializer;
+import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
@@ -33,12 +36,19 @@ import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class WarehouseManagerEPackTest {
 
@@ -86,6 +96,14 @@ public class WarehouseManagerEPackTest {
                 " adjust lake_compaction_warehouse or lake_background_warehouse first",
                 () -> mgr.dropWarehouse(dropStmt2));
         Config.lake_compaction_warehouse = "default_warehouse";
+    }
+
+    byte[] writeEditLog(short op, Writable w) throws IOException {
+        ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
+        DataOutputStream stream = new DataOutputStream(byteOut);
+        stream.writeShort(op);
+        w.write(stream);
+        return byteOut.toByteArray();
     }
 
     @Test
@@ -217,6 +235,77 @@ public class WarehouseManagerEPackTest {
             DdlException exception = Assert.assertThrows(DdlException.class, () -> mgr.alterWarehouse(alterStmt));
             Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("_warmup_"));
             Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("+replication+"));
+        }
+    }
+
+    @Test
+    public void testCreateWarehouseAndReplayCreateWarehouse() throws IOException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+        long workerGroupId = GlobalStateMgr.getCurrentState().getNextId();
+        new MockUp<StarOSAgentEpack>() {
+            @Mock
+            public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                          WarmupLevel warmupLevel) throws DdlException {
+                return workerGroupId;
+            }
+        };
+
+        { // the warehouse is created with default properties, the editLog is captured
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh1", Maps.newHashMap(), "");
+            ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
+
+            Warehouse warehouse = mgr.getWarehouse("wh1");
+            Assert.assertNotNull(warehouse);
+            Assert.assertTrue(warehouse instanceof LocalWarehouse);
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            WarehouseProperty property = localWarehouse.getProperty();
+            Assert.assertEquals(new WarehouseProperty(), property);
+            Assert.assertEquals(1L, localWarehouse.getClusters().size());
+            // verify the cngroup
+            Cluster cluster = localWarehouse.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+            Assert.assertNotNull(cluster);
+            Assert.assertEquals(workerGroupId, cluster.getWorkerGroupId());
+        }
+
+        AtomicReference<byte[]> bytes = new AtomicReference<>();
+        new Verifications() {
+            {
+                short op;
+                Writable w;
+                editLog.logEdit(op = withCapture(), w = withCapture());
+                Assert.assertNotNull(w);
+                bytes.set(writeEditLog(op, w));
+            }
+        };
+
+        { // replay the editLog to recreate the warehouse
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes.get()));
+            short opCode = in.readShort();
+            Writable writable = EditLogDeserializer.deserialize(opCode, in);
+            Assert.assertEquals(OperationType.OP_CREATE_WAREHOUSE, opCode);
+            Assert.assertTrue(writable instanceof Warehouse);
+
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            mgr.replayCreateWarehouse((Warehouse) writable);
+
+            // verify the replayed result
+            Warehouse warehouse = mgr.getWarehouse("wh1");
+            Assert.assertNotNull(warehouse);
+            Assert.assertTrue(warehouse instanceof LocalWarehouse);
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            WarehouseProperty property = localWarehouse.getProperty();
+            Assert.assertEquals(new WarehouseProperty(), property);
+            Assert.assertEquals(1L, localWarehouse.getClusters().size());
+            // verify the cngroup
+            Cluster cluster = localWarehouse.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+            Assert.assertNotNull(cluster);
+            Assert.assertEquals(workerGroupId, cluster.getWorkerGroupId());
         }
     }
 }

@@ -36,6 +36,23 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
     }
 
     @Test
+    public void testCreateWarehouseWithBuiltinCNGroup() {
+        String warehouseName = randomWarehouseName();
+        // builtin cngroup will be created along with the warehouse creation.
+        LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        Cluster c = wh.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assert.assertNotNull(c);
+        Assert.assertEquals(1L, wh.getClusters().size());
+
+        // builtin cngroup can be dropped with no problem.
+        ensureCnGroupDropped(warehouseName, LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assert.assertNull(wh.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME));
+        Assert.assertEquals(0L, wh.getClusters().size());
+
+        ensureWarehouseDropped(warehouseName);
+    }
+
+    @Test
     public void testGetWarehouseInfo() {
         String warehouseName = randomWarehouseName();
         // remove the milliseconds part
@@ -55,12 +72,12 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
         Assert.assertEquals("AVAILABLE", whInfo.get(index++));
         // 4. NodeCount
         Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
-        // 5. CurrentClusterCount
-        Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
+        // 5. CurrentClusterCount, contains the `_builtin_cngroup_0_`
+        Assert.assertEquals(String.valueOf(1), whInfo.get(index++));
         // 6. MaxClusterCount
         Assert.assertEquals(String.valueOf(-1), whInfo.get(index++));
         // 7. StartedClusters
-        Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
+        Assert.assertEquals(String.valueOf(1), whInfo.get(index++));
         // 8. RunningSql
         Assert.assertEquals(String.valueOf(0), whInfo.get(index++));
         // 9. QueuedSql
@@ -81,7 +98,7 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
         Assert.assertEquals(13L, index);
         Assert.assertNull(whInfo.get(index));
 
-        // create a new cngroup and then check the warehouse info again
+        // create a new cngroup and then check the warehouse info again, two CNGroups there
         String cngroupName = randomCNGroupName();
         ensureCnGroupCreated(warehouseName, cngroupName);
         {
@@ -89,11 +106,11 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
             // 4. NodeCount
             Assert.assertEquals(String.valueOf(0), whInfo2.get(3));
             // 5. CurrentClusterCount
-            Assert.assertEquals(String.valueOf(1), whInfo2.get(4));
+            Assert.assertEquals(String.valueOf(2), whInfo2.get(4));
             // 6. MaxClusterCount
             Assert.assertEquals(String.valueOf(-1), whInfo2.get(5));
             // 7. StartedClusters
-            Assert.assertEquals(String.valueOf(1), whInfo2.get(6));
+            Assert.assertEquals(String.valueOf(2), whInfo2.get(6));
         }
         ensureCnGroupDropped(warehouseName, cngroupName);
         ensureWarehouseDropped(warehouseName);
@@ -107,14 +124,17 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
         String cngroupName = randomCNGroupName();
 
         { // Create a new CNGROUP
+            Assert.assertEquals(1, wh.getClusters().size());
+            Assert.assertNotNull(wh.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME));
+
             Cluster cluster = new Cluster(1024, cngroupName, 1025);
             LocalWarehouseOpLog opLog = LocalWarehouseOpLog.createCNGroupOpLog(cluster);
             WarehouseInternalOpLog whOpLog = new WarehouseInternalOpLog(warehouseName, opLog.toJson());
 
-            Assert.assertEquals(0, wh.getClusters().size());
+            Assert.assertEquals(1, wh.getClusters().size());
             manager.replayInternalOpLog(whOpLog);
             // the cngroup should be created to the warehouse
-            Assert.assertEquals(1, wh.getClusters().size());
+            Assert.assertEquals(2, wh.getClusters().size());
             Cluster c = wh.getCluster(cngroupName);
             Assert.assertNotNull(c);
             Assert.assertEquals(cluster.getId(), c.getId());
@@ -150,7 +170,7 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
             manager.replayInternalOpLog(whOpLog);
 
             Assert.assertNull(getClusterByName(warehouseName, cngroupName));
-            Assert.assertEquals(0, wh.getClusters().size());
+            Assert.assertEquals(1, wh.getClusters().size());
         }
         ensureWarehouseDropped(warehouseName);
     }

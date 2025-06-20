@@ -251,10 +251,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 }
             }
 
-            // Create warehouse without any CNGroup
             long warehouseId = GlobalStateMgr.getCurrentState().getNextId();
             String comment = stmt.getComment();
             LocalWarehouse wh = new LocalWarehouse(warehouseId, warehouseName, warehouseProperty, comment);
+            wh.initializeBuiltinCNGroup();
 
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);

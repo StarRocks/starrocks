@@ -3,12 +3,10 @@
 package com.starrocks.epack;
 
 import com.starrocks.common.DdlException;
-import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.WarehouseProperty;
 import com.starrocks.epack.warehouse.WarehouseSlotManager;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -23,12 +21,7 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -39,16 +32,6 @@ public class WarehouseStmtTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_DATA);
-    }
-
-    @Before
-    public void setUp() throws Exception {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
     }
 
     @Test
@@ -89,26 +72,7 @@ public class WarehouseStmtTest {
     }
 
     @Test
-    public void testOperateWarehouse(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new Expectations() {
-            {
-                starOSAgent.deleteWorkerGroup(anyLong);
-                result = null;
-                minTimes = 0;
-
-                starOSAgent.createWorkerGroup(anyString, 1 /* replicaNumber */, null);
-                result = -1L;
-                minTimes = 0;
-            }
-        };
-
+    public void testOperateWarehouse() throws Exception {
         String sql = "CREATE WAREHOUSE warehouse_1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
@@ -145,30 +109,7 @@ public class WarehouseStmtTest {
     }
 
     @Test
-    public void testOperateWarehouseWithQueryQueue1(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new Expectations() {
-            {
-                RunMode.isSharedDataMode();
-                minTimes = 1;
-                result = true;
-
-                starOSAgent.deleteWorkerGroup(anyLong);
-                result = null;
-                minTimes = 0;
-
-                starOSAgent.createWorkerGroup(anyString, 1 /* replicaNumber */, null);
-                result = -1L;
-                minTimes = 0;
-            }
-        };
-
+    public void testOperateWarehouseWithQueryQueue1() throws Exception {
         String sql = "CREATE WAREHOUSE warehouse_1 PROPERTIES (\n" +
                 "'enable_query_queue' = 'true',\n" +
                 "'query_queue_max_queued_queries' = '100',\n" +
@@ -234,30 +175,7 @@ public class WarehouseStmtTest {
     }
 
     @Test
-    public void testOperateWarehouseWithQueryQueue2(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new Expectations() {
-            {
-                RunMode.isSharedDataMode();
-                minTimes = 1;
-                result = true;
-
-                starOSAgent.deleteWorkerGroup(anyLong);
-                result = null;
-                minTimes = 0;
-
-                starOSAgent.createWorkerGroup(anyString, 1 /* replicaNumber */, null);
-                result = -1L;
-                minTimes = 0;
-            }
-        };
-
+    public void testOperateWarehouseWithQueryQueue2() throws Exception {
         String sql = "CREATE WAREHOUSE warehouse_1;";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
@@ -353,30 +271,7 @@ public class WarehouseStmtTest {
     }
 
     @Test
-    public void testOperateWarehouseWithQueryQueue3(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new Expectations() {
-            {
-                RunMode.isSharedDataMode();
-                minTimes = 1;
-                result = true;
-
-                starOSAgent.deleteWorkerGroup(anyLong);
-                result = null;
-                minTimes = 0;
-
-                starOSAgent.createWorkerGroup(anyString, 1 /* replicaNumber */, null);
-                result = -1L;
-                minTimes = 0;
-            }
-        };
-
+    public void testOperateWarehouseWithQueryQueue3() throws Exception {
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
