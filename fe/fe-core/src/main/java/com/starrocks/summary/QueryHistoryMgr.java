@@ -120,27 +120,27 @@ public class QueryHistoryMgr {
         if (!GlobalVariable.isEnableQueryHistory()) {
             return;
         }
-        if (ctx.isStatisticsConnection() || ctx.isStatisticsJob() || plan.getScanNodes().isEmpty()
+        if (histories.size() > CONVERT_BATCH_SIZE || lastLoadTime.plusSeconds(
+                GlobalVariable.queryHistoryLoadIntervalSeconds).isBefore(LocalDateTime.now())) {
+            loadQueryHistory(Lists.newArrayList(histories));
+            histories.clear();
+        }
+        if (ctx.isStatisticsConnection() || ctx.isStatisticsJob() || plan.getScanNodes().size() < 2
                 || StringUtils.containsIgnoreCase(ctx.getExecutor().getOriginStmtInString(),
                 StatsConstants.INFORMATION_SCHEMA)) {
             return;
         }
 
         histories.add(new QueryHistory(ctx, plan));
-        if (histories.size() > CONVERT_BATCH_SIZE || lastLoadTime.plusSeconds(
-                GlobalVariable.queryHistoryLoadIntervalSeconds).isBefore(LocalDateTime.now())) {
-            loadQueryHistory(Lists.newArrayList(histories));
-            histories.clear();
-        }
     }
 
     private void loadQueryHistory(List<QueryHistory> list) {
-        if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.QUERY_HISTORY_TABLE_NAME))) {
-            return;
-        }
-
-        ConnectContext ctx = StatisticUtils.buildConnectContext();
         EXECUTOR.submit(() -> {
+            if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.QUERY_HISTORY_TABLE_NAME))) {
+                return;
+            }
+
+            ConnectContext ctx = StatisticUtils.buildConnectContext();
             ctx.setThreadLocalInfo();
             for (QueryHistory query : list) {
                 try {
