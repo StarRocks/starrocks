@@ -478,6 +478,21 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return new PartitionKey(keyList, typeList);
     }
 
+    public static int findLastLessEqualInOrderedList(PartitionKey key, List<PartitionKey> list) {
+        int lower = 0;
+        int higher = list.size() - 1;
+        while (lower <= higher) {
+            int mid = (lower + higher) >> 1;
+            PartitionKey current = list.get(mid);
+            if (current.compareTo(key) <= 0) {
+                lower = mid + 1;
+            } else {
+                higher = mid - 1;
+            }
+        }
+        return Math.max(higher, 0);
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         int count = keys.size();

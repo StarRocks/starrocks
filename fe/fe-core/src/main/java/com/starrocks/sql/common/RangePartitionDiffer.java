@@ -40,7 +40,6 @@ import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,6 +50,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.PRangeCellPlus.getIntersectedCells;
 import static com.starrocks.sql.common.PRangeCellPlus.toPRangeCellPlus;
 
 // TODO: refactor all related code into this class
@@ -450,24 +450,15 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             Preconditions.checkArgument(partitionExprs.size() == 1);
             List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExprs.get(0));
             for (PRangeCellPlus baseRange : baseRanges) {
-                int mid = Collections.binarySearch(mvRanges, baseRange);
-                if (mid < 0) {
+                List<PRangeCellPlus> intersectedRanges = getIntersectedCells(baseRange, mvRanges);
+                if (intersectedRanges.isEmpty()) {
                     initialBaseRefMap(result, baseTable, baseRange);
                     continue;
                 }
-                PRangeCellPlus mvRange = mvRanges.get(mid);
-                updateTableRefMap(result, baseTable, baseRange.getPartitionName(), mvRange.getPartitionName());
 
-                int lower = mid - 1;
-                while (lower >= 0 && mvRanges.get(lower).isIntersected(baseRange)) {
-                    updateTableRefMap(result, baseTable, baseRange.getPartitionName(), mvRanges.get(lower).getPartitionName());
-                    lower--;
-                }
-
-                int higher = mid + 1;
-                while (higher < mvRanges.size() && mvRanges.get(higher).isIntersected(baseRange)) {
-                    updateTableRefMap(result, baseTable, baseRange.getPartitionName(), mvRanges.get(higher).getPartitionName());
-                    higher++;
+                for (PRangeCellPlus intersectedRange : intersectedRanges) {
+                    updateTableRefMap(
+                            result, baseTable, baseRange.getPartitionName(), intersectedRange.getPartitionName());
                 }
             }
         }
@@ -505,25 +496,14 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             initialMvRefMap(result, mvRanges, entry.getKey());
             List<PRangeCellPlus> baseRanges = entry.getValue();
             for (PRangeCellPlus baseRange : baseRanges) {
-                int mid = Collections.binarySearch(mvRanges, baseRange);
-                if (mid < 0) {
+                List<PRangeCellPlus> intersectedRanges = getIntersectedCells(baseRange, mvRanges);
+                if (intersectedRanges.isEmpty()) {
                     continue;
                 }
-                PRangeCellPlus mvRange = mvRanges.get(mid);
-                updatePartitionRefMap(result, mvRange.getPartitionName(), entry.getKey(), baseRange.getPartitionName());
 
-                int lower = mid - 1;
-                while (lower >= 0 && mvRanges.get(lower).isIntersected(baseRange)) {
+                for (PRangeCellPlus intersectedRange : intersectedRanges) {
                     updatePartitionRefMap(
-                            result, mvRanges.get(lower).getPartitionName(), entry.getKey(), baseRange.getPartitionName());
-                    lower--;
-                }
-
-                int higher = mid + 1;
-                while (higher < mvRanges.size() && mvRanges.get(higher).isIntersected(baseRange)) {
-                    updatePartitionRefMap(
-                            result, mvRanges.get(higher).getPartitionName(), entry.getKey(), baseRange.getPartitionName());
-                    higher++;
+                            result, intersectedRange.getPartitionName(), entry.getKey(), baseRange.getPartitionName());
                 }
             }
         }

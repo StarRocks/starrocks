@@ -18,6 +18,7 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.PartitionKey;
 
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,6 +52,41 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
 
     public boolean isIntersected(PRangeCellPlus o) {
         return cell.isIntersected(o.getCell());
+    }
+
+    /**
+     * Get intersected cells.
+     *
+     * @param cell PRangeCellPlus whose intersected cells will be found.
+     * @param ranges need to be sorted.
+     * @return intersected cells
+     */
+    public static List<PRangeCellPlus> getIntersectedCells(PRangeCellPlus cell, List<PRangeCellPlus> ranges) {
+        if (ranges.isEmpty()) {
+            return List.of();
+        }
+        List<PartitionKey> lowerPoints = ranges.stream().map(
+                dstRange -> dstRange.getCell().getRange().lowerEndpoint()).toList();
+        List<PartitionKey> upperPoints = ranges.stream().map(
+                dstRange -> dstRange.getCell().getRange().upperEndpoint()).toList();
+
+        PartitionKey lower = cell.getCell().getRange().lowerEndpoint();
+        PartitionKey upper = cell.getCell().getRange().upperEndpoint();
+
+        // For an interval [l, r], if there exists another interval [li, ri] that intersects with it, this interval
+        // must satisfy l ≤ ri and r ≥ li. Therefore, if there exists a pos_a such that for all k < pos_a,
+        // ri[k] < l, and there exists a pos_b such that for all k > pos_b, li[k] > r, then all intervals between
+        // pos_a and pos_b might potentially intersect with the interval [l, r].
+        int posA = PartitionKey.findLastLessEqualInOrderedList(lower, upperPoints);
+        int posB = PartitionKey.findLastLessEqualInOrderedList(upper, lowerPoints);
+
+        List<PRangeCellPlus> results = new LinkedList<>();
+        for (int i = posA; i <= posB; ++i) {
+            if (ranges.get(i).isIntersected(cell)) {
+                results.add(ranges.get(i));
+            }
+        }
+        return results;
     }
 
     public static List<PRangeCellPlus> toPRangeCellPlus(Map<String, PCell> rangeMap) {
