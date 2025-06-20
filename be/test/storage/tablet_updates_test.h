@@ -378,7 +378,7 @@ public:
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false,
-                                  int64_t schema_id = 0, int32_t schema_version = 0) {
+                                  int64_t schema_id = 0, int32_t schema_version = 0, bool add_v3 = false) {
         srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
@@ -427,6 +427,15 @@ public:
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
         request.tablet_schema.columns.push_back(k3);
+
+        if (add_v3) {
+            TColumn k4;
+            k4.column_name = "v3";
+            k4.__set_default_value("1");
+            k4.__set_is_key(false);
+            k4.column_type.type = TPrimitiveType::INT;
+            request.tablet_schema.columns.push_back(k4);
+        }
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);

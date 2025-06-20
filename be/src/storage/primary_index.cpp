@@ -1049,8 +1049,8 @@ PrimaryIndex::~PrimaryIndex() {
             LOG(WARNING) << "bad primary index released table:" << _table_id << " tablet:" << _tablet_id
                          << " memory: " << memory_usage();
         } else {
-            LOG(INFO) << "primary index released table:" << _table_id << " tablet:" << _tablet_id
-                      << " memory: " << memory_usage();
+            VLOG(1) << "primary index released table:" << _table_id << " tablet:" << _tablet_id
+                    << " memory: " << memory_usage();
         }
     }
 }

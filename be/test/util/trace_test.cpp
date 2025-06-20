@@ -137,4 +137,13 @@ TEST_F(TraceTest, TestTraceMetrics) {
     EXPECT_GE(m["test_scope_us"], 80 * 1000);
 }
 
+TEST_F(TraceTest, TestTraceLevel) {
+    scoped_refptr<Trace> t(new Trace);
+    TRACE_TO(t, "hello $0, $1", "world", 12345);
+    t->set_trace_level(1);
+    TRACE_TO(t, "goodbye $0, $1", "cruel world", 54321);
+    std::string result = XOutDigits(t->DumpToString(Trace::NO_FLAGS));
+    ASSERT_EQ("XXXX XX:XX:XX.XXXXXX trace_test.cpp:XXX] goodbye cruel world, XXXXX\n", result);
+}
+
 } // namespace starrocks

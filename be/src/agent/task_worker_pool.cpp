@@ -511,7 +511,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     std::unordered_set<DataDir*> affected_dirs;
     std::vector<TFinishTaskRequest> finish_task_requests;
     int64_t batch_publish_latency = 0;
-
+    std::vector<int64_t> finished_txn;
     while (true) {
         uint32_t wait_time = config::wait_apply_time;
         {
@@ -552,6 +552,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(publish_version_task.signature);
 
         batch_publish_latency += MonotonicMillis() - start_ts;
+        finished_txn.emplace_back(publish_version_task.task_req.transaction_id);
         priority_tasks.pop();
 
         if (!enable_sync_publish) {
@@ -588,6 +589,14 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 VLOG(1) << "batch submit " << finish_task_size << " finish publish version task "
                         << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
             }
+        }
+        if (priority_tasks.empty() || finished_txn.size() > PUBLISH_VERSION_BATCH_SIZE) {
+            std::stringstream ss;
+            for (auto& txn_id : finished_txn) {
+                ss << txn_id << ",";
+            }
+            LOG(INFO) << "publish version finished transactions: [" << ss.str() << "]";
+            finished_txn.clear();
         }
     }
     return nullptr;
