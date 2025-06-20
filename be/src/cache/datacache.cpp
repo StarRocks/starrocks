@@ -62,7 +62,7 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
 
     if (config::datacache_engine == "starcache") {
 #if defined(WITH_STARCACHE)
-        RETURN_IF_ERROR(_init_starcache(&cache_options));
+        RETURN_IF_ERROR(_init_starcache_engine(&cache_options));
         RETURN_IF_ERROR(_init_peer_cache(cache_options));
 
         if (config::block_cache_enable) {
@@ -136,7 +136,7 @@ Status DataCache::_init_page_cache() {
 }
 
 #if defined(WITH_STARCACHE)
-Status DataCache::_init_starcache(CacheOptions* cache_options) {
+Status DataCache::_init_starcache_engine(CacheOptions* cache_options) {
     // init starcache & disk monitor
     // TODO: DiskSpaceMonitor needs to be decoupled from StarCacheEngine.
     _local_cache = std::make_shared<StarCacheEngine>();
