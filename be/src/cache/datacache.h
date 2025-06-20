@@ -57,6 +57,7 @@ public:
 
 private:
     StatusOr<CacheOptions> _init_cache_options();
+    Status _init_starcache(CacheOptions* cache_options);
     Status _init_datacache();
     Status _init_lrucache_engine();
     Status _init_page_cache();
