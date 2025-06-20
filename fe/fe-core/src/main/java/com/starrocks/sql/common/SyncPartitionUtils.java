@@ -327,25 +327,26 @@ public class SyncPartitionUtils {
 
         Collections.sort(srcRanges, PRangeCellPlus::compareTo);
         Collections.sort(dstRanges, PRangeCellPlus::compareTo);
-
+        List<PartitionKey> lowerPoints = dstRanges.stream().map(
+                dstRange -> dstRange.getCell().getRange().lowerEndpoint()).toList();
+        List<PartitionKey> upperPoints = dstRanges.stream().map(
+                dstRange -> dstRange.getCell().getRange().upperEndpoint()).toList();
         for (PRangeCellPlus srcRange : srcRanges) {
-            int mid = Collections.binarySearch(dstRanges, srcRange);
-            if (mid < 0) {
-                continue;
-            }
+            PartitionKey lower = srcRange.getCell().getRange().lowerEndpoint();
+            PartitionKey upper = srcRange.getCell().getRange().upperEndpoint();
+
+            // For an interval [l, r], if there exists another interval [li, ri] that intersects with it, this interval
+            // must satisfy l ≤ ri and r ≥ li. Therefore, if there exists a pos_a such that for all k < pos_a,
+            // ri[k] < l, and there exists a pos_b such that for all k > pos_b, li[k] > r, then all intervals between
+            // pos_a and pos_b might potentially intersect with the interval [l, r].
+            int posA = PartitionKey.findLastLessEqualInOrderedList(lower, upperPoints);
+            int posB = PartitionKey.findLastLessEqualInOrderedList(upper, lowerPoints);
+
             Set<String> addedSet = result.get(srcRange.getPartitionName());
-            addedSet.add(dstRanges.get(mid).getPartitionName());
-
-            int lower = mid - 1;
-            while (lower >= 0 && dstRanges.get(lower).isIntersected(srcRange)) {
-                addedSet.add(dstRanges.get(lower).getPartitionName());
-                lower--;
-            }
-
-            int higher = mid + 1;
-            while (higher < dstRanges.size() && dstRanges.get(higher).isIntersected(srcRange)) {
-                addedSet.add(dstRanges.get(higher).getPartitionName());
-                higher++;
+            for (int i = posA; i <= posB; ++i) {
+                if (dstRanges.get(i).isIntersected(srcRange)) {
+                    addedSet.add(dstRanges.get(i).getPartitionName());
+                }
             }
         }
         return result;
