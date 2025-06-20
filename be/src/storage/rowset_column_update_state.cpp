@@ -834,8 +834,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
                   << ", finalize cost:" << cost_str.str();
     } else {
-        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
-                  << ", cost_time: " << total_do_update_time;
+        VLOG(1) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                << ", cost_time: " << total_do_update_time;
     }
     _finalize_finished = true;
     return Status::OK();

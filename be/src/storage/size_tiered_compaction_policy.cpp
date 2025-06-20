@@ -350,12 +350,12 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
 
     RETURN_IF_ERROR(_check_version_continuity(*input_rowsets));
 
-    LOG(INFO) << "pick tablet " << _tablet->tablet_id()
-              << " for size-tiered compaction rowset version=" << input_rowsets->front()->start_version() << "-"
-              << input_rowsets->back()->end_version() << " score=" << selected_level->score
-              << " level_size=" << selected_level->level_size << " total_size=" << selected_level->total_size
-              << " segment_num=" << selected_level->segment_num << " force_base_compaction=" << force_base_compaction
-              << " reached_max_versions=" << reached_max_version;
+    VLOG(1) << "pick tablet " << _tablet->tablet_id()
+            << " for size-tiered compaction rowset version=" << input_rowsets->front()->start_version() << "-"
+            << input_rowsets->back()->end_version() << " score=" << selected_level->score
+            << " level_size=" << selected_level->level_size << " total_size=" << selected_level->total_size
+            << " segment_num=" << selected_level->segment_num << " force_base_compaction=" << force_base_compaction
+            << " reached_max_versions=" << reached_max_version;
 
     return Status::OK();
 }

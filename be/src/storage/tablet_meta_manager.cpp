@@ -1180,8 +1180,8 @@ StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* me
     }
     RETURN_IF_ERROR(meta->write_batch(&batch));
     if (num_delete > 0) {
-        LOG(INFO) << "delete_del_vector_before_version version:" << version << " tablet:" << tablet_id
-                  << vlog_delvec_maplist.str();
+        VLOG(1) << "delete_del_vector_before_version version:" << version << " tablet:" << tablet_id
+                << vlog_delvec_maplist.str();
     }
     return num_delete;
 }
