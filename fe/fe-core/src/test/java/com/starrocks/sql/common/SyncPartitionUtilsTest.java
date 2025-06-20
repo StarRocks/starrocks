@@ -561,13 +561,8 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-<<<<<<< HEAD
         RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                createFuncExpr("month", PrimitiveType.DATETIME), null);
-=======
-        PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc("month", PrimitiveType.DATETIME), null);
->>>>>>> 29b3cd114c ([BugFix] Fix mv refresh bugs when contains null partition values (#59939))
         System.out.println(diff);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
@@ -593,15 +588,9 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-<<<<<<< HEAD
-                createFuncExpr("day", PrimitiveType.DATETIME), null);
+                createDateTruncFunc("day", PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
-=======
-                createDateTruncFunc("day", PrimitiveType.DATETIME), null);
-        adds = toRangeMap(diff.getAdds());
-        deletes = toRangeMap(diff.getDeletes());
->>>>>>> 29b3cd114c ([BugFix] Fix mv refresh bugs when contains null partition values (#59939))
 
         System.out.println(adds);
         System.out.println(deletes);
@@ -668,13 +657,8 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p1", createRange("2020-09-12", "2020-10-12"));
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
-<<<<<<< HEAD
         RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                createFuncExpr(granularity, PrimitiveType.DATETIME), null);
-=======
-        PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc(granularity, PrimitiveType.DATETIME), null);
->>>>>>> 29b3cd114c ([BugFix] Fix mv refresh bugs when contains null partition values (#59939))
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
@@ -695,15 +679,9 @@ public class SyncPartitionUtilsTest {
         mvRange.put("p202001_202002", createRange("2020-01-01", "2020-02-01"));
 
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-<<<<<<< HEAD
-                createFuncExpr(granularity, PrimitiveType.DATETIME), null);
+                createDateTruncFunc(granularity, PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
-=======
-                createDateTruncFunc(granularity, PrimitiveType.DATETIME), null);
-        adds = toRangeMap(diff.getAdds());
-        deletes = toRangeMap(diff.getDeletes());
->>>>>>> 29b3cd114c ([BugFix] Fix mv refresh bugs when contains null partition values (#59939))
         Assert.assertEquals(11, adds.size());
         Assert.assertEquals(0, deletes.size());
 
@@ -712,15 +690,9 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-<<<<<<< HEAD
-                createFuncExpr("month", PrimitiveType.DATETIME), null);
+                createDateTruncFunc("month", PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
-=======
-                createDateTruncFunc("month", PrimitiveType.DATETIME), null);
-        adds = toRangeMap(diff.getAdds());
-        deletes = toRangeMap(diff.getDeletes());
->>>>>>> 29b3cd114c ([BugFix] Fix mv refresh bugs when contains null partition values (#59939))
         Assert.assertEquals(1, adds.size());
         Assert.assertEquals(0, deletes.size());
         expects = ImmutableList.of(
@@ -734,16 +706,10 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-<<<<<<< HEAD
-                createFuncExpr("month", PrimitiveType.DATETIME), null);
+                createDateTruncFunc("month", PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
-=======
-                createDateTruncFunc("month", PrimitiveType.DATETIME), null);
-        adds = toRangeMap(diff.getAdds());
-        deletes = toRangeMap(diff.getDeletes());
->>>>>>> 29b3cd114c ([BugFix] Fix mv refresh bugs when contains null partition values (#59939))
-        Assert.assertEquals(2, adds.size());
+        Assert.assertEquals(3, adds.size());
         Assert.assertEquals("2020-04-01 00:00:00",
                 adds.get("p202004_202005").lowerEndpoint().getKeys().get(0).getStringValue());
         Assert.assertEquals("2020-05-01 00:00:00",
