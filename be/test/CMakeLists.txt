@@ -496,12 +496,7 @@ set(EXEC_FILES
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
-<<<<<<< HEAD
-=======
-        ./util/stack_util_test.cpp
-        ./util/byte_stream_split_test.cpp
-	./util/url_coding_test.cpp
->>>>>>> 7a664b7e7a ([BugFix] StreamLoad not working for URL encoded chinese characters (#59722))
+	    ./util/url_coding_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
