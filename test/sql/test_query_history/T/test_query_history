@@ -18,7 +18,8 @@ select count(1) from _statistics_.query_history;
 set global enable_query_history=true;
 set global query_history_load_interval_seconds=0;
 
-select count(1) from t1;
+select count(1) from t1 as a, t1 as b;
+select count(1) from t1; 
 
 select sleep(2);
 

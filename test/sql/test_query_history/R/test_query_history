@@ -26,13 +26,15 @@ set global enable_query_history=true;
 set global query_history_load_interval_seconds=0;
 -- result:
 -- !result
-select count(1) from t1;
+select count(1) from t1 as a, t1 as b;
 -- result:
-100
+10000
 -- !result
+select count(1) from t1; 
+
 select sleep(2);
 -- result:
-1
+100
 -- !result
 select count(1) from _statistics_.query_history where sql_digest like "%count%"; 
 
