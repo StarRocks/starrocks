@@ -605,8 +605,9 @@ public class MvPartitionCompensator {
         return partitionPredicates;
     }
 
-    public static ScalarOperator convertPartitionRangesToListPredicate(ScalarOperator partitionColRef,
-                                                                       List<Range<PartitionKey>> partitionRanges) {
+    public static ScalarOperator convertPartitionRangesToListPredicate(
+            ScalarOperator partitionColRef,
+            List<Range<PartitionKey>> partitionRanges) throws AnalysisException {
         List<PartitionKey> keys = Lists.newArrayList();
         for (Range<PartitionKey> range : partitionRanges) {
             if (range.isEmpty()) {
@@ -626,12 +627,19 @@ public class MvPartitionCompensator {
         return MvUtils.convertPartitionKeysToListPredicate(Lists.newArrayList(partitionColRef), keys);
     }
 
-    private static ScalarOperator convertPartitionKeysToPredicate(ScalarOperator partitionColumn,
-                                                                  List<Range<PartitionKey>> partitionKeys) {
+    private static ScalarOperator convertPartitionKeysToPredicate(
+            ScalarOperator partitionColumn,
+            List<Range<PartitionKey>> partitionKeys) {
         // NOTE: For string type partition column, it should be list partition rather than range partition.
         boolean isListPartition = partitionColumn.getType().isStringType();
         if (isListPartition) {
-            return MvPartitionCompensator.convertPartitionRangesToListPredicate(partitionColumn, partitionKeys);
+            try {
+                return MvPartitionCompensator.convertPartitionRangesToListPredicate(partitionColumn, partitionKeys);
+            } catch (AnalysisException e) {
+                LOG.warn("Failed to convert partition ranges to list predicate: {}",
+                        DebugUtil.getStackTrace(e));
+                return null;
+            }
         } else {
             List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumn, partitionKeys);
             return Utils.compoundOr(rangePredicates);
