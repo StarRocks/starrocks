@@ -1192,11 +1192,6 @@ int meta_tool_main(int argc, char** argv) {
                 return -1;
             }
 
-            if (file_size < offset + size) {
-                std::cerr << "Invalid page pointer for tablet " << page.first << ": offset + size exceeds file size\n";
-                return -1;
-            }
-
             auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
             std::string_view metadata_str = std::string_view(input_data.data() + offset);
             if (!metadata->ParseFromArray(metadata_str.data(), size)) {

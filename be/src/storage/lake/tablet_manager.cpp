@@ -520,9 +520,6 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         offset = page_pointer.offset();
         size = page_pointer.size();
     }
-    if (offset + size > file_size) {
-        return Status::Corruption(fmt::format("failed to parse protobuf file {}", path));
-    }
 
     if (file_size < offset + size) {
         return Status::Corruption(
