@@ -525,7 +525,7 @@ private:
                     while (i < when_num && !(when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(i)) {
+                    if (then_columns[i]->is_null(row)) {
                         res->append_nulls(1);
                     } else {
                         res->append(*then_columns[i], row, 1);
@@ -537,7 +537,7 @@ private:
                     while ((i < when_num) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(i)) {
+                    if (then_columns[i]->is_null(row)) {
                         res->append_nulls(1);
                     } else {
                         res->append(*then_columns[i], row, 1);
