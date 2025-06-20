@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.MatchType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -24,17 +25,23 @@ import java.util.List;
 import java.util.Objects;
 
 public class MatchExprOperator extends ScalarOperator {
+    private MatchType matchType;
     private List<ScalarOperator> arguments;
 
-    public MatchExprOperator(ScalarOperator... arguments) {
-        this(Lists.newArrayList(arguments));
+    public MatchExprOperator(MatchType matchType, ScalarOperator... arguments) {
+        this(matchType, Lists.newArrayList(arguments));
     }
 
-    public MatchExprOperator(List<ScalarOperator> arguments) {
+    public MatchExprOperator(MatchType matchType, List<ScalarOperator> arguments) {
         super(OperatorType.MATCH_EXPR, Type.BOOLEAN);
         Preconditions.checkState(arguments.size() == 2);
+        this.matchType = matchType;
         this.arguments = arguments;
         this.incrDepth(arguments);
+    }
+
+    public MatchType getMatchType() {
+        return matchType;
     }
 
     @Override
@@ -44,7 +51,7 @@ public class MatchExprOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        return getChild(0).toString() + " MATCH " + getChild(1).toString();
+        return getChild(0).toString() + " " + matchType + " " + getChild(1).toString();
     }
 
     @Override
@@ -54,12 +61,12 @@ public class MatchExprOperator extends ScalarOperator {
 
     @Override
     public String debugString() {
-        return getChild(0).debugString() + " MATCH " + getChild(1).debugString();
+        return getChild(0).debugString() + " " + matchType + " " + getChild(1).debugString();
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(arguments.get(0), arguments.get(1));
+        return Objects.hash(matchType, arguments.get(0), arguments.get(1));
     }
 
     @Override
@@ -95,12 +102,13 @@ public class MatchExprOperator extends ScalarOperator {
             return false;
         }
         MatchExprOperator other = (MatchExprOperator) obj;
-        return Objects.equals(this.arguments, other.arguments);
+        return this.matchType == other.matchType && Objects.equals(this.arguments, other.arguments);
     }
 
     @Override
     public ScalarOperator clone() {
         MatchExprOperator operator = (MatchExprOperator) super.clone();
+        operator.matchType = this.matchType;
         // Deep copy here
         List<ScalarOperator> newArguments = Lists.newArrayList();
         this.arguments.forEach(p -> newArguments.add(p.clone()));

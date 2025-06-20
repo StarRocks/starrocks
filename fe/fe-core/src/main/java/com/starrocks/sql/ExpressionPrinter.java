@@ -230,7 +230,7 @@ public class ExpressionPrinter<C> extends ScalarOperatorVisitor<String, C> {
 
     @Override
     public String visitMatchExprOperator(MatchExprOperator predicate, C context) {
-        return print(predicate.getChild(0), context) + " MATCH " + print(predicate.getChild(1), context);
+        return print(predicate.getChild(0)) + " " + predicate.getMatchType() + " " + print(predicate.getChild(1));
     }
 
     @Override

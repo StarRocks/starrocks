@@ -193,7 +193,8 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
           _is_nullable(node.is_nullable),
           _type(TypeDescriptor::from_thrift(node.type)),
           _output_scale(node.output_scale),
-          _fn_context_index(-1) {
+          _fn_context_index(-1),
+          _match_type(node.match_type) {
     if (node.__isset.fn) {
         _fn = node.fn;
     }

@@ -50,6 +50,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
@@ -521,6 +522,13 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                 type = _column_child_type;
                             } else {
                                 type = _column_type;
+                            }
+
+                            if (opts.runtime_state != nullptr &&
+                                opts.runtime_state->query_options().__isset.enable_phrase_query_sequential_opt) {
+                                add_enable_phrase_query_sequential_opt_options(
+                                        index_meta.get(),
+                                        opts.runtime_state->query_options().enable_phrase_query_sequential_opt);
                             }
 
                             ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))

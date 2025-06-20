@@ -23,6 +23,7 @@
 #include "storage/index/inverted/clucene/clucene_compound_reader.h"
 #include "storage/index/inverted/clucene/clucene_file_reader.h"
 #include "storage/index/inverted/clucene/match_operator.h"
+#include "storage/index/inverted/clucene/match_operator_factory.h"
 #include "storage/index/inverted/inverted_index_context.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -45,8 +46,10 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
         ASSIGN_OR_RETURN(auto file_reader, CLuceneFileManager::getInstance().get_or_create_clucene_file_reader(path));
         InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(tablet_index->index_properties()));
+        bool enable_phrase_query_sequential_opt = is_enable_phrase_query_sequential_opt(*tablet_index);
         // Only support full text search for now
-        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index, std::move(file_reader), parser_type);
+        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index, std::move(file_reader), parser_type,
+                                                               enable_phrase_query_sequential_opt);
         return Status::OK();
     } else {
         return Status::InvalidArgument(fmt::format("Not supported type {}", field_type));
@@ -59,14 +62,12 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
-    std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
 
     if (!index_exists(_index_path)) {
         LOG(WARNING) << "inverted index path: " << _index_path << " not exist.";
         return Status::NotFound(fmt::format("Not exists index_file {}", _index_path.c_str()));
     }
 
-    std::unique_ptr<MatchOperator> match_operator;
     ASSIGN_OR_RETURN(auto dir, _inverted_index_reader->open(_tablet_index));
     lucene::search::IndexSearcher index_searcher(dir.release(), true);
 
@@ -74,41 +75,21 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     inverted_index_ctx->setParserType(_parser_type);
     inverted_index_ctx->setQueryType(query_type);
     inverted_index_ctx->setReaderType(get_inverted_index_reader_type());
+    inverted_index_ctx->setEnablePhraseQuerySequentialOpt(_enable_phrase_query_sequential_opt);
 
-    switch (query_type) {
-    case InvertedIndexQueryType::MATCH_ALL_QUERY:
-    case InvertedIndexQueryType::EQUAL_QUERY:
-        match_operator = std::make_unique<MatchTermOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
-                                                             column_name_ws, search_str);
-        break;
-    case InvertedIndexQueryType::MATCH_PHRASE_QUERY:
-        // in phrase query
-        match_operator = std::make_unique<MatchPhraseOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
-                                                               column_name_ws, search_str, 0, _parser_type);
-        break;
-    case InvertedIndexQueryType::LESS_THAN_QUERY:
-        match_operator = std::make_unique<MatchLessThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
-                                                                 column_name_ws, search_str, false);
-        break;
-    case InvertedIndexQueryType::LESS_EQUAL_QUERY:
-        match_operator = std::make_unique<MatchLessThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
-                                                                 column_name_ws, search_str, true);
-        break;
-    case InvertedIndexQueryType::GREATER_THAN_QUERY:
-        match_operator = std::make_unique<MatchGreatThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
-                                                                  column_name_ws, search_str, false);
-        break;
-    case InvertedIndexQueryType::GREATER_EQUAL_QUERY:
-        match_operator = std::make_unique<MatchGreatThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
-                                                                  column_name_ws, search_str, true);
-        break;
-    case InvertedIndexQueryType::MATCH_WILDCARD_QUERY:
-        match_operator = std::make_unique<MatchWildcardOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
-                                                                 column_name_ws, search_str);
-        break;
-    default:
-        return Status::InvalidArgument("Unknown query type");
+    const auto match_operator_context = std::make_unique<MatchOperatorContext>();
+    match_operator_context->inverted_index_ctx = inverted_index_ctx.get();
+    match_operator_context->searcher = &index_searcher;
+    match_operator_context->parser_type = _parser_type;
+    match_operator_context->column_name = column_name;
+    match_operator_context->search_str = search_str;
+
+    if (query_type == InvertedIndexQueryType::LESS_EQUAL_QUERY ||
+        query_type == InvertedIndexQueryType::GREATER_EQUAL_QUERY) {
+        match_operator_context->inclusive = true;
     }
+
+    ASSIGN_OR_RETURN(const auto match_operator, MatchOperatorFactory::create(query_type, match_operator_context.get()));
 
     roaring::Roaring result;
     try {

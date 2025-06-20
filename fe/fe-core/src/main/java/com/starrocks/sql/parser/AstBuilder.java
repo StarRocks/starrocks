@@ -60,6 +60,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MatchExpr;
+import com.starrocks.analysis.MatchType;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
@@ -8022,10 +8023,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new LambdaFunctionExpr(arguments);
     }
 
+    public MatchType getMatchType(StarRocksParser.MatchTypesContext matchTypeContext) {
+        return MatchType.fromString(matchTypeContext.getText());
+    }
+
     @Override
     public ParseNode visitMatchExpr(StarRocksParser.MatchExprContext context) {
+        MatchType matchType = getMatchType(context.matchTypes());
         NodePosition pos = createPos(context);
         MatchExpr matchExpr = new MatchExpr((Expr) visit(context.left), (Expr) visit(context.right), pos);
+        matchExpr.setMatchType(matchType);
         if (context.NOT() != null) {
             return new CompoundPredicate(CompoundPredicate.Operator.NOT, matchExpr, null, pos);
         } else {

@@ -42,28 +42,21 @@ class InvertedIndexAnalyzer {
 public:
     static StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> create_analyzer(InvertedIndexParserType parser_type);
 
-    static std::vector<std::string> get_analyse_result(lucene::util::Reader* reader,
-                                                       lucene::analysis::Analyzer* analyzer,
-                                                       const std::wstring& field_name,
-                                                       InvertedIndexQueryType query_type, bool drop_duplicates = true);
-
-    static std::vector<std::string> get_analyse_result(lucene::util::Reader* reader,
-                                                       lucene::analysis::Analyzer* analyzer,
-                                                       const std::string& field_name, InvertedIndexQueryType query_type,
-                                                       bool drop_duplicates = true);
-
     static StatusOr<std::vector<std::string>> get_analyse_result(const std::string& search_str,
-                                                                 const std::string& field_name,
-                                                                 InvertedIndexParserType parser_type,
-                                                                 InvertedIndexQueryType query_type);
-
-    static StatusOr<std::vector<std::string>> get_analyse_result(const std::string& search_str,
-                                                                 const std::string& field_name,
-                                                                 InvertedIndexCtx* inverted_index_ctx);
+                                                                 const std::wstring& field_name,
+                                                                 const InvertedIndexCtx* inverted_index_ctx);
 
     static StatusOr<std::vector<std::string>> get_analyse_result(const std::string& search_str,
                                                                  const std::wstring& field_name,
-                                                                 InvertedIndexCtx* inverted_index_ctx);
+                                                                 const InvertedIndexParserType& parser_type,
+                                                                 const InvertedIndexQueryType& query_type);
+
+private:
+    static std::vector<std::string> analyse_result_internal(lucene::util::Reader* reader,
+                                                            lucene::analysis::Analyzer* analyzer,
+                                                            const std::wstring& field_name,
+                                                            const InvertedIndexQueryType& query_type,
+                                                            const bool& drop_duplicates = true);
 };
 
 } // namespace starrocks

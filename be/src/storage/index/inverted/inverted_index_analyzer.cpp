@@ -42,56 +42,28 @@ StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> InvertedIndexAnalyzer::cre
     }
 }
 
+StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(
+        const std::string& search_str, const std::wstring& field_name, const InvertedIndexCtx* inverted_index_ctx) {
+    return get_analyse_result(search_str, field_name, inverted_index_ctx->getParserType(),
+                              inverted_index_ctx->getQueryType());
+}
+
 StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(const std::string& search_str,
                                                                              const std::wstring& field_name,
-                                                                             InvertedIndexCtx* inverted_index_ctx) {
-    auto& analyzer = inverted_index_ctx->getAnalyzer();
-    if (analyzer == nullptr) {
-        // this will modify inverted_index_ctx.analyzer, maybe need to reconsider.
-        ASSIGN_OR_RETURN(analyzer, create_analyzer(inverted_index_ctx->getParserType()));
-    }
-    auto reader = std::make_unique<lucene::util::SStringReader<char>>();
-    reader->init(search_str.data(), static_cast<int32_t>(search_str.size()), false);
-    return get_analyse_result(reader.get(), analyzer.get(), field_name, inverted_index_ctx->getQueryType());
-}
-
-StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(const std::string& search_str,
-                                                                             const std::string& field_name,
-                                                                             InvertedIndexCtx* inverted_index_ctx) {
-    auto& analyzer = inverted_index_ctx->getAnalyzer();
-    if (analyzer == nullptr) {
-        // this will modify inverted_index_ctx.analyzer, maybe need to reconsider.
-        ASSIGN_OR_RETURN(analyzer, create_analyzer(inverted_index_ctx->getParserType()));
-    }
-    auto reader = std::make_unique<lucene::util::SStringReader<char>>();
-    reader->init(search_str.data(), static_cast<int32_t>(search_str.size()), false);
-    return get_analyse_result(reader.get(), analyzer.get(), field_name, inverted_index_ctx->getQueryType());
-}
-
-StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(const std::string& search_str,
-                                                                             const std::string& field_name,
-                                                                             InvertedIndexParserType parser_type,
-                                                                             InvertedIndexQueryType query_type) {
+                                                                             const InvertedIndexParserType& parser_type,
+                                                                             const InvertedIndexQueryType& query_type) {
     ASSIGN_OR_RETURN(auto analyzer, create_analyzer(parser_type));
     auto reader = std::make_unique<lucene::util::SStringReader<char>>();
     reader->init(search_str.data(), static_cast<int32_t>(search_str.size()), false);
-    return get_analyse_result(reader.get(), analyzer.get(), field_name, query_type);
+    const std::wstring field_ws(field_name.begin(), field_name.end());
+    return analyse_result_internal(reader.get(), analyzer.get(), std::move(field_ws), query_type);
 }
 
-std::vector<std::string> InvertedIndexAnalyzer::get_analyse_result(lucene::util::Reader* reader,
-                                                                   lucene::analysis::Analyzer* analyzer,
-                                                                   const std::string& field_name,
-                                                                   InvertedIndexQueryType query_type,
-                                                                   bool drop_duplicates) {
-    std::wstring field_ws(field_name.begin(), field_name.end());
-    return get_analyse_result(reader, analyzer, field_ws, query_type, drop_duplicates);
-}
-
-std::vector<std::string> InvertedIndexAnalyzer::get_analyse_result(lucene::util::Reader* reader,
-                                                                   lucene::analysis::Analyzer* analyzer,
-                                                                   const std::wstring& field_name,
-                                                                   InvertedIndexQueryType query_type,
-                                                                   bool drop_duplicates) {
+std::vector<std::string> InvertedIndexAnalyzer::analyse_result_internal(lucene::util::Reader* reader,
+                                                                        lucene::analysis::Analyzer* analyzer,
+                                                                        const std::wstring& field_name,
+                                                                        const InvertedIndexQueryType& query_type,
+                                                                        const bool& drop_duplicates) {
     std::unique_ptr<lucene::analysis::TokenStream> token_stream(analyzer->tokenStream(field_name.c_str(), reader));
     DeferOp d([&] {
         if (token_stream != nullptr) {
@@ -108,7 +80,7 @@ std::vector<std::string> InvertedIndexAnalyzer::get_analyse_result(lucene::util:
     }
 
     if (drop_duplicates && query_type == InvertedIndexQueryType::MATCH_ALL_QUERY) {
-        std::set<std::string> unrepeated_result(analyse_result.begin(), analyse_result.end());
+        std::set unrepeated_result(analyse_result.begin(), analyse_result.end());
         analyse_result.assign(unrepeated_result.begin(), unrepeated_result.end());
     }
     return analyse_result;

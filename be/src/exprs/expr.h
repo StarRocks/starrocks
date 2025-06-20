@@ -112,6 +112,8 @@ public:
 
     TExprNodeType::type node_type() const { return _node_type; }
 
+    TMatchType::type match_type() const { return _match_type; }
+
     const TFunction& fn() const { return _fn; }
 
     bool is_slotref() const { return _is_slotref; }
@@ -361,6 +363,8 @@ protected:
     /// Set in RegisterFunctionContext(). -1 if this expr does not need a FunctionContext and
     /// doesn't call RegisterFunctionContext().
     int _fn_context_index;
+
+    TMatchType::type _match_type;
 
     std::once_flag _constant_column_evaluate_once{};
     // set if this expr is constant, used to avoid redundant computation

@@ -2561,7 +2561,17 @@ primaryExpression
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
     | identifierList '->' '('(expressionList)?')'                                         #lambdaFunctionExpr
-    | left = primaryExpression NOT? MATCH right = primaryExpression                       #matchExpr
+    | left = primaryExpression NOT? matchTypes right = primaryExpression                  #matchExpr
+    ;
+
+matchTypes
+    : MATCH
+    | MATCH_ANY
+    | MATCH_ALL
+    | MATCH_PHRASE
+    | MATCH_PHRASE_PREFIX
+    | MATCH_REGEXP
+    | MATCH_PHRASE_EDGE
     ;
 
 literalExpression

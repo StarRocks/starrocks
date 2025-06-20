@@ -38,7 +38,11 @@ public:
     CLuceneFileReader(std::shared_ptr<FileSystem> fs, std::string index_file_path);
 
     Status init(int32_t read_buffer_size = config::inverted_index_read_buffer_size);
+
+    // Visible for index tools.
+    StatusOr<std::unique_ptr<CLuceneCompoundReader>> open(const int64_t& index_id) const;
     StatusOr<std::unique_ptr<CLuceneCompoundReader>> open(const std::shared_ptr<TabletIndex>& index_meta) const;
+
     void debug_file_entries();
     std::string get_index_file_path(const TabletIndex* index_meta) const;
     Status index_file_exist(const TabletIndex* index_meta, bool* res) const;

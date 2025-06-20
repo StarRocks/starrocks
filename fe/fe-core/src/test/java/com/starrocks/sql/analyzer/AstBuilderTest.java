@@ -16,12 +16,18 @@
 package com.starrocks.sql.analyzer;
 
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.MatchExpr;
+import com.starrocks.analysis.MatchType;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.parser.AstBuilder;
@@ -42,7 +48,6 @@ import java.util.List;
 public class AstBuilderTest {
 
     private static ConnectContext connectContext;
-
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -94,5 +99,27 @@ public class AstBuilderTest {
         List<AlterClause> alterClauses = aStmt.getAlterClauseList();
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assertions.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
+    }
+
+    @Test
+    public void testMatchTypes() {
+        for (MatchType type : MatchType.values()) {
+            String sql = "select * from tbl where col1 " + type.toString() + " 'text'";
+            List<StatementBase> statementBases = SqlParser.parse(sql, connectContext.getSessionVariable());
+            Assert.assertEquals(1, statementBases.size());
+            Assert.assertTrue(statementBases.get(0) instanceof QueryStatement);
+
+            QueryStatement query = (QueryStatement) statementBases.get(0);
+            QueryRelation relation = query.getQueryRelation();
+            Assert.assertTrue(relation instanceof SelectRelation);
+
+            SelectRelation selectRelation = (SelectRelation) relation;
+            Expr predExpr = selectRelation.getWhereClause();
+            Assert.assertTrue(predExpr instanceof MatchExpr);
+
+            MatchExpr matchExpr = (MatchExpr) predExpr;
+            MatchType matchType = matchExpr.getMatchType();
+            Assert.assertEquals(type, matchType);
+        }
     }
 }

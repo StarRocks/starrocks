@@ -13,9 +13,15 @@
 // limitations under the License.
 
 #pragma once
-#include <utility>
 
-#include "CLucene.h"
+#include <CLucene.h>
+#include <CLucene/search/MultiPhraseQuery.h>
+#include <CLucene/search/query/TermIterator.h>
+#include <CLucene/search/query/TermPositionIterator.h>
+
+#include <utility>
+#include <variant>
+
 #include "common/status.h"
 #include "roaring/roaring.hh"
 #include "storage/index/inverted/inverted_index_common.h"
@@ -24,44 +30,124 @@ namespace starrocks {
 
 class InvertedIndexCtx;
 
+struct MatchOperatorContext {
+    InvertedIndexCtx* inverted_index_ctx = nullptr;
+    lucene::search::IndexSearcher* searcher = nullptr;
+    InvertedIndexParserType parser_type = InvertedIndexParserType::PARSER_UNKNOWN;
+    std::string column_name;
+    std::string search_str;
+    bool inclusive = false;
+    int32_t max_expansions = 50;
+};
+
+struct InvertedIndexQueryInfo {
+    std::vector<std::string> terms;
+    std::vector<std::vector<std::string>> additional_terms;
+    int32_t slop = 0;
+    bool ordered = false;
+
+    std::string to_string() {
+        std::string s;
+        s += std::to_string(terms.size()) + ", ";
+        s += std::to_string(additional_terms.size()) + ", ";
+        s += std::to_string(slop) + ", ";
+        s += std::to_string(ordered);
+        return s;
+    }
+};
+
+class PostingsAndPosition {
+public:
+    PostingsAndPosition(const TermPositionIterator& postings, int32_t offset) : _postings(postings), _offset(offset) {}
+
+    TermPositionIterator _postings;
+    int32_t _offset = 0;
+    int32_t _freq = 0;
+    int32_t _upTo = 0;
+    int32_t _pos = 0;
+};
+
+template <typename Derived>
+class PhraseMatcherBase {
+public:
+    // Handle position information for different types of phrase queries
+    bool matches(int32_t doc);
+
+private:
+    void reset(int32_t doc);
+
+protected:
+    bool advance_position(PostingsAndPosition& posting, int32_t target);
+
+public:
+    std::vector<PostingsAndPosition> _postings;
+};
+
+class ExactPhraseMatcher : public PhraseMatcherBase<ExactPhraseMatcher> {
+public:
+    bool next_match();
+};
+
+class OrderedSloppyPhraseMatcher : public PhraseMatcherBase<OrderedSloppyPhraseMatcher> {
+public:
+    bool next_match();
+
+private:
+    bool stretch_to_order(PostingsAndPosition* prev_posting);
+
+public:
+    int32_t _allowed_slop = 0;
+
+private:
+    int32_t _match_width = -1;
+};
+
+using Matcher = std::variant<ExactPhraseMatcher, OrderedSloppyPhraseMatcher>;
+
 // MatchOperator is the base operator which wraps index search operations
 // and it would be the minimum cache unit in the searching of inverted index.
 class MatchOperator {
 public:
-    MatchOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                  std::wstring field_name)
-            : _inverted_index_ctx(ctx), _searcher(searcher), _dir(dir), _field_name(std::move(field_name)) {}
+    explicit MatchOperator(MatchOperatorContext* ctx)
+            : _ctx(ctx),
+              _inverted_index_ctx(ctx->inverted_index_ctx),
+              _searcher(ctx->searcher),
+              _field_name(std::wstring(ctx->column_name.begin(), ctx->column_name.end())) {}
     virtual ~MatchOperator() = default;
     Status match(roaring::Roaring& result);
 
 protected:
     virtual Status _match_internal(roaring::Roaring& result) = 0;
 
+    static void parser_slop(std::string& query, InvertedIndexQueryInfo& query_info);
+    static Status parser_info(std::string& query, const std::wstring& field_name,
+                              const InvertedIndexParserType& parser_type, const InvertedIndexQueryType& query_type,
+                              InvertedIndexQueryInfo& query_info, const bool& sequential_opt);
+
+    MatchOperatorContext* _ctx;
     InvertedIndexCtx* _inverted_index_ctx;
     lucene::search::IndexSearcher* _searcher;
-    lucene::store::Directory* _dir;
     std::wstring _field_name;
 };
 
 class MatchTermOperator : public MatchOperator {
 public:
-    MatchTermOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                      std::wstring field_name, std::string search_str)
-            : MatchOperator(ctx, searcher, dir, std::move(field_name)), _search_str(std::move(search_str)) {}
+    explicit MatchTermOperator(MatchOperatorContext* ctx)
+            : MatchOperator(ctx), _search_str(std::move(ctx->search_str)) {}
 
 protected:
-    std::string _search_str;
-
     Status _match_internal(roaring::Roaring& result) override;
+
+    virtual void _filter(const TermIterator& term_docs, const bool& first, roaring::Roaring& result);
+
+private:
+    std::string _search_str;
 };
 
 class MatchRangeOperator : public MatchOperator {
 public:
-    MatchRangeOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                       std::wstring field_name, std::string bound, bool inclusive)
-            : MatchOperator(ctx, searcher, dir, std::move(field_name)),
-              _bound(std::move(bound)),
-              _inclusive(inclusive) {}
+    explicit MatchRangeOperator(MatchOperatorContext* ctx)
+            : MatchOperator(ctx), _bound(std::move(ctx->search_str)), _inclusive(ctx->inclusive) {}
 
 protected:
     virtual std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) = 0;
@@ -73,9 +159,7 @@ protected:
 
 class MatchGreatThanOperator final : public MatchRangeOperator {
 public:
-    MatchGreatThanOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher,
-                           lucene::store::Directory* dir, std::wstring field_name, std::string bound, bool inclusive)
-            : MatchRangeOperator(ctx, searcher, dir, std::move(field_name), std::move(bound), inclusive) {}
+    explicit MatchGreatThanOperator(MatchOperatorContext* ctx) : MatchRangeOperator(ctx) {}
 
 protected:
     std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) override {
@@ -85,21 +169,18 @@ protected:
 
 class MatchLessThanOperator final : public MatchRangeOperator {
 public:
-    MatchLessThanOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                          std::wstring field_name, std::string bound, bool inclusive)
-            : MatchRangeOperator(ctx, searcher, dir, std::move(field_name), std::move(bound), inclusive) {}
+    explicit MatchLessThanOperator(MatchOperatorContext* ctx) : MatchRangeOperator(ctx) {}
 
 protected:
-    std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) override {
+    std::unique_ptr<lucene::search::RangeQuery> create_query(Term* term) override {
         return std::make_unique<lucene::search::RangeQuery>(nullptr, term, _inclusive);
     }
 };
 
 class MatchWildcardOperator final : public MatchOperator {
 public:
-    MatchWildcardOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                          std::wstring field_name, std::string wildard)
-            : MatchOperator(ctx, searcher, dir, std::move(field_name)), _wildcard(std::move(wildard)) {}
+    explicit MatchWildcardOperator(MatchOperatorContext* ctx)
+            : MatchOperator(ctx), _wildcard(std::move(ctx->search_str)) {}
 
 protected:
     Status _match_internal(roaring::Roaring& result) override;
@@ -110,20 +191,100 @@ private:
 
 class MatchPhraseOperator final : public MatchOperator {
 public:
-    MatchPhraseOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                        std::wstring field_name, std::string query_str, int slop, InvertedIndexParserType parser_type)
-            : MatchOperator(ctx, searcher, dir, std::move(field_name)),
-              _query_str(std::move(query_str)),
-              _slop(slop),
-              _parser_type(parser_type) {}
+    explicit MatchPhraseOperator(MatchOperatorContext* ctx)
+            : MatchOperator(ctx), _search_str(std::move(ctx->search_str)), _parser_type(ctx->parser_type) {}
+    ~MatchPhraseOperator() override;
 
 protected:
     Status _match_internal(roaring::Roaring& result) override;
 
 private:
-    std::string _query_str;
-    int _slop;
+    void add(const std::vector<std::string>& terms);
+
+    // Use bitmap for merging inverted lists
+    Status search_by_bitmap(roaring::Roaring& roaring) const;
+    // Use skiplist for merging inverted lists
+    Status search_by_skiplist(roaring::Roaring& roaring);
+
+    int32_t do_next(int32_t doc) const;
+    bool matches(int32_t doc);
+
+    std::string _search_str;
+    int _slop = 0;
     InvertedIndexParserType _parser_type;
+
+    TermIterator _lead1;
+    TermIterator _lead2;
+    std::vector<TermIterator> _others;
+
+    std::vector<PostingsAndPosition> _postings;
+
+    std::vector<Term*> _terms;
+    std::vector<TermDocs*> _term_docs;
+
+    std::vector<std::vector<std::string>> _additional_terms;
+    std::unique_ptr<lucene::search::PhraseQuery> _phrase_query = nullptr;
+    std::vector<Matcher> _matchers;
+};
+
+class MatchAnyTermOperator final : public MatchTermOperator {
+public:
+    explicit MatchAnyTermOperator(MatchOperatorContext* ctx) : MatchTermOperator(ctx) {}
+
+protected:
+    void _filter(const TermIterator& term_docs, const bool& first, roaring::Roaring& result) override;
+};
+
+class MatchPhraseEdgeOperator final : public MatchOperator {
+public:
+    explicit MatchPhraseEdgeOperator(MatchOperatorContext* ctx)
+            : MatchOperator(ctx), _search_str(ctx->search_str), _max_expansions(ctx->max_expansions) {}
+
+protected:
+    Status _match_internal(roaring::Roaring& result) override;
+
+private:
+    Status search_one_term(const std::vector<std::string>& terms, roaring::Roaring& roaring) const;
+    Status search_multi_term(const std::vector<std::string>& terms, roaring::Roaring& roaring) const;
+
+    void find_words(const std::function<void(Term*)>& cb) const;
+    static void add_default_term(lucene::search::MultiPhraseQuery* query, const std::wstring& field_name,
+                                 const std::wstring& ws_term);
+    static void handle_terms(lucene::search::MultiPhraseQuery* query, const std::wstring& field_name,
+                             const std::wstring& ws_term, std::vector<Term*>& checked_terms);
+
+    std::string _search_str;
+    const int32_t _max_expansions;
+};
+
+class MatchPhrasePrefixOperator final : public MatchOperator {
+public:
+    explicit MatchPhrasePrefixOperator(MatchOperatorContext* ctx)
+            : MatchOperator(ctx), _search_str(ctx->search_str), _max_expansions(ctx->max_expansions) {}
+
+protected:
+    Status _match_internal(roaring::Roaring& result) override;
+
+private:
+    static void get_prefix_terms(IndexReader* reader, const std::wstring& field_name, const std::string& prefix,
+                                 std::vector<CL_NS(index)::Term*>& prefix_terms, int32_t max_expansions);
+
+    std::string _search_str;
+    const int32_t _max_expansions;
+};
+
+class MatchRegexpOperator final : public MatchOperator {
+public:
+    explicit MatchRegexpOperator(MatchOperatorContext* ctx)
+            : MatchOperator(ctx), _ctx(ctx), _pattern(ctx->search_str), _max_expansions(ctx->max_expansions) {}
+
+protected:
+    Status _match_internal(roaring::Roaring& result) override;
+
+private:
+    MatchOperatorContext* _ctx;
+    std::string _pattern;
+    int32_t _max_expansions;
 };
 
 } // namespace starrocks

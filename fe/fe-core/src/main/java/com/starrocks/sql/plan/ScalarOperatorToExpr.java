@@ -44,6 +44,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.MatchExpr;
+import com.starrocks.analysis.MatchType;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -415,7 +416,10 @@ public class ScalarOperatorToExpr {
         public Expr visitMatchExprOperator(MatchExprOperator operator, FormatterContext context) {
             Expr child1 = buildExpr.build(operator.getChild(0), context);
             Expr child2 = buildExpr.build(operator.getChild(1), context);
-            return new MatchExpr(child1, child2);
+            MatchType matchType = operator.getMatchType();
+            MatchExpr expr = new MatchExpr(child1, child2);
+            expr.setMatchType(matchType);
+            return expr;
         }
 
         @Override

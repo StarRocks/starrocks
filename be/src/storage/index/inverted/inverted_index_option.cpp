@@ -18,6 +18,21 @@
 
 namespace starrocks {
 
+void add_enable_phrase_query_sequential_opt_options(TabletIndex* tablet_index,
+                                                    bool enable_phrase_query_sequential_opt) {
+    tablet_index->add_search_properties(INVERTED_ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT,
+                                        std::to_string(enable_phrase_query_sequential_opt));
+}
+
+bool is_enable_phrase_query_sequential_opt(const TabletIndex& tablet_index) {
+    auto it = tablet_index.search_properties().find(INVERTED_ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT);
+    if (it != tablet_index.search_properties().end()) {
+        const auto value = it->second;
+        return boost::algorithm::to_lower_copy(value) == "true";
+    }
+    return false;
+}
+
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index) {
     auto inverted_imp_prop = tablet_index.common_properties().find(INVERTED_IMP_KEY);
     if (inverted_imp_prop != tablet_index.common_properties().end()) {
@@ -68,7 +83,7 @@ std::string get_omit_term_freq_and_position_from_properties(const std::map<std::
             return prop.second;
         }
     }
-    return INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_YES;
+    return INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_NO;
 }
 
 std::string get_parser_string_from_properties(const std::map<std::string, std::string>& properties) {

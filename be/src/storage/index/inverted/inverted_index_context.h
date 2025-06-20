@@ -14,42 +14,34 @@
 
 #pragma once
 
-#include <memory>
-
 #include "inverted_index_common.h"
-
-namespace lucene::analysis {
-class Analyzer;
-}
 
 namespace starrocks {
 
 class InvertedIndexCtx {
 public:
     InvertedIndexCtx() = default;
-    InvertedIndexCtx(InvertedIndexQueryType _query_type, InvertedIndexReaderType _reader_type,
-                     InvertedIndexParserType _parser_type, std::unique_ptr<lucene::analysis::Analyzer> _analyzer)
-            : query_type(_query_type),
-              reader_type(_reader_type),
-              parser_type(_parser_type),
-              analyzer(std::move(_analyzer)) {};
+    InvertedIndexCtx(const InvertedIndexQueryType& _query_type, const InvertedIndexReaderType& _reader_type,
+                     const InvertedIndexParserType& _parser_type)
+            : query_type(_query_type), reader_type(_reader_type), parser_type(_parser_type) {}
 
-    void setQueryType(InvertedIndexQueryType _query_type) { query_type = _query_type; }
-    void setReaderType(InvertedIndexReaderType _reader_type) { reader_type = _reader_type; }
-    void setParserType(InvertedIndexParserType _parser_type) { parser_type = _parser_type; }
-    void setAnalyzer(std::unique_ptr<lucene::analysis::Analyzer> _analyzer) { analyzer = std::move(_analyzer); }
+    void setQueryType(const InvertedIndexQueryType& _query_type) { query_type = _query_type; }
+    void setReaderType(const InvertedIndexReaderType& _reader_type) { reader_type = _reader_type; }
+    void setParserType(const InvertedIndexParserType& _parser_type) { parser_type = _parser_type; }
+    void setEnablePhraseQuerySequentialOpt(bool _enable_phrase_query_sequential_opt) {
+        enable_phrase_query_sequential_opt = _enable_phrase_query_sequential_opt;
+    }
 
     InvertedIndexQueryType getQueryType() const { return query_type; }
     InvertedIndexReaderType getReaderType() const { return reader_type; }
     InvertedIndexParserType getParserType() const { return parser_type; }
-    std::unique_ptr<lucene::analysis::Analyzer>& getAnalyzer() { return analyzer; }
+    bool enablePhraseQuerySequentialOpt() const { return enable_phrase_query_sequential_opt; }
 
 private:
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
     InvertedIndexReaderType reader_type = InvertedIndexReaderType::UNKNOWN;
     InvertedIndexParserType parser_type = InvertedIndexParserType::PARSER_UNKNOWN;
-
-    std::unique_ptr<lucene::analysis::Analyzer> analyzer = nullptr;
+    bool enable_phrase_query_sequential_opt = false;
 };
 
 } // namespace starrocks

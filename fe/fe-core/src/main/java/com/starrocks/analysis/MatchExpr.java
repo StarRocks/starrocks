@@ -25,6 +25,8 @@ import com.starrocks.thrift.TExprNodeType;
 import java.util.Objects;
 
 public class MatchExpr extends Expr {
+    private MatchType matchType = MatchType.MATCH_ALL;
+
     public MatchExpr(Expr e1, Expr e2) {
         this(e1, e2, NodePosition.ZERO);
     }
@@ -45,7 +47,16 @@ public class MatchExpr extends Expr {
             Preconditions.checkNotNull(child);
             this.children.add(child.clone());
         }
+        this.matchType = other.matchType;
         setType(Type.BOOLEAN);
+    }
+
+    public void setMatchType(MatchType matchType) {
+        this.matchType = matchType;
+    }
+
+    public MatchType getMatchType() {
+        return matchType;
     }
 
     @Override
@@ -55,12 +66,13 @@ public class MatchExpr extends Expr {
 
     @Override
     public String toSqlImpl() {
-        return getChild(0).toSql() + " MATCH " + getChild(1).toSql();
+        return getChild(0).toSql() + " " + matchType + " " + getChild(1).toSql();
     }
 
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.MATCH_EXPR;
+        msg.match_type = matchType.toThrift();
     }
 
     @Override

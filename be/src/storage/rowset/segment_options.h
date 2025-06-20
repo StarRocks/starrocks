@@ -74,7 +74,7 @@ public:
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
-
+    RuntimeState* runtime_state = nullptr;
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;

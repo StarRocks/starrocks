@@ -47,6 +47,8 @@ const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_NO = "false";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 
+const std::string INVERTED_ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT = "enable_phrase_query_sequential_opt";
+
 enum class InvertedIndexReaderType {
     UNKNOWN = -1,
     TEXT = 0,
@@ -62,9 +64,12 @@ enum class InvertedIndexQueryType {
     GREATER_THAN_QUERY = 3,
     GREATER_EQUAL_QUERY = 4,
     MATCH_WILDCARD_QUERY = 5,
-    MATCH_FUZZY_QUERY = 6,
+    MATCH_ANY_QUERY = 6,
     MATCH_ALL_QUERY = 7,
     MATCH_PHRASE_QUERY = 8,
+    MATCH_PHRASE_PREFIX_QUERY = 9,
+    MATCH_REGEXP_QUERY = 10,
+    MATCH_PHRASE_EDGE_QUERY = 11,
 };
 
 } // namespace starrocks

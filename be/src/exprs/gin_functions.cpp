@@ -38,10 +38,7 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
     InvertedIndexCtx* inverted_index_ctx = new InvertedIndexCtx();
 
     InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(method_col.to_string());
-    ASSIGN_OR_RETURN(auto analyzer, InvertedIndexAnalyzer::create_analyzer(parser_type));
-
     inverted_index_ctx->setParserType(parser_type);
-    inverted_index_ctx->setAnalyzer(std::move(analyzer));
 
     context->set_function_state(scope, inverted_index_ctx);
     return Status::OK();
@@ -81,6 +78,7 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
     NullColumnPtr null_array = NullColumn::create();
 
     std::string field_name("tokenize");
+    std::wstring field_ws(field_name.begin(), field_name.end());
 
     for (int row = 0; row < num_rows; ++row) {
         array_offsets->append(offset);
@@ -92,7 +90,7 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
             auto data = value_viewer.value(row);
             std::string slice_str(data.data, data.get_size());
             ASSIGN_OR_RETURN(auto tokens,
-                             InvertedIndexAnalyzer::get_analyse_result(slice_str, field_name, inverted_index_ctx));
+                             InvertedIndexAnalyzer::get_analyse_result(slice_str, field_ws, inverted_index_ctx));
             for (auto& token : tokens) {
                 offset++;
                 array_binary_column->append(Slice(std::move(token)));

@@ -25,6 +25,10 @@
 
 namespace starrocks {
 
+void add_enable_phrase_query_sequential_opt_options(TabletIndex* tablet_index, bool enable_phrase_query_sequential_opt);
+
+bool is_enable_phrase_query_sequential_opt(const TabletIndex& tablet_index);
+
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index);
 
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type);

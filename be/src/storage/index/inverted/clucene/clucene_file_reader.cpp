@@ -114,6 +114,10 @@ StatusOr<std::unique_ptr<CLuceneCompoundReader>> CLuceneFileReader::_open(const 
     return std::make_unique<CLuceneCompoundReader>(_stream->clone(), index_it->second.get(), _read_buffer_size);
 }
 
+StatusOr<std::unique_ptr<CLuceneCompoundReader>> CLuceneFileReader::open(const int64_t& index_id) const {
+    return _open(index_id);
+}
+
 StatusOr<std::unique_ptr<CLuceneCompoundReader>> CLuceneFileReader::open(
         const std::shared_ptr<TabletIndex>& index_meta) const {
     const auto index_id = index_meta->index_id();

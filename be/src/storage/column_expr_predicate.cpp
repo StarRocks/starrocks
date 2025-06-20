@@ -325,6 +325,8 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         return Status::NotSupported(ss.str());
     }
 
+    const TMatchType::type& match_type = expr->match_type();
+
     auto* like_target = dynamic_cast<VectorizedLiteral*>(expr->get_child(1));
     DCHECK(like_target != nullptr);
     ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
@@ -336,11 +338,34 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {
-        query_type = InvertedIndexQueryType::EQUAL_QUERY;
-    } else {
-        query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
+
+    switch (match_type) {
+    case TMatchType::MATCH_ALL:
+        if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {
+            query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        } else {
+            query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
+        }
+        break;
+    case TMatchType::MATCH_ANY:
+        query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
+        break;
+    case TMatchType::MATCH_PHRASE:
+        query_type = InvertedIndexQueryType::MATCH_PHRASE_QUERY;
+        break;
+    case TMatchType::MATCH_PHRASE_EDGE:
+        query_type = InvertedIndexQueryType::MATCH_PHRASE_EDGE_QUERY;
+        break;
+    case TMatchType::MATCH_PHRASE_PREFIX:
+        query_type = InvertedIndexQueryType::MATCH_PHRASE_PREFIX_QUERY;
+        break;
+    case TMatchType::MATCH_REGEXP:
+        query_type = InvertedIndexQueryType::MATCH_REGEXP_QUERY;
+        break;
+    default:
+        break;
     }
+
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
     if (with_not) {

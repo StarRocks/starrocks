@@ -186,6 +186,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     }
     seg_options.stats = options.stats;
+    seg_options.runtime_state = options.runtime_state;
     seg_options.ranges = options.ranges;
     seg_options.pred_tree = options.pred_tree;
     seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;

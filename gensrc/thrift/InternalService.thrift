@@ -309,6 +309,8 @@ struct TQueryOptions {
 
   116: optional string sql_dialect;
 
+  117: optional bool enable_phrase_query_sequential_opt;
+
   119: optional bool enable_result_sink_accumulate;
   120: optional bool enable_connector_split_io_tasks = false;
   121: optional i64 connector_max_split_size = 0;

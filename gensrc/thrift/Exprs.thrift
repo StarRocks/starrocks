@@ -195,6 +195,15 @@ struct TDictionaryGetExpr {
   4: optional bool null_if_not_exist
 }
 
+enum TMatchType {
+  MATCH_ALL,
+  MATCH_ANY,
+  MATCH_PHRASE,
+  MATCH_PHRASE_PREFIX,
+  MATCH_REGEXP,
+  MATCH_PHRASE_EDGE
+}
+
 // This is essentially a union over the subclasses of Expr.
 struct TExprNode {
   1: required TExprNodeType node_type
@@ -253,6 +262,9 @@ struct TExprNode {
   56: optional TDictionaryGetExpr dictionary_get_expr
   // whether this expr is only used in index
   57: optional bool is_index_only_filter
+
+  // for future compatibility
+  999: optional TMatchType match_type
 }
 
 struct TPartitionLiteral {
