@@ -32,6 +32,7 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -93,6 +94,18 @@ public final class ExternalTableCompensation extends TableCompensation {
     public LogicalScanOperator compensate(OptimizerContext optimizerContext,
                                           MaterializedView mv,
                                           LogicalScanOperator scanOperator) {
+        try {
+            return compensateImpl(optimizerContext, mv, scanOperator);
+        } catch (AnalysisException e) {
+            logMVRewrite(mv.getName(), "Failed to compensate external table {}: {}",
+                    refBaseTable.getName(), DebugUtil.getStackTrace(e));
+            return null;
+        }
+    }
+
+    public LogicalScanOperator compensateImpl(OptimizerContext optimizerContext,
+                                              MaterializedView mv,
+                                              LogicalScanOperator scanOperator) throws AnalysisException {
         final LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
         // reset original partition predicates to prune partitions/tablets again
         builder.withOperator(scanOperator);
@@ -141,7 +154,7 @@ public final class ExternalTableCompensation extends TableCompensation {
                                                        MaterializedView mv,
                                                        IcebergTable icebergTable,
                                                        TableName refTableName,
-                                                       List<ColumnRefOperator> refPartitionColRefs) {
+                                                       List<ColumnRefOperator> refPartitionColRefs) throws AnalysisException {
         PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
         if (!mvPartitionInfo.isListPartition()) {
             // check whether the iceberg table contains partition transformations
