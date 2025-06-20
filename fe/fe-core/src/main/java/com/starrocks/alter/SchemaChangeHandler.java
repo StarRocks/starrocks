@@ -82,6 +82,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
@@ -1940,10 +1941,17 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
+
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties
