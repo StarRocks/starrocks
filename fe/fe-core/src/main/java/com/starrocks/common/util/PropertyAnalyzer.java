@@ -1505,16 +1505,7 @@ public class PropertyAnalyzer {
                             + " does not support non-partitioned materialized view.");
                 }
             }
-<<<<<<< HEAD
-=======
-            // partition refresh strategy
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
-                String strategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, strategy);
-                materializedView.getTableProperty().setPartitionRefreshStrategy(strategy);
-            }
->>>>>>> 44c71b713e ([Enhancement] Add a force refresh strategy and add meta functions for better debug (#60027))
+
             // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,

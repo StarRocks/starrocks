@@ -295,13 +295,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             logger.warn("failed to lock database: {} in checkMvToRefreshedPartitions", db.getFullName());
             throw new LockTimeoutException("Failed to lock database: " + db.getFullName());
         }
-        PartitionRefreshStrategy partitionRefreshStrategy = PartitionRefreshStrategy.valueOf(
-                mv.getTableProperty().getPartitionRefreshStrategy().trim().toUpperCase());
 
-        boolean isForce = partitionRefreshStrategy == PartitionRefreshStrategy.FORCE || tentative;
         try {
             final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
-            final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), context.getProperties(), isForce);
+            final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), context.getProperties(), tentative);
             final PartitionInfo partitionInfo = mv.getPartitionInfo();
             mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(partitionInfo,
                     mvRefreshParams, mvPotentialPartitionNames);
@@ -318,29 +315,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
             }
-<<<<<<< HEAD
-=======
-            // TODO(Hongkun Xu) Because non-OLAP tables cannot directly obtain partition information, currently SMART mode does
-            //  not support base tables that contain external tables. However, support for this scenario will be added in the future.
-            boolean hasExternalTable = mv.getBaseTableTypes().stream().anyMatch(type -> type != Table.TableType.OLAP);
-            if (hasExternalTable) {
-                logger.warn("materialized view {} has external table. so choose default refresh strategy", mv.getId());
-                filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
-                        tentative);
-            } else {
-                switch (partitionRefreshStrategy) {
-                    case ADAPTIVE:
-                        filterPartitionByAdaptiveRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
-                                tentative);
-                        break;
-                    case STRICT:
-                    default:
-                        // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
-                        filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
-                                tentative);
-                }
-            }
->>>>>>> 44c71b713e ([Enhancement] Add a force refresh strategy and add meta functions for better debug (#60027))
 
             // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
             filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,

@@ -147,8 +147,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         DEFERRED
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Strategy for selecting candidate partitions to refresh during materialized view refresh.
      */
@@ -173,7 +171,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         ADAPTIVE
     }
 
->>>>>>> 44c71b713e ([Enhancement] Add a force refresh strategy and add meta functions for better debug (#60027))
     @Override
     public boolean getUseFastSchemaEvolution() {
         return false;
