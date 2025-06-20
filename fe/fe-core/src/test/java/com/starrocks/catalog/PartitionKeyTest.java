@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import org.junit.Assert;
@@ -215,5 +216,25 @@ public class PartitionKeyTest {
         // 3. delete files
         dis.close();
         file.delete();
+    }
+
+    private PartitionKey createPartitionKey(String key) throws AnalysisException {
+        return PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(key));
+    }
+
+    @Test
+    public void testPartitionKeys() throws AnalysisException {
+        List<PartitionKey> list = Arrays.asList(
+                createPartitionKey("20230801"),
+                createPartitionKey("20230802"),
+                createPartitionKey("20230804"),
+                createPartitionKey("20230805"),
+                createPartitionKey("20230806"),
+                createPartitionKey("20230807"));
+        Assert.assertEquals(0, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230731"), list));
+        Assert.assertEquals(0, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230801"), list));
+        Assert.assertEquals(1, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230802"), list));
+        Assert.assertEquals(1, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230803"), list));
+        Assert.assertEquals(5, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230808"), list));
     }
 }
