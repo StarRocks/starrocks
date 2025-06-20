@@ -291,7 +291,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         try {
             final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
-            final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), context.getProperties(), tentative);
+            final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(),
+                    context.getProperties(), tentative);
             final PartitionInfo partitionInfo = mv.getPartitionInfo();
             mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(partitionInfo,
                     mvRefreshParams, mvPotentialPartitionNames);
