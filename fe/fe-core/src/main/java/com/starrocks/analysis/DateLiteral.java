@@ -449,10 +449,10 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public boolean isNullable() {
-        if (type == Type.DATETIME) {
+        if (type.isDatetime()) {
             return this.compareLiteral(DateLiteral.MIN_DATETIME) < 0
                     || DateLiteral.MAX_DATETIME.compareLiteral(this) < 0;
-        } else if (type == Type.DATE) {
+        } else if (type.isDate()) {
             return this.compareLiteral(DateLiteral.MIN_DATE) < 0 || DateLiteral.MAX_DATE.compareLiteral(this) < 0;
         }
         return true;
