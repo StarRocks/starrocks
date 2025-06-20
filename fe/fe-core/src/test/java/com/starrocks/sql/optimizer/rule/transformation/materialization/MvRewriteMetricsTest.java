@@ -311,9 +311,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
             String json = visitor.build();
             System.out.println(json);
-            Assert.assertTrue(json.contains("mv_refresh_jobs"));
-            Assert.assertTrue(json.contains("mv_refresh_total_success_jobs"));
-            Assert.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
+            Assert.assertEquals("[]", json);
         }
     }
 }

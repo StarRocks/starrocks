@@ -100,11 +100,7 @@ public class MVPCTMetaRepairer {
         if (baseTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
             return true;
         }
-        if (!(baseTable instanceof HiveTable)) {
-            return false;
-        }
-        HiveTable hiveTable = (HiveTable) baseTable;
-        return hiveTable.getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE;
+        return baseTable instanceof HiveTable;
     }
 
     /**
