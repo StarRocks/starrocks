@@ -250,13 +250,8 @@ void DataCache::try_release_resource_before_core_dump() {
         return release_all || modules.contains(name);
     };
 
-    if (_page_cache != nullptr && need_release("data_cache")) {
-        _page_cache->set_capacity(0);
-    }
-    if (_local_cache != nullptr && _local_cache->available() && need_release("data_cache")) {
-        // TODO: Currently, block cache don't support shutdown now,
-        //  so here will temporary use update_mem_quota instead to release memory.
-        (void)_local_cache->update_mem_quota(0, false);
+    if (_local_cache != nullptr && need_release("data_cache")) {
+        (void) _local_cache->update_mem_quota(0, false);
     }
 }
 
@@ -270,7 +265,7 @@ bool DataCache::page_cache_available() const {
 
 int64_t DataCache::check_datacache_limit(int64_t datacache_limit) {
     if (datacache_limit > _global_env->process_mem_limit()) {
-        LOG(WARNING) << "Config datacache_limit is greater process memory limit, config="
+        LOG(WARNING) << "BE Config datacache_mem_size is greater process memory limit, config="
                      << config::datacache_mem_size.value() << ", memory=" << _global_env->process_mem_limit();
         datacache_limit = _global_env->process_mem_limit();
     }
