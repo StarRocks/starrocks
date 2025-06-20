@@ -73,8 +73,8 @@ public class InvertedIndexUtil {
     }
 
     public static void checkInvertedIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (keysType != KeysType.DUP_KEYS) {
-            throw new SemanticException("The inverted index can only be build on DUPLICATE table.");
+        if (keysType != KeysType.DUP_KEYS && keysType != KeysType.PRIMARY_KEYS) {
+            throw new SemanticException("The inverted index can only be build on DUPLICATE and PK table.");
         }
         if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
