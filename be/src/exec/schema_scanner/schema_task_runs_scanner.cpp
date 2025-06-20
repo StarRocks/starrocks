@@ -40,7 +40,6 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"JOB_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"JOB_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
@@ -285,18 +284,9 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
         }
         case 16: {
-            // job_state
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
-                const std::string* str = &task_run_info.job_state;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-        }
-        case 17: {
             // process_time
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
                 auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (task_run_info.__isset.process_time) {
                     int64_t complete_time = task_run_info.process_time;

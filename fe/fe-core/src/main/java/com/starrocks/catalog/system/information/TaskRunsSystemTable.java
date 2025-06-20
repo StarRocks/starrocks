@@ -86,7 +86,6 @@ public class TaskRunsSystemTable extends SystemTable {
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
                         .column("PROPERTIES", ScalarType.createVarcharType(512))
                         .column("JOB_ID", ScalarType.createVarcharType(64))
-                        .column("JOB_STATE", ScalarType.createVarcharType(16))
                         .column("PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
@@ -219,7 +218,6 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setProperties(status.getPropertiesJson());
             info.setProcess_time(status.getProcessStartTime() / 1000);
             info.setJob_id(status.getStartTaskRunId());
-            info.setJob_state(status.getLastRefreshState().toString());
             tasksResult.add(info);
         }
         return result;

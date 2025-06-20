@@ -34,7 +34,6 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -194,7 +193,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
             try {
                 scalar = mayCast(scalar, column.getType());
             } catch (Exception e) {
-                LOG.warn("Failed to cast scalar operator for column: {}, value: {}, type: {}",
+                LOG.debug("Failed to cast scalar operator for column: {}, value: {}, type: {}",
                         column.getName(), obj, valueType, e);
                 scalar = ConstantOperator.createNull(column.getType());
             }
@@ -336,6 +335,6 @@ public class MaterializedViewsSystemTable extends SystemTable {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
-        return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+        return ShowMaterializedViewStatus.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
 }

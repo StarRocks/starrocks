@@ -533,8 +533,7 @@ struct TTaskRunInfo {
 
     14: optional string catalog
     15: optional string job_id
-    16: optional string job_state
-    17: optional i64 process_time
+    16: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
