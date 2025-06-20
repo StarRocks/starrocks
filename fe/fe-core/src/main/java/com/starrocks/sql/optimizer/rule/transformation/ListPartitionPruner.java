@@ -500,7 +500,7 @@ public class ListPartitionPruner implements PartitionPruner {
     private static LiteralExpr castLiteralExpr(LiteralExpr literalExpr, Type type) {
         LiteralExpr result = null;
         String value = literalExpr.getStringValue();
-        if (literalExpr.getType() == Type.DATE && type.isNumericType()) {
+        if (literalExpr.getType().isDate() && type.isNumericType()) {
             value = String.valueOf(literalExpr.getLongValue() / 1000000);
         }
         try {

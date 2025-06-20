@@ -39,6 +39,7 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -48,7 +49,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
@@ -123,6 +126,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -2586,6 +2590,56 @@ public class AlterTest {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         Assert.assertEquals(3, rangePartitionInfo.getIdToRange(true).size());
 
+    }
+
+    @Test
+    public void testCreateTemporaryPartitionInBatchHourly() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.withDatabase("test2");
+        String createSQL = "CREATE TABLE test2.site_access_hourly(\n" +
+                "    event_hour datetime,\n" +
+                "    site_id INT DEFAULT '10',\n" +
+                "    city_code VARCHAR(100),\n" +
+                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                "    pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_hour, site_id, city_code, user_name)\n" +
+                "PARTITION BY date_trunc('hour', event_hour)(\n" +
+                " START (\"2023-03-27\") END (\"2023-03-30\") EVERY (INTERVAL 1 hour)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(event_hour, site_id) BUCKETS 32\n" +
+                "PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test2");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test2")
+                .getTable("site_access_hourly");
+        OlapTable olapTable = (OlapTable) table;
+
+        // We use reflection to create a new ScalarType instance for DATETIME.
+        // This intentionally bypasses the normal static singleton returned by Type.DATETIME.
+        // The goal is to simulate a scenario where type identity (==) fails—demonstrating
+        // that reference equality is unsafe for type checks, and .isDatetime() must be used for correctness.
+        Constructor<ScalarType> ctor = ScalarType.class.getDeclaredConstructor(PrimitiveType.class);
+        ctor.setAccessible(true);
+        Type evilDatetime = ctor.newInstance(PrimitiveType.DATETIME);
+        Column eventHourCol = table.getColumn("event_hour");
+        eventHourCol.setType(evilDatetime);
+
+        String sql = "alter table test2.site_access_hourly add TEMPORARY partitions " +
+                "START (\"2023-03-27 16:00:00\") END (\"2023-03-27 17:00:00\") EVERY (INTERVAL 1 hour);";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addPartitions(Util.getOrCreateInnerContext(), db, "site_access_hourly", addPartitionClause);
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        Assert.assertEquals(1, rangePartitionInfo.getIdToRange(true).size());
     }
 
     @Test

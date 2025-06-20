@@ -180,7 +180,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         }
 
         DateTimeFormatter outputDateFormat = DateUtils.DATE_FORMATTER;
-        if (context.getFirstPartitionColumnType() == Type.DATETIME) {
+        if (context.getFirstPartitionColumnType().isDatetime()) {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
         }
 
