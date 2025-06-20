@@ -513,7 +513,8 @@ private:
     CASE_TYPE(TYPE_JSON, CLASS);       \
     CASE_TYPE(TYPE_DECIMAL32, CLASS);  \
     CASE_TYPE(TYPE_DECIMAL64, CLASS);  \
-    CASE_TYPE(TYPE_DECIMAL128, CLASS);
+    CASE_TYPE(TYPE_DECIMAL128, CLASS); \
+    CASE_TYPE(TYPE_DECIMAL256, CLASS);
 
 Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExprNode& node) {
     LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
