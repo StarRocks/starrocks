@@ -147,7 +147,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             CheckpointController controller = getCheckpointController();
             if (isSuccess) {
                 try {
-                    controller.finishCheckpoint(journalId, nodeName, clusterSnapshotInfo);
+                    controller.finishCheckpoint(journalId, nodeName, this.clusterSnapshotInfo);
                 } catch (CheckpointException e) {
                     LOG.warn("finish checkpoint failed", e);
                 }
