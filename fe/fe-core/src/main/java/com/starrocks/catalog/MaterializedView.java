@@ -104,7 +104,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1708,21 +1707,31 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     private boolean isManyToManyPartitionRangeMapping(PRangeCell srcRange,
                                                       List<PRangeCell> dstRanges) {
-        int mid = Collections.binarySearch(dstRanges, srcRange);
-        if (mid < 0) {
+        if (dstRanges.isEmpty()) {
             return false;
         }
+        List<PartitionKey> lowerPoints = dstRanges.stream().map(
+                dstRange -> dstRange.getRange().lowerEndpoint()).toList();
+        List<PartitionKey> upperPoints = dstRanges.stream().map(
+                dstRange -> dstRange.getRange().upperEndpoint()).toList();
 
-        int lower = mid - 1;
-        if (lower >= 0 && dstRanges.get(lower).isIntersected(srcRange)) {
-            return true;
-        }
+        PartitionKey lower = srcRange.getRange().lowerEndpoint();
+        PartitionKey upper = srcRange.getRange().upperEndpoint();
 
-        int higher = mid + 1;
-        if (higher < dstRanges.size() && dstRanges.get(higher).isIntersected(srcRange)) {
-            return true;
+        // For an interval [l, r], if there exists another interval [li, ri] that intersects with it, this interval
+        // must satisfy l ≤ ri and r ≥ li. Therefore, if there exists a pos_a such that for all k < pos_a,
+        // ri[k] < l, and there exists a pos_b such that for all k > pos_b, li[k] > r, then all intervals between
+        // pos_a and pos_b might potentially intersect with the interval [l, r].
+        int posA = PartitionKey.findLastLessEqualInOrderedList(lower, upperPoints);
+        int posB = PartitionKey.findLastLessEqualInOrderedList(upper, lowerPoints);
+
+        int matched = 0;
+        for (int i = posA; i <= posB && matched <= 1; ++i) {
+            if (dstRanges.get(i).isIntersected(srcRange)) {
+                ++matched;
+            }
         }
-        return false;
+        return matched > 1;
     }
 
     private Map<Table, List<Column>> getBaseTablePartitionColumnMapImpl() {
