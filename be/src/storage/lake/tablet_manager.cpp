@@ -467,18 +467,16 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
     auto file_size = serialized_string.size();
     auto footer_size = sizeof(uint64_t);
     auto bundle_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    if (file_size < footer_size + bundle_metadata_size) {
-        return Status::Corruption(
-                strings::Substitute("deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2)",
-                                    path, file_size, bundle_metadata_size + footer_size));
-    }
+    RETURN_IF(file_size < footer_size + bundle_metadata_size,
+              Status::Corruption(strings::Substitute(
+                      "deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2)", path,
+                      file_size, bundle_metadata_size + footer_size)));
 
     auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
     std::string_view bundle_metadata_str =
             std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
-    if (!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size)) {
-        return Status::Corruption(strings::Substitute("deserialized shared metadata failed"));
-    }
+    RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
+              Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
 
     return bundle_metadata;
 }
