@@ -53,15 +53,15 @@ from t0 group by date_trunc('month', ts);
 refresh materialized view test_mv3 with sync mode;
 [UC]analyze table test_mv1 WITH SYNC MODE;
 -- result:
-test_db_d07f7af7f3f145c28057ec2aa87a3b8e.test_mv1	analyze	status	OK
+test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv1	analyze	status	OK
 -- !result
 [UC]analyze table test_mv2 WITH SYNC MODE;
 -- result:
-test_db_d07f7af7f3f145c28057ec2aa87a3b8e.test_mv2	analyze	status	OK
+test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv2	analyze	status	OK
 -- !result
 [UC]analyze table test_mv3 WITH SYNC MODE;
 -- result:
-test_db_d07f7af7f3f145c28057ec2aa87a3b8e.test_mv3	analyze	status	OK
+test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv3	analyze	status	OK
 -- !result
 set enable_materialized_view_rewrite=true;
 -- result:
@@ -74,11 +74,11 @@ set materialized_view_rewrite_mode="force";
 -- !result
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
 -- result:
-test_mv2,test_mv3
+test_mv3
 -- !result
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;")
 -- result:
-test_mv2,test_mv3
+test_mv3
 -- !result
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts < '2020-04-23 12:12:00'  order by 1;")
 -- result:
@@ -184,15 +184,15 @@ from test_mv2 group by date_trunc('month', dt);
 refresh materialized view test_mv3 with sync mode;
 [UC]analyze table test_mv1 WITH SYNC MODE;
 -- result:
-test_db_d07f7af7f3f145c28057ec2aa87a3b8e.test_mv1	analyze	status	OK
+test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv1	analyze	status	OK
 -- !result
 [UC]analyze table test_mv2 WITH SYNC MODE;
 -- result:
-test_db_d07f7af7f3f145c28057ec2aa87a3b8e.test_mv2	analyze	status	OK
+test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv2	analyze	status	OK
 -- !result
 [UC]analyze table test_mv3 WITH SYNC MODE;
 -- result:
-test_db_d07f7af7f3f145c28057ec2aa87a3b8e.test_mv3	analyze	status	OK
+test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv3	analyze	status	OK
 -- !result
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
 -- result:
@@ -224,7 +224,7 @@ test_mv2
 -- !result
 select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;
 -- result:
-11	16
+12	17
 -- !result
 select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;
 -- result:
