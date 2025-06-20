@@ -576,6 +576,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             ErrorReport.wrapWithRuntimeException(() ->
                     schemaChangeHandler.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
+
+            // If modified columns are already done, inactive related mv
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) table, modifiedColumns);
+
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
         }
