@@ -155,7 +155,7 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
-                                         Quantiles compactionScore, long txnId) {
+                                         Quantiles compactionScore, long txnId, boolean isPartialSuccess) {
         removeFromStartupActiveCompactionTransactionMap(txnId);
         PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
@@ -164,7 +164,7 @@ public class CompactionMgr implements MemoryTrackable {
             }
             v.setCurrentVersion(compactionVersion);
             v.setCompactionVersion(compactionVersion);
-            v.setCompactionScoreAndAdjustPunishFactor(compactionScore);
+            v.setCompactionScoreAndAdjustPunishFactor(compactionScore, isPartialSuccess);
             return v;
         });
         if (LOG.isDebugEnabled()) {
