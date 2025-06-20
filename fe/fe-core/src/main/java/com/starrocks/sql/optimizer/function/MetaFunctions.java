@@ -201,7 +201,7 @@ public class MetaFunctions {
         Locker locker = new Locker();
         MaterializedView mv = (MaterializedView) table;
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
             Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
             Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
             for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
@@ -236,7 +236,7 @@ public class MetaFunctions {
             String json = meta.inspect();
             return ConstantOperator.createVarchar(json);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
         }
     }
 
@@ -254,7 +254,7 @@ public class MetaFunctions {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
 
             JsonObject obj = new JsonObject();
             if (table instanceof OlapTable) {
@@ -264,8 +264,8 @@ public class MetaFunctions {
                         .forEach(partition -> {
                             MaterializedView.BasePartitionInfo basePartitionInfo =
                                     new MaterializedView.BasePartitionInfo(partition.getId(),
-                                            partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                                            partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+                                            partition.getVisibleVersion(),
+                                            partition.getVisibleVersionTime());
                             obj.add(partition.getName(), GsonUtils.GSON.toJsonTree(basePartitionInfo));
                         });
             } else {
@@ -283,7 +283,7 @@ public class MetaFunctions {
             String json = obj.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
         }
     }
 
