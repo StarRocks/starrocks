@@ -256,6 +256,7 @@ public class ClusterSnapshotTest {
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
                 .getItems().get(0).state == "SNAPSHOTING");
         job.setState(ClusterSnapshotJobState.UPLOADING);
+        Assert.assertTrue(job.isUploading());
         logSnapshotJob.setSnapshotJob(job);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
@@ -446,6 +447,9 @@ public class ClusterSnapshotTest {
         final CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
         final ClusterSnapshotInfo info = new ClusterSnapshotInfo(null);
         ClusterSnapshotJob job = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        Assert.assertTrue(!job.needClusterSnapshotInfo());
+        Assert.assertTrue(job.isAutomated());
+        job.setClusterSnapshotInfo(null);
 
         CheckpointWorker worker = GlobalStateMgr.getCurrentState().getCheckpointWorker();
         Deencapsulation.setField(worker, "servingGlobalState", GlobalStateMgr.getCurrentState());
