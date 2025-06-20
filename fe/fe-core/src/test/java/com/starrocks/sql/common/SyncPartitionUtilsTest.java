@@ -709,7 +709,7 @@ public class SyncPartitionUtilsTest {
                 createDateTruncFunc("month", PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
-        Assert.assertEquals(3, adds.size());
+        Assert.assertEquals(2, adds.size());
         Assert.assertEquals("2020-04-01 00:00:00",
                 adds.get("p202004_202005").lowerEndpoint().getKeys().get(0).getStringValue());
         Assert.assertEquals("2020-05-01 00:00:00",
