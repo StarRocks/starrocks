@@ -22,11 +22,6 @@ import com.starrocks.leader.ReportHandler;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
-<<<<<<< HEAD
-import com.starrocks.qe.ConnectContext;
-=======
-import com.starrocks.qe.SimpleExecutor;
->>>>>>> 44c71b713e ([Enhancement] Add a force refresh strategy and add meta functions for better debug (#60027))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
