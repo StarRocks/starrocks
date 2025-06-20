@@ -57,9 +57,11 @@ public:
 
 private:
     StatusOr<CacheOptions> _init_cache_options();
+#if defined(WITH_STARCACHE)
     Status _init_starcache(CacheOptions* cache_options);
-    Status _init_datacache();
-    Status _init_lrucache_engine();
+    Status _init_peer_cache(const CacheOptions& cache_options);
+#endif
+    Status _init_lrucache_engine(const CacheOptions& cache_options);
     Status _init_page_cache();
 
     GlobalEnv* _global_env;
@@ -68,7 +70,6 @@ private:
     // cache engine
     std::shared_ptr<LocalCacheEngine> _local_cache;
     std::shared_ptr<RemoteCacheEngine> _remote_cache;
-    std::shared_ptr<LocalCacheEngine> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;
     std::shared_ptr<StoragePageCache> _page_cache;

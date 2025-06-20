@@ -58,14 +58,18 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
     ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
 
     if (config::datacache_engine == "starcache") {
+#if defined(WITH_STARCACHE)
         RETURN_IF_ERROR(_init_starcache(&cache_options));
+        RETURN_IF_ERROR(_init_peer_cache(cache_options));
 
+        if (config::block_cache_enable) {
+            RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+        }
+#endif
     } else {
-
+        RETURN_IF_ERROR(_init_lrucache_engine(cache_options));
     }
 
-    RETURN_IF_ERROR(_init_datacache());
-    RETURN_IF_ERROR(_init_lrucache_engine());
     RETURN_IF_ERROR(_init_page_cache());
 
     _mem_space_monitor = std::make_shared<MemSpaceMonitor>(this);
@@ -94,8 +98,8 @@ void DataCache::destroy() {
 }
 
 bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {
-    if (_lru_cache != nullptr) {
-        Status st = _lru_cache->update_mem_quota(delta, min_capacity);
+    if (_local_cache != nullptr) {
+        Status st = _local_cache->update_mem_quota(delta, min_capacity);
         if (st.ok()) {
             return true;
         } else {
@@ -107,31 +111,28 @@ bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {
 }
 
 size_t DataCache::get_mem_capacity() const {
-    if (_lru_cache != nullptr) {
-        return _lru_cache->mem_quota();
+    if (_local_cache != nullptr) {
+        return _local_cache->mem_quota();
     } else {
         return 0;
     }
 }
 
-Status DataCache::_init_lrucache_engine() {
-    ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_limit());
-    storage_cache_limit = check_storage_page_cache_limit(storage_cache_limit);
-
-    CacheOptions cache_options{.mem_space_size = static_cast<size_t>(storage_cache_limit)};
-    _lru_cache = std::make_shared<LRUCacheEngine>();
-    RETURN_IF_ERROR(_lru_cache->init(cache_options));
-    LOG(INFO) << "object cache init successfully";
+Status DataCache::_init_lrucache_engine(const CacheOptions& cache_options) {
+    _local_cache = std::make_shared<LRUCacheEngine>();
+    RETURN_IF_ERROR(_local_cache->init(cache_options));
+    LOG(INFO) << "lrucache engine init successfully";
     return Status::OK();
 }
 
 Status DataCache::_init_page_cache() {
-    _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());
+    _page_cache = std::make_shared<StoragePageCache>(_local_cache.get());
     _page_cache->init_metrics();
     LOG(INFO) << "storage page cache init successfully";
     return Status::OK();
 }
 
+#if defined(WITH_STARCACHE)
 Status DataCache::_init_starcache(CacheOptions* cache_options) {
     // init starcache & disk monitor
     // TODO: DiskSpaceMonitor needs to be decoupled from StarCacheEngine.
@@ -143,27 +144,11 @@ Status DataCache::_init_starcache(CacheOptions* cache_options) {
     return Status::OK();
 }
 
-Status DataCache::_init_datacache() {
-
-    if (config::datacache_enable) {
-#if defined(WITH_STARCACHE)
-
-
-        // init remote cache
-        _remote_cache = std::make_shared<PeerCacheEngine>();
-        RETURN_IF_ERROR(_remote_cache->init(cache_options));
-
-        if (config::block_cache_enable) {
-            RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
-        }
-
-        LOG(INFO) << "datacache init successfully";
-#endif
-    } else {
-        LOG(INFO) << "starts by skipping the datacache initialization";
-    }
-    return Status::OK();
+Status DataCache::_init_peer_cache(const CacheOptions& cache_options) {
+    _remote_cache = std::make_shared<PeerCacheEngine>();
+    return _remote_cache->init(cache_options);
 }
+#endif
 
 StatusOr<CacheOptions> DataCache::_init_cache_options() {
     CacheOptions cache_options;
