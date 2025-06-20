@@ -4923,6 +4923,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
 - Introduced in: v3.3
 
+##### enable_materialized_view_concurrent_prepare
+
+- Default: true
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Prepare materialized view concurrently to improve performance
+- Introduced in: v3.4.4
+
 ##### mv_query_context_cache_max_size
 
 - Default: 1000
