@@ -2245,4 +2245,28 @@ public class LowCardinalityTest2 extends PlanTestBase {
         final String plan = getFragmentPlan(sql);
         assertContains(plan, "Short Circuit Scan: true");
     }
+
+    @Test
+    public void testAggregateWithUnion() throws Exception {
+        try {
+            connectContext.getSessionVariable().setNewPlanerAggStage(2);
+            String sql = "SELECT *\n" +
+                    "FROM (\n" +
+                    "        SELECT DISTINCT concat(S_ADDRESS, 'a'), S_NAME, S_NATIONKEY\n" +
+                    "        FROM supplier\n" +
+                    "    ) t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT *\n" +
+                    "FROM (" +
+                    "        SELECT * \n" +
+                    "        from (select P_NAME, P_MFGR, COUNT(P_BRAND) \n" +
+                    "        FROM part_v2 \n" +
+                    "        GROUP BY concat(P_TYPE, 'b') ) xxx\n" +
+                    "\n) t2;";
+            String plan = getThriftPlan(sql);
+            assertContains(plan, "TPlanFragment");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
+    }
 }
