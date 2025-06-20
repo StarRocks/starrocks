@@ -1455,9 +1455,10 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-    public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                          Collection<PRangeCell> pRangeCells,
-                                                                          boolean areAllRangePartitionsSingleton) {
+    public static ScalarOperator convertPartitionKeyRangesToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<PRangeCell> pRangeCells,
+            boolean areAllRangePartitionsSingleton) throws AnalysisException {
         final List<Range<PartitionKey>> partitionRanges = pRangeCells
                 .stream()
                 .map(PRangeCell::getRange)
@@ -1466,15 +1467,25 @@ public class MvUtils {
         return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
     }
 
-    public static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                     Collection<PartitionKey> partitionRanges) {
+    private static ConstantOperator convertLiteralToConstantOperator(ScalarOperator partitionColRef,
+                                                                     LiteralExpr literalExpr) throws AnalysisException {
+        if (!partitionColRef.getType().equals(literalExpr.getType())) {
+            literalExpr = LiteralExpr.create(literalExpr.getStringValue(), partitionColRef.getType());
+        }
+        return (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+    }
+
+    public static ScalarOperator convertPartitionKeysToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<PartitionKey> partitionRanges) throws AnalysisException {
         final List<ScalarOperator> values = Lists.newArrayList();
         if (partitionColRefs.size() == 1) {
+            ScalarOperator partitionColRef = partitionColRefs.get(0);
             for (PartitionKey key : partitionRanges) {
                 final List<LiteralExpr> literalExprs = key.getKeys();
                 // Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
                 final LiteralExpr literalExpr = literalExprs.get(0);
-                final ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                final ConstantOperator upperBound = convertLiteralToConstantOperator(partitionColRef, literalExpr);
                 values.add(upperBound);
             }
             return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
@@ -1497,9 +1508,10 @@ public class MvUtils {
         }
     }
 
-    private static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
-                                                                      Collection<Range<PartitionKey>> partitionRanges,
-                                                                      boolean areAllRangePartitionsSingleton) {
+    private static ScalarOperator convertPartitionKeysToListPredicate(
+            List<? extends ScalarOperator> partitionColRefs,
+            Collection<Range<PartitionKey>> partitionRanges,
+            boolean areAllRangePartitionsSingleton) throws AnalysisException {
 
         if (areAllRangePartitionsSingleton) {
             List<PartitionKey> partitionKeys = partitionRanges
