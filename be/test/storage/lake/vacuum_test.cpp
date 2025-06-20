@@ -1771,7 +1771,7 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(2, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -1802,7 +1802,7 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_EQ(4, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
@@ -2054,7 +2054,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(2, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -2083,7 +2083,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_EQ(4, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
@@ -2123,7 +2123,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(5, response.vacuumed_files());
+        EXPECT_EQ(7, response.vacuumed_files());
         EXPECT_EQ(16384, response.vacuumed_file_size());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));

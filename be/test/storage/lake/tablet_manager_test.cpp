@@ -634,7 +634,7 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     starrocks::TabletMetadataPB metadata2;
     {
         metadata2.set_id(2);
-        metadata2.set_version(2);
+        metadata2.set_version(3);
         metadata2.mutable_schema()->CopyFrom(schema_pb2);
         auto& item1 = (*metadata2.mutable_historical_schemas())[10];
         item1.CopyFrom(schema_pb1);
@@ -646,7 +646,31 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
 
     metadatas.emplace(1, metadata1);
     metadatas.emplace(2, metadata2);
-    EXPECT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    {
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("get_real_location_failed");
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        ASSERT_FALSE(_tablet_manager->put_bundle_tablet_metadata(metadatas).ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+
+        fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_meta_not_found");
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        ASSERT_FALSE(_tablet_manager->put_bundle_tablet_metadata(metadatas).ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
+
+    ASSERT_FALSE(_tablet_manager->put_bundle_tablet_metadata(metadatas).ok());
+
+    metadata2.set_version(2);
+    metadatas.clear();
+    metadatas.emplace(1, metadata1);
+    metadatas.emplace(2, metadata2);
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
 
     {
         auto res = _tablet_manager->get_tablet_metadata(1, 2);
