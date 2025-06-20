@@ -165,7 +165,6 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
 
-<<<<<<< HEAD
     if (config::parquet_advance_zonemap_filter) {
         ScanConjunctsManagerOptions opts;
         opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
@@ -181,14 +180,13 @@ Status HdfsScanner::_build_scanner_context() {
         ConnectorPredicateParser predicate_parser{&ctx.slot_descs};
         ASSIGN_OR_RETURN(ctx.predicate_tree,
                          ctx.conjuncts_manager->get_predicate_tree(&predicate_parser, ctx.predicate_free_pool));
-=======
+    }
     RETURN_IF_ERROR(ctx.update_return_count_columns());
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
         ctx.can_use_file_record_count = true;
     }
     if (ctx.scan_range->__isset.is_first_split) {
         ctx.is_first_split = ctx.scan_range->is_first_split;
->>>>>>> 5943373fa9 ([Enhancement] optimize count(1) for iceberg table (#60022))
     }
     return Status::OK();
 }

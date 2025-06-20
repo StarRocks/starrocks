@@ -424,8 +424,6 @@ struct THdfsScanRange {
     30: optional Types.TTableId table_id;
 
     31:optional TDeletionVectorDescriptor deletion_vector_descriptor
-<<<<<<< HEAD
-=======
 
     32: optional string candidate_node
 
@@ -435,7 +433,6 @@ struct THdfsScanRange {
 
     // is this scan range the first split of this file?
     34: optional bool is_first_split
->>>>>>> 5943373fa9 ([Enhancement] optimize count(1) for iceberg table (#60022))
 }
 
 struct TBinlogScanRange {
