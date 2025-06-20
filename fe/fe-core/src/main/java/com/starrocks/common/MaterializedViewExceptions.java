@@ -24,6 +24,14 @@ import java.util.Set;
  */
 public class MaterializedViewExceptions {
 
+<<<<<<< HEAD
+=======
+    // reason for base table optimized, base table's partition is optimized which mv cannot be actived again.
+    public static final String INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED = "base-table optimized:";
+
+    public static final String INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS = "base-table reordered columns:";
+
+>>>>>>> 0e8a2cd13f ([BugFix] Fix some corner cases when mv meets schema changes (#60079))
     /**
      * Create the inactive reason when base table not exists
      */
@@ -50,6 +58,17 @@ public class MaterializedViewExceptions {
         return "base-table swapped: " + tableName;
     }
 
+<<<<<<< HEAD
+=======
+    public static String inactiveReasonForBaseTableOptimized(String tableName) {
+        return INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableReorderColumns(String tableName) {
+        return INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS + tableName;
+    }
+
+>>>>>>> 0e8a2cd13f ([BugFix] Fix some corner cases when mv meets schema changes (#60079))
     public static String inactiveReasonForBaseTableActive(String tableName) {
         return "base-mv inactive: " + tableName;
     }
