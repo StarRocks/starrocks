@@ -674,8 +674,6 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             DCHECK_GE(value_index, peer_group_start - 1);
             DCHECK_LE(value_index, peer_group_end);
             if (!found_target || columns[0]->is_null(value_index)) {
-                std::cout << "todo by jiajingzhe view def 2  is " << this->data(state).default_value_is_constant << "value index is " << value_index << "frame start is " 
-                            << frame_start << "  peer group start is " << peer_group_start <<  "current_row is " << current_row << "frame end is " << frame_end << std::endl;
                 if (this->data(state).default_value_is_constant) {
                     if (this->data(state).default_is_null) {
                         this->data(state).is_null = true;
@@ -683,7 +681,6 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                         this->data(state).value = this->data(state).default_value;
                     }
                 } else {
-                    std::cout << "todo by jiajingzhe view def 3 value index is " << value_index << std::endl;
                     if (!columns[2]->is_null(current_row)) {
                         this->data(state).is_null = false;
                         const Column* data_column = ColumnHelper::get_data_column(columns[2]);
@@ -714,7 +711,6 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                         this->data(state).value = this->data(state).default_value;
                     } else {
                         size_t target_index = isLag ? (frame_start + this->data(state).offset) : (frame_end - 1 - this->data(state).offset);
-                        std::cout << "todo by jiajingzhe view def 5 , frame start is " << frame_start << "  peer group start is " << peer_group_start << " isLag "<< isLag << " index " << target_index << std::endl;
                         if (!columns[2]->is_null(target_index)) {
                             this->data(state).is_null = false;
                             const Column* data_column = ColumnHelper::get_data_column(columns[2]);
