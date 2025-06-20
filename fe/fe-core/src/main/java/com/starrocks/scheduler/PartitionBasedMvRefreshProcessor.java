@@ -287,7 +287,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * If it's tentative, only return the result rather than modify any state
      * IF it's not, it would modify the context state, like `NEXT_PARTITION_START`
      */
-    private Set<String> checkMvToRefreshedPartitions(TaskRunContext context, boolean tentative)
+    @VisibleForTesting
+    public Set<String> checkMvToRefreshedPartitions(TaskRunContext context, boolean tentative)
             throws AnalysisException, LockTimeoutException {
         Set<String> mvToRefreshedPartitions = null;
         Locker locker = new Locker();
@@ -296,11 +297,24 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             logger.warn("failed to lock database: {} in checkMvToRefreshedPartitions", db.getFullName());
             throw new LockTimeoutException("Failed to lock database: " + db.getFullName());
         }
+
         try {
-            Set<String> mvPotentialPartitionNames = Sets.newHashSet();
-            mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(
-                    context.getProperties(), mvPotentialPartitionNames, tentative);
-            if (mvToRefreshedPartitions.isEmpty()) {
+            final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
+            final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(),
+                    context.getProperties(), tentative);
+            final PartitionInfo partitionInfo = mv.getPartitionInfo();
+            mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(partitionInfo,
+                    mvRefreshParams, mvPotentialPartitionNames);
+            // update mv extra message
+            if (!tentative) {
+                updateTaskRunStatus(status -> {
+                    MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+                    extraMessage.setForceRefresh(mvRefreshParams.isForce());
+                    extraMessage.setPartitionStart(mvRefreshParams.getRangeStart());
+                    extraMessage.setPartitionEnd(mvRefreshParams.getRangeEnd());
+                });
+            }
+            if (CollectionUtils.isEmpty(mvToRefreshedPartitions)) {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
             }
@@ -947,32 +961,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         boolean result = mvRefreshPartitioner.syncAddOrDropPartitions();
         logger.info("finish sync partitions, cost(ms): {}", stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return result;
-    }
-
-    /**
-     * If it's tentative, don't really consider the staleness of MV, but all potential partitions
-     */
-    @VisibleForTesting
-    public Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> properties,
-                                                                 Set<String> mvPotentialPartitionNames,
-                                                                 boolean tentative)
-            throws AnalysisException {
-        PartitionInfo partitionInfo = mv.getPartitionInfo();
-        MVRefreshParams mvRefreshParams = new MVRefreshParams(partitionInfo, properties, tentative);
-        Set<String> needRefreshMvPartitionNames = getPartitionsToRefreshForMaterializedView(partitionInfo,
-                mvRefreshParams, mvPotentialPartitionNames);
-
-        // update mv extra message
-        if (!tentative) {
-            updateTaskRunStatus(status -> {
-                MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
-                extraMessage.setForceRefresh(mvRefreshParams.isForce());
-                extraMessage.setPartitionStart(mvRefreshParams.getRangeStart());
-                extraMessage.setPartitionEnd(mvRefreshParams.getRangeEnd());
-            });
-        }
-
-        return needRefreshMvPartitionNames;
     }
 
     /**
