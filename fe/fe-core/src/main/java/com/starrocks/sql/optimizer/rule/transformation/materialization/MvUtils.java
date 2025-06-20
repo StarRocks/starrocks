@@ -1364,15 +1364,8 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-<<<<<<< HEAD
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
-    }
-
-    public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
-=======
         try {
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1389,7 +1382,7 @@ public class MvUtils {
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
         try {
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1403,7 +1396,6 @@ public class MvUtils {
             }
             throw e;
         }
->>>>>>> 0e8a2cd13f ([BugFix] Fix some corner cases when mv meets schema changes (#60079))
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
