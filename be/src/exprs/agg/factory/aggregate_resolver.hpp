@@ -68,6 +68,7 @@ public:
     void register_others();
     void register_retract_functions();
     void register_hypothesis_testing();
+    void register_boolean();
 
     const std::vector<LogicalType>& aggregate_types() const {
         const static std::vector<LogicalType> kTypes{
@@ -246,6 +247,11 @@ public:
                 return AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>();
             }
         }
+        return nullptr;
+    }
+
+    template <LogicalType ArgLT, LogicalType ResultLT, bool IsWindowFunc, bool IsNull>
+    std::enable_if_t<!isArithmeticLT<ArgLT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
         return nullptr;
     }
 
