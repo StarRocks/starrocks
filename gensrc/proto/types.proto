@@ -181,6 +181,36 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
+message RecordPredicateNodePB {
+    enum NodeType {
+        UNKNOWN = 0;
+        NOT = 1;
+        AND = 2;
+        OR = 3;
+        LEAF = 4;
+    }
+
+    optional NodeType type = 1;
+    repeated RecordPredicateNodePB children = 2; // only set if NodeType is not LEAF
+    optional RecordPredicatePB record_predicate = 3; // only set if NodeType is LEAF
+}
+
+message RecordPredicatePB {
+    message ColumnHashModulusPredicatePB {
+        enum ColumnHashTypePB {
+            UNKNOWN = 0;
+            CRC32 = 1;
+        }
+
+        optional ColumnHashTypePB type = 1;
+        optional int64 modulus = 2;
+        optional int64 remainder = 3;
+        repeated string hash_column_names = 4;
+    }
+
+    optional ColumnHashModulusPredicatePB column_hash_modulus_predicate = 1;
+}
+
 message IndexValueWithVerPB {
     // will be set after mvcc support
     optional int64 version = 1;
