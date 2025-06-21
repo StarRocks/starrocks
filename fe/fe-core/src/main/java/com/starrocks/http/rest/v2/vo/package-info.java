@@ -18,4 +18,5 @@
  * while shielding the details of the persistence layer data (such as entity object). <br/>
  * The <a href="https://docs.oracle.com/cd/A97688_16/generic.903/bc_guide/bc_awhatisavo.htm">Oracle Docs</a> give more introduction.
  */
+@Deprecated // this annotation makes this file non-empty, forcing compiler to generate a class file, so incremental build can succeed
 package com.starrocks.http.rest.v2.vo;
