@@ -1729,12 +1729,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                               ComputeResource computeResource) throws DdlException {
         PartitionInfo partitionInfo = table.getPartitionInfo();
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
+        long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         for (long indexId : table.getIndexIdToMeta().keySet()) {
             long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
             if (table.isCloudNativeTableOrMaterializedView()) {
                 // create shard group
                 shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                        createShardGroup(db.getId(), table.getId(), partitionId, indexId);
+                        createShardGroup(db.getId(), table.getId(), physicalPartitionId, indexId);
             }
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
             indexMap.put(indexId, rollup);
@@ -1745,7 +1746,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 partitionName,
                 distributionInfo);
 
-        long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 physicalPartitionId,
                 logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
