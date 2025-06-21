@@ -32,6 +32,7 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.utframe.UtFrameUtils;
@@ -95,6 +96,7 @@ public class HudiMetadataTest {
 
     @After
     public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
         executorForHmsRefresh.shutdown();
         executorForRemoteFileRefresh.shutdown();
         executorForPullFiles.shutdown();

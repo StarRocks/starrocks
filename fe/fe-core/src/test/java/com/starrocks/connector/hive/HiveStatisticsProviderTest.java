@@ -25,6 +25,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -103,6 +104,7 @@ public class HiveStatisticsProviderTest {
 
     @After
     public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
         executorForHmsRefresh.shutdown();
         executorForRemoteFileRefresh.shutdown();
         executorForPullFiles.shutdown();

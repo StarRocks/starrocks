@@ -27,6 +27,7 @@ import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Operation;
 import io.delta.kernel.Snapshot;
@@ -41,6 +42,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -69,6 +71,11 @@ public class CachingDeltaLakeMetastoreTest {
         metastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore, new Configuration(),
                 new DeltaLakeCatalogProperties(Maps.newHashMap()));
         executor = Executors.newFixedThreadPool(5);
+    }
+
+    @After
+    public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
     }
 
     @Test

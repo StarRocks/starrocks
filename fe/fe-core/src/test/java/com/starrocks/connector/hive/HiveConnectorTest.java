@@ -25,6 +25,7 @@ import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -71,6 +72,7 @@ public class HiveConnectorTest {
 
     @After
     public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
         executorForHmsRefresh.shutdown();
         executorForRemoteFileRefresh.shutdown();
         executorForPullFiles.shutdown();
