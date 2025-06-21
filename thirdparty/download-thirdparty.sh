@@ -596,6 +596,10 @@ if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
         patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
         touch "$PATCHED_MARK"
     fi
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2024.02.16" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/breakpad-2024.02.16.patch"
+        touch "$PATCHED_MARK"
+    fi
     cd -
     echo "Finished patching $BREAK_PAD_SOURCE"
 fi
