@@ -99,9 +99,6 @@ public class CheckpointController extends FrontendDaemon {
     private volatile long journalId;
     private volatile BlockingQueue<FinishCheckpointResult> result;
 
-    // if this param is true, the checkpoint worker will get cluster snapshot info
-    // and send it back to CheckpointController.
-    private volatile boolean needClusterSnapshotInfo;
     // save the cluster snapshot info getted from the checkpoint worker.
     private volatile ClusterSnapshotInfo clusterSnapshotInfo;
 
@@ -111,7 +108,6 @@ public class CheckpointController extends FrontendDaemon {
         this.subDir = subDir;
         this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
         nodesToPushImage = new HashSet<>();
-        this.needClusterSnapshotInfo = false;
         this.clusterSnapshotInfo = null;
     }
 
@@ -135,7 +131,7 @@ public class CheckpointController extends FrontendDaemon {
 
     protected void runCheckpointController() {
         // ignore return value in normal checkpoint controller
-        runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalId());
+        runCheckpointControllerWithIds(getImageJournalId(), getCheckpointJournalId(), false);
     }
 
     public long getCheckpointJournalId() {
@@ -154,14 +150,15 @@ public class CheckpointController extends FrontendDaemon {
         return imageJournalId;
     }
 
-    public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId) {
+    public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                                                                boolean needClusterSnapshotInfo) {
         LOG.info("checkpoint imageJournalId {}, logJournalId {}", imageJournalId, maxJournalId);
 
         // Step 1: create image
         Pair<Boolean, String> createImageRet = Pair.create(false, "");
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
-            createImageRet = createImage();
+            createImageRet = createImage(needClusterSnapshotInfo);
         }
         if (createImageRet.first) {
             // Push the image file to all other nodes
@@ -194,12 +191,12 @@ public class CheckpointController extends FrontendDaemon {
         return createImageRet;
     }
 
-    private Pair<Boolean, String> createImage() {
+    private Pair<Boolean, String> createImage(boolean needClusterSnapshotInfo) {
         // reset the cluster snapshot info before sending the checkpoint request
         this.clusterSnapshotInfo = null;
 
         result = new ArrayBlockingQueue<>(1);
-        workerNodeName = selectWorker();
+        workerNodeName = selectWorker(needClusterSnapshotInfo);
         if (workerNodeName == null) {
             LOG.warn("Failed to select worker to do checkpoint, journalId: {}", journalId);
             return Pair.create(false, workerNodeName);
@@ -229,7 +226,7 @@ public class CheckpointController extends FrontendDaemon {
                 return Pair.create(false, workerNodeName);
             }
 
-            if (this.needClusterSnapshotInfo) {
+            if (needClusterSnapshotInfo) {
                 // set cluter snapshot versions info
                 this.clusterSnapshotInfo = ret.clusterSnapshotInfo;
             }
@@ -278,7 +275,7 @@ public class CheckpointController extends FrontendDaemon {
         cleaner.clean();
     }
 
-    private String selectWorker() {
+    private String selectWorker(boolean needClusterSnapshotInfo) {
         List<Frontend> workers;
         if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/) {
             workers = new ArrayList<>();
@@ -304,7 +301,7 @@ public class CheckpointController extends FrontendDaemon {
         }
 
         for (Frontend frontend : workers) {
-            if (frontend.isAlive() && doCheckpoint(frontend)) {
+            if (frontend.isAlive() && doCheckpoint(frontend, needClusterSnapshotInfo)) {
                 LOG.info("select worker: {} to do checkpoint", frontend.getNodeName());
                 return frontend.getNodeName();
             }
@@ -313,7 +310,7 @@ public class CheckpointController extends FrontendDaemon {
         return null;
     }
 
-    private boolean doCheckpoint(Frontend frontend) {
+    private boolean doCheckpoint(Frontend frontend, boolean needClusterSnapshotInfo) {
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {
@@ -488,10 +485,6 @@ public class CheckpointController extends FrontendDaemon {
 
     public Journal getJournal() {
         return journal;
-    }
-
-    public void setNeedClusterSnapshotInfo(boolean needClusterSnapshotInfo) {
-        this.needClusterSnapshotInfo = needClusterSnapshotInfo;
     }
 
     public ClusterSnapshotInfo getClusterSnapshotInfo() {

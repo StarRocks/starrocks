@@ -281,7 +281,8 @@ public class ClusterSnapshotTest {
             }
 
             @Mock
-            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId) {
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                                                                        boolean needClusterSnapshotInfo) {
                 return Pair.create(true, "");
             }
         };
