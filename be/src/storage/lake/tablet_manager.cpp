@@ -394,21 +394,13 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
                                                                const std::shared_ptr<FileSystem>& fs) {
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
     // There are several possible cases for getting tablet metadata:
-    // 1. If the partition is an bundle partition (in cache), and version is kInitialVersion
-    //    then we will read the initial metadata from the initial metadata location.
-    // 2. If the partition is an bundle partition (in cache), and version is not kInitialVersion
+    // 1. If the partition is an bundle partition (in cache),
     //    then we will first try to read the metadata from the bundle metadata location,
     //    if not found, then we will read the metadata from the single tablet metadata.
-    // 3. If the partition is not an bundle partition (not in cache), then we will read the metadata from the single
-    //    tablet metadata location.
+    // 2. If the partition is not an bundle partition (not in cache),
+    //    then we will read the metadata from the single tablet metadata location.
     if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
-        if (version == kInitialVersion) {
-            // Handle tablet initial metadata
-            tablet_metadata_or =
-                    get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
-        } else {
-            tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
-        }
+        tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
         if (tablet_metadata_or.status().is_not_found()) {
             tablet_metadata_or =
                     get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);

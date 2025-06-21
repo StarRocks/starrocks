@@ -64,6 +64,7 @@ TEST_F(StarletLocationProviderTest, test_location) {
     std::string_view filename = basename(location);
     EXPECT_TRUE(is_tablet_initial_metadata(filename));
     EXPECT_TRUE(location == join_path(prefix_name(location), tablet_initial_metadata_filename()));
+    EXPECT_TRUE("abcdefg" == prefix_name("abcdefg"));
 }
 
 TEST_F(StarletLocationProviderTest, test_get_real_location) {
