@@ -65,6 +65,7 @@ public class WarehouseManager implements Writable {
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
+    public static final long INVALID_WAREHOUSE_ID = -1L;
 
     // default compute resource
     public static final ComputeResource DEFAULT_RESOURCE = WarehouseComputeResource.DEFAULT;
@@ -343,6 +344,14 @@ public class WarehouseManager implements Writable {
 
     public void alterCnGroup(AlterCnGroupStmt stmt) throws DdlException {
         throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void recordWarehouseInfoForTable(long tableId, long warehouseId) {
+
+    }
+
+    public void removeTableWarehouseInfo(long tableId) {
+
     }
 
     public Set<String> getAllWarehouseNames() {
