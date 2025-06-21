@@ -291,6 +291,9 @@ struct CastToString {
         } else if constexpr (IsInt128<Type>) {
             // int128_t
             return LargeIntValue::to_string(v);
+        } else if constexpr (IsInt256<Type>) {
+            // int256_t
+            return v.to_string();
         } else {
             // int8_t ~ int64_t, boolean
             return SimpleItoa(v);
