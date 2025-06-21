@@ -888,6 +888,7 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addScanRows(execStats.getScanRows() != null ? execStats.getScanRows() : 0);
         context.getAuditEventBuilder().addSpilledBytes(execStats.spillBytes != null ? execStats.spillBytes : 0);
         context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
+        context.getAuditEventBuilder().addTransmittedBytes(execStats.transmittedBytes != null ? execStats.transmittedBytes : 0);
     }
 
     private void clearQueryScopeHintContext() {
