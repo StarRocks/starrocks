@@ -153,6 +153,9 @@ public class AuditEvent {
 
     @AuditField(value = "SessionId")
     public String sessionId = "";
+    
+    @AuditField(value = "CustomQueryId")
+    public String customQueryId = "";
 
     public static class AuditEventBuilder {
 
@@ -394,6 +397,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setSessionId(String sessionId) {
             auditEvent.sessionId = sessionId;
+            return this;
+        }
+
+        public AuditEventBuilder setCustomQueryId(String customQueryId) {
+            auditEvent.customQueryId = customQueryId;
             return this;
         }
 
