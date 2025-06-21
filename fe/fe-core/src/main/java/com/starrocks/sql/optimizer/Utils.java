@@ -303,6 +303,15 @@ public class Utils {
             return null;
         }
 
+        // for and predicate, filter redundant true
+        if (type == CompoundPredicateOperator.CompoundType.AND) {
+            link = link.stream()
+                    .filter(so -> !ConstantOperator.TRUE.equals(so))
+                    .collect(Collectors.toCollection(Lists::newLinkedList));
+            if (link.isEmpty()) {
+                return ConstantOperator.TRUE;
+            }
+        }
         if (link.size() == 1) {
             return link.get(0);
         }
