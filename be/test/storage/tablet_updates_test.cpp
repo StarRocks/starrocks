@@ -3575,10 +3575,24 @@ TEST_F(TabletUpdatesTest, test_apply_concurrent_with_on_rowset_finish) {
 
 TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
     _tablet = create_tablet(rand(), rand());
-    _tablet2 = create_tablet(rand(), rand());
+    _tablet2 = create_tablet(rand(), rand(), false, 0, 0, true);
+    // tablet state is not notready
     ASSERT_FALSE(_tablet->updates()->link_from(_tablet2.get(), 1, nullptr, _tablet2->tablet_schema(), "").ok());
     ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
     ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
+
+    _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+    // tablet version not valid
+    ASSERT_FALSE(_tablet->updates()->link_from(_tablet2.get(), 3, nullptr, _tablet2->tablet_schema(), "").ok());
+    ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 3, nullptr, _tablet2->tablet_schema(), "").ok());
+    ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 3, nullptr, _tablet2->tablet_schema(), "").ok());
+
+    // tablet version skip
+    ASSERT_TRUE(_tablet->updates()->link_from(_tablet2.get(), 1, nullptr, _tablet2->tablet_schema(), "").ok());
+    _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+    ASSERT_TRUE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
+    _tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+    ASSERT_TRUE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
 }
 
 TEST_F(TabletUpdatesTest, test_normal_apply_retry) {

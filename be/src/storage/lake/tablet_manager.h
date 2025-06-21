@@ -99,6 +99,9 @@ public:
                                                            int64_t expected_gtid = 0,
                                                            const std::shared_ptr<FileSystem>& fs = nullptr);
 
+    static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
+                                                                          const std::string& serialized_string);
+
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
