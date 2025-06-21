@@ -94,6 +94,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -385,7 +386,13 @@ public class MaterializedViewAnalyzer {
 
             // columns' order may be changed for sort keys' reorder, need to
             // change `queryStatement.getQueryRelation`'s outputs at the same time.
-            List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
+            QueryRelation queryRelation = queryStatement.getQueryRelation();
+            List<Expr> unionOtherOutputExpression;
+            if (queryRelation instanceof UnionRelation) {
+                unionOtherOutputExpression = ((UnionRelation) queryRelation).getOtherOutputExpression();
+                statement.setUnionOtherOutputExpression(unionOtherOutputExpression);
+            }
+            List<Expr> outputExpressions = queryRelation.getOutputExpression();
             for (Pair<Column, Integer> pair : mvColumnPairs) {
                 Preconditions.checkState(pair.second < outputExpressions.size());
                 columnExprMap.put(pair.first, outputExpressions.get(pair.second));

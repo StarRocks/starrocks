@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -61,9 +62,10 @@ public class MVLazyRangePartitionMapper extends MVRangePartitionMapper {
     public static final MVLazyRangePartitionMapper INSTANCE = new MVLazyRangePartitionMapper();
 
     @Override
-    public Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
+    public PartitionRangeWrapper toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
                                                             String granularity,
-                                                            PrimitiveType partitionType) {
+                                                            PrimitiveType partitionType,
+                                                            MaterializedView mv) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
         for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
             PartitionMapping mappedRange = toMappingRanges(rangeEntry.getValue(), granularity);
@@ -75,7 +77,7 @@ public class MVLazyRangePartitionMapper extends MVRangePartitionMapper {
         // deal overlap
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         if (timePointList.size() < 2) {
-            return result;
+            return new PartitionRangeWrapper(result);
         }
         for (int i = 1; i < timePointList.size(); i++) {
             try {
@@ -89,7 +91,7 @@ public class MVLazyRangePartitionMapper extends MVRangePartitionMapper {
                 throw new SemanticException("Convert to DateLiteral failed:", ex);
             }
         }
-        return result;
+        return new PartitionRangeWrapper(result);
     }
 
     public PartitionMapping toMappingRanges(Range<PartitionKey> baseRange,
