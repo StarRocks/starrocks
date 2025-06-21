@@ -83,6 +83,7 @@ import com.starrocks.planner.ExceptNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.ExecGroupSets;
+import com.starrocks.planner.FetchNode;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.FragmentNormalizer;
@@ -95,11 +96,13 @@ import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.KuduScanNode;
+import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.NestLoopJoinNode;
+import com.starrocks.planner.NoopSink;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
@@ -174,6 +177,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
@@ -4186,6 +4190,83 @@ public class PlanFragmentBuilder {
                 parentFragment.mergeQueryGlobalDicts(fragment.getQueryGlobalDicts());
                 parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
             }
+        }
+
+        @Override
+        public PlanFragment visitPhysicalFetch(OptExpression optExpression, ExecPlan context) {
+            PlanFragment childFragment = visit(optExpression.getInputs().get(0), context);
+            PlanFragment lookUpFragment = visit(optExpression.getInputs().get(1), context);
+
+            LookUpNode lookupNode = (LookUpNode) lookUpFragment.getPlanRoot();
+
+            ComputeResource computeResource = ConnectContext.get() != null ?
+                    ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+            // ROW_ID column may become nullable after passing through outer join node,
+            // so we need to change nullable property for late-materialized columns too,
+            for (TupleDescriptor tupleDescriptor : lookupNode.getDescs()) {
+                SlotId rowIdSlotId = lookupNode.getRowidSlots().get(tupleDescriptor.getId());
+                SlotDescriptor rowIdSlotDesc = context.getDescTbl().getSlotDesc(rowIdSlotId);
+                if (rowIdSlotDesc.getIsNullable()) {
+                    tupleDescriptor.getSlots().forEach(slotDescriptor -> slotDescriptor.setIsNullable(true));
+                }
+            }
+
+            FetchNode fetchNode = new FetchNode(context.getNextNodeId(),
+                    childFragment.getPlanRoot(), lookupNode.getId(),
+                    lookupNode.getDescs(), lookupNode.getRowidSlots(), computeResource);
+            currentExecGroup.add(fetchNode);
+            childFragment.setPlanRoot(fetchNode);
+            childFragment.addChild(lookUpFragment);
+            lookUpFragment.setQueryGlobalDicts(childFragment.getQueryGlobalDicts());
+            context.getFragments().remove(childFragment);
+            context.getFragments().remove(lookUpFragment);
+            context.getFragments().add(lookUpFragment);
+            context.getFragments().add(childFragment);
+            return childFragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalLookUp(OptExpression optExpression, ExecPlan context) {
+            PhysicalLookUpOperator lookUpOperator = (PhysicalLookUpOperator) optExpression.getOp();
+
+            Map<ColumnRefOperator, Set<ColumnRefOperator>> rowidToColumns = lookUpOperator.getRowidToColumns();
+            Map<ColumnRefOperator, Table> rowidToTable = lookUpOperator.getRowidToTable();
+            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = lookUpOperator.getColumnRefOperatorColumnMap();
+
+            List<TupleDescriptor> tupleDescriptors = Lists.newArrayList();
+            List<Table> tables = Lists.newArrayList();
+            Map<TupleId, SlotId> rowidSlots = new HashMap<>();
+            for (Map.Entry<ColumnRefOperator, Set<ColumnRefOperator>> entry : rowidToColumns.entrySet()) {
+                Preconditions.checkState(rowidToTable.containsKey(entry.getKey()));
+                Table table = rowidToTable.get(entry.getKey());
+                Set<ColumnRefOperator> columns = entry.getValue();
+
+                TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+                tupleDescriptor.setTable(table);
+                tupleDescriptor.setIsMaterialized(true);
+
+                for (ColumnRefOperator columnRefOperator : columns) {
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(columnRefOperator.getId()));
+                    slotDescriptor.setColumn(columnRefOperatorColumnMap.get(columnRefOperator));
+                    slotDescriptor.setIsMaterialized(true);
+                    slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                    context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                }
+                rowidSlots.put(tupleDescriptor.getId(), new SlotId(entry.getKey().getId()));
+
+                tupleDescriptor.computeMemLayout();
+                tables.add(table);
+                tupleDescriptors.add(tupleDescriptor);
+
+            }
+
+            LookUpNode lookUpNode = new LookUpNode(context.getNextNodeId(), tupleDescriptors, rowidSlots);
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), lookUpNode, DataPartition.RANDOM);
+            fragment.setPlanRoot(lookUpNode);
+            fragment.setSink(new NoopSink());
+            context.getFragments().add(fragment);
+            return fragment;
         }
     }
 }

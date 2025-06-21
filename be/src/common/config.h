@@ -1703,4 +1703,10 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+// @TODO use session var
+CONF_mInt64(fetch_max_buffer_chunk_num, "8");
+CONF_mInt64(max_batch_num_per_fetch_operator, "8");
+CONF_mInt64(max_chunk_num_per_fetch_batch, "8");
+CONF_mBool(enable_fetch_local_pass_through, "true");
+CONF_mInt64(max_lookup_batch_request, "8");
 } // namespace starrocks::config

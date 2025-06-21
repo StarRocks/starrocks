@@ -59,7 +59,6 @@ private:
 
 void ProjectionIterator::build_index_map(const Schema& output, const Schema& input) {
     DCHECK_LE(output.num_fields(), input.num_fields());
-
     std::unordered_map<ColumnId, size_t> input_indexes;
     for (size_t i = 0; i < input.num_fields(); i++) {
         input_indexes[input.field(i)->id()] = i;
@@ -79,6 +78,7 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
     }
     _chunk->reset();
     Status st = _child->get_next(_chunk.get());
+
     if (st.ok()) {
         Columns& input_columns = _chunk->columns();
         for (size_t i = 0; i < _index_map.size(); i++) {

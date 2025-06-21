@@ -17,6 +17,9 @@
 #include <algorithm>
 #include <utility>
 
+#include "column/field.h"
+#include "types/logical_type.h"
+
 namespace starrocks {
 
 #ifdef BE_TEST
@@ -147,6 +150,7 @@ Schema& Schema::operator=(const Schema& other) {
 void Schema::append(const FieldPtr& field) {
     _fields.emplace_back(field);
     _num_keys += field->is_key();
+
     if (!_share_name_to_index) {
         if (_name_to_index == nullptr) {
             _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
@@ -284,6 +288,15 @@ size_t Schema::get_field_index_by_name(const std::string& name) const {
         }
     }
     return p->second;
+}
+size_t Schema::get_row_id_field_index() const {
+    size_t num_field = _fields.size();
+    for (size_t i = 0; i < num_field; i++) {
+        if (_fields[i]->type()->type() == TYPE_ROW_ID) {
+            return i;
+        }
+    }
+    return INVALID_ROW_ID_FIELD_IDX;
 }
 
 void Schema::convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const {

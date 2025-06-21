@@ -370,6 +370,8 @@ int TypeDescriptor::get_slot_size() const {
         }
         return struct_size;
     }
+    case TYPE_ROW_ID:
+        return 12;
     case TYPE_UNKNOWN:
     case TYPE_BINARY:
     case TYPE_FUNCTION:

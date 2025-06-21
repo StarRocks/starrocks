@@ -195,6 +195,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_DATETIME_V1:
             case TYPE_NONE:
             case TYPE_MAX_VALUE:
+            case TYPE_ROW_ID:
                 break;
             }
         }
