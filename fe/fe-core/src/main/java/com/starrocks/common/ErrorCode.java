@@ -315,6 +315,7 @@ public enum ErrorCode {
     ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
             "Can not rename column of table in %s state"),
     ERR_CATALOG_EXISTED_ERROR(5514, new byte[] {'4', '2', '0', '0', '0'}, "Catalog '%s' already exists"),
+    ERR_ANLZ_JOB_EXISTED_ERROR(5515, new byte[] {'4', '2', '0', '0', '0'}, "Analyze job create failed; already exists"),
 
     /**
      * 5600 - 5699: DML operation failure
