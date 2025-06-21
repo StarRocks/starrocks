@@ -534,6 +534,9 @@ public class GlobalStateMgr {
 
     private JwkMgr jwkMgr;
 
+    // The executor to handle http requests asynchronously
+    private final ThreadPoolExecutor httpAsyncExecutor;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -855,6 +858,16 @@ public class GlobalStateMgr {
         this.tabletCollector = new TabletCollector();
 
         this.jwkMgr = new JwkMgr();
+        this.httpAsyncExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.http_async_threads_num, "starrocks-http-nio-pool", !isCkptGlobalState);
+        if (!isCkptGlobalState) {
+            getConfigRefreshDaemon().registerListener(() ->
+                    ThreadPoolManager.setCacheThreadPoolSize(httpAsyncExecutor, Config.http_async_threads_num));
+        }
+    }
+
+    public ThreadPoolExecutor getHttpAsyncExecutor() {
+        return httpAsyncExecutor;
     }
 
     public static void destroyCheckpoint() {
