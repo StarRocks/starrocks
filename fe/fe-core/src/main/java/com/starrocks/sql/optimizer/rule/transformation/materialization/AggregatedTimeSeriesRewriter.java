@@ -652,7 +652,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         rewrittenPartitionPredicates.addAll(queryNonPartitionPredicates);
 
         // non-rewritten predicates
-        List<ScalarOperator> leftQueryPartitionPredicates = Lists.newArrayList(queryNonPartitionPredicates);
+        final List<ScalarOperator> leftQueryPartitionPredicates = Lists.newArrayList(queryNonPartitionPredicates);
         final NegateFilterShuttle negateFilterShuttle = NegateFilterShuttle.getInstance();
         final List<ScalarOperator> notQueryPartitionPredicates = rewrittenPartitionPredicates.stream()
                 .map(pred -> negateFilterShuttle.negateFilter(pred))
