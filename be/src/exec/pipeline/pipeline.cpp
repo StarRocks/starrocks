@@ -118,25 +118,27 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
 }
 
 void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
-    runtime_state->runtime_profile()->add_child(runtime_profile(), true, nullptr);
+    runtime_state->runtime_profile()->add_child(runtime_profile_ptr(), true, nullptr);
+    runtime_profile()->reserve_child_holder(degree_of_parallelism());
 }
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
     runtime_profile()->add_info_string("IsGroupExecution",
                                        _execution_group->is_colocate_exec_group() ? "true" : "false");
-    runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
+    runtime_profile()->add_child(driver->runtime_profile_ptr(), true, nullptr);
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(dop_counter, static_cast<int64_t>(source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, dop_counter->value());
     auto& operators = driver->operators();
+    driver->runtime_profile()->reserve_child_holder(operators.size());
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
-        driver->runtime_profile()->add_child(curr_op->runtime_profile(), true, nullptr);
+        driver->runtime_profile()->add_child(curr_op->runtime_profile_ptr(), true, nullptr);
         if (curr_op->is_combinatorial_operator()) {
             curr_op->for_each_child_operator([&](Operator* child) {
-                driver->runtime_profile()->add_child(child->runtime_profile(), true, nullptr);
+                driver->runtime_profile()->add_child(child->runtime_profile_ptr(), true, nullptr);
             });
         }
     }

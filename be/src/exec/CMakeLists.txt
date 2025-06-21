@@ -251,6 +251,7 @@ set(EXEC_FILES
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
+    pipeline/profile_manager.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/driver_limiter.cpp
@@ -335,5 +336,5 @@ set(EXEC_FILES
     stream/stream_aggregate_node.cpp)
 
 add_library(Exec STATIC
-    ${EXEC_FILES}
+        ${EXEC_FILES}
 )

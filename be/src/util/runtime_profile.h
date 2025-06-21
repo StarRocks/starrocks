@@ -38,6 +38,7 @@
 #include <sys/time.h> // NOLINT
 
 #include <atomic>
+#include <boost/container/vector.hpp>
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -51,6 +52,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/casts.h"
+#include "util/counter_memory_pool.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
@@ -87,7 +89,7 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
     (profile)->add_child_counter(                                                                                      \
-            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 1, min_max_type), \
             parent)
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
     (profile)->add_child_counter(                                  \
@@ -138,7 +140,7 @@ public:
     public:
         static TCounterStrategy create_strategy(
                 TCounterAggregateType::type aggregate_type,
-                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 0,
+                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 1,
                 TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             TCounterStrategy strategy;
             strategy.aggregate_type = aggregate_type;
@@ -150,7 +152,7 @@ public:
 
         static TCounterStrategy create_strategy(
                 TUnit::type type, TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
-                int64_t display_threshold = 0,
+                int64_t display_threshold = 1,
                 TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
             return create_strategy(aggregate_type, merge_type, display_threshold, min_max_type);
@@ -210,7 +212,7 @@ public:
         int64_t display_threshold() const { return _strategy.display_threshold; }
         bool should_display() const {
             int64_t threshold = _strategy.display_threshold;
-            return threshold == 0 || value() > threshold;
+            return _value.load() > threshold;
         }
 
     private:
@@ -218,7 +220,7 @@ public:
 
         std::atomic<int64_t> _value;
         const TUnit::type _type;
-        const TCounterStrategy _strategy;
+        TCounterStrategy _strategy;
         std::optional<int64_t> _min_value;
         std::optional<int64_t> _max_value;
     };
@@ -391,6 +393,10 @@ public:
     // If location is non-null, child will be inserted after location.  Location must
     // already be added to the profile.
     void add_child(RuntimeProfile* child, bool indent, RuntimeProfile* location);
+
+    void add_child(std::shared_ptr<RuntimeProfile> child, bool indent, RuntimeProfile* location);
+
+    void reserve_child_holder(size_t child_num);
 
     // Creates a new child profile with the given 'name'.
     // If 'prepend' is true, prepended before other child profiles, otherwise appended
@@ -627,7 +633,9 @@ private:
     ChildMap _child_map;
 
     ChildVector _children;
-    mutable std::mutex _children_lock; // protects _child_map and _children
+
+    std::vector<std::shared_ptr<RuntimeProfile>> _childre_holder;
+    mutable std::mutex _children_lock; // protects _child_map, _children and _childre_holder
 
     typedef std::map<std::string, std::string> InfoStrings;
     InfoStrings _info_strings;
@@ -654,6 +662,8 @@ private:
     // from an old one.
     int64_t _version{0};
 
+    bool isUniqueMetric;
+
     // update a subtree of profiles from nodes, rooted at *idx. If the version
     // of the parent node, or the version of root node for this subtree is older,
     // skip to update the subtree, but still traverse the nodes of subtree to
@@ -674,9 +684,14 @@ private:
 public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
-    // The merged result will be stored in the first profile
+    // The merged result will be stored in the first profile for the final merge
+    // running profile will create new profile for merge
+    template <bool isFinal = false>
     static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
                                                      bool require_identical = true);
+
+    // static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
+    //                                                  bool require_identical = true);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
@@ -690,6 +705,9 @@ private:
     }
 
     std::string get_children_name_string();
+
+    // 用于分配 counter 对象的内存池
+    CounterMemoryPool _counter_pool;
 };
 
 // Utility class to update the counter at object construction and destruction.

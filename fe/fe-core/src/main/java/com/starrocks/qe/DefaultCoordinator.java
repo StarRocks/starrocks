@@ -373,7 +373,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public RuntimeProfile getQueryProfile() {
-        return queryProfile.getQueryProfile();
+        return queryProfile.getExecutionProfile();
     }
 
     @Override
@@ -1074,12 +1074,16 @@ public class DefaultCoordinator extends Coordinator {
             if (!execState.cancelFragmentInstance(cancelReason) &&
                     (!execState.hasBeenDeployed() || execState.isFinished())) {
                 queryProfile.finishInstance(execState.getInstanceId());
+                //                queryProfile.finishInstanceProfile(execState.getIndexInJob());
             }
         }
 
         executionDAG.getInstances().stream()
                 .filter(instance -> executionDAG.getExecution(instance.getIndexInJob()) == null)
-                .forEach(instance -> queryProfile.finishInstance(instance.getInstanceId()));
+                .forEach(instance -> {
+                    queryProfile.finishInstance(instance.getInstanceId());
+                    //                    queryProfile.finishInstanceProfile(instance.getIndexInJob());
+                });
     }
 
     @Override
@@ -1255,7 +1259,7 @@ public class DefaultCoordinator extends Coordinator {
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
-            boolean isFinished = queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            boolean isFinished = queryProfile.waitForProfileReported(timeout, TimeUnit.SECONDS);
             if (!isFinished) {
                 LOG.warn("failed to get profile within {} seconds", timeout);
             }
@@ -1319,7 +1323,7 @@ public class DefaultCoordinator extends Coordinator {
         boolean awaitRes = false;
         while (leftTimeoutS > 0) {
             long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+            awaitRes = queryProfile.waitForQueryFinished(waitTime, TimeUnit.SECONDS);
             if (awaitRes) {
                 return true;
             }
@@ -1344,11 +1348,11 @@ public class DefaultCoordinator extends Coordinator {
 
     // build execution profile  from every BE's report
     @Override
-    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+    public RuntimeProfile buildExecutionProfile(boolean needMerge) {
         if (isShortCircuit) {
             return shortCircuitExecutor.buildQueryProfile(needMerge);
         }
-        return queryProfile.buildQueryProfile(needMerge);
+        return queryProfile.buildExecutionProfile(needMerge);
     }
 
     /**
@@ -1437,4 +1441,5 @@ public class DefaultCoordinator extends Coordinator {
     public ConnectContext getConnectContext() {
         return connectContext;
     }
+
 }

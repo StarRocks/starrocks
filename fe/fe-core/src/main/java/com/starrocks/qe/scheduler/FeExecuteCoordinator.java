@@ -194,7 +194,7 @@ public class FeExecuteCoordinator extends Coordinator {
     }
 
     @Override
-    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+    public RuntimeProfile buildExecutionProfile(boolean needMerge) {
         return null;
     }
 

@@ -21,6 +21,7 @@
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
+#include "profile_manager.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
@@ -46,6 +47,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
+          _profile_manager(new profile_manager()),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
@@ -309,31 +311,6 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                              const Status& status, bool done, bool attach_profile) {
-    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
-    ObjectPool obj_pool;
-    if (attach_profile) {
-        profile = _build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
-
-        // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
-        auto* query_peak_memory = profile->add_counter(
-                "QueryPeakMemoryUsage", TUnit::BYTES,
-                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_peak_memory->set(query_ctx->mem_cost_bytes());
-        auto* query_cumulative_cpu = profile->add_counter(
-                "QueryCumulativeCpuTime", TUnit::TIME_NS,
-                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_cumulative_cpu->set(query_ctx->cpu_cost());
-        auto* query_spill_bytes = profile->add_counter(
-                "QuerySpillBytes", TUnit::BYTES,
-                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_spill_bytes->set(query_ctx->get_spill_bytes());
-        // Add execution wall time
-        auto* query_exec_wall_time = profile->add_counter(
-                "QueryExecutionWallTime", TUnit::TIME_NS,
-                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_exec_wall_time->set(query_ctx->lifetime());
-    }
-
     const auto& fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
         // query executed by external connectors, like spark and flink connector,
@@ -341,14 +318,24 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         return;
     }
 
+    if (attach_profile && query_ctx->enable_profile()) {
+        DCHECK(fragment_ctx->runtime_state()->runtime_profile_ptr().get() != nullptr);
+        std::shared_ptr<FragmentProfileMaterial> fragment_profile_material = std::make_shared<FragmentProfileMaterial>(
+                fragment_ctx->runtime_state()->runtime_profile_ptr(),
+                fragment_ctx->runtime_state()->load_channel_profile_ptr(), query_ctx->profile_level(),
+                query_ctx->mem_cost_bytes(), query_ctx->cpu_cost(), query_ctx->get_spill_bytes(), query_ctx->lifetime(),
+                done, query_ctx->query_id(), fragment_ctx->runtime_state()->fragment_instance_id(),
+                fragment_ctx->runtime_state()->query_options().query_type, fe_addr);
+
+        _profile_manager->build_and_report_profile(fragment_profile_material);
+    }
+
     // Load channel profile will be merged on FE
-    auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
     std::shared_ptr<TReportExecStatusParams> params;
     {
         // move profile memory to process, similar with SinkBuffer. the params will be released in ExecStateReporter
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
-                                                                     load_channel_profile, status, done);
+        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
         int64_t delta = CurrentThread::current().get_consumed_bytes() - before_bytes;
 
         CurrentThread::current().mem_release(delta);
