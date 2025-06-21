@@ -81,9 +81,11 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
     @Override
     public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+        Map<Long, Optional<Long>> statistics = new HashMap<>();
         // get Statistics Table column info, just return default column statistics
         if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
-            return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+            partitions.forEach(p -> statistics.put(p.getId(), Optional.empty()));
+            return statistics;
         }
 
         List<TableStatsCacheKey> keys = partitions.stream().map(p -> new TableStatsCacheKey(tableId, p.getId()))
@@ -102,7 +104,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         } catch (Exception e) {
             LOG.warn("Faied to execute tableStatsCache.getAll", e);
         }
-        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+        partitions.forEach(p -> statistics.put(p.getId(), Optional.empty()));
+        return statistics;
     }
 
     @Override
