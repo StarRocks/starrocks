@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/row_id_column.h"
 #include "column/schema.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
@@ -274,6 +275,8 @@ struct ColumnPtrBuilder {
             }
             auto struct_column = StructColumn::create(std::move(fields), std::move(names));
             return NullableIfNeed(std::move(struct_column));
+        } else if constexpr (ftype == TYPE_ROW_ID) {
+            return RowIdColumn::create();
         } else {
             switch (ftype) {
             case TYPE_DECIMAL32:
@@ -293,6 +296,9 @@ struct ColumnPtrBuilder {
 };
 
 ColumnPtr column_from_pool(const Field& field) {
+    if (field.type()->type() == TYPE_ROW_ID) {
+        return RowIdColumn::create();
+    }
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
     return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
@@ -383,6 +389,8 @@ struct ColumnBuilder {
             CHECK(false) << "array not supported";
         } else if constexpr (ftype == TYPE_STRUCT) {
             CHECK(false) << "array not supported";
+        } else if constexpr (ftype == TYPE_ROW_ID) {
+            CHECK(false) << "row_id not supported";
         } else {
             return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
         }
@@ -423,6 +431,9 @@ MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
         }
         auto struct_column = StructColumn::create(std::move(fields), std::move(names));
         return NullableIfNeed(std::move(struct_column));
+    }
+    case TYPE_ROW_ID: {
+        return RowIdColumn::create();
     }
     default:
         return NullableIfNeed(column_from_field_type(type, false));
@@ -624,9 +635,10 @@ bool ChunkPipelineAccumulator::is_finished() const {
 }
 
 template <class ColumnT>
-inline constexpr bool is_object = std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
-                                  std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
-                                  std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
+inline constexpr bool is_object =
+        std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
+        std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
+        std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT> || std::is_same_v<ColumnT, RowIdColumn>;
 
 // Selective-copy data from SegmentedColumn according to provided index
 class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {
@@ -774,6 +786,10 @@ public:
     }
 
     Status do_visit(const ConstColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+
+    Status do_visit(const RowIdColumn& column) {
+        return Status::NotSupported("SegmentColumnVisitor not support row id column");
+    }
 
     ColumnPtr result() { return _result; }
 

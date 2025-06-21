@@ -704,6 +704,7 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     case TYPE_BINARY:
     case TYPE_VARBINARY:
     case TYPE_MAX_VALUE:
+    case TYPE_ROW_ID:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }
