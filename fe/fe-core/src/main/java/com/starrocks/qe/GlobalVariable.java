@@ -90,6 +90,10 @@ public final class GlobalVariable {
 
     public static final String SPM_CAPTURE_INCLUDE_TABLE_PATTERN = "plan_capture_include_pattern";
 
+    public static final String ENABLE_PARTITIONS_SCAN = "enable_partitions_scan";
+    public static final String PARTITIONS_SCAN_KEEP_DAYS = "partitions_scan_keep_days";
+    public static final String PARTITIONS_SCAN_LOAD_INTERVAL_SECONDS = "partitions_scan_load_interval_seconds";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
@@ -207,6 +211,19 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = SPM_CAPTURE_INCLUDE_TABLE_PATTERN, flag = VariableMgr.GLOBAL)
     public static String spmCaptureIncludeTablePattern = ".*";
+
+    @VariableMgr.VarAttr(name = ENABLE_PARTITIONS_SCAN, flag = VariableMgr.GLOBAL)
+    public static boolean enablePartitionsScan = false;
+
+    @VariableMgr.VarAttr(name = PARTITIONS_SCAN_KEEP_DAYS, flag = VariableMgr.GLOBAL)
+    public static long partitionsScanKeepDays = 7; // 7 days
+
+    @VariableMgr.VarAttr(name = PARTITIONS_SCAN_LOAD_INTERVAL_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long partitionsScanLoadIntervalSeconds = 60 * 5; // 5min
+
+    public static boolean isEnablePartitionsScan() {
+        return enablePartitionsScan;
+    }
 
     public static boolean isEnableQueryHistory() {
         return enableQueryHistory;
