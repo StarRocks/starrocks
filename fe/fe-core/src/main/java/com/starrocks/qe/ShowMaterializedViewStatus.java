@@ -14,22 +14,34 @@
 
 package com.starrocks.qe;
 
-import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedViewStatus;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,6 +57,8 @@ import java.util.stream.Collectors;
  * ShowMaterializedViewStatus represents one materialized view's refresh status for ShowMaterializedViews command usage.
  */
 public class ShowMaterializedViewStatus {
+    private static final Logger LOG = LogManager.getLogger(ShowMaterializedViewStatus.class);
+
     public static final String MULTI_TASK_RUN_SEPARATOR = "|";
 
     private long id;
@@ -58,17 +72,19 @@ public class ShowMaterializedViewStatus {
     private long lastCheckTime;
     private String inactiveReason;
     private String queryRewriteStatus;
+    private long taskId;
+    private String taskName;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
      * RefreshJobStatus represents a batch of batch TaskRunStatus because a fresh may trigger more than one task runs.
      */
     public class RefreshJobStatus {
-        private long taskId;
-        private String taskName;
         private String taskOwner;
+        private String jobId;
         private Constants.TaskRunState refreshState;
         private long mvRefreshStartTime;
+        private long mvRefreshProcessTime;
         private long mvRefreshEndTime;
         private long totalProcessDuration;
         private boolean isForce;
@@ -90,6 +106,14 @@ public class ShowMaterializedViewStatus {
 
         public void setMvRefreshStartTime(long mvRefreshStartTime) {
             this.mvRefreshStartTime = mvRefreshStartTime;
+        }
+
+        public long getMvRefreshProcessTime() {
+            return mvRefreshProcessTime;
+        }
+
+        public void setMvRefreshProcessTime(long mvRefreshProcessTime) {
+            this.mvRefreshProcessTime = mvRefreshProcessTime;
         }
 
         public long getMvRefreshEndTime() {
@@ -164,6 +188,14 @@ public class ShowMaterializedViewStatus {
             this.errorMsg = errorMsg;
         }
 
+        public String getJobId() {
+            return jobId;
+        }
+
+        public void setJobId(String jobId) {
+            this.jobId = jobId;
+        }
+
         public Constants.TaskRunState getRefreshState() {
             return refreshState;
         }
@@ -178,22 +210,6 @@ public class ShowMaterializedViewStatus {
 
         public void setRefreshFinished(boolean refreshFinished) {
             isRefreshFinished = refreshFinished;
-        }
-
-        public long getTaskId() {
-            return taskId;
-        }
-
-        public void setTaskId(long taskId) {
-            this.taskId = taskId;
-        }
-
-        public String getTaskName() {
-            return taskName;
-        }
-
-        public void setTaskName(String taskName) {
-            this.taskName = taskName;
         }
 
         public ExtraMessage getExtraMessage() {
@@ -301,10 +317,74 @@ public class ShowMaterializedViewStatus {
         }
     }
 
+    @Deprecated
     public ShowMaterializedViewStatus(long id, String dbName, String name) {
         this.id = id;
         this.dbName = dbName;
         this.name = name;
+    }
+
+    public static ShowMaterializedViewStatus of(String dbName, MaterializedView mv, List<TaskRunStatus> taskTaskStatusJob) {
+        ShowMaterializedViewStatus status = new ShowMaterializedViewStatus(mv.getId(), dbName, mv.getName());
+        // refresh_type
+        final MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
+        if (refreshScheme == null) {
+            status.setRefreshType("UNKNOWN");
+        } else {
+            status.setRefreshType(String.valueOf(mv.getRefreshScheme().getType()));
+        }
+        // is_active
+        status.setActive(mv.isActive());
+        status.setInactiveReason(Optional.ofNullable(mv.getInactiveReason()).map(String::valueOf).orElse(null));
+        // partition info
+        if (mv.getPartitionInfo() != null && mv.getPartitionInfo().getType() != null) {
+            status.setPartitionType(mv.getPartitionInfo().getType().toString());
+        }
+        // row count
+        status.setRows(mv.getRowCount());
+        // materialized view ddl
+        status.setText(mv.getMaterializedViewDdlStmt(true));
+        // rewrite status
+        status.setQueryRewriteStatus(mv.getQueryRewriteStatus());
+        // task_name
+        final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        if (task != null) {
+            status.setTaskId(task.getId());
+            status.setTaskName(task.getName());
+        }
+        status.setLastJobTaskRunStatus(taskTaskStatusJob);
+        return status;
+    }
+
+    public static ShowMaterializedViewStatus of(String dbName, OlapTable olapTable, MaterializedIndexMeta indexMeta) {
+        ShowMaterializedViewStatus status = new ShowMaterializedViewStatus(indexMeta.getIndexId(), dbName,
+                olapTable.getIndexNameById(indexMeta.getIndexId()));
+        // refresh_type
+        status.setRefreshType("ROLLUP");
+        // is_active
+        status.setActive(true);
+        // partition type
+        if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
+            status.setPartitionType(olapTable.getPartitionInfo().getType().toString());
+        }
+        // text
+        if (indexMeta.getOriginStmt() == null) {
+            final String mvName = olapTable.getIndexNameById(indexMeta.getIndexId());
+            status.setText(buildCreateMVSql(olapTable, mvName, indexMeta));
+        } else {
+            status.setText(indexMeta.getOriginStmt().replace("\n", "").replace("\t", "")
+                    .replaceAll("[ ]+", " "));
+        }
+        // rows
+        if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
+            final Partition partition = olapTable.getPartitions().iterator().next();
+            final MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(indexMeta.getIndexId());
+            status.setRows(index.getRowCount());
+        } else {
+            status.setRows(0L);
+        }
+        return status;
     }
 
     public long getId() {
@@ -387,6 +467,22 @@ public class ShowMaterializedViewStatus {
         this.inactiveReason = inactiveReason;
     }
 
+    public long getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(long taskId) {
+        this.taskId = taskId;
+    }
+
+    public String getTaskName() {
+        return taskName;
+    }
+
+    public void setTaskName(String taskName) {
+        this.taskName = taskName;
+    }
+
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
         if (lastJobTaskRunStatus != null) {
             // sort by process start time
@@ -410,9 +506,6 @@ public class ShowMaterializedViewStatus {
 
         TaskRunStatus firstTaskRunStatus = lastJobTaskRunStatus.get(0);
         TaskRunStatus lastTaskRunStatus = lastJobTaskRunStatus.get(lastJobTaskRunStatus.size() - 1);
-
-        status.setTaskId(firstTaskRunStatus.getTaskId());
-        status.setTaskName(firstTaskRunStatus.getTaskName());
 
         // Task creator
         Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(firstTaskRunStatus.getTaskName());
@@ -441,8 +534,15 @@ public class ShowMaterializedViewStatus {
         }
 
         // start time
+        long mvRefreshCreateTime = firstTaskRunStatus.getCreateTime();
+        status.setMvRefreshStartTime(mvRefreshCreateTime);
+
+        // process time
         long mvRefreshStartTime = firstTaskRunStatus.getProcessStartTime();
-        status.setMvRefreshStartTime(mvRefreshStartTime);
+        status.setMvRefreshProcessTime(mvRefreshStartTime);
+
+        /// last refresh job id
+        status.setJobId(lastTaskRunStatus.getStartTaskRunId());
 
         // last refresh state
         status.setRefreshState(lastTaskRunStatus.getLastRefreshState());
@@ -514,10 +614,14 @@ public class ShowMaterializedViewStatus {
         status.setPartition_type(this.partitionType);
 
         RefreshJobStatus refreshJobStatus = getRefreshJobStatus();
-        status.setTask_id(String.valueOf(refreshJobStatus.getTaskId()));
-        status.setTask_name(refreshJobStatus.getTaskName());
+        status.setTask_id(String.valueOf(this.taskId));
+        status.setTask_name(this.taskName);
         // start time
         status.setLast_refresh_start_time(TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshStartTime()));
+        // process time
+        status.setLast_refresh_process_time(TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
+        // last_refresh_job_id
+        status.setLast_refresh_job_id(refreshJobStatus.getJobId());
         // LAST_REFRESH_STATE
         status.setLast_refresh_state(String.valueOf(refreshJobStatus.getRefreshState()));
         // is force
@@ -584,15 +688,19 @@ public class ShowMaterializedViewStatus {
 
         RefreshJobStatus refreshJobStatus = getRefreshJobStatus();
         // task id
-        addField(resultRow, refreshJobStatus.getTaskId());
+        addField(resultRow, this.getTaskId());
         // task name
-        addField(resultRow, Strings.nullToEmpty(refreshJobStatus.getTaskName()));
-        // process start time
+        addField(resultRow, Strings.nullToEmpty(this.getTaskName()));
+        // start time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshStartTime()));
+        // process start time
+        addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
         // process finish time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshEndTime()));
         // process duration
         addField(resultRow, formatDuration(refreshJobStatus.getTotalProcessDuration()));
+        // last refresh job id
+        addField(resultRow, refreshJobStatus.getJobId());
         // last refresh state
         addField(resultRow, refreshJobStatus.getRefreshState());
         // whether it's force refresh
@@ -661,5 +769,86 @@ public class ShowMaterializedViewStatus {
                 ", queryRewriteStatus='" + queryRewriteStatus + '\'' +
                 ", lastJobTaskRunStatus=" + lastJobTaskRunStatus +
                 '}';
+    }
+
+    public static String buildCreateMVSql(OlapTable olapTable, String mv, MaterializedIndexMeta mvMeta) {
+        StringBuilder originStmtBuilder = new StringBuilder(
+                "create materialized view " + mv +
+                        " as select ");
+        String groupByString = "";
+        for (Column column : mvMeta.getSchema()) {
+            if (column.isKey()) {
+                groupByString += column.getName() + ",";
+            }
+        }
+        originStmtBuilder.append(groupByString);
+        for (Column column : mvMeta.getSchema()) {
+            if (!column.isKey()) {
+                originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                        .append(column.getName()).append(")").append(",");
+            }
+        }
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                .append(groupByString);
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        return originStmtBuilder.toString();
+    }
+
+    private static ShowMaterializedViewStatus getASyncMVStatus(String dbName,
+                                                               MaterializedView mvTable,
+                                                               List<TaskRunStatus> taskTaskStatusJob) {
+        try {
+            return ShowMaterializedViewStatus.of(dbName, mvTable, taskTaskStatusJob);
+        } catch (Exception e) {
+            long mvId = mvTable.getId();
+            LOG.warn("get async mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
+                    mvId, dbName, mvTable.getName(), e.getMessage());
+            return new ShowMaterializedViewStatus(mvId, dbName, mvTable.getName());
+        }
+    }
+
+    private static ShowMaterializedViewStatus getSyncMVStatus(String dbName,
+                                                              OlapTable olapTable,
+                                                              MaterializedIndexMeta mvMeta) {
+        try {
+            return ShowMaterializedViewStatus.of(dbName, olapTable, mvMeta);
+        } catch (Exception e) {
+            final long mvId = mvMeta.getIndexId();
+            LOG.warn("get sync mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
+                    mvId, dbName, olapTable.getIndexNameById(mvId), e.getMessage());
+            return new ShowMaterializedViewStatus(mvId, dbName, olapTable.getIndexNameById(mvId));
+        }
+    }
+
+    public static List<ShowMaterializedViewStatus> listMaterializedViewStatus(
+            String dbName,
+            List<MaterializedView> mvs,
+            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
+        final List<ShowMaterializedViewStatus> rowSets = Lists.newArrayList();
+
+        // Now there are two MV cases:
+        //  1. Table's type is MATERIALIZED_VIEW, this is the new MV type which the MV table is separated from
+        //     the base table and supports multi table in MV definition.
+        //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
+        //     table and only supports single table in MV definition.
+        final Map<String, List<TaskRunStatus>> taskNameToStatusMap = mvs.isEmpty()
+                ? Maps.newHashMap()
+                : GlobalStateMgr.getCurrentState().getTaskManager()
+                .listMVRefreshedTaskRunStatus(dbName,
+                        mvs.stream()
+                                .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
+                                .collect(Collectors.toSet())
+                );
+        // async materialized views
+        mvs.forEach(mvTable ->
+                rowSets.add(getASyncMVStatus(dbName, mvTable, taskNameToStatusMap.getOrDefault(
+                        TaskBuilder.getMvTaskName(mvTable.getId()), Lists.newArrayList())))
+        );
+        // sync materialized views
+        singleTableMVs.forEach(singleTableMV ->
+                rowSets.add(getSyncMVStatus(dbName, singleTableMV.first, singleTableMV.second))
+        );
+        return rowSets;
     }
 }

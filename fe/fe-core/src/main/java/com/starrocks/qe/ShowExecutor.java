@@ -85,7 +85,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
@@ -147,9 +146,6 @@ import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -417,7 +413,7 @@ public class ShowExecutor {
             }
 
             List<ShowMaterializedViewStatus> mvStatusList =
-                    listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+                    ShowMaterializedViewStatus.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
             List<List<String>> rowSets = mvStatusList.stream().map(ShowMaterializedViewStatus::toResultSet)
                     .collect(Collectors.toList());
             return new ShowResultSet(statement.getMetaData(), rowSets);
@@ -750,7 +746,8 @@ public class ShowExecutor {
                                     if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
                                         if (mvMeta.getOriginStmt() == null) {
                                             String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
-                                            rows.add(Lists.newArrayList(showStmt.getTable(), buildCreateMVSql(olapTable,
+                                            rows.add(Lists.newArrayList(showStmt.getTable(),
+                                                    ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
                                                     mvName, mvMeta), "utf8", "utf8_general_ci"));
                                         } else {
                                             rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
@@ -3117,141 +3114,5 @@ public class ShowExecutor {
 
             return rows;
         }
-    }
-
-    private static ShowMaterializedViewStatus getASyncMVStatus(Map<String, List<TaskRunStatus>> mvNameTaskMap,
-                                                               String dbName,
-                                                               MaterializedView mvTable) {
-        long mvId = mvTable.getId();
-        final ShowMaterializedViewStatus mvStatus = new ShowMaterializedViewStatus(mvId, dbName, mvTable.getName());
-        try {
-            // refresh_type
-            final MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
-            if (refreshScheme == null) {
-                mvStatus.setRefreshType("UNKNOWN");
-            } else {
-                mvStatus.setRefreshType(String.valueOf(mvTable.getRefreshScheme().getType()));
-            }
-            // is_active
-            mvStatus.setActive(mvTable.isActive());
-            mvStatus.setInactiveReason(Optional.ofNullable(mvTable.getInactiveReason()).map(String::valueOf).orElse(null));
-            // partition info
-            if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
-                mvStatus.setPartitionType(mvTable.getPartitionInfo().getType().toString());
-            }
-            // row count
-            mvStatus.setRows(mvTable.getRowCount());
-            // materialized view ddl
-            mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
-            // task run status
-            final List<TaskRunStatus> taskTaskStatusJob = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
-            mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
-            mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
-        } catch (Exception e) {
-            LOG.warn("get async mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
-                    mvId, dbName, mvTable.getName(), e.getMessage());
-        }
-        return mvStatus;
-    }
-
-    private static ShowMaterializedViewStatus getSyncMVStatus(String dbName,
-                                                              OlapTable olapTable,
-                                                              MaterializedIndexMeta mvMeta) {
-        final long mvId = mvMeta.getIndexId();
-        final ShowMaterializedViewStatus mvStatus =
-                new ShowMaterializedViewStatus(mvId, dbName, olapTable.getIndexNameById(mvId));
-        try {
-            // refresh_type
-            mvStatus.setRefreshType("ROLLUP");
-            // is_active
-            mvStatus.setActive(true);
-            // partition type
-            if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
-                mvStatus.setPartitionType(olapTable.getPartitionInfo().getType().toString());
-            }
-            // text
-            if (mvMeta.getOriginStmt() == null) {
-                final String mvName = olapTable.getIndexNameById(mvId);
-                mvStatus.setText(buildCreateMVSql(olapTable, mvName, mvMeta));
-            } else {
-                mvStatus.setText(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
-                        .replaceAll("[ ]+", " "));
-            }
-            // rows
-            if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                final Partition partition = olapTable.getPartitions().iterator().next();
-                final MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
-                mvStatus.setRows(index.getRowCount());
-            } else {
-                mvStatus.setRows(0L);
-            }
-        } catch (Exception e) {
-            LOG.warn("get sync mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
-                    mvId, dbName, olapTable.getIndexNameById(mvId), e.getMessage());
-        }
-        return mvStatus;
-    }
-
-    public static List<ShowMaterializedViewStatus> listMaterializedViewStatus(
-            String dbName,
-            List<MaterializedView> materializedViews,
-            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
-        final List<ShowMaterializedViewStatus> rowSets = Lists.newArrayList();
-
-        // Now there are two MV cases:
-        //  1. Table's type is MATERIALIZED_VIEW, this is the new MV type which the MV table is separated from
-        //     the base table and supports multi table in MV definition.
-        //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
-        //     table and only supports single table in MV definition.
-
-        // async mvs
-        final Map<String, List<TaskRunStatus>> mvNameTaskMap;
-        if (!materializedViews.isEmpty()) {
-            final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            final TaskManager taskManager = globalStateMgr.getTaskManager();
-            final Set<String> taskNames = materializedViews.stream()
-                    .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
-                    .collect(Collectors.toSet());
-            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName, taskNames);
-        } else {
-            mvNameTaskMap = Maps.newHashMap();
-        }
-        materializedViews.forEach(mvTable -> {
-            final ShowMaterializedViewStatus mvStatus = getASyncMVStatus(mvNameTaskMap, dbName, mvTable);
-            rowSets.add(mvStatus);
-        });
-
-        // sync mvs
-        singleTableMVs.forEach(singleTableMV -> {
-            final OlapTable olapTable = singleTableMV.first;
-            final MaterializedIndexMeta mvMeta = singleTableMV.second;
-            final ShowMaterializedViewStatus mvStatus = getSyncMVStatus(dbName, olapTable, mvMeta);
-            rowSets.add(mvStatus);
-        });
-        return rowSets;
-    }
-
-    public static String buildCreateMVSql(OlapTable olapTable, String mv, MaterializedIndexMeta mvMeta) {
-        StringBuilder originStmtBuilder = new StringBuilder(
-                "create materialized view " + mv +
-                        " as select ");
-        String groupByString = "";
-        for (Column column : mvMeta.getSchema()) {
-            if (column.isKey()) {
-                groupByString += column.getName() + ",";
-            }
-        }
-        originStmtBuilder.append(groupByString);
-        for (Column column : mvMeta.getSchema()) {
-            if (!column.isKey()) {
-                originStmtBuilder.append(column.getAggregationType().toString()).append("(")
-                        .append(column.getName()).append(")").append(",");
-            }
-        }
-        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-        originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
-                .append(groupByString);
-        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-        return originStmtBuilder.toString();
     }
 }

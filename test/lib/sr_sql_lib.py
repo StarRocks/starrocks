@@ -1929,8 +1929,10 @@ class StarrocksSQLApiLib(object):
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
+            if len(results) == 0:
+                return False
             for _res in results:
-                last_refresh_state = _res[12]
+                last_refresh_state = _res[14]
                 if last_refresh_state not in TASK_RUN_SUCCESS_STATES:
                     print("mv %s last refresh state is %s, not in %s" % (mv_name, last_refresh_state, TASK_RUN_SUCCESS_STATES))
                     return False
@@ -1948,6 +1950,8 @@ class StarrocksSQLApiLib(object):
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
+            if len(results) == 0:
+                return False
             for _res in results:
                 if _res[0] not in TASK_RUN_SUCCESS_STATES:
                     return False
