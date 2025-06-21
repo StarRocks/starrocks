@@ -116,7 +116,7 @@ public class JoinPredicatePushdown {
                     if (join.getJoinType().isRightAntiJoin()) {
                         continue;
                     }
-                    if (join.getJoinType().isNullAwareLeftAntiJoin()) {
+                    if (join.getJoinType().isNullAwareLeftAntiJoin() && predicate.isJoinDerived()) {
                         final IsNullPredicateOperator isNull =
                                 new IsNullPredicateOperator(false, predicate);
                         final CompoundPredicateOperator orPredicate =
@@ -496,7 +496,7 @@ public class JoinPredicatePushdown {
         return Utils.compoundAnd(pushDown);
     }
 
-    public ScalarOperator equivalenceDerive(ScalarOperator predicate, boolean returnInputPredicate) {
+    public ScalarOperator  equivalenceDerive(ScalarOperator predicate, boolean returnInputPredicate) {
         ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
 
         Set<ColumnRefOperator> allColumnRefs = Sets.newLinkedHashSet();
