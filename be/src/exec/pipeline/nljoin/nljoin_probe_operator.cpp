@@ -306,24 +306,51 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
         *filter = std::make_shared<Filter>(chunk->num_rows(), 1);
         auto& filter_data = **filter;
 
-        for (auto* ctx : _join_conjuncts) {
-            ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk.get()));
-            size_t num_rows = column->size();
+        // for null-aware left anti join, join_conjunct[0] is on-predicate
+        // others are other-conjuncts
+        // process on conjuncts
+        {
+            ASSIGN_OR_RETURN(ColumnPtr column, _join_conjuncts[0]->evaluate(chunk.get()));
             size_t num_false = ColumnHelper::count_false_with_notnull(column);
             // is null or true
             size_t num_not_false = column->size() - num_false;
             if (num_not_false == num_rows) {
-                continue;
+                // nothing to do
             } else if (0 == num_not_false) {
                 chunk->set_num_rows(0);
-                break;
             } else {
                 ColumnHelper::merge_two_anti_filters(column, null_data, filter->get());
             }
         }
+        // all rows filtered
+        if (chunk->is_empty()) {
+            return Status::OK();
+        }
 
+        // null data
         for (size_t i = 0; i < num_rows; ++i) {
             filter_data[i] |= null_data[i];
+        }
+
+        // process other conjucts
+        for (size_t i = 1; i < _join_conjuncts.size(); ++i) {
+            auto* ctx = _join_conjuncts[i];
+            ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk.get()));
+            size_t true_count = ColumnHelper::count_true_with_notnull(column);
+
+            if (true_count == column->size()) {
+                // all hit, skip
+                continue;
+            } else if (0 == true_count) {
+                chunk->set_num_rows(0);
+                break;
+            } else {
+                bool all_zero = false;
+                ColumnHelper::merge_two_filters(column, filter->get(), &all_zero);
+                if (all_zero) {
+                    chunk->set_num_rows(0);
+                }
+            }
         }
     }
     return Status::OK();

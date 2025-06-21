@@ -111,3 +111,15 @@ insert into build2 values (1,1,1),(NULL,NULL,NULL);
 select count(*) from aware3 l where 1 not in (select k2 from build2 r);
 select count(*) from aware3 l where null not in (select k2 from build2 r);
 select count(*) from aware3 l where 5 not in (select k2 from build2 r);
+
+
+select count(*) from aware3 l where l.k2 not in (select k2 from build1 r where r.k3 = l.k3 );
+select count(*) from aware3 l where 1 not in (select k2 from build1 r where r.k3 != l.k3 );
+
+
+
+select count(*) from aware3 l where l.k2 not in (select k2 from build2 r where r.k3 = l.k3 );
+select count(*) from aware3 l where 1 not in (select k2 from build2 r where r.k3 != l.k3 );
+
+-- not support yet
+-- select count(*) from aware3 l where 1 not in (select k2 from build1 r where r.k3 = l.k3 );
