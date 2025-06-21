@@ -28,13 +28,16 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
@@ -59,6 +62,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
@@ -81,6 +86,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
@@ -615,6 +621,9 @@ public class QueryAnalyzer {
                     subqueryRelation.setAlias(resolveTableName);
                     return subqueryRelation;
                 }
+            } else if (relation instanceof TableFunctionRelation &&
+                    TableFunction.isResultScanFunction(((TableFunctionRelation) relation).getFunctionName().getFunction())) {
+                return resultScan((TableFunctionRelation) relation);
             } else {
                 if (relation.getResolveTableName() != null) {
                     if (aliasSet.contains(relation.getResolveTableName())) {
@@ -646,6 +655,51 @@ public class QueryAnalyzer {
                 }
                 rows.add(row);
             }
+            return new ValuesRelation(rows, columnNames, outputColumnTypes);
+        }
+
+        // convert result scan TableFunctionRelation to ValuesRelation
+        private ValuesRelation resultScan(TableFunctionRelation relation) {
+            ConnectContext ctx = ConnectContext.get();
+            FunctionParams params = relation.getFunctionParams();
+            String sql = ((StringLiteral) params.exprs().get(0)).getStringValue();
+            StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+            Analyzer.analyze(stmt, ctx);
+
+            if (!(stmt instanceof ShowStmt)) {
+                throw new SemanticException("Result scan only supports show statement");
+            }
+            ShowResultSet resultSet = ShowExecutor.execute((ShowStmt) stmt, ctx);
+
+            List<String> columnNames = Lists.newArrayList();
+            List<Type> outputColumnTypes = Lists.newArrayList();
+            resultSet.getMetaData().getColumns().stream().forEach(c -> {
+                columnNames.add(c.getName());
+                outputColumnTypes.add(c.getType());
+            });
+
+            List<List<Expr>> rows = Lists.newArrayList();
+            for (List<String> resultRow : resultSet.getResultRows()) {
+                List<Expr> row = Lists.newArrayList();
+                for (int i = 0; i < resultRow.size(); ++i) {
+                    String data = resultRow.get(i);
+                    Type type = outputColumnTypes.get(i);
+
+                    if (data == null) {
+                        row.add(NullLiteral.create(type));
+                        continue;
+                    }
+
+                    try {
+                        row.add(LiteralExpr.create(data, type));
+                    } catch (AnalysisException e) {
+                        row.add(NullLiteral.create(type));
+                    }
+                }
+
+                rows.add(row);
+            }
+
             return new ValuesRelation(rows, columnNames, outputColumnTypes);
         }
 
