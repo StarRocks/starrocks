@@ -261,6 +261,7 @@ import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -3861,6 +3862,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String repoName = ((Identifier) visit(context.identifier())).getValue();
 
         return new ShowSnapshotStmt(repoName, where, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropSnapshotStatement(StarRocksParser.DropSnapshotStatementContext context) {
+        StarRocksParser.ExpressionContext expression = context.expression();
+        Expr where = null;
+        if (expression != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        String repoName = ((Identifier) visit(context.repoName)).getValue();
+
+        return new DropSnapshotStmt(repoName, where, createPos(context));
     }
 
     // ----------------------------------------------- Repository Statement --------------------------------------------
