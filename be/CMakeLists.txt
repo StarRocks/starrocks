@@ -710,9 +710,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mbmi2")
     endif()
     if (${USE_AVX512})
-        # the compiler will define __AVX512F__ __AVX512BW__ __AVX512DQ__ __AVX512CD__ __AVX512VL__
+        # the compiler will define __AVX512F__ __AVX512BW__ __AVX512DQ__  __AVX512IFMA__ __AVX512CD__ __AVX512VL__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw -mavx512dq -mavx512ifma -mavx512cd -mavx512vl")
-    endif()
+c    endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
 endif()
