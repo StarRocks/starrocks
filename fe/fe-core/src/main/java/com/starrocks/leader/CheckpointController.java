@@ -97,7 +97,7 @@ public class CheckpointController extends FrontendDaemon {
     private volatile String workerNodeName;
     private volatile long workerSelectedTime;
     private volatile long journalId;
-    private volatile BlockingQueue<FinishCheckpointResult> result;
+    private volatile BlockingQueue<CheckpointCompletionStatus> result;
 
     // save the cluster snapshot info getted from the checkpoint worker.
     private volatile ClusterSnapshotInfo clusterSnapshotInfo;
@@ -212,7 +212,7 @@ public class CheckpointController extends FrontendDaemon {
 
         try {
             long startNs = System.nanoTime();
-            FinishCheckpointResult ret = null;
+            CheckpointCompletionStatus ret = null;
             while (ret == null
                     && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
                 ret = result.poll(1, TimeUnit.SECONDS);
@@ -463,7 +463,7 @@ public class CheckpointController extends FrontendDaemon {
                     this.journalId, journalId));
         }
 
-        if (result.offer(new FinishCheckpointResult(true, "", clusterSnapshotInfo))) {
+        if (result.offer(new CheckpointCompletionStatus(true, "", clusterSnapshotInfo))) {
             LOG.info("finish checkpoint successfully, journalId: {}, nodeName: {}", journalId, nodeName);
         } else {
             LOG.warn("There are already other values in the result queue");
@@ -472,7 +472,7 @@ public class CheckpointController extends FrontendDaemon {
 
     public void cancelCheckpoint(String nodeName, String reason) {
         if (nodeName.equals(workerNodeName)) {
-            result.offer(new FinishCheckpointResult(false, reason, null));
+            result.offer(new CheckpointCompletionStatus(false, reason, null));
             LOG.warn("cancel checkpoint on node: {}, because: {}", nodeName, reason);
         }
     }
@@ -491,12 +491,12 @@ public class CheckpointController extends FrontendDaemon {
         return this.clusterSnapshotInfo;
     }
 
-    static class FinishCheckpointResult {
+    static class CheckpointCompletionStatus {
         private final boolean success;
         private final String reason;
         private final ClusterSnapshotInfo clusterSnapshotInfo;
 
-        public FinishCheckpointResult(boolean success, String reason, ClusterSnapshotInfo clusterSnapshotInfo) {
+        public CheckpointCompletionStatus(boolean success, String reason, ClusterSnapshotInfo clusterSnapshotInfo) {
             this.success = success;
             this.reason = reason;
             this.clusterSnapshotInfo = clusterSnapshotInfo;

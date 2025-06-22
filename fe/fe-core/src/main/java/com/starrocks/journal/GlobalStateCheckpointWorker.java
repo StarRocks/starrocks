@@ -55,10 +55,10 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
             if (needClusterSnapshotInfo) {
                 this.clusterSnapshotInfo = SnapshotInfoHelper.buildClusterSnapshotInfo(
                         globalStateMgr.getLocalMetastore().getAllDbs());
-                LOG.info("get cluster snapshot info successfully");
             }
 
-            LOG.info("checkpoint finished save image.{}", replayedJournalId);
+            LOG.info("checkpoint finished save image.{}, needClusterSnapshotInfo: {}",
+                     replayedJournalId, needClusterSnapshotInfo);
         } finally {
             GlobalStateMgr.destroyCheckpoint();
         }
