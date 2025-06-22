@@ -160,10 +160,10 @@ if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
 fi
 if [[ -z ${USE_AVX2} ]]; then
-    USE_AVX2=ON
+    USE_AVX2=OFF
 fi
 if [[ -z ${USE_AVX512} ]]; then
-    # Disable it by default
+    # Enable it by default
     USE_AVX512=OFF
 fi
 echo "Build Backend UT"
