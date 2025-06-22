@@ -98,10 +98,6 @@ public class ClusterSnapshot {
         return type == ClusterSnapshotType.AUTOMATED;
     }
 
-    public boolean needClusterSnapshotInfo() {
-        return false;
-    }
-
     public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
         return;
     }

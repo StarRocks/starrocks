@@ -155,7 +155,7 @@ public class ClusterSnapshotJob implements Writable {
     }
 
     public boolean needClusterSnapshotInfo() {
-        return snapshot.needClusterSnapshotInfo();
+        return false;
     }
 
     public boolean isAutomated() {
