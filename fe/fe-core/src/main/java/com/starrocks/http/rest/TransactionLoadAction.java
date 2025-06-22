@@ -74,13 +74,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Function;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
@@ -114,14 +111,7 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
 
-    private final ReadWriteLock txnNodeMapAccessLock = new ReentrantReadWriteLock();
-    private final Map<String, Long> txnNodeMap = new LinkedHashMap<>(512, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-            return size() > (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber()) * 512;
-        }
-    };
+    private final ConcurrentHashMap<String, Long> txnNodeMap = new ConcurrentHashMap<>(512, 0.75f);
 
     public TransactionLoadAction(ActionController controller) {
         super(controller);
@@ -163,11 +153,15 @@ public class TransactionLoadAction extends RestBaseAction {
     }
 
     public int txnNodeMapSize() {
-        return accessTxnNodeMapWithReadLock(Map::size);
+        return txnNodeMap.size();
     }
 
     public static TransactionLoadAction getAction() {
         return ac;
+    }
+
+    public static void removeActionTxnLabel(String label) {
+        ac.txnNodeMap.remove(label);
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
@@ -257,7 +251,7 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         String label = params.getLabel();
-        if (accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.containsKey(label))) {
+        if (txnNodeMap.containsKey(label)) {
             /*
              * The Bypass Write scenario will not redirect the request to BE definitely,
              * so if txnNodeMap contains the label, this must not be a Bypass Write scenario.
@@ -292,10 +286,9 @@ public class TransactionLoadAction extends RestBaseAction {
             List<Long> nodeIds = LoadAction.selectNodes(computeResource);
             Long chosenNodeId = nodeIds.get(0);
             nodeId = chosenNodeId;
-            // txnNodeMap is LRU cache, it atomic remove unused entry
-            accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, chosenNodeId));
+            txnNodeMap.put(label, chosenNodeId);
         } else {
-            nodeId = accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.get(label));
+            nodeId = txnNodeMap.get(label);
         }
 
         if (nodeId == null) {
@@ -405,24 +398,6 @@ public class TransactionLoadAction extends RestBaseAction {
             return jobSourceType;
         } catch (NumberFormatException e) {
             throw new StarRocksException("Invalid source type: " + sourceType);
-        }
-    }
-
-    private <T> T accessTxnNodeMapWithReadLock(Function<Map<String, Long>, T> function) {
-        txnNodeMapAccessLock.readLock().lock();
-        try {
-            return function.apply(txnNodeMap);
-        } finally {
-            txnNodeMapAccessLock.readLock().unlock();
-        }
-    }
-
-    private <T> T accessTxnNodeMapWithWriteLock(Function<Map<String, Long>, T> function) {
-        txnNodeMapAccessLock.writeLock().lock();
-        try {
-            return function.apply(txnNodeMap);
-        } finally {
-            txnNodeMapAccessLock.writeLock().unlock();
         }
     }
 
