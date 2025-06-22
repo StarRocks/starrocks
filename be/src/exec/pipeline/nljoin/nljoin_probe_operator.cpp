@@ -317,14 +317,10 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
             if (num_not_false == num_rows) {
                 // nothing to do
             } else if (0 == num_not_false) {
-                chunk->set_num_rows(0);
+                (*filter)->assign(num_rows, 0);
             } else {
                 ColumnHelper::merge_two_anti_filters(column, null_data, filter->get());
             }
-        }
-        // all rows filtered
-        if (chunk->is_empty()) {
-            return Status::OK();
         }
 
         // null data
@@ -342,7 +338,7 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
                 // all hit, skip
                 continue;
             } else if (0 == true_count) {
-                chunk->set_num_rows(0);
+                (*filter)->assign(num_rows, 0);
                 break;
             } else {
                 bool all_zero = false;
@@ -375,7 +371,7 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
     bool apply_filter = (!_is_left_semi_join() && !_is_left_anti_join()) || _is_build_side_empty();
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
-        if (_is_left_anti_join()) {
+        if (_is_null_aware_left_anti_join()) {
             RETURN_IF_ERROR(_eval_nullaware_anti_conjuncts(chunk, &filter));
         } else {
             RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter, apply_filter));
