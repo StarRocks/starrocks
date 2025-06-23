@@ -162,9 +162,9 @@ public class MvRewriteHiveTest extends MVTestBase {
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "0:UNION");
         PlanTestBase.assertContains(plan1, "hive_union_mv_1");
-        PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
-                "     TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 12: s_suppkey < 10, 12: s_suppkey >= 5");
+        PlanTestBase.assertContains(plan1, "     TABLE: supplier\n" +
+                "     NON-PARTITION PREDICATES: 12: s_suppkey < 10, (12: s_suppkey >= 5) OR (12: s_suppkey IS NULL)\n" +
+                "     MIN/MAX PREDICATES: 12: s_suppkey < 10");
         dropMv("test", "hive_union_mv_1");
     }
 
@@ -185,7 +185,9 @@ public class MvRewriteHiveTest extends MVTestBase {
 
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 18: s_suppkey < 10, 18: s_suppkey >= 5");
+        PlanTestBase.assertContains(plan, "     TABLE: supplier\n" +
+                "     NON-PARTITION PREDICATES: 12: s_suppkey < 10, (12: s_suppkey >= 5) OR (12: s_suppkey IS NULL)\n" +
+                "     MIN/MAX PREDICATES: 12: s_suppkey < 10");
         connectContext.getSessionVariable().setUseNthExecPlan(0);
         dropMv("test", "hive_union_mv_1");
         dropMv("test", "hive_join_mv_1");
