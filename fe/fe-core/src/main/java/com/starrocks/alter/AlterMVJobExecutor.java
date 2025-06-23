@@ -522,7 +522,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         try {
             if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
-                materializedView.fixRelationship();
                 if (materializedView.isActive()) {
                     return null;
                 }
