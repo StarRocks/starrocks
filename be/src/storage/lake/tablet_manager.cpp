@@ -430,15 +430,15 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
                                                                const std::shared_ptr<FileSystem>& fs) {
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
     auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
-    ASSIGN_OR_RETURN(auto cache_key, _location_provider->real_location(tablet_metadata_root_location(tablet_id)));
-    if (_metacache->lookup_aggregation_partition(cache_key)) {
+    if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
         if (version == kInitialVersion) {
             // Handle tablet initial metadata
             tablet_metadata_or =
                     get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
         }
     } else {
-        tablet_metadata_or = get_tablet_metadata((tablet_id, version), fill_cache, expected_gtid, fs);
+        tablet_metadata_or =
+                get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
     }
 
     if (!tablet_metadata_or.ok()) {
