@@ -238,6 +238,10 @@ public abstract class BulkLoadJob extends LoadJob {
         return failInfos;
     }
 
+    // Update failInfos under load job write lock when task is failed
+    protected void updateTabletFailInfos(TaskAttachment attachment) {
+    }
+
     @Override
     protected void reset() {
         super.reset();
@@ -259,7 +263,7 @@ public abstract class BulkLoadJob extends LoadJob {
     }
 
     @Override
-    public void onTaskFailed(long taskId, FailMsg failMsg) {
+    public void onTaskFailed(long taskId, FailMsg failMsg, TaskAttachment attachment) {
         List<TabletFailInfo> lastFailInfos = null;
         writeLock();
         try {
@@ -272,14 +276,15 @@ public abstract class BulkLoadJob extends LoadJob {
                 return;
             }
 
+            updateTabletFailInfos(attachment);
+            lastFailInfos = Lists.newArrayList(failInfos);
+
             boolean needRetry = isRetryable(failMsg);
             if (!needRetry) {
                 // For not retryable failure, cancel job and return
                 unprotectedExecuteCancel(failMsg, true);
                 logFinalOperation();
                 return;
-            } else {
-                lastFailInfos = Lists.newArrayList(failInfos);
             }
         } finally {
             writeUnlock();

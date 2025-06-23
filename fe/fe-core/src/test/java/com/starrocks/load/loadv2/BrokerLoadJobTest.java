@@ -464,7 +464,7 @@ public class BrokerLoadJobTest {
 
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, "load_run_fail");
-        brokerLoadJob.onTaskFailed(taskId, failMsg);
+        brokerLoadJob.onTaskFailed(taskId, failMsg, null);
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
@@ -482,7 +482,7 @@ public class BrokerLoadJobTest {
 
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         failMsg = new FailMsg(FailMsg.CancelType.USER_CANCEL, "Failed to allocate resource to query: pending timeout");
-        brokerLoadJob.onTaskFailed(taskId, failMsg);
+        brokerLoadJob.onTaskFailed(taskId, failMsg, null);
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
@@ -500,9 +500,8 @@ public class BrokerLoadJobTest {
         };
 
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
-        brokerLoadJob.failInfos = failInfos;
         failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
-        brokerLoadJob.onTaskFailed(taskId, failMsg);
+        brokerLoadJob.onTaskFailed(taskId, failMsg, new BrokerLoadingTaskAttachment(brokerLoadJob.getId(), failInfos));
 
         new Expectations() {
             {
@@ -515,7 +514,7 @@ public class BrokerLoadJobTest {
         try {
             BrokerLoadJob brokerLoadJob1 = new BrokerLoadJob();
             failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
-            brokerLoadJob1.onTaskFailed(taskId, failMsg);
+            brokerLoadJob1.onTaskFailed(taskId, failMsg, null);
         } catch (Exception e) {
             Assert.fail("should not throw exception");
         }
