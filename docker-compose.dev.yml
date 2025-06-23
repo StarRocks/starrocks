@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   starrocks-dev:
-    image: ${STARROCKS_DEV_ENV_IMAGE:-starrocks/dev-env-ubuntu:main-20250619}
+    image: ${STARROCKS_DEV_ENV_IMAGE:-starrocks/dev-env-ubuntu:latest}
     container_name: starrocks-dev-env
     volumes:
       - .:/workspace
@@ -25,7 +25,7 @@ services:
     container_name: starrocks-build-fe
     command: ./build.sh --fe
 
-  # Service for building Backend  
+  # Service for building Backend
   build-be:
     extends: starrocks-dev
     container_name: starrocks-build-be
