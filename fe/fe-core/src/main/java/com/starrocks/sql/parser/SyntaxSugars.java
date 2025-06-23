@@ -37,6 +37,11 @@ public class SyntaxSugars {
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
                 .put(FunctionSet.BOOLOR_AGG, SyntaxSugars::boolOrAgg)
                 .put(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH, SyntaxSugars::hllSketchCount)
+
+                // replace the V1 to V2
+                .put(FunctionSet.FROM_UNIXTIME, SyntaxSugars::fromUnixTime)
+                .put(FunctionSet.FROM_UNIXTIME_MS, SyntaxSugars::fromUnixTimeMs)
+
                 .build();
     }
 
@@ -82,5 +87,13 @@ public class SyntaxSugars {
 
     private static FunctionCallExpr boolOrAgg(FunctionCallExpr call) {
         return new FunctionCallExpr(FunctionSet.BOOL_OR, call.getChildren());
+    }
+
+    private static FunctionCallExpr fromUnixTime(FunctionCallExpr call) {
+        return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_V2, call.getChildren());
+    }
+
+    private static FunctionCallExpr fromUnixTimeMs(FunctionCallExpr call) {
+        return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_MS_V2, call.getChildren());
     }
 }
