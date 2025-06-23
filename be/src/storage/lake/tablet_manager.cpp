@@ -382,7 +382,6 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
-<<<<<<< HEAD
     StatusOr<TabletMetadataPtr> tablet_metadata_or =
             get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
     if (!tablet_metadata_or.status().is_not_found()) {
@@ -395,24 +394,6 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
     } else {
         // get single tablet metadata
         tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
-=======
-    StatusOr<TabletMetadataPtr> tablet_metadata_or;
-    // There are several possible cases for getting tablet metadata:
-    // 1. If the partition is an bundle partition (in cache),
-    //    then we will first try to read the metadata from the bundle metadata location,
-    //    if not found, then we will read the metadata from the single tablet metadata.
-    // 2. If the partition is not an bundle partition (not in cache),
-    //    then we will read the metadata from the single tablet metadata location.
-    if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
-        tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
-        if (tablet_metadata_or.status().is_not_found()) {
-            tablet_metadata_or =
-                    get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
-        }
-    } else {
-        tablet_metadata_or =
-                get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
->>>>>>> 529dbb0b09 ([BugFix] fix initial tablet meta read when only provide full path (#60132))
     }
 
     if (!tablet_metadata_or.ok()) {
