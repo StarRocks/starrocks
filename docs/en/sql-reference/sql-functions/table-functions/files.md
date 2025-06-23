@@ -120,6 +120,40 @@ The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
 
 You must set detailed options for specific data file formats.
 
+<<<<<<< HEAD
+=======
+When `list_files_only` is set to `true`, you do not need to specify `data_format`.
+
+##### Parquet
+
+Example of the Parquet format:
+
+```SQL
+"format"="parquet",
+"parquet.use_legacy_encoding" = "true"   -- for unloading only
+```
+
+###### parquet.use_legacy_encoding
+
+Controls the encoding technique used for DATETIME and DECIMAL data types. Valid values: `true` and `false` (default). This property is only supported for data unloading.
+
+If this item is set to `true`:
+
+- For DATETIME type, the system uses `INT96` encoding.
+- For DECIMAL type, the system uses `fixed_len_byte_array` encoding.
+
+If this item is set to `false`:
+
+- For DATETIME type, the system uses `INT64` encoding.
+- For DECIMAL type, the system uses `INT32` or `INT64` encoding.
+
+:::note
+
+For DECIMAL 128 data type, only `fixed_len_byte_array` encoding is available. `parquet.use_legacy_encoding` does not take effect.
+
+:::
+
+>>>>>>> 3cc3631d0c ([Doc] Doc for parquet.use_legacy_encoding (#60141))
 ##### CSV
 
 Example for the CSV format:
