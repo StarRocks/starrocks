@@ -69,12 +69,14 @@ public class LakeTableHelper {
         table.removeTableBinds(replay);
         if (replay) {
             table.removeTabletsFromInvertedIndex();
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(table.getId());
             return true;
         }
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
         boolean succ = cleaner.cleanTable();
         if (succ) {
             table.removeTabletsFromInvertedIndex();
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(table.getId());
         }
         return succ;
     }
