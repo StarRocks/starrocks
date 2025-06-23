@@ -1712,7 +1712,4 @@ CONF_mInt64(two_level_memory_threshold, "-1");
 CONF_mInt64(async_profile_merge_thread_max_num, "0");
 
 CONF_mInt64(async_profile_report_thread_max_num, "0");
-
-CONF_mInt64(counter_display_threshold, "50");
-
 } // namespace starrocks::config

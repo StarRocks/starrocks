@@ -336,5 +336,5 @@ set(EXEC_FILES
     stream/stream_aggregate_node.cpp)
 
 add_library(Exec STATIC
-        ${EXEC_FILES}
+    ${EXEC_FILES}
 )

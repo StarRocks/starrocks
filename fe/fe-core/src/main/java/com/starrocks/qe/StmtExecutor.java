@@ -1074,8 +1074,9 @@ public class StmtExecutor {
         final long startTime = context.getStartTime();
         final TUniqueId executionId = context.getExecutionId();
         final QueryDetail queryDetail = context.getQueryDetail();
-        // boolean needMerge = context.needMergeProfile();
+        boolean needMerge = context.needMergeProfile();
         final boolean isShortCircuit = coord.isShortCircuit();
+        final boolean enableAsyncProfileInBe = coord.enableAsyncProfileInBe();
         final ProfilingExecPlan profilingPlan;
         if (isShortCircuit) {
             profilingPlan = null;
@@ -1092,9 +1093,13 @@ public class StmtExecutor {
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
             summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
-            RunningProfileManager.RunningProfile runningProfile =
-                    RunningProfileManager.getInstance().getRunningProfile(executionId);
-            profileCopy.addChild(runningProfile.buildExecutionProfile());
+            if (enableAsyncProfileInBe) {
+                RunningProfileManager.RunningProfile runningProfile =
+                        RunningProfileManager.getInstance().getRunningProfile(executionId);
+                profileCopy.addChild(runningProfile.buildExecutionProfile());
+            } else {
+                profileCopy.addChild(coord.buildExecutionProfile(needMerge));
+            }
 
             // Update TotalTime to include the Profile Collect Time and the time to build the profile.
             long now = System.currentTimeMillis();

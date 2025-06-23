@@ -326,6 +326,21 @@ void RuntimeProfile::add_child_unlock(RuntimeProfile* child, bool indent, ChildV
     child->_parent = this;
 }
 
+int64_t RuntimeProfile::getThreshold(TUnit::type type) {
+    switch (type) {
+    case TUnit::UNIT:
+        return 1;
+    case TUnit::BYTES:
+        return 1024;
+    case TUnit::TIME_NS:
+        return 10000000;
+    case TUnit::TIME_MS:
+        return 10;
+    default:
+        return 0;
+    }
+}
+
 RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& name, TUnit::type type,
                                                             const TCounterStrategy& strategy,
                                                             const std::string& parent_name) {
@@ -338,7 +353,7 @@ RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& n
     void* mem = _counter_pool.allocate(sizeof(Counter));
     Counter* counter = new (mem) Counter(type, strategy, 0);
     if (isUniqueMetric) {
-        counter->_strategy.display_threshold = config::counter_display_threshold;
+        counter->_strategy.display_threshold = getThreshold(type);
     }
 
     _counter_map[name] = std::make_pair(counter, parent_name);
@@ -369,14 +384,14 @@ void RuntimeProfile::add_child(std::shared_ptr<RuntimeProfile> child, bool inden
         add_child_unlock(child.get(), indent, ++pos);
     }
 
-    // _childre_holder.emplace_back(std::move(child));
+    _childre_holder.emplace_back(std::move(child));
 }
 
-// void RuntimeProfile::reserve_child_holder(size_t child_num) {
-//     DCHECK(child_num > 0);
-//     std::lock_guard<std::mutex> l(_children_lock);
-//     _childre_holder.reserve(child_num);
-// }
+void RuntimeProfile::reserve_child_holder(size_t child_num) {
+    DCHECK(child_num > 0);
+    std::lock_guard<std::mutex> l(_children_lock);
+    _childre_holder.reserve(child_num);
+}
 
 RuntimeProfile* RuntimeProfile::get_child(const std::string& name) {
     std::lock_guard<std::mutex> l(_children_lock);

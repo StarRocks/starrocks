@@ -2,7 +2,7 @@
 // Created by femi on 2025/5/14.
 //
 
-#include "profile_manager.h"
+#include "ProfileManager.h"
 
 #include <utility>
 
@@ -11,7 +11,7 @@
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
-RuntimeProfile* profile_manager::build_merged_instance_profile(
+RuntimeProfile* ProfileManager::build_merged_instance_profile(
         const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material, ObjectPool* obj_pool) {
     // LOG(WARNING) << "Before task - fragment_profile_material content: "
     //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
@@ -88,7 +88,7 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(
     return new_instance_profile;
 }
 
-profile_manager::profile_manager() {
+ProfileManager::ProfileManager() {
     int max_reporter = config::async_profile_report_thread_max_num == 0 ? CpuInfo::num_cores() / 2
                                                                         : config::async_profile_report_thread_max_num;
 
@@ -122,7 +122,7 @@ profile_manager::profile_manager() {
     _mem_tracker = GlobalEnv::GetInstance()->profile_mem_tracker();
 }
 
-void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
+void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
     auto profile_task = [=, fragment_profile_material = std::move(fragment_profile_material)]() {
         SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
@@ -178,7 +178,7 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
     }
 }
 
-std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_params(
+std::unique_ptr<TFragmentProfile> ProfileManager::create_report_profile_params(
         const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material,
         RuntimeProfile* merged_instance_profile) {
     auto res = std::make_unique<TFragmentProfile>();
@@ -186,9 +186,6 @@ std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_params(
     params.__set_query_id(fragment_profile_material->_query_id);
     params.__set_fragment_instance_id(fragment_profile_material->_instance_id);
     params.__set_done(fragment_profile_material->_instance_is_done);
-
-    // ObjectPool obj_pool;
-    // merged_instance_profile = obj_pool.add(new RuntimeProfile(merged_instance_profile->name()));
 
     merged_instance_profile->to_thrift(&params.profile);
     params.__isset.profile = true;
