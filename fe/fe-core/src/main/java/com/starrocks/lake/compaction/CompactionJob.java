@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.proto.CompactStat;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,9 +44,10 @@ public class CompactionJob {
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks = Collections.emptyList();
     private boolean allowPartialSuccess = false;
+    private final ComputeResource computeResource;
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
-            boolean allowPartialSuccess) {
+            boolean allowPartialSuccess, ComputeResource computeResource) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
@@ -54,6 +56,7 @@ public class CompactionJob {
         this.commitTs = 0L;
         this.finishTs = 0L;
         this.allowPartialSuccess = allowPartialSuccess;
+        this.computeResource = computeResource;
     }
 
     Database getDb() {
@@ -168,6 +171,10 @@ public class CompactionJob {
 
     public boolean getAllowPartialSuccess() {
         return allowPartialSuccess;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public String getExecutionProfile() {

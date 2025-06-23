@@ -282,7 +282,7 @@ public class WarehouseManager implements Writable {
         return nextComputeNodeIndex;
     }
 
-    public Warehouse getCompactionWarehouse() {
+    public Warehouse getCompactionWarehouse(long tableId) {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }
 
