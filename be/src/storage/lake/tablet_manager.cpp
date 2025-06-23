@@ -418,6 +418,12 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
     }
 
+    if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion) {
+        // If the metadata is not found, we will try to read the initial metadata at least
+        std::string new_path = join_path(prefix_name(path), tablet_initial_metadata_filename());
+        metadata_or = load_tablet_metadata(new_path, fill_cache, expected_gtid, fs);
+    }
+
     if (!metadata_or.ok()) {
         return metadata_or.status();
     }
