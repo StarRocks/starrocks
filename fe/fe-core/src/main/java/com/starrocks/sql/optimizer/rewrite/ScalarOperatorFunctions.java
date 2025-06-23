@@ -734,6 +734,25 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime_v2", argTypes = {INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime_v2", argTypes = {BIGINT}, returnType = DATETIME, isMonotonic = true)
+    })
+    public static ConstantOperator fromUnixTimeV2(ConstantOperator unixTime) throws AnalysisException {
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+        }
+        return ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true),
     })
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
@@ -747,6 +766,22 @@ public class ScalarOperatorFunctions {
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(second), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime_ms_v2", argTypes = {
+                    BIGINT}, returnType = DATETIME, isMonotonic = true),
+    })
+    public static ConstantOperator fromUnixTimeMsV2(ConstantOperator unixTime) throws AnalysisException {
+        long millisecond = unixTime.getBigint();
+
+        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+        }
+        long second = millisecond / 1000;
+        return ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(second), TimeUtils.getTimeZone().toZoneId()));
     }
 
     @ConstantFunction.List(list = {
