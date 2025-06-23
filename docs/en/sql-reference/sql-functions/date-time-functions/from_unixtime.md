@@ -24,7 +24,8 @@ Other formats are invalid and NULL will be returned.
 ## Syntax
 
 ```Haskell
-VARCHAR from_unixtime(BIGINT unix_timestamp[, VARCHAR string_format])
+DATETIME from_unixtime(BIGINT unix_timestamp)
+VARCHAR from_unixtime(BIGINT unix_timestamp, VARCHAR string_format)
 ```
 
 ## Parameters
@@ -35,7 +36,7 @@ VARCHAR from_unixtime(BIGINT unix_timestamp[, VARCHAR string_format])
 
 ## Return value
 
-Returns a DATETIME or DATE value of the VARCHAR type. If `string_format` specifies the DATE format, a DATE value of the VARCHAR type is returned.
+Retruns a DATETIME value if the format is not specified; Returns a VARCHAR type is the format is specified.
 
 If the timestamp exceeds the value range or if `string_format` is invalid, NULL will be returned.
 
