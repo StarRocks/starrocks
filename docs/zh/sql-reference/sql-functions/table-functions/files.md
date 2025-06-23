@@ -119,10 +119,6 @@ FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams
 
 特定数据文件格式需要额外参数指定细节选项。
 
-<<<<<<< HEAD
-=======
-`list_files_only` 设置为 `true` 时，无需指定 `data_format`。
-
 ##### Parquet
 
 Parquet 格式示例：
@@ -152,7 +148,6 @@ Parquet 格式示例：
 
 :::
 
->>>>>>> 3cc3631d0c ([Doc] Doc for parquet.use_legacy_encoding (#60141))
 ##### CSV
 
 CSV 格式示例：
