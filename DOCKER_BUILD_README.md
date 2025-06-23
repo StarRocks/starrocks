@@ -1,6 +1,6 @@
 # Docker-Based Build for StarRocks
 
-This directory provides Docker-based build tools for StarRocks that use the official `starrocks/dev-env-ubuntu:main-20250619` development environment image. This ensures consistent builds across different host systems by using a standardized Ubuntu environment with all required toolchains and dependencies pre-installed.
+This directory provides Docker-based build tools for StarRocks that use the official `starrocks/dev-env-ubuntu:latest` development environment image. This ensures consistent builds across different host systems by using a standardized Ubuntu environment with all required toolchains and dependencies pre-installed.
 
 ## 🚀 Quick Start
 
@@ -54,7 +54,7 @@ The main build script with all options from the original `build.sh`:
 ./docker-build.sh --test                   # Build and run tests
 
 # Custom image
-./docker-build.sh --image starrocks/dev-env-ubuntu:main-20250619 --fe
+./docker-build.sh --image starrocks/dev-env-ubuntu:latest --fe
 ```
 
 ### 2. `docker-dev.sh` - Simple Wrapper
@@ -100,7 +100,7 @@ docker-compose -f docker-compose.dev.yml down -v
 
 ```bash
 # Use different Docker image
-export STARROCKS_DEV_ENV_IMAGE=starrocks/dev-env-ubuntu:main-20250619
+export STARROCKS_DEV_ENV_IMAGE=starrocks/dev-env-ubuntu:latest
 
 # Additional Docker options
 export DOCKER_BUILD_OPTS="--memory=16g --cpus=8"
@@ -163,7 +163,7 @@ The Docker container mounts your local repository, so all build outputs are avai
 3. **Docker Image Not Found**
    ```bash
    # Pull the image manually
-   docker pull starrocks/dev-env-ubuntu:main-20250619
+   docker pull starrocks/dev-env-ubuntu:latest
    ```
 
 4. **Build Failures**
@@ -198,7 +198,7 @@ docker --version
 docker info
 
 # 2. Test image availability
-docker pull starrocks/dev-env-ubuntu:main-20250619
+docker pull starrocks/dev-env-ubuntu:latest
 
 # 3. Test build scripts
 ./docker-dev.sh shell
@@ -224,7 +224,7 @@ Create `.devcontainer/devcontainer.json`:
 ```json
 {
     "name": "StarRocks Dev Environment",
-    "image": "starrocks/dev-env-ubuntu:main-20250619",
+    "image": "starrocks/dev-env-ubuntu:latest",
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
     "workspaceFolder": "/workspace",
     "customizations": {

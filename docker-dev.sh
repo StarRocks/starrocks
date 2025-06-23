@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-DOCKER_IMAGE="${STARROCKS_DEV_ENV_IMAGE:-starrocks/dev-env-ubuntu:main-20250619}"
+DOCKER_IMAGE="${STARROCKS_DEV_ENV_IMAGE:-starrocks/dev-env-ubuntu:latest}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Colors
@@ -28,7 +28,7 @@ Usage: $0 <command>
 COMMANDS:
     shell           Open interactive shell in dev environment
     build-fe        Build Frontend only
-    build-be        Build Backend only  
+    build-be        Build Backend only
     build-all       Build both Frontend and Backend
     clean-build     Clean and build all
     test-fe         Run Frontend tests

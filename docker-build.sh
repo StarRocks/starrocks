@@ -21,7 +21,7 @@
 # This script uses the official StarRocks dev-env Docker image
 # to build the project in a consistent Ubuntu environment.
 #
-# Usage: 
+# Usage:
 #    ./docker-build.sh --help
 # Examples:
 #    ./docker-build.sh                                    # build all (FE + BE)
@@ -36,7 +36,7 @@
 set -euo pipefail
 
 # Configuration
-DOCKER_IMAGE="${STARROCKS_DEV_ENV_IMAGE:-starrocks/dev-env-ubuntu:main-20250619}"
+DOCKER_IMAGE="${STARROCKS_DEV_ENV_IMAGE:-starrocks/dev-env-ubuntu:latest}"
 CONTAINER_NAME="starrocks-build-$(date +%s)"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_ARGS=""
@@ -104,7 +104,7 @@ EXAMPLES:
     $0 --be --with-gcov                         # Build Backend with gcov
     $0 --shell                                  # Open interactive shell
     $0 --test                                   # Build and run tests
-    $0 --image starrocks/dev-env-ubuntu:main-20250619  # Use different image
+    $0 --image starrocks/dev-env-ubuntu:latest  # Use different image
 
 ENVIRONMENT VARIABLES:
     STARROCKS_DEV_ENV_IMAGE    Docker image to use (default: $DOCKER_IMAGE)
@@ -174,7 +174,7 @@ check_docker() {
 # Pull Docker image if needed
 pull_image() {
     log_info "Checking Docker image: $DOCKER_IMAGE"
-    
+
     if ! docker image inspect "$DOCKER_IMAGE" &> /dev/null; then
         log_info "Pulling Docker image: $DOCKER_IMAGE"
         if ! docker pull "$DOCKER_IMAGE"; then
@@ -218,7 +218,7 @@ run_shell() {
     log_info "Container: $CONTAINER_NAME"
     log_info "Image: $DOCKER_IMAGE"
     log_info "Workspace: /workspace (mounted from $REPO_ROOT)"
-    
+
     docker run "${DOCKER_RUN_OPTS[@]}" "$DOCKER_IMAGE" /bin/bash
 }
 
@@ -303,14 +303,14 @@ run_build() {
 # Run tests
 run_tests() {
     log_info "Running tests in Docker container"
-    
+
     local test_commands=(
         "echo 'Running Frontend tests...'"
         "./run-fe-ut.sh || echo 'FE tests completed with some failures'"
         "echo 'Running Backend tests...'"
         "./run-be-ut.sh || echo 'BE tests completed with some failures'"
     )
-    
+
     for cmd in "${test_commands[@]}"; do
         docker run "${DOCKER_RUN_OPTS[@]}" "$DOCKER_IMAGE" bash -c "$cmd"
     done
@@ -328,15 +328,15 @@ cleanup() {
 main() {
     # Set up cleanup trap
     trap cleanup EXIT
-    
+
     # Parse arguments
     parse_args "$@"
-    
+
     # Check prerequisites
     check_docker
     pull_image
     setup_docker_run
-    
+
     # Execute requested action
     if [[ "$INTERACTIVE_SHELL" == "true" ]]; then
         run_shell
