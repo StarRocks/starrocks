@@ -1050,6 +1050,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: オプティマイザがスカラーオペレーターを書き換える最大回数。
 - 導入バージョン: -
 
+##### max_scalar_operator_optimize_depth
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: オプティマイザ内でのScalarOperatorの最適化の最大深さ
+- 導入バージョン: -
+
+##### max_scalar_operator_flat_children
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: オプティマイザ内でのScalarOperatorが許容する最大子孫ノード数。この制限は通常、オプティマイザが過剰なメモリを使用するのを防ぐためです。
+- 導入バージョン: -
+
 ##### enable_statistic_collect
 
 - デフォルト: true

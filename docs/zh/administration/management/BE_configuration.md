@@ -185,27 +185,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Thrift RPC 超时的时长。
 - 引入版本：-
 
-<!--
 ##### thrift_rpc_strict_mode
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
+- 描述：是否启用了 thrift 的严格执行模式。 thrift 严格模式 参见 https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md
 - 引入版本：-
--->
 
-<!--
 ##### thrift_rpc_max_body_size
 
 - 默认值：0
 - 类型：Int
+- 单位：单位：Milliseconds
+- 是否动态：否
+- 描述：rpc 最大字符串体大小。0 表示无限制
+- 引入版本：-
+
+##### thrift_rpc_max_body_size
+
+- 默认值：5000
+- 类型：Int
 - 单位：
 - 是否动态：否
-- 描述：
+- 描述：thrift rpc 连接的最长有效时间。请与 FE 的 thrift_client_timeout_ms 保持一致。如果连接池中存在的时间超过此值，连接将被关闭。
 - 引入版本：-
--->
 
 #### bRPC
 
@@ -2288,16 +2293,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
 - 引入版本：-
 
-<!--
 ##### pipeline_scan_thread_pool_queue_size
 
 - 默认值：102400
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：
+- 描述：pipeline 执行引擎扫描线程池任务队列的最大队列长度
 - 引入版本：-
--->
 
 <!--
 ##### pipeline_exec_thread_pool_thread_num
@@ -2310,27 +2313,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### pipeline_prepare_thread_pool_thread_num
 
 - 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：
+- 描述：pipeline 执行引擎准备片段线程池中的线程数。0 表示等于系统 VCPU 数量
 - 引入版本：-
--->
 
-<!--
 ##### pipeline_prepare_thread_pool_queue_size
 
 - 默认值：102400
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：
+- 描述：Pipeline 执行引擎在线程池中执行prepare fragment 的队列长度。
 - 引入版本：-
--->
+
+##### pipeline_poller_timeout_guard_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：如果该值大于 0，则在轮询器中，如果某个driver的单次调度时间超过了 `pipeline_poller_timeout_guard_ms` 的时间，则会打印该driver以及operator信息。
+- 引入版本：-
+
+##### pipeline_prepare_timeout_guard_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述： 如果该值大于 0，则在prepare过程中plan fragment 超过 `pipeline_prepare_timeout_guard_ms` 时，将打印plan fragment的堆栈跟踪。
+- 引入版本：-
 
 <!--
 ##### pipeline_sink_io_thread_pool_thread_num

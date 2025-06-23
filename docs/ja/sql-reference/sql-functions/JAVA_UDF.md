@@ -536,6 +536,8 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## SQL データ型と Java データ型のマッピング
 
+注：現在スカラーUDFでサポートされているのは、入れ子になっていない配列とマップのパラメータ/リターン型のみです。
+
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
 | BOOLEAN        | java.lang.Boolean |

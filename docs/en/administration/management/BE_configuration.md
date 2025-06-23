@@ -189,27 +189,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The timeout for a thrift RPC.
 - Introduced in: -
 
-<!--
 ##### thrift_rpc_strict_mode
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Whether thrift's strict execution mode is enabled. thrift strict mode See https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md
 - Introduced in: -
--->
 
-<!--
 ##### thrift_rpc_max_body_size
 
 - Default: 0
 - Type: Int
 - Unit:
 - Is mutable: No
-- Description:
+- Description: rpc max string body size. 0 means unlimited
 - Introduced in: -
--->
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Maximum valid time for a thrift rpc connection. Just be consistent with FE's thrift_client_timeout_ms.
+The connection will be closed if it has existed in the connection pool for longer than this value.
+- Introduced in: -
 
 #### bRPC
 
@@ -2332,16 +2338,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
-<!--
 ##### pipeline_scan_thread_pool_queue_size
 
 - Default: 102400
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Pipeline execution engine scan maximum queue length for the thread pool task queue.
 - Introduced in: -
--->
 
 <!--
 ##### pipeline_exec_thread_pool_thread_num
@@ -2354,27 +2358,41 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### pipeline_prepare_thread_pool_thread_num
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Number of threads in the pipeline execution engine prepare fragment's thread pool. 0 means equal to the number of system VCPUs
 - Introduced in: -
--->
 
-<!--
 ##### pipeline_prepare_thread_pool_queue_size
 
 - Default: 102400
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Pipeline execution engine execute prepare fragment queue length in the thread pool.
 - Introduced in: -
--->
+
+##### pipeline_poller_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: If this value is greater than 0, if a driver takes longer than `pipeline_poller_timeout_guard_ms` for a single dispatch in the poller, then this driver as well as operator information is printed.
+- Introduced in: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: If this value is greater than 0, a stack trace of the plan fragment is printed if a plan fragment exceeds `pipeline_prepare_timeout_guard_ms` during the prepare process.
+- Introduced in: -
 
 <!--
 ##### pipeline_sink_io_thread_pool_thread_num
