@@ -123,6 +123,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
+        // record warehouse for load transaction
         if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             warehouseManager.recordWarehouseInfoForTable(tableId, txnState.getWarehouseId());

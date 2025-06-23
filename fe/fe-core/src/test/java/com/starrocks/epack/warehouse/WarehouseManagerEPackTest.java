@@ -28,6 +28,7 @@ import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
@@ -307,5 +308,18 @@ public class WarehouseManagerEPackTest {
             Assert.assertNotNull(cluster);
             Assert.assertEquals(workerGroupId, cluster.getWorkerGroupId());
         }
+    }
+
+    @Test
+    public void testRecordWarehouseInfo() throws DdlException {
+        WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+        mgr.recordWarehouseInfoForTable(100 /* tableId */, 1);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), 1);
+        mgr.recordWarehouseInfoForTable(100 /* tableId */, 11);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), 11);
+        mgr.removeTableWarehouseInfo(100 /* tableId */);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), WarehouseManager.INVALID_WAREHOUSE_ID);
+        mgr.recordWarehouseInfoForTable(100 /* tableId */, 111);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), 111);
     }
 }

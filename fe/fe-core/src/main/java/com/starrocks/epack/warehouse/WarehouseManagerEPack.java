@@ -3,6 +3,7 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.WarmupLevel;
 import com.staros.util.LockCloseable;
@@ -39,6 +40,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.transaction.TransactionWarehouseInfo;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
@@ -51,10 +53,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class WarehouseManagerEPack extends WarehouseManager {
     private static final Logger LOG = LogManager.getLogger(WarehouseManagerEPack.class);
+
+    @SerializedName(value = "tableLastTransactionWarehouseInfo")
+    private ConcurrentHashMap<Long /* TableId */, TransactionWarehouseInfo> tableLastTransactionWarehouseInfo
+            = new ConcurrentHashMap<>();
 
     public WarehouseManagerEPack(ComputeResourceProvider computeResourceProvider) {
         super(computeResourceProvider);
@@ -577,12 +584,41 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
+    public void recordWarehouseInfoForTable(long tableId, long warehouseId) {
+        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.compute(tableId, (k, v) -> {
+            if (v == null) {
+                v = new TransactionWarehouseInfo();
+            }
+            v.setWarehouseId(warehouseId);
+            return v;
+        });
+        LOG.debug("record warehouse {} for table {}", warehouseId, tableId);
+    }
+
+    @Override
+    public void removeTableWarehouseInfo(long tableId) {
+        tableLastTransactionWarehouseInfo.remove(tableId);
+        LOG.debug("remove warehouse info for table {}", tableId);
+    }
+
+    public long getLastTransactionWarehouseIdForTable(long tableId) {
+        TransactionWarehouseInfo last = tableLastTransactionWarehouseInfo.get(tableId);
+        if (last == null) {
+            return WarehouseManager.INVALID_WAREHOUSE_ID;
+        } else {
+            return last.getWarehouseId();
+        }
+    }
+
+    @Override
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.WAREHOUSE_MGR, nameToWh.size() + 1);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.WAREHOUSE_MGR,
+                nameToWh.size() + 1 /* Int */ + 1 /* this */);
         writer.writeInt(nameToWh.size());
         for (Warehouse warehouse : nameToWh.values()) {
             writer.writeJson(warehouse);
         }
+        writer.writeJson(this);
         writer.close();
     }
 
@@ -594,6 +630,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
             this.idToWh.put(warehouse.getId(), warehouse);
             onCreateWarehouse(warehouse);
         });
+        WarehouseManagerEPack warehouseManagerEPack = reader.readJson(WarehouseManagerEPack.class);
+        tableLastTransactionWarehouseInfo = warehouseManagerEPack.tableLastTransactionWarehouseInfo;
     }
 
     @Override
