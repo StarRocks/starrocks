@@ -269,46 +269,48 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
     @Override
     public List<List<String>> getWarehouseNodesInfo() {
         List<List<String>> rows = new ArrayList<>();
-        for (Cluster cluster : getClusters().values()) {
-            List<Long> computeNodes = cluster.getComputeNodeIds();
-            for (Long computeNodeId : computeNodes) {
-                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .getBackendOrComputeNode(computeNodeId);
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            for (Cluster cluster : getClusters().values()) {
+                List<Long> computeNodes = cluster.getComputeNodeIds();
+                for (Long computeNodeId : computeNodes) {
+                    ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getBackendOrComputeNode(computeNodeId);
 
-                List<String> computeNodeInfo = Lists.newArrayList();
-                long warehouseId = node.getWarehouseId();
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                computeNodeInfo.add(warehouse.getName());
+                    List<String> computeNodeInfo = Lists.newArrayList();
+                    long warehouseId = node.getWarehouseId();
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                    computeNodeInfo.add(warehouse.getName());
 
-                computeNodeInfo.add(String.valueOf(cluster.getId()));
-                computeNodeInfo.add(String.valueOf(cluster.getWorkerGroupId()));
-                long nodeId = node.getId();
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(nodeId);
-                computeNodeInfo.add(String.valueOf(nodeId));
-                computeNodeInfo.add(String.valueOf(workerId));
+                    computeNodeInfo.add(String.valueOf(cluster.getId()));
+                    computeNodeInfo.add(String.valueOf(cluster.getWorkerGroupId()));
+                    long nodeId = node.getId();
+                    long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(nodeId);
+                    computeNodeInfo.add(String.valueOf(nodeId));
+                    computeNodeInfo.add(String.valueOf(workerId));
 
-                computeNodeInfo.add(node.getHost());
+                    computeNodeInfo.add(node.getHost());
 
-                computeNodeInfo.add(String.valueOf(node.getHeartbeatPort()));
-                computeNodeInfo.add(String.valueOf(node.getBePort()));
-                computeNodeInfo.add(String.valueOf(node.getHttpPort()));
-                computeNodeInfo.add(String.valueOf(node.getBrpcPort()));
-                computeNodeInfo.add(String.valueOf(node.getStarletPort()));
+                    computeNodeInfo.add(String.valueOf(node.getHeartbeatPort()));
+                    computeNodeInfo.add(String.valueOf(node.getBePort()));
+                    computeNodeInfo.add(String.valueOf(node.getHttpPort()));
+                    computeNodeInfo.add(String.valueOf(node.getBrpcPort()));
+                    computeNodeInfo.add(String.valueOf(node.getStarletPort()));
 
-                computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastStartTime()));
-                computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastUpdateMs()));
-                computeNodeInfo.add(String.valueOf(node.isAlive()));
+                    computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastStartTime()));
+                    computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastUpdateMs()));
+                    computeNodeInfo.add(String.valueOf(node.isAlive()));
 
-                computeNodeInfo.add(node.getHeartbeatErrMsg());
-                computeNodeInfo.add(String.valueOf(node.getVersion()));
+                    computeNodeInfo.add(node.getHeartbeatErrMsg());
+                    computeNodeInfo.add(String.valueOf(node.getVersion()));
 
-                computeNodeInfo.add(String.valueOf(node.getNumRunningQueries()));
-                computeNodeInfo.add(String.valueOf(node.getCpuCores()));
-                double memUsedPct = node.getMemUsedPct();
-                computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
-                computeNodeInfo.add(String.format("%.1f", node.getCpuUsedPermille() / 10.0) + " %");
+                    computeNodeInfo.add(String.valueOf(node.getNumRunningQueries()));
+                    computeNodeInfo.add(String.valueOf(node.getCpuCores()));
+                    double memUsedPct = node.getMemUsedPct();
+                    computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
+                    computeNodeInfo.add(String.format("%.1f", node.getCpuUsedPermille() / 10.0) + " %");
 
-                rows.add(computeNodeInfo);
+                    rows.add(computeNodeInfo);
+                }
             }
         }
 
@@ -317,16 +319,27 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
 
     public List<List<String>> getClustersInfo() {
         List<List<String>> rows = new ArrayList<>();
-        for (Cluster cluster : getClusters().values()) {
-            List<String> row = Lists.newArrayList();
-            row.add(String.valueOf(cluster.getId())); // CNGroupID
-            row.add(String.valueOf(cluster.getName())); // CNGroupName
-            row.add(String.valueOf(cluster.getWorkerGroupId())); // WorkerGroupId
-            String nodeIds = cluster.getComputeNodeIds().stream().map(String::valueOf).collect(Collectors.joining(","));
-            row.add(nodeIds); // ComputeNodeIds
-            row.add(String.valueOf(-1)); // Pending
-            row.add(String.valueOf(-1)); // Running
-            rows.add(row);
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            for (Cluster cluster : getClusters().values()) {
+                List<String> row = Lists.newArrayList();
+                row.add(String.valueOf(cluster.getId())); // CNGroupID
+                row.add(String.valueOf(cluster.getName())); // CNGroupName
+                row.add(String.valueOf(cluster.getWorkerGroupId())); // WorkerGroupId
+                String nodeIds =
+                        cluster.getComputeNodeIds().stream().map(String::valueOf).collect(Collectors.joining(","));
+                row.add(nodeIds); // ComputeNodeIds
+                row.add(String.valueOf(-1)); // Pending
+                row.add(String.valueOf(-1)); // Running
+                row.add(String.valueOf(cluster.isEnabled())); // Enabled
+                String properties = "{}";
+                try {
+                    properties = cluster.getPropertiesJsonString();
+                } catch (Exception ignoredException) {
+                    // ignore the exception
+                }
+                row.add(properties); // Properties
+                rows.add(row);
+            }
         }
         return rows;
     }

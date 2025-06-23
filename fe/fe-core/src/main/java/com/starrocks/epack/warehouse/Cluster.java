@@ -15,6 +15,7 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Strings;
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.starrocks.common.DdlException;
@@ -97,6 +98,11 @@ public class Cluster implements Writable {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         WorkerGroupDetailInfo info = starOSAgent.getWorkerGroupInfo(workerGroupId);
         return info.getPropertiesMap();
+    }
+
+    public String getPropertiesJsonString() throws DdlException {
+        Map<String, String> properties = getProperties();
+        return new Gson().toJson(properties);
     }
 
     public void updateProperties(Map<String, String> properties) throws DdlException {

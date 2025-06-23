@@ -14,6 +14,7 @@
 
 package com.starrocks.epack.warehouse;
 
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -27,7 +28,9 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class LocalWarehouseTest extends LocalWarehouseTestBase {
     @BeforeClass
@@ -176,7 +179,7 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
     }
 
     @Test
-    public void testShowCnGroup() {
+    public void testShowCnGroup() throws DdlException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         { // single cngroup, default warehouse
             ShowClustersStmt stmt = new ShowClustersStmt("default_warehouse");
@@ -185,31 +188,52 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
             Assert.assertEquals(1L, resultSet.getResultRows().size());
 
             Assert.assertTrue(resultSet.next());
+            Assert.assertEquals(8L, resultSet.numColumns());
             // 0. CNGroupId
+            Assert.assertEquals("CNGroupId", resultSet.getMetaData().getColumn(0).getName());
             Assert.assertEquals(String.valueOf(LocalWarehouse.DEFAULT_CLUSTER_ID), resultSet.getString(0));
             // 1. CNGroupName
+            Assert.assertEquals("CNGroupName", resultSet.getMetaData().getColumn(1).getName());
             Assert.assertEquals(LocalWarehouse.DEFAULT_CLUSTER_NAME, resultSet.getString(1));
             // 2. WorkerGroupId
+            Assert.assertEquals("WorkerGroupId", resultSet.getMetaData().getColumn(2).getName());
             Assert.assertEquals(String.valueOf(StarOSAgent.DEFAULT_WORKER_GROUP_ID), resultSet.getString(2));
             // 3. ComputeNodeIds
             // NOTE: there is a backend:10001 added when the miniCluster is created.
             // refer to UtFrameUtils.createMinStarRocksCluster
+            Assert.assertEquals("ComputeNodeIds", resultSet.getMetaData().getColumn(3).getName());
             Assert.assertEquals("10001", resultSet.getString(3));
             // 4. Pending
+            Assert.assertEquals("Pending", resultSet.getMetaData().getColumn(4).getName());
             Assert.assertEquals("-1", resultSet.getString(4));
             // 5. Running
+            Assert.assertEquals("Running", resultSet.getMetaData().getColumn(5).getName());
             Assert.assertEquals("-1", resultSet.getString(5));
+            // 6. Enabled
+            Assert.assertEquals("Enabled", resultSet.getMetaData().getColumn(6).getName());
+            Assert.assertEquals("true", resultSet.getString(6));
+            // 7. Properties
+            Assert.assertEquals("Properties", resultSet.getMetaData().getColumn(7).getName());
+            Assert.assertEquals("{}", resultSet.getString(7));
         }
         { // add a second cngroup into default warehouse
             LocalWarehouse wh = (LocalWarehouse) warehouseManager.getWarehouseAllowNull("default_warehouse");
             Assert.assertNotNull(wh);
             String cngroupName = randomCNGroupName();
             Cluster c = ensureCnGroupCreated("default_warehouse", cngroupName);
+            c.setDisabled();
+
+            Map<String, String> props = new HashMap<>();
+            props.put("a", "aa");
+            props.put("b", "bb");
+            c.updateProperties(props);
+
             Assert.assertEquals(2, wh.getClusters().size());
 
             ShowClustersStmt stmt = new ShowClustersStmt("default_warehouse");
             ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
             Assert.assertEquals(stmt.getMetaData(), resultSet.getMetaData());
+            Assert.assertEquals(8L, resultSet.numColumns());
             Assert.assertEquals(2L, resultSet.getResultRows().size());
 
             // builtin cngroup
@@ -228,6 +252,10 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
             Assert.assertEquals("-1", resultSet.getString(4));
             // 5. Running
             Assert.assertEquals("-1", resultSet.getString(5));
+            // 6. Enabled
+            Assert.assertEquals("false", resultSet.getString(6));
+            // 7. Properties
+            Assert.assertEquals("{\"a\":\"aa\",\"b\":\"bb\"}", resultSet.getString(7));
 
             ensureCnGroupDropped("default_warehouse", cngroupName);
         }
