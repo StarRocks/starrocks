@@ -120,10 +120,6 @@ FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams
 
 特定のデータファイル形式に対して詳細なオプションを設定する必要があります。
 
-<<<<<<< HEAD
-=======
-`list_files_only` が `true` に設定されている場合、`data_format` を指定する必要はありません。
-
 ##### Parquet
 
 Parquet フォーマットの例：
@@ -153,7 +149,6 @@ DECIMAL 128 データ型では、`fixed_len_byte_array` エンコーディング
 
 :::
 
->>>>>>> 3cc3631d0c ([Doc] Doc for parquet.use_legacy_encoding (#60141))
 ##### CSV
 
 CSV 形式の例:
