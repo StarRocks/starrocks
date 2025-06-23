@@ -92,7 +92,8 @@ CLuceneCompoundReader::CLuceneCompoundReader(CL_NS(store)::IndexInput* stream, E
     // After stream clone, the io_ctx needs to be reconfigured.
     initialize();
 
-    for (auto& [aid, origin_entry] : *entries_clone) {
+    for (auto& [origin_aid, origin_entry] : *entries_clone) {
+        char* aid = strdup(origin_aid);
         auto* entry = _CLNEW ReaderFileEntry();
         entry->file_name = origin_entry->file_name;
         entry->offset = origin_entry->offset;

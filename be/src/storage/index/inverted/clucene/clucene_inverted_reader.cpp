@@ -68,31 +68,31 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
         return Status::NotFound(fmt::format("Not exists index_file {}", _index_path.c_str()));
     }
 
-    ASSIGN_OR_RETURN(auto dir, _inverted_index_reader->open(_tablet_index));
-    lucene::search::IndexSearcher index_searcher(dir.release(), true);
-
-    auto inverted_index_ctx = std::make_unique<InvertedIndexCtx>();
-    inverted_index_ctx->setParserType(_parser_type);
-    inverted_index_ctx->setQueryType(query_type);
-    inverted_index_ctx->setReaderType(get_inverted_index_reader_type());
-    inverted_index_ctx->setEnablePhraseQuerySequentialOpt(_enable_phrase_query_sequential_opt);
-
-    const auto match_operator_context = std::make_unique<MatchOperatorContext>();
-    match_operator_context->inverted_index_ctx = inverted_index_ctx.get();
-    match_operator_context->searcher = &index_searcher;
-    match_operator_context->parser_type = _parser_type;
-    match_operator_context->column_name = column_name;
-    match_operator_context->search_str = search_str;
-
-    if (query_type == InvertedIndexQueryType::LESS_EQUAL_QUERY ||
-        query_type == InvertedIndexQueryType::GREATER_EQUAL_QUERY) {
-        match_operator_context->inclusive = true;
-    }
-
-    ASSIGN_OR_RETURN(const auto match_operator, MatchOperatorFactory::create(query_type, match_operator_context.get()));
-
     roaring::Roaring result;
     try {
+        ASSIGN_OR_RETURN(auto dir, _inverted_index_reader->open(_tablet_index));
+        lucene::search::IndexSearcher index_searcher(dir.release(), true);
+
+        auto inverted_index_ctx = std::make_unique<InvertedIndexCtx>();
+        inverted_index_ctx->setParserType(_parser_type);
+        inverted_index_ctx->setQueryType(query_type);
+        inverted_index_ctx->setReaderType(get_inverted_index_reader_type());
+        inverted_index_ctx->setEnablePhraseQuerySequentialOpt(_enable_phrase_query_sequential_opt);
+
+        const auto match_operator_context = std::make_unique<MatchOperatorContext>();
+        match_operator_context->inverted_index_ctx = inverted_index_ctx.get();
+        match_operator_context->searcher = &index_searcher;
+        match_operator_context->parser_type = _parser_type;
+        match_operator_context->column_name = column_name;
+        match_operator_context->search_str = search_str;
+
+        if (query_type == InvertedIndexQueryType::LESS_EQUAL_QUERY ||
+            query_type == InvertedIndexQueryType::GREATER_EQUAL_QUERY) {
+            match_operator_context->inclusive = true;
+        }
+
+        ASSIGN_OR_RETURN(const auto match_operator,
+                         MatchOperatorFactory::create(query_type, match_operator_context.get()));
         RETURN_IF_ERROR(match_operator->match(result));
     } catch (CLuceneError& e) {
         LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();
