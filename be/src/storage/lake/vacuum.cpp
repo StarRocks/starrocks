@@ -899,7 +899,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     for (auto version : bundle_tablet_versions) {
         // Get the path of the bundle tablet metadata file for this version
         // We use the first tablet ID from tablet_ids as a reference to get the location
-        auto path = tablet_mgr->aggregate_tablet_metadata_location(*tablet_ids.begin(), version);
+        auto path = tablet_mgr->bundle_tablet_metadata_location(*tablet_ids.begin(), version);
 
         // Check the state of the bundle tablet metadata for this version
         // This tells us whether all tablets in this bundle are being deleted or not
