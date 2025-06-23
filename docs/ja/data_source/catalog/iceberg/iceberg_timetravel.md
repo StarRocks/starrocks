@@ -53,6 +53,24 @@ RETAIN 7 DAYS
 WITH SNAPSHOT RETENTION 2 SNAPSHOTS;
 ```
 
+テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch2` を作成し、ブランチを `7` 日間保持し、ブランチ上のスナップショットを最大 `2` 日間保持する。
+
+```SQL
+ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch2` 
+AS OF VERSION 12345
+RETAIN 7 DAYS
+WITH SNAPSHOT RETENTION 2 DAYS;
+```
+
+テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch3` を作成し、ブランチを `7` 日間保持し、ブランチ上に少なくとも `2` 個のスナップショットを、それぞれ最大 `2` 日間保持する。
+
+```SQL
+ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch3` 
+AS OF VERSION 12345
+RETAIN 7 DAYS
+WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
+```
+
 ### テーブルの特定のブランチにデータをロード
 
 **構文**

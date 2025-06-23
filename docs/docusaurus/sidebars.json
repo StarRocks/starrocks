@@ -237,7 +237,7 @@
                         "data_source/catalog/hive_catalog",
                         {
                             "type": "category",
-                            "label": "Iceberg",
+                            "label": "Iceberg catalog",
                             "link": {
                                 "type": "doc",
                                 "id": "data_source/catalog/iceberg/iceberg_catalog"
