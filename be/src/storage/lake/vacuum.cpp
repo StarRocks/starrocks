@@ -699,28 +699,15 @@ static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
     ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, meta_path));
+    // Read the entire file content into a string.
     ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
-
-    auto file_size = serialized_string.size();
-    auto footer_size = sizeof(uint64_t);
-    auto shared_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    if (file_size < footer_size + shared_metadata_size) {
-        return Status::Corruption(
-                strings::Substitute("deserialized shared metadata($0) failed, file_size($1) < shared_metadata_size($2)",
-                                    meta_path, file_size, shared_metadata_size + footer_size));
-    }
-
-    auto shared_metadata = std::make_shared<SharedTabletMetadataPB>();
-    std::string_view shared_metadata_str =
-            std::string_view(serialized_string.data() + file_size - footer_size - shared_metadata_size);
-    if (!shared_metadata->ParseFromArray(shared_metadata_str.data(), shared_metadata_size)) {
-        return Status::Corruption(strings::Substitute("deserialized shared metadata failed"));
-    }
+    // Parse the bundle tablet metadata from the serialized string.
+    ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(meta_path, serialized_string));
     bool shared_meta_contains_deleted_tablet = false;
     bool shared_meta_contains_alive_tablet = false;
     // Check if the shared metadata contains tablets that are not to be deleted.
     std::unordered_set<int64_t> to_delete_tablet_ids_set(to_delete_tablet_ids.begin(), to_delete_tablet_ids.end());
-    for (const auto& tablet_id : shared_metadata->tablet_meta_pages()) {
+    for (const auto& tablet_id : bundle_metadata->tablet_meta_pages()) {
         if (to_delete_tablet_ids_set.find(tablet_id.first) == to_delete_tablet_ids_set.end()) {
             shared_meta_contains_alive_tablet = true;
         } else {
@@ -882,7 +869,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         // if the tablet is the bundle tablet, we need to record the version.
-        if (tablet_id == 0) {
+        // And if the version is equal to kInitialVersion, it means this is the initial tablet meta,
+        // not bundle tablet meta.
+        if (tablet_id == 0 && version != kInitialVersion) {
             bundle_tablet_versions.insert(version);
             return true;
         }
