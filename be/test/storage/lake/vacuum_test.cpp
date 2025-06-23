@@ -1199,19 +1199,19 @@ TEST_P(LakeVacuumTest, test_delete_tablets_bundle_metadata_files) {
     std::map<int64_t, TabletMetadataPB> tablet_metas_v1;
     tablet_metas_v1[600] = *t600_v1;
     tablet_metas_v1[601] = *t601_v1;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v1));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
     tablet_metas_v2[600] = *t600_v2;
     tablet_metas_v2[601] = *t601_v2;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v2));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
     tablet_metas_v3[600] = *t600_v3;
     tablet_metas_v3[601] = *t601_v3;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v3));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v4;
     tablet_metas_v4[600] = *t600_v4;
     tablet_metas_v4[601] = *t601_v4;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v4));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v4));
 
     // delete tablet 600
     {
