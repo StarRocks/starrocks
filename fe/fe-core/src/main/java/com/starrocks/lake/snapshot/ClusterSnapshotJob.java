@@ -65,8 +65,10 @@ public class ClusterSnapshotJob implements Writable {
         this.state = state;
         if (state == ClusterSnapshotJobState.FINISHED) {
             snapshot.setFinishedTimeMs(System.currentTimeMillis());
-            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                    .clearFinishedAutomatedClusterSnapshot(getSnapshotName());
+            if (isAutomated()) {
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                        .clearFinishedAutomatedClusterSnapshot(getSnapshotName());
+            }
         }
     }
 
@@ -124,6 +126,10 @@ public class ClusterSnapshotJob implements Writable {
         return state == ClusterSnapshotJobState.INITIALIZING;
     }
 
+    public boolean isUploading() {
+        return state == ClusterSnapshotJobState.UPLOADING;
+    }
+
     public boolean isError() {
         return state == ClusterSnapshotJobState.ERROR;
     }
@@ -146,6 +152,18 @@ public class ClusterSnapshotJob implements Writable {
 
     public void setDetailInfo(String detailInfo) {
         this.detailInfo = detailInfo;
+    }
+
+    public boolean needClusterSnapshotInfo() {
+        return false;
+    }
+
+    public boolean isAutomated() {
+        return snapshot.isAutomated();
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        snapshot.setClusterSnapshotInfo(clusterSnapshotInfo);
     }
 
     public void logJob() {

@@ -2987,7 +2987,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStartCheckpointResponse response = new TStartCheckpointResponse();
         try {
-            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id());
+            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id(), false);
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3018,7 +3018,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         try {
             if (request.isIs_success()) {
-                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name(), null);
             } else {
                 controller.cancelCheckpoint(request.getNode_name(), request.getMessage());
             }
