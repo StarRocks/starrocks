@@ -132,6 +132,8 @@ exclude_data_list=
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
+# To maintain consistency with the source cluster, use null.
+target_cluster_enable_persistent_index=
 
 max_replication_data_size_per_job_in_gb=1024
 
@@ -139,13 +141,31 @@ meta_job_interval_seconds=180
 meta_job_threads=4
 ddl_job_interval_seconds=10
 ddl_job_batch_size=10
+
+# table config
 ddl_job_allow_drop_target_only=false
 ddl_job_allow_drop_schema_change_table=true
 ddl_job_allow_drop_inconsistent_partition=true
+ddl_job_allow_drop_inconsistent_time_partition = true
 ddl_job_allow_drop_partition_target_only=true
+# index config
+enable_bitmap_index_sync=false
+ddl_job_allow_drop_inconsistent_bitmap_index=true
+ddl_job_allow_drop_bitmap_index_target_only=true
+# MV config
+enable_materialized_view_sync=false
+ddl_job_allow_drop_inconsistent_materialized_view=true
+ddl_job_allow_drop_materialized_view_target_only=false
+# View config
+enable_view_sync=false
+ddl_job_allow_drop_inconsistent_view=true
+ddl_job_allow_drop_view_target_only=false
+
 replication_job_interval_seconds=10
 replication_job_batch_size=10
 report_interval_seconds=300
+
+enable_table_property_sync=false
 ```
 
 The description of the parameters is as follows:
@@ -181,6 +201,18 @@ The description of the parameters is as follows:
 | replication_job_batch_size                | The batch size at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
 | max_replication_data_size_per_job_in_gb   | The data size threshold at which the migration tool triggers data synchronization tasks. Unit: GB. Multiple data synchronization tasks will be triggered if the size of the partition to be migrated exceed this value. The default value is `1024`. You can use the default value for this item. |
 | report_interval_seconds                   | The time interval at which the migration tool prints the progress information. Unit: Seconds. Default value: `300`. You can use the default value for this item. |
+| target_cluster_enable_persistent_index    | Whether to enable persistent index the in the target cluster. If this item is not specified, the target cluster is consistent with the source cluster. |
+| ddl_job_allow_drop_inconsistent_time_partition | Whether to allow the migration tool to delete partitions with inconsistent time between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
+| enable_bitmap_index_sync                  | Whether to enable synchronization for Bitmap indexes.         |
+| ddl_job_allow_drop_inconsistent_bitmap_index | Whether to allow the migration tool to delete inconsistent Bitmap indexes between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted indexes during the migration. |
+| ddl_job_allow_drop_bitmap_index_target_only | Whether to allow the migration tool to delete Bitmap indexes that are deleted in the source cluster to keep the indexes consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
+| enable_materialized_view_sync             | Whether to enable synchronization for materialized views.     |
+| ddl_job_allow_drop_inconsistent_materialized_view | Whether to allow the migration tool to delete inconsistent materialized views between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted materialized views during the migration. |
+| ddl_job_allow_drop_materialized_view_target_only | Whether to allow the migration tool to delete materialized views that are deleted in the source cluster to keep the materialized views consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
+| enable_view_sync                          | Whether to enable synchronization for views.                  |
+| ddl_job_allow_drop_inconsistent_view      | Whether to allow the migration tool to delete inconsistent views between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted views during the migration. |
+| ddl_job_allow_drop_view_target_only       | Whether to allow the migration tool to delete views that are deleted in the source cluster to keep the views consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
+| enable_table_property_sync                | Whether to enable synchronization for table properties.       |
 
 ### Obtain Cluster Token
 
