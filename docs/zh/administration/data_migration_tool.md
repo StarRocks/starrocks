@@ -132,6 +132,8 @@ exclude_data_list=
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
+# To maintain consistency with the source cluster, use null.
+target_cluster_enable_persistent_index=
 
 max_replication_data_size_per_job_in_gb=1024
 
@@ -139,13 +141,31 @@ meta_job_interval_seconds=180
 meta_job_threads=4
 ddl_job_interval_seconds=10
 ddl_job_batch_size=10
+
+# table config
 ddl_job_allow_drop_target_only=false
 ddl_job_allow_drop_schema_change_table=true
 ddl_job_allow_drop_inconsistent_partition=true
+ddl_job_allow_drop_inconsistent_time_partition = true
 ddl_job_allow_drop_partition_target_only=true
+# index config
+enable_bitmap_index_sync=false
+ddl_job_allow_drop_inconsistent_bitmap_index=true
+ddl_job_allow_drop_bitmap_index_target_only=true
+# MV config
+enable_materialized_view_sync=false
+ddl_job_allow_drop_inconsistent_materialized_view=true
+ddl_job_allow_drop_materialized_view_target_only=false
+# View config
+enable_view_sync=false
+ddl_job_allow_drop_inconsistent_view=true
+ddl_job_allow_drop_view_target_only=false
+
 replication_job_interval_seconds=10
 replication_job_batch_size=10
 report_interval_seconds=300
+
+enable_table_property_sync=false
 ```
 
 参数说明如下：
@@ -181,6 +201,18 @@ report_interval_seconds=300
 | replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。 |
 | max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务的（分区）数据大小阈值。单位：GB。如果要迁移的数据大小超过此值，将触发多个数据同步任务。默认值为 `1024`。此项您可以使用默认值。 |
 | report_interval_seconds                   | 迁移工具打印 Progress 信息的周期。单位：秒。默认值：`300`。此项您可以使用默认值。 |
+| target_cluster_enable_persistent_index    | 是否在目标群集中启用持久化索引。如果未指定此项，目标群集将与源群集保持一致。 |
+| ddl_job_allow_drop_inconsistent_time_partition | 是否允许迁移工具删除源集群和目标集群之间时间不一致的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
+| enable_bitmap_index_sync                  | 是否启用 Bitmap 索引同步。                               |
+| ddl_job_allow_drop_inconsistent_bitmap_index | 迁移工具是否自动删除源集群和目标集群不一致的 Bitmap 索引，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的索引。 |
+| ddl_job_allow_drop_bitmap_index_target_only | 迁移工具是否自动删除目标集群上在源集群中已删除的 Bitmap 索引，保持目标集群与源集群上的 Bitmap 索引一致。默认为 `true`，即删除。此项您可以使用默认值。 |
+| enable_materialized_view_sync             | 是否启用物化视图同步。                                   |
+| ddl_job_allow_drop_inconsistent_materialized_view | 迁移工具是否自动删除源集群和目标集群不一致的物化视图，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的物化视图。 |
+| ddl_job_allow_drop_materialized_view_target_only | 迁移工具是否自动删除目标集群上在源集群中已删除的物化视图，保持目标集群与源集群上的物化视图一致。默认为 `true`，即删除。此项您可以使用默认值。 |
+| enable_view_sync                          | 是否启用视图同步。                                      |
+| ddl_job_allow_drop_inconsistent_view      | 迁移工具是否自动删除源集群和目标集群不一致的视图，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的视图。 |
+| ddl_job_allow_drop_view_target_only       | 迁移工具是否自动删除目标集群上在源集群中已删除的视图，保持目标集群与源集群上的视图一致。默认为 `true`，即删除。此项您可以使用默认值。 |
+| enable_table_property_sync                | 是否启用表属性同步。                                    |
 
 ### 获取集群 Token
 
