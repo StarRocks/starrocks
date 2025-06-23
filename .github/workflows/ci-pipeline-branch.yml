@@ -491,7 +491,7 @@ jobs:
             -Dsonar.projectKey=StarRocks_starrocks \
             -Dsonar.pullrequest.key=${{ github.event.number }} \
             -Dsonar.pullrequest.base=${{ github.base_ref }} \
-            -Dsonar.pullrequest.branch=${{ github.head_ref }
+            -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
   fe-ut:
     runs-on: [self-hosted, normal]
