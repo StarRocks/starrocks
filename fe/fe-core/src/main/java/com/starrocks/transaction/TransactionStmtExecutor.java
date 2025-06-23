@@ -353,6 +353,7 @@ public class TransactionStmtExecutor {
             OriginStatement originStmt,
             ConnectContext context,
             Coordinator coord) throws StarRocksException, InterruptedException, RpcException {
+        long jobId = -1;
         try {
             GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
@@ -396,8 +397,7 @@ public class TransactionStmtExecutor {
                     context.isStatisticsJob(),
                     coord);
             loadJob.setJobProperties(dmlStmt.getProperties());
-            long jobId = loadJob.getId();
-            txnState.addCallbackId(jobId);
+            jobId = loadJob.getId();
             coord.setLoadJobId(jobId);
 
             QeProcessorImpl.QueryInfo queryInfo =
@@ -472,6 +472,8 @@ public class TransactionStmtExecutor {
             long loadedBytes = coord.getLoadCounters().get(LoadJob.LOADED_BYTES) != null ?
                     Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)) : 0;
 
+            txnState.addCallbackId(jobId);
+
             ExplicitTxnState.ExplicitTxnStateItem item = new ExplicitTxnState.ExplicitTxnStateItem();
             item.setDmlStmt(dmlStmt);
             item.setTabletCommitInfos(TabletCommitInfo.fromThrift(coord.getCommitInfos()));
@@ -480,6 +482,16 @@ public class TransactionStmtExecutor {
             item.addFilteredRows(filteredRows);
             item.addLoadedBytes(loadedBytes);
             return item;
+        } catch (StarRocksException | RpcException | InterruptedException e) {
+            if (jobId != -1) {
+                try {
+                    GlobalStateMgr.getCurrentState().getLoadMgr().recordFinishedOrCancelledLoadJob(
+                            jobId, EtlJobType.INSERT, "Cancelled, msg: " + e.getMessage(), coord.getTrackingUrl());
+                } catch (Exception abortTxnException) {
+                    LOG.warn("errors when cancel insert load job {}", jobId);
+                }
+            }
+            throw e;
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
