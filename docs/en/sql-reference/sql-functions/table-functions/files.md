@@ -120,10 +120,6 @@ The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
 
 You must set detailed options for specific data file formats.
 
-<<<<<<< HEAD
-=======
-When `list_files_only` is set to `true`, you do not need to specify `data_format`.
-
 ##### Parquet
 
 Example of the Parquet format:
@@ -153,7 +149,6 @@ For DECIMAL 128 data type, only `fixed_len_byte_array` encoding is available. `p
 
 :::
 
->>>>>>> 3cc3631d0c ([Doc] Doc for parquet.use_legacy_encoding (#60141))
 ##### CSV
 
 Example for the CSV format:
