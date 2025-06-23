@@ -48,11 +48,13 @@ public class EliminateAggFunctionRule extends TransformationRule {
     }
 
     private static final EliminateAggFunctionRule INSTANCE = new EliminateAggFunctionRule();
+
     public static EliminateAggFunctionRule getInstance() {
         return INSTANCE;
     }
+
     private static final Set<String> SUPPORTED_AGG_FUNCTIONS = ImmutableSet.of(
-            FunctionSet.FIRST_VALUE,
+            FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE, FunctionSet.ANY_VALUE,
             FunctionSet.MAX, FunctionSet.MIN
     );
 
@@ -64,8 +66,6 @@ public class EliminateAggFunctionRule extends TransformationRule {
 
         LogicalAggregationOperator aggOp = input.getOp().cast();
         ColumnRefSet groupByColumns = new ColumnRefSet(aggOp.getGroupingKeys());
-        System.out.println("groupByColumns = " + groupByColumns);
-        System.out.println("aggOp.getAggregations().values() = " + aggOp.getAggregations().values());
         for (CallOperator call : aggOp.getAggregations().values()) {
             if (!call.isDistinct() && SUPPORTED_AGG_FUNCTIONS.contains(call.getFnName()) &&
                     call.getChild(0).isColumnRef()) {
