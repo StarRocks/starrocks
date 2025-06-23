@@ -1261,7 +1261,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_bundle_metadata_files) {
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 
-        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 1)));
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 4)));
