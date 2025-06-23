@@ -565,10 +565,13 @@ vectorized_functions = [
     [50286, 'unix_timestamp', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
     [50287, 'unix_timestamp', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'],
      'TimeFunctions::to_unix_from_datetime_with_format_64'],
+     
+    # [deprecated] V1 returns VARCHAR type
     [50288, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
     [50289, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT', 'VARCHAR'],
-     'TimeFunctions::from_unix_to_datetime_with_format_64',
-     'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+        'TimeFunctions::from_unix_to_datetime_with_format_64',
+        'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    # [deprecated] V1 returns VARCHAR type
     [50290, 'from_unixtime_ms', True, False, 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_ms_64'],
     [50291, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT', 'VARCHAR', 'VARCHAR'],
      'TimeFunctions::from_unix_to_datetime_with_format_timezone',
@@ -578,10 +581,16 @@ vectorized_functions = [
     [50302, 'unix_timestamp', True, False, 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date_32'],
     [50303, 'unix_timestamp', True, False, 'INT', ['VARCHAR', 'VARCHAR'],
      'TimeFunctions::to_unix_from_datetime_with_format_32'],
+    # [deprecated] V1 returns VARCHAR type
     [50304, 'from_unixtime', True, False, 'VARCHAR', ['INT'], 'TimeFunctions::from_unix_to_datetime_32'],
     [50305, 'from_unixtime', True, False, 'VARCHAR', ['INT', 'VARCHAR'],
      'TimeFunctions::from_unix_to_datetime_with_format_32',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+
+    # V2 from_unixtime returns DATETIME type if the format parameter is omitted
+    [50306, 'from_unixtime_v2', True, False, 'DATETIME', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64_v2'],
+    [50307, 'from_unixtime_v2', True, False, 'DATETIME', ['INT'], 'TimeFunctions::from_unix_to_datetime_32_v2'],
+    [50308, 'from_unixtime_ms_v2', True, False, 'DATETIME', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_ms_64_v2'],
 
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],

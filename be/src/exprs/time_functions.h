@@ -704,6 +704,9 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_64);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_32);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_64);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_64_v2);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_32_v2);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_64_v2);
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -822,9 +825,10 @@ public:
     DEFINE_VECTORIZED_FN(iceberg_hours_since_epoch_datetime);
 
 private:
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
-
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime_ms);
+    template <LogicalType Type, LogicalType ReturnType>
+    static StatusOr<ColumnPtr> _t_from_unix_to_datetime(FunctionContext* context, const Columns& columns);
+    template <LogicalType Type, LogicalType ReturnType>
+    static StatusOr<ColumnPtr> _t_from_unix_to_datetime_ms(FunctionContext* context, const Columns& columns);
 
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime);
 
