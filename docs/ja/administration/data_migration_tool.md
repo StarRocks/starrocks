@@ -176,6 +176,8 @@ exclude_data_list=
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
+# ソースクラスタとの一貫性を保つには、null を使用してください。
+target_cluster_enable_persistent_index=
 
 max_replication_data_size_per_job_in_gb=1024
 
@@ -183,13 +185,31 @@ meta_job_interval_seconds=180
 meta_job_threads=4
 ddl_job_interval_seconds=10
 ddl_job_batch_size=10
+
+# table config
 ddl_job_allow_drop_target_only=false
 ddl_job_allow_drop_schema_change_table=true
 ddl_job_allow_drop_inconsistent_partition=true
+ddl_job_allow_drop_inconsistent_time_partition = true
 ddl_job_allow_drop_partition_target_only=true
+# index config
+enable_bitmap_index_sync=false
+ddl_job_allow_drop_inconsistent_bitmap_index=true
+ddl_job_allow_drop_bitmap_index_target_only=true
+# MV config
+enable_materialized_view_sync=false
+ddl_job_allow_drop_inconsistent_materialized_view=true
+ddl_job_allow_drop_materialized_view_target_only=false
+# View config
+enable_view_sync=false
+ddl_job_allow_drop_inconsistent_view=true
+ddl_job_allow_drop_view_target_only=false
+
 replication_job_interval_seconds=10
 replication_job_batch_size=10
 report_interval_seconds=300
+
+enable_table_property_sync=false
 ```
 
 パラメータの説明は次のとおりです。
@@ -225,6 +245,18 @@ report_interval_seconds=300
 | replication_job_batch_size                | 移行ツールがデータ同期タスクをトリガーする際のバッチサイズ。この項目にはデフォルト値を使用できます。 |
 | max_replication_data_size_per_job_in_gb   | 移行ツールがデータ同期タスクをトリガーするデータサイズの閾値。単位: GB。移行するパーティションのサイズがこの値を超える場合、複数のデータ同期タスクがトリガーされます。デフォルト値は `1024` で、この項目にはデフォルト値を使用できます。 |
 | report_interval_seconds                   | 移行ツールが進捗情報を出力する間隔。単位: 秒。デフォルト値: `300`。この項目にはデフォルト値を使用できます。 |
+| target_cluster_enable_persistent_index    | ターゲットクラスタで Persistent Index を有効にするかどうか。この項目が指定されない場合、ターゲットクラスタはソースクラスタと一貫性を保ちます。 |
+| ddl_job_allow_drop_inconsistent_time_partition | 移行ツールがソースクラスタとターゲットクラスタの間で時刻が一致しないパーティションの削除を許可するかどうか。デフォルトは `true` で、削除されます。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたパーティションを自動的に同期します。 |
+| enable_bitmap_index_sync                  | Bitmap インデックスの同期を有効にするかどうか。                      |
+| ddl_job_allow_drop_inconsistent_bitmap_index | 移行ツールがソースクラスタとターゲットクラスタの間で矛盾した Bitmap インデックスを削除することを許可するかどうか。デフォルトは `true` で、削除されます。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたインデックスを自動的に同期します。 |
+| ddl_job_allow_drop_bitmap_index_target_only | 移行ツールがソースクラスタで削除された Bitmap インデックスを削除して、ソースクラスタとターゲットクラスタのインデックスを一致させることを許可するかどうか。デフォルトは `true` で、削除されることを意味します。この項目にはデフォルト値を使用できます。 |
+| enable_materialized_view_sync             | マテリアライズドビューの同期を有効にするかどうか。                   |
+| ddl_job_allow_drop_inconsistent_materialized_view | 移行ツールがソースクラスタとターゲットクラスタの間で矛盾したマテリアライズドビューを削除することを許可するかどうか。デフォルトは `true` で、削除されます。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたマテリアライズドビューを自動的に同期します。 |
+| ddl_job_allow_drop_materialized_view_target_only | 移行ツールがソースクラスタで削除されたマテリアライズドビューを削除して、ソースクラスタとターゲットクラスタのマテリアライズドビューを一致させることを許可するかどうか。デフォルトは `true` で、削除されることを意味します。この項目にはデフォルト値を使用できます。 |
+| enable_view_sync                          | ビューの同期を有効にするかどうか。                                |
+| ddl_job_allow_drop_inconsistent_view      |  移行ツールがソースクラスタとターゲットクラスタの間で矛盾したビューを削除することを許可するかどうか。デフォルトは `true` で、削除されます。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたビューを自動的に同期します。 |
+| ddl_job_allow_drop_view_target_only       | 移行ツールがソースクラスタで削除されたビューを削除して、ソースクラスタとターゲットクラスタのビューを一致させることを許可するかどうか。デフォルトは `true` で、削除されることを意味します。この項目にはデフォルト値を使用できます。 |
+| enable_table_property_sync                | テーブルプロパティの同期を有効にするかどうか。                     |
 
 ### クラスタトークンの取得
 
