@@ -21,7 +21,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
@@ -85,6 +87,13 @@ public class ExplicitTxnTest {
         localMetastore.createDb("db1");
         String createTable = "create table db1.tbl1 (c1 bigint, c2 bigint, c3 bigint)";
         CreateTableStmt createTableStmt =
+                (CreateTableStmt) SqlParser.parseSingleStatement(createTable, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(createTableStmt, context);
+        localMetastore.createTable(createTableStmt);
+
+        localMetastore.createDb("db2");
+        createTable = "create table db2.tbl1 (c1 bigint, c2 bigint, c3 bigint)";
+        createTableStmt =
                 (CreateTableStmt) SqlParser.parseSingleStatement(createTable, context.getSessionVariable().getSqlMode());
         Analyzer.analyze(createTableStmt, context);
         localMetastore.createTable(createTableStmt);
@@ -207,6 +216,70 @@ public class ExplicitTxnTest {
         } catch (ErrorReportException e) {
             Assert.assertEquals(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE, e.getErrorCode());
         }
+    }
+
+    @Test
+    public void testInsertSameTable2() throws IOException, DdlException {
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() throws StarRocksException, RpcException, InterruptedException {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<String, String>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "10");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "5");
+                counters.put(LoadJob.LOADED_BYTES, "0");
+
+                return counters;
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+
+        TUniqueId queryId = new TUniqueId(4, 4);
+        context.setExecutionId(queryId);
+        UUID lastQueryId = new UUID(4L, 5L);
+        context.setLastQueryId(lastQueryId);
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+
+        String sql = "insert into db1.tbl1 values(1,2,3)";
+        DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(stmt, context);
+
+        TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), (DmlStmt) stmt, stmt.getOrigStmt(), context);
+
+        ExplicitTxnState explicitTxnState =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(context.getTxnId());
+        String label = explicitTxnState.getTransactionState().getLabel();
+        LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
+        LoadJob loadJob = loadMgr.getLoadJobs(label).get(0);
+        Assert.assertEquals(JobState.CANCELLED, loadJob.getState());
     }
 
     @Test
