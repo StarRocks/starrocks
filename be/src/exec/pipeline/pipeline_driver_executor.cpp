@@ -16,12 +16,12 @@
 
 #include <memory>
 
+#include "profile_manager.h"
 #include "agent/master_info.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
-#include "profile_manager.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
@@ -47,7 +47,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
-          _profile_manager(new profile_manager()),
+          _profile_manager(new ProfileManager()),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
@@ -318,6 +318,12 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         return;
     }
 
+    RuntimeProfile* query_profile = nullptr;
+    RuntimeProfile* load_channel_profile = nullptr;
+    ObjectPool obj_pool;
+    bool enable_async_profile_in_be =
+            fragment_ctx->runtime_state()->query_options().__isset.enable_async_profile_in_be &&
+            fragment_ctx->runtime_state()->query_options().enable_async_profile_in_be;
     if (attach_profile && query_ctx->enable_profile()) {
         DCHECK(fragment_ctx->runtime_state()->runtime_profile_ptr().get() != nullptr);
         std::shared_ptr<FragmentProfileMaterial> fragment_profile_material = std::make_shared<FragmentProfileMaterial>(
@@ -326,16 +332,21 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 query_ctx->mem_cost_bytes(), query_ctx->cpu_cost(), query_ctx->get_spill_bytes(), query_ctx->lifetime(),
                 done, query_ctx->query_id(), fragment_ctx->runtime_state()->fragment_instance_id(),
                 fragment_ctx->runtime_state()->query_options().query_type, fe_addr);
-
-        _profile_manager->build_and_report_profile(fragment_profile_material);
+        if (enable_async_profile_in_be) {
+            _profile_manager->build_and_report_profile(fragment_profile_material);
+        } else {
+            query_profile = ProfileManager::build_merged_instance_profile(fragment_profile_material, &obj_pool);
+            // Load channel profile will be merged on FE
+            load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
+        }
     }
 
-    // Load channel profile will be merged on FE
     std::shared_ptr<TReportExecStatusParams> params;
     {
         // move profile memory to process, similar with SinkBuffer. the params will be released in ExecStateReporter
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
+        params = ExecStateReporter::create_report_exec_status_params(
+                query_ctx, fragment_ctx, query_profile, load_channel_profile, status, done, enable_async_profile_in_be);
         int64_t delta = CurrentThread::current().get_consumed_bytes() - before_bytes;
 
         CurrentThread::current().mem_release(delta);

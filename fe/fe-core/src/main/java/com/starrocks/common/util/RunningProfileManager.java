@@ -82,24 +82,25 @@ public class RunningProfileManager {
             return status;
         }
 
-        Boolean instanceIsDone = fragmentInstanceProfile.isDone.get();
-        if (instanceIsDone) {
-            status = new TStatus(TStatusCode.OK);
-            return status;
-        }
-
+        boolean shouldProcessDone = false;
         if (request.isDone()) {
-            fragmentInstanceProfile.isDone.set(true);
+            shouldProcessDone = fragmentInstanceProfile.isDone.compareAndSet(false, true);
+        } else {
+            if (fragmentInstanceProfile.isDone.get()) {
+                status = new TStatus(TStatusCode.OK);
+                return status;
+            }
         }
 
         try {
-            //            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
+            //            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}, shouldProcessDone:{}",
             //                    DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
-            //                    fragmentInstanceProfile.isDone.toString());
+            //                    fragmentInstanceProfile.isDone.toString(), shouldProcessDone);
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);
-            if (fragmentInstanceProfile.isDone.get()) {
+            
+            if (shouldProcessDone) {
                 queryProfile.finishInstance(request.fragment_instance_id);
             }
         } catch (Throwable e) {

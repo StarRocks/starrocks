@@ -45,7 +45,8 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
 }
 
 std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_status_params(
-        QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done) {
+        QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
+        RuntimeProfile* load_channel_profile, const Status& status, bool done, bool enable_async_profile_in_be) {
     auto res = std::make_unique<TReportExecStatusParams>();
     TReportExecStatusParams& params = *res;
     auto* runtime_state = fragment_ctx->runtime_state();
@@ -64,26 +65,27 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         runtime_state->update_report_load_status(&params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
 
-        if (query_ctx->enable_profile()) {
-            // profile->to_thrift(&params.profile);
-            // params.__isset.profile = true;
-            //
-            // load_channel_profile->to_thrift(&params.load_channel_profile);
-            // params.__isset.load_channel_profile = true;
+        if (query_ctx->enable_profile() && enable_async_profile_in_be) {
+            profile->to_thrift(&params.profile);
+            params.__isset.profile = true;
+
+            load_channel_profile->to_thrift(&params.load_channel_profile);
+            params.__isset.load_channel_profile = true;
         }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             runtime_state->update_report_load_status(&params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->enable_profile()) {
-            // profile->to_thrift(&params.profile);
-            // params.__isset.profile = true;
-            //
-            // if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            //     load_channel_profile->to_thrift(&params.load_channel_profile);
-            //     params.__isset.load_channel_profile = true;
-            // }
+        if (query_ctx->enable_profile() && enable_async_profile_in_be) {
+            DCHECK(profile != nullptr);
+            profile->to_thrift(&params.profile);
+            params.__isset.profile = true;
+
+            if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                load_channel_profile->to_thrift(&params.load_channel_profile);
+                params.__isset.load_channel_profile = true;
+            }
         }
 
         if (!runtime_state->output_files().empty()) {

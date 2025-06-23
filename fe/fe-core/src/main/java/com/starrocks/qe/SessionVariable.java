@@ -917,6 +917,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
 
+    public static final String ENABLE_ASYNC_PROFILE_IN_BE = "enable_async_profile_in_be";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1860,6 +1862,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //                Fragment-1                                    Fragment-1
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
+
+    @VarAttr(name = ENABLE_ASYNC_PROFILE_IN_BE)
+    private boolean enableAsyncProfileInBe = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5037,6 +5042,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMultiCastLimitPushDown() {
         return enableMultiCastLimitPushDown;
+    }
+
+    public boolean isEnableAsyncProfileInBe() {
+        return enableAsyncProfileInBe;
     }
 
     // Serialize to thrift object

@@ -266,4 +266,6 @@ public abstract class Coordinator {
     public abstract String getResourceGroupName();
 
     public abstract boolean isShortCircuit();
+
+    public abstract boolean enableAsyncProfileInBe();
 }

@@ -471,6 +471,12 @@ public class DefaultCoordinator extends Coordinator {
         return isShortCircuit;
     }
 
+    @Override
+    public boolean enableAsyncProfileInBe() {
+        return jobSpec.isNeedReport() && jobSpec.isEnablePipeline() && !isShortCircuit && !isLoad() &&
+                connectContext.getSessionVariable().isEnableAsyncProfileInBe();
+    }
+
     private void lock() {
         lock.lock();
     }
@@ -602,11 +608,16 @@ public class DefaultCoordinator extends Coordinator {
                 .collect(Collectors.joining("\n"));
     }
 
+    private boolean isLoad() {
+        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
+        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        return isLoadType;
+    }
+
     private void prepareProfile() {
         this.queryProfile.initFragmentProfiles(executionDAG.getFragmentsInCreatedOrder().size());
 
-        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
-        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        boolean isLoadType = isLoad();
         if (isLoadType) {
             // for non-pipeline engine, enable_profile is renamed from is_report_success,
             // which is not only for report profile but also for report success.
@@ -631,6 +642,7 @@ public class DefaultCoordinator extends Coordinator {
                     coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds());
         }
 
+        jobSpec.getQueryOptions().setEnable_async_profile_in_be(enableAsyncProfileInBe());
         queryProfile.attachInstances(executionDAG.getInstanceIds());
     }
 

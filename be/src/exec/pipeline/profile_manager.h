@@ -60,15 +60,15 @@ struct FragmentProfileMaterial {
               _fe_addr(fe_addr) {}
 };
 
-class profile_manager {
+class ProfileManager {
 public:
-    explicit profile_manager();
+    explicit ProfileManager();
     void build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material);
 
-private:
     static RuntimeProfile* build_merged_instance_profile(
             const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material, ObjectPool* obj_pool);
 
+private:
     static std::unique_ptr<TFragmentProfile> create_report_profile_params(
             const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material,
             RuntimeProfile* merged_instance_profile);

@@ -304,6 +304,11 @@ public class FeExecuteCoordinator extends Coordinator {
     }
 
     @Override
+    public boolean enableAsyncProfileInBe() {
+        return false;
+    }
+
+    @Override
     public String getWarehouseName() {
         if (connectContext == null) {
             return "";

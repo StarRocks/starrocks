@@ -109,7 +109,7 @@ public class QueryRuntimeProfile {
     // runningProfile includes all stuff of the query profile
     // coordinator will register it into RunningProfileManager by registerProfileToRunningProfileManager
     // profile will be reported to RunningProfileManager and trigger profile merge even after query is finished.
-    private RunningProfileManager.RunningProfile runningProfile;
+    private Optional<RunningProfileManager.RunningProfile> runningProfile = Optional.empty();
 
     /**
      * The number of instances of this query.
@@ -220,10 +220,7 @@ public class QueryRuntimeProfile {
     public synchronized void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
         this.topProfileSupplier = topProfileSupplier;
         if (topProfileSupplier == null) {
-            if (runningProfile == null) {
-                LOG.warn("clearTopProfileSupplier meet npe, {}", DebugUtil.printId(jobSpec.getQueryId()));
-            }
-            runningProfile.clearTopProfileSupplier();
+            runningProfile.ifPresent(profile -> profile.clearTopProfileSupplier());
         }
     }
 
@@ -241,10 +238,10 @@ public class QueryRuntimeProfile {
         // execution at backends where it hasn't even started
         fragmentInstanceDownSignal = new MarkedCountDownLatch<>(instanceIds.size());
         instanceIds.forEach(instanceId -> fragmentInstanceDownSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
-        runningProfile = createRunningProfile();
-        runningProfile.registerInstanceProfiles(instanceIds);
-        if (jobSpec.isNeedReport()) {
-            RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile);
+        if (jobSpec.getQueryOptions().isEnable_async_profile_in_be()) {
+            runningProfile = Optional.of(createRunningProfile());
+            runningProfile.get().registerInstanceProfiles(instanceIds);
+            RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile.get());
         }
     }
 
@@ -292,13 +289,20 @@ public class QueryRuntimeProfile {
             return true;
         }
 
-        // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
-        runningProfile.addListener(() -> EXECUTOR.submit(() -> {
-            task.accept(true);
-        }));
+        if (runningProfile.isPresent()) {
+            // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
+            runningProfile.get().addListener(() -> EXECUTOR.submit(() -> {
+                task.accept(true);
+            }));
+        } else {
+            fragmentInstanceDownSignal.addListener(() -> EXECUTOR.submit(() -> {
+                task.accept(true);
+            }));
+        }
         return true;
     }
 
+    // return true if all fragment report finished exec state
     public boolean waitForQueryFinished(long timeout, TimeUnit unit) {
         boolean res = false;
         try {
@@ -310,8 +314,20 @@ public class QueryRuntimeProfile {
         return res;
     }
 
+    // return true if all fragment report finished profile
     public boolean waitForProfileReported(long timeout, TimeUnit unit) {
-        return runningProfile.waitForProfileReported(timeout, unit);
+        if (runningProfile.isPresent()) {
+            return runningProfile.get().waitForProfileReported(timeout, unit);
+        } else {
+            boolean res = false;
+            try {
+                res = fragmentInstanceDownSignal.await(timeout, unit);
+            } catch (InterruptedException e) { // NOSONAR
+                LOG.warn("profile signal await error", e);
+            }
+
+            return res;
+        }
     }
 
     public RuntimeProfile getExecutionProfile() {
@@ -319,12 +335,11 @@ public class QueryRuntimeProfile {
     }
 
     public RunningProfileManager.RunningProfile createRunningProfile() {
-        runningProfile =
+        return
                 new RunningProfileManager.RunningProfile(executionProfile, loadChannelProfile, topProfileSupplier,
                         execPlan.getProfilingPlan(),
                         connectContext.getSessionVariable().getRuntimeProfileReportInterval(),
                         connectContext.needMergeProfile(), jobSpec.isBrokerLoad(), jobSpec.getQueryId());
-        return runningProfile;
     }
 
     public void updateLoadChannelProfile(TReportExecStatusParams params) {
