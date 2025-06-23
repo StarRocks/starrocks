@@ -101,7 +101,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             OptExpression child = optExpression.inputAt(i);
 
             DecodeInfo childDecodeInfo = context.operatorDecodeInfo.getOrDefault(child.getOp(), DecodeInfo.EMPTY);
-            child = rewriteImpl(child, childFragmentUsedDictExpr);
+            child = rewriteImpl(child, childFragmentUsedDictExpr.clone());
             if (decodeInfo.decodeStringColumns.isIntersect(childDecodeInfo.outputStringColumns)) {
                 // if child's output dict column required decode, insert decode node
                 child = insertDecodeNode(child, childDecodeInfo.outputStringColumns, decodeInfo.decodeStringColumns);
