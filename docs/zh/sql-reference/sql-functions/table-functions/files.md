@@ -133,7 +133,7 @@ Parquet 格式示例：
 
 ###### parquet.use_legacy_encoding
 
-是否为 DATETIME 和 DECIMAL 数据类型使用旧有的编码方式。有效值：`true` 和 `false`（默认）。该属性仅支持数据导出。
+控制 DATETIME 和 DECIMAL 数据类型的编码技术。有效值：`true` 和 `false`（默认）。该属性仅支持数据导出。
 
 如果设置为 `true`：
 
@@ -144,6 +144,12 @@ Parquet 格式示例：
 
 - 对于 DATETIME 类型，系统使用 `INT64` 编码方式。
 - 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码方式。
+
+:::note
+
+对于 DECIMAL 128 数据类型，仅可使用 `fixed_len_byte_array` 编码。`parquet.use_legacy_encoding` 不生效。
+
+:::
 
 ##### CSV
 

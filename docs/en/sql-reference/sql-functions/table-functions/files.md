@@ -134,7 +134,7 @@ Example of the Parquet format:
 
 ###### parquet.use_legacy_encoding
 
-Whether to use legacy encoding for DATETIME and DECIMAL data types. Valid values: `true` and `false` (default). This property is only supported for data unloading.
+Controls the encoding technique used for DATETIME and DECIMAL data types. Valid values: `true` and `false` (default). This property is only supported for data unloading.
 
 If this item is set to `true`:
 
@@ -145,6 +145,12 @@ If this item is set to `false`:
 
 - For DATETIME type, the system uses `INT64` encoding.
 - For DECIMAL type, the system uses `INT32` or `INT64` encoding.
+
+:::note
+
+For DECIMAL 128 data type, only `fixed_len_byte_array` encoding is available. `parquet.use_legacy_encoding` does not take effect.
+
+:::
 
 ##### CSV
 

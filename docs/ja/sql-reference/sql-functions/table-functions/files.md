@@ -132,7 +132,7 @@ Parquet フォーマットの例：
 
 ###### parquet.use_legacy_encoding
 
-DATETIME および DECIMAL データ型にレガシーエンコーディングを使用するかどうか。有効な値： 有効な値: `true` および `false` (デフォルト)。このプロパティはデータのアンロードでのみサポートされる。
+DATETIME および DECIMAL データ型に使用されるエンコード技術を制御する。有効な値： 有効な値: `true` および `false` (デフォルト)。このプロパティはデータのアンロードでのみサポートされる。
 
 この項目が `true` に設定されている場合：
 
@@ -143,6 +143,12 @@ DATETIME および DECIMAL データ型にレガシーエンコーディング�
 
 - DATETIME 型の場合、システムは `INT64` エンコーディングを使用する。
 - DECIMAL 型の場合、システムは `INT32` または `INT64` エンコーディングを使用する。
+
+:::note
+
+DECIMAL 128 データ型では、`fixed_len_byte_array` エンコーディングのみが使用可能です。`parquet.use_legacy_encoding` は有効になりません。
+
+:::
 
 ##### CSV
 
