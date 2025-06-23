@@ -53,17 +53,6 @@ from t0 group by date_trunc('month', ts);
 refresh materialized view test_mv3 with sync mode;
 [UC]analyze table test_mv1 WITH SYNC MODE;
 -- result:
-<<<<<<< HEAD
-test_db_821db0e543014d6d8c356e450d1ab264.test_mv1	analyze	status	OK
--- !result
-[UC]analyze table test_mv2 WITH SYNC MODE;
--- result:
-test_db_821db0e543014d6d8c356e450d1ab264.test_mv2	analyze	status	OK
--- !result
-[UC]analyze table test_mv3 WITH SYNC MODE;
--- result:
-test_db_821db0e543014d6d8c356e450d1ab264.test_mv3	analyze	status	OK
-=======
 test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv1	analyze	status	OK
 -- !result
 [UC]analyze table test_mv2 WITH SYNC MODE;
@@ -73,7 +62,6 @@ test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv2	analyze	status	OK
 [UC]analyze table test_mv3 WITH SYNC MODE;
 -- result:
 test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv3	analyze	status	OK
->>>>>>> 6bf247e86d ([BugFix] Fix mv union rewrite handling null partition bugs (#60087))
 -- !result
 set enable_materialized_view_rewrite=true;
 -- result:
@@ -196,17 +184,6 @@ from test_mv2 group by date_trunc('month', dt);
 refresh materialized view test_mv3 with sync mode;
 [UC]analyze table test_mv1 WITH SYNC MODE;
 -- result:
-<<<<<<< HEAD
-test_db_821db0e543014d6d8c356e450d1ab264.test_mv1	analyze	status	OK
--- !result
-[UC]analyze table test_mv2 WITH SYNC MODE;
--- result:
-test_db_821db0e543014d6d8c356e450d1ab264.test_mv2	analyze	status	OK
--- !result
-[UC]analyze table test_mv3 WITH SYNC MODE;
--- result:
-test_db_821db0e543014d6d8c356e450d1ab264.test_mv3	analyze	status	OK
-=======
 test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv1	analyze	status	OK
 -- !result
 [UC]analyze table test_mv2 WITH SYNC MODE;
@@ -216,7 +193,6 @@ test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv2	analyze	status	OK
 [UC]analyze table test_mv3 WITH SYNC MODE;
 -- result:
 test_db_0f44f338f5ae4e80ae9ef9679844d213.test_mv3	analyze	status	OK
->>>>>>> 6bf247e86d ([BugFix] Fix mv union rewrite handling null partition bugs (#60087))
 -- !result
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
 -- result:
