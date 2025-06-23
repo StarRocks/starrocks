@@ -53,6 +53,24 @@ RETAIN 7 DAYS
 WITH SNAPSHOT RETENTION 2 SNAPSHOTS;
 ```
 
+基于表 `iceberg.sales.order` 的版本（快照 ID）`12345` 创建一个分支 `test-branch2`，保留该分支 `7` 天，该分支上的快照至多保留 `2` 天。
+
+```SQL
+ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch2` 
+AS OF VERSION 12345
+RETAIN 7 DAYS
+WITH SNAPSHOT RETENTION 2 DAYS;
+```
+
+基于表 `iceberg.sales.order` 的版本（快照 ID）`12345` 创建一个分支 `test-branch3`，保留该分支 `7` 天，并在该分支上至少保留 `2` 个快照，每个快照至多保留 `2` 天。
+
+```SQL
+ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch3` 
+AS OF VERSION 12345
+RETAIN 7 DAYS
+WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
+```
+
 ### 将数据导入到表的特定分支
 
 **语法**
