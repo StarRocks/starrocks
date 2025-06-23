@@ -119,6 +119,35 @@ FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams
 
 特定数据文件格式需要额外参数指定细节选项。
 
+##### Parquet
+
+Parquet 格式示例：
+
+```SQL
+"format"="parquet",
+"parquet.use_legacy_encoding" = "true"  -- 仅用于数据导出
+```
+
+###### parquet.use_legacy_encoding
+
+控制 DATETIME 和 DECIMAL 数据类型的编码技术。有效值：`true` 和 `false`（默认）。该属性仅支持数据导出。
+
+如果设置为 `true`：
+
+- 对于 DATETIME 类型，系统使用 `INT96` 编码方式。
+- 对于 DECIMAL 类型，系统使用 `fixed_len_byte_array` 编码方式。
+
+如果设置为 `false`：
+
+- 对于 DATETIME 类型，系统使用 `INT64` 编码方式。
+- 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码方式。
+
+:::note
+
+对于 DECIMAL 128 数据类型，仅可使用 `fixed_len_byte_array` 编码。`parquet.use_legacy_encoding` 不生效。
+
+:::
+
 ##### CSV
 
 CSV 格式示例：
