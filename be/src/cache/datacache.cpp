@@ -102,7 +102,7 @@ void DataCache::destroy() {
 
 bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {
     if (_local_cache != nullptr) {
-        Status st = _local_cache->update_mem_quota(delta, min_capacity);
+        Status st = _local_cache->adjust_mem_quota(delta, min_capacity);
         if (st.ok()) {
             return true;
         } else {
