@@ -1305,6 +1305,10 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * lru: the typical `Least Recently Used` eviction policy.
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
+// Only used to clean the old and stale datacache files.
+// Users usually do not need to configure it.
+CONF_String(datacache_stale_data_path, "");
+CONF_Alias(datacache_stale_data_path, datacache_disk_path);
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with

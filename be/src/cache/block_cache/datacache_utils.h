@@ -32,7 +32,10 @@ public:
     static Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
                                                   bool ignore_broken_disk);
 
-    static void clean_residual_datacache(const std::string& disk_path);
+    static void clean_residual_datacache(const std::string& disk_path, bool ignore_persistent_cache);
+
+    static void clean_stale_datacache(const std::string& stale_data_path_conf,
+                                      std::vector<std::string> cur_cache_paths);
 
     static Status change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path);
 
