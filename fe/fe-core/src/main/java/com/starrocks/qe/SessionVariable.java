@@ -917,6 +917,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
 
+    public static final String FROM_UNIXTIME_BEHAVIOR_VERSION = "from_unixtime_behavior_version";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1846,6 +1848,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
     private boolean enableDeferProjectAfterTopN = true;
+
+    @VarAttr(name = FROM_UNIXTIME_BEHAVIOR_VERSION, flag = VariableMgr.INVISIBLE)
+    private int fromUnixTimeBehaviorVersion = 2;
 
     // When this variable is enabled, the limits of consumers a CTE are pushed down to the producer of the CTE.
     // The limits can then be applied before the exchange.
@@ -5037,6 +5042,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMultiCastLimitPushDown() {
         return enableMultiCastLimitPushDown;
+    }
+
+    public int getFromUnixTimeBehaviorVersion() {
+        return fromUnixTimeBehaviorVersion;
     }
 
     // Serialize to thrift object

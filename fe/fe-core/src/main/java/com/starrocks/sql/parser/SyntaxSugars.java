@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -90,10 +91,20 @@ public class SyntaxSugars {
     }
 
     private static FunctionCallExpr fromUnixTime(FunctionCallExpr call) {
-        return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_V2, call.getChildren());
+        ConnectContext session = ConnectContext.get();
+        if (session != null && session.getSessionVariable().getFromUnixTimeBehaviorVersion() == 2) {
+            return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_V2, call.getChildren());
+        } else {
+            return call;
+        }
     }
 
     private static FunctionCallExpr fromUnixTimeMs(FunctionCallExpr call) {
-        return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_MS_V2, call.getChildren());
+        ConnectContext session = ConnectContext.get();
+        if (session != null && session.getSessionVariable().getFromUnixTimeBehaviorVersion() == 2) {
+            return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_V2, call.getChildren());
+        } else {
+            return call;
+        }
     }
 }
