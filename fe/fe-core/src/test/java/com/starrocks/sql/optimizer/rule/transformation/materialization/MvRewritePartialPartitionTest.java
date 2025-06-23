@@ -481,9 +481,13 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
                         "where l_shipdate < '1998-01-02' and l_orderkey = 100;");
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=2/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: ((22: l_shipdate >= '1998-01-02') OR (22: l_shipdate IS NULL))" +
-                        " OR (20: l_orderkey != 100)");
+        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+                        "     NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-02') AND (20: l_orderkey = 100) IS NULL) " +
+                        "OR (22: l_shipdate >= '1998-01-02')) OR ((22: l_shipdate IS NULL) OR (20: l_orderkey != 100))\n" +
+                        "     partitions=6/6",
+                "     TABLE: hive_parttbl_mv_4\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=2/6");
         dropMv("test", "hive_parttbl_mv_4");
     }
 
@@ -1254,8 +1258,8 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: (23: col0 != 123456789) OR (25: col3 != 'Guangdong')\n" +
-                    "     partitions=5/9");
+                    "     PREDICATES: 20: col3 = 'Guangdong', 18: col0 = 123456789\n" +
+                    "     partitions=2/9");
         }
 
         {
@@ -1265,7 +1269,8 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: (23: col0 != 123456789) OR (25: col3 != 'Guangdong')\n" +
+                    "     PREDICATES: ((23: col0 != 123456789) OR ((23: col0 = 123456789) " +
+                    "AND (25: col3 = 'Guangdong') IS NULL)) OR (25: col3 != 'Guangdong')\n" +
                     "     partitions=5/9");
         }
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
