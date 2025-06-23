@@ -56,12 +56,9 @@ import org.junit.Test;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-<<<<<<< HEAD
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-=======
 import java.util.HashMap;
->>>>>>> 9ab94136c6 ([BugFix] Fix bug of BrokerDesc can not restore from metadb (#59732))
 import java.util.List;
 import java.util.Map;
 
