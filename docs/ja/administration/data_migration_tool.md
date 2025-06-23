@@ -176,7 +176,6 @@ exclude_data_list=
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
-# レプリケーション中に Persistent Index がメモリを満たすのを防ぐために true に変更します。
 # ソースクラスタとの一貫性を保つには、null を使用してください。
 target_cluster_enable_persistent_index=
 
@@ -246,8 +245,8 @@ enable_table_property_sync=false
 | replication_job_batch_size                | 移行ツールがデータ同期タスクをトリガーする際のバッチサイズ。この項目にはデフォルト値を使用できます。 |
 | max_replication_data_size_per_job_in_gb   | 移行ツールがデータ同期タスクをトリガーするデータサイズの閾値。単位: GB。移行するパーティションのサイズがこの値を超える場合、複数のデータ同期タスクがトリガーされます。デフォルト値は `1024` で、この項目にはデフォルト値を使用できます。 |
 | report_interval_seconds                   | 移行ツールが進捗情報を出力する間隔。単位: 秒。デフォルト値: `300`。この項目にはデフォルト値を使用できます。 |
-| target_cluster_enable_persistent_index    | 非 Persistent Index がレプリケーション中にメモリを満たすのを防ぐために、ターゲットクラスタで Persistent Index を有効にするかどうか。この項目が指定されない場合、ターゲットクラスタはソースクラスタと一貫性を保ちます。 |
-| ddl_job_allow_drop_inconsistent_time_partition | 移行ツールがソースクラスタとターゲットクラスタの間で矛盾した日時粒度のパーティションを削除することを許可するかどうか。デフォルトは `true` で、削除されます。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたパーティションを自動的に同期します。 |
+| target_cluster_enable_persistent_index    | ターゲットクラスタで Persistent Index を有効にするかどうか。この項目が指定されない場合、ターゲットクラスタはソースクラスタと一貫性を保ちます。 |
+| ddl_job_allow_drop_inconsistent_time_partition | 移行ツールがソースクラスタとターゲットクラスタの間で時刻が一致しないパーティションの削除を許可するかどうか。デフォルトは `true` で、削除されます。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたパーティションを自動的に同期します。 |
 | enable_bitmap_index_sync                  | Bitmap インデックスの同期を有効にするかどうか。                      |
 | ddl_job_allow_drop_inconsistent_bitmap_index | 移行ツールがソースクラスタとターゲットクラスタの間で矛盾した Bitmap インデックスを削除することを許可するかどうか。デフォルトは `true` で、削除されます。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたインデックスを自動的に同期します。 |
 | ddl_job_allow_drop_bitmap_index_target_only | 移行ツールがソースクラスタで削除された Bitmap インデックスを削除して、ソースクラスタとターゲットクラスタのインデックスを一致させることを許可するかどうか。デフォルトは `true` で、削除されることを意味します。この項目にはデフォルト値を使用できます。 |

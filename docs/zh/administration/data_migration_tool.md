@@ -132,7 +132,6 @@ exclude_data_list=
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
-# Modified as true to prevent non-persistent indexes from filling up memory during replication.
 # To maintain consistency with the source cluster, use null.
 target_cluster_enable_persistent_index=
 
@@ -202,8 +201,8 @@ enable_table_property_sync=false
 | replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。 |
 | max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务的（分区）数据大小阈值。单位：GB。如果要迁移的数据大小超过此值，将触发多个数据同步任务。默认值为 `1024`。此项您可以使用默认值。 |
 | report_interval_seconds                   | 迁移工具打印 Progress 信息的周期。单位：秒。默认值：`300`。此项您可以使用默认值。 |
-| target_cluster_enable_persistent_index    | 是否在目标群集中启用持久化索引，以防止非持久化索引在复制过程中占用内存。如果未指定此项，目标群集将与源群集保持一致。 |
-| ddl_job_allow_drop_inconsistent_time_partition | 是否允许迁移工具删除源集群和目标集群之间不一致的日期/时间粒度分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
+| target_cluster_enable_persistent_index    | 是否在目标群集中启用持久化索引。如果未指定此项，目标群集将与源群集保持一致。 |
+| ddl_job_allow_drop_inconsistent_time_partition | 是否允许迁移工具删除源集群和目标集群之间时间不一致的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
 | enable_bitmap_index_sync                  | 是否启用 Bitmap 索引同步。                               |
 | ddl_job_allow_drop_inconsistent_bitmap_index | 迁移工具是否自动删除源集群和目标集群不一致的 Bitmap 索引，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的索引。 |
 | ddl_job_allow_drop_bitmap_index_target_only | 迁移工具是否自动删除目标集群上在源集群中已删除的 Bitmap 索引，保持目标集群与源集群上的 Bitmap 索引一致。默认为 `true`，即删除。此项您可以使用默认值。 |

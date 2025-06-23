@@ -132,7 +132,6 @@ exclude_data_list=
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
-# Modified as true to prevent non-persistent indexes from filling up memory during replication.
 # To maintain consistency with the source cluster, use null.
 target_cluster_enable_persistent_index=
 
@@ -202,8 +201,8 @@ The description of the parameters is as follows:
 | replication_job_batch_size                | The batch size at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
 | max_replication_data_size_per_job_in_gb   | The data size threshold at which the migration tool triggers data synchronization tasks. Unit: GB. Multiple data synchronization tasks will be triggered if the size of the partition to be migrated exceed this value. The default value is `1024`. You can use the default value for this item. |
 | report_interval_seconds                   | The time interval at which the migration tool prints the progress information. Unit: Seconds. Default value: `300`. You can use the default value for this item. |
-| target_cluster_enable_persistent_index    | Whether to enable persistent index the in the target cluster to prevent non-persistent indexes from filling up memory during replication. If this item is not specified, the target cluster is consistent with the source cluster. |
-| ddl_job_allow_drop_inconsistent_time_partition | Whether to allow the migration tool to delete inconsistent date/time-granularity partitions between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
+| target_cluster_enable_persistent_index    | Whether to enable persistent index the in the target cluster. If this item is not specified, the target cluster is consistent with the source cluster. |
+| ddl_job_allow_drop_inconsistent_time_partition | Whether to allow the migration tool to delete partitions with inconsistent time between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
 | enable_bitmap_index_sync                  | Whether to enable synchronization for Bitmap indexes.         |
 | ddl_job_allow_drop_inconsistent_bitmap_index | Whether to allow the migration tool to delete inconsistent Bitmap indexes between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted indexes during the migration. |
 | ddl_job_allow_drop_bitmap_index_target_only | Whether to allow the migration tool to delete Bitmap indexes that are deleted in the source cluster to keep the indexes consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
