@@ -1273,14 +1273,8 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-<<<<<<< HEAD
-                    "     PREDICATES: ((13: col0 != 123456789) OR (14: col2 < '2022-04-01')) " +
-                    "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
-                    "     partitions=5/9");
-=======
                     "     PREDICATES: 20: col3 = 'Guangdong', 18: col0 = 123456789\n" +
                     "     partitions=2/9");
->>>>>>> 6bf247e86d ([BugFix] Fix mv union rewrite handling null partition bugs (#60087))
         }
 
         {
@@ -1290,13 +1284,8 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-<<<<<<< HEAD
-                    "     PREDICATES: ((13: col0 != 123456789) OR (14: col2 < '2022-04-01')) " +
-                    "OR ((14: col2 >= '2022-04-04') OR (15: col3 != 'Guangdong'))\n" +
-=======
                     "     PREDICATES: ((23: col0 != 123456789) OR ((23: col0 = 123456789) " +
                     "AND (25: col3 = 'Guangdong') IS NULL)) OR (25: col3 != 'Guangdong')\n" +
->>>>>>> 6bf247e86d ([BugFix] Fix mv union rewrite handling null partition bugs (#60087))
                     "     partitions=5/9");
         }
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);

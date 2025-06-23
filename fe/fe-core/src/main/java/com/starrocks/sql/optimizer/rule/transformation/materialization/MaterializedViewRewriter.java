@@ -2039,14 +2039,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return null;
             }
 
-<<<<<<< HEAD
-            // TODO(fixme): Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
-=======
             final ColumnRefSet requiredOutputColumns = optimizerContext.getTaskContext().getRequiredColumns();
             requiredOutputColumns.union(queryCompensationPredicate.getUsedColumns());
 
             // Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
->>>>>>> 6bf247e86d ([BugFix] Fix mv union rewrite handling null partition bugs (#60087))
             // push-down predicates.
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             if (CollectionUtils.isNotEmpty(mvRewriteContext.getEnforcedNonExistedColumns())) {
