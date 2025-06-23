@@ -49,7 +49,7 @@ public class ScannerHelper {
         preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
         dir = new File(basePath + "/lib/common-runtime-lib");
         preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        dir = new File(basePath + "/lib/hadoop-lib");
+        dir = new File(basePath + "/lib/hadoop/common");
         preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
         ClassLoader classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, moduleName);
         return classLoader;
