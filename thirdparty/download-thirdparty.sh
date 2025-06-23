@@ -235,6 +235,17 @@ echo "===== Patching thirdparty archives..."
 ###################################################################################
 PATCHED_MARK="patched_mark"
 
+#patch cctz
+if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CCTZ_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $CCTZ_SOURCE == "cctz-2.3" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/cctz_civil_cache.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CCTZ_SOURCE"
+fi
+
 # glog patch
 cd $TP_SOURCE_DIR/$GLOG_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
@@ -609,4 +620,15 @@ if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $AZURE_SOURCE"
+fi
+
+#patch cctz
+if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CCTZ_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $CCTZ_SOURCE == "cctz-2.3" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/cctz_civil_cache.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CCTZ_SOURCE"
 fi
