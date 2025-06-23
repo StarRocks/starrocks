@@ -47,6 +47,8 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -222,7 +224,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         PartitionInfo partitionInfo = table.getPartitionInfo();
         Set<Long> nullPartitions = partitionInfo.getNullValuePartitions();
 
-        List<Long> pruned = Lists.newArrayList();
+        Set<Long> prunedSet = new LinkedHashSet<>();
         if (hasMinMax.first) {
             List<Long> sorted = partitionInfo.getSortedPartitions(true);
             sorted.retainAll(nonEmptyPartitionIds);
@@ -230,7 +232,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 return null;
             }
             for (long partitionId : sorted) {
-                pruned.add(partitionId);
+                prunedSet.add(partitionId);
                 // at least reserve one non-null partition, null-partition might be useless
                 if (!nullPartitions.contains(partitionId)) {
                     break;
@@ -245,7 +247,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 return null;
             }
             for (long partitionId : sorted) {
-                pruned.add(partitionId);
+                prunedSet.add(partitionId);
                 // at least reserve one non-null partition, null-partition might be useless
                 if (!nullPartitions.contains(partitionId)) {
                     break;
@@ -253,6 +255,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             }
         }
 
+        List<Long> pruned = new ArrayList<>(prunedSet);
         LogicalOlapScanOperator scan = new LogicalOlapScanOperator.Builder()
                 .withOperator(scanOperator)
                 .setSelectedPartitionId(pruned)

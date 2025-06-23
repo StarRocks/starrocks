@@ -585,4 +585,31 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.query("select max(c1-1)+1 from t3_pri").explainContains("OlapScanNode");
         starRocksAssert.query("select max(c1), min(c1) from t3_pri").explainContains("OlapScanNode");
     }
+
+    @Test
+    public void testMinMaxRangePartitionPruneWithEmptyPartition() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_range_minmax` (\n" +
+                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "    PARTITION p20250428 VALUES [(\"2025-04-28\"), (\"2025-04-29\")),\n" +
+                "    PARTITION p20250429 VALUES [(\"2025-04-29\"), (\"2025-04-30\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx().executeSql("insert into t4_range_minmax values('2025-04-29', 1, 'bar')");
+        FeConstants.runningUnitTest = false;
+        starRocksAssert.getTable("test", "t4_range_minmax")
+                .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
+        starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
+        FeConstants.runningUnitTest = true;
+
+    }
 }
