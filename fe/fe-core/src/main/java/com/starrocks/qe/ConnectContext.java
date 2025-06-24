@@ -880,6 +880,10 @@ public class ConnectContext {
         return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
     }
 
+    public String getCustomSessionName() {
+        return sessionVariable != null ? sessionVariable.getCustomSessionName() : "";
+    }
+
     public boolean isProfileEnabled() {
         if (sessionVariable == null) {
             return false;
