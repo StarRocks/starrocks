@@ -763,7 +763,7 @@ Google GCS 的 `StorageCredentialParams`：
 
 关于 StarRocks 如何更新 Iceberg 元数据缓存的一组参数。此参数集是可选的。
 
-从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#appendix-periodic-metadata-refresh-strategy)。在大多数情况下，您可以忽略 `MetadataUpdateParams`，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
+从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#附录-a-周期性元数据刷新策略)。在大多数情况下，您可以忽略 `MetadataUpdateParams`，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据解析模式。
 
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -1498,7 +1498,7 @@ StarRocks 使用最近最少使用（LRU）算法来缓存和驱逐数据。基�
 - StarRocks 首先尝试从内存中检索请求的元数据。如果内存中未命中元数据，StarRocks 尝试从磁盘中检索元数据。从磁盘中检索到的元数据将加载到内存中。如果磁盘中也未命中元数据，StarRocks 从远端存储中检索元数据并将其缓存到内存中。
 - StarRocks 将从内存中驱逐的元数据写入磁盘，但直接丢弃从磁盘中驱逐的元数据。
 
-从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#appendix-periodic-metadata-refresh-strategy)。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
+从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#附录-a-周期性元数据刷新策略)。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
 
 #### Iceberg 元数据缓存的 FE 配置
 
@@ -1562,7 +1562,15 @@ StarRocks 使用最近最少使用（LRU）算法来缓存和驱逐数据。基�
 - 默认值：86400
 - 描述：Iceberg 元数据缓存刷新任务的过期时间。对于已访问的 Iceberg catalog，如果超过指定时间未访问，StarRocks 将停止刷新其缓存元数据。对于未访问的 Iceberg catalog，StarRocks 将不刷新其缓存元数据。
 
-## 附录：周期性元数据刷新策略
+## 附录 A：周期性元数据刷新策略
+
+Iceberg 支持 [Snapshot](./iceberg_timetravel.md)。有了最新 Snapshot，就能得到最新结果。因此，只有缓存 Snapshot 能影响数据的新鲜度。您只需注意包含快照的缓存的刷新策略即可。
+
+下面的流程图在时间轴上显示了时间间隔。
+
+![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline_zh.png)
+
+## 附录 B：元数据文件解析
 
 - **大规模元数据的分布式计划**
 
