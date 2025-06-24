@@ -213,7 +213,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: Maximum valid time for a thrift rpc connection. A connection will be closed if it has existed in the connection pool for longer than this value. It must be set consistent with FE configuration `thrift_client_timeout_ms`.
+- Description: Maximum valid time for a thrift RPC connection. A connection will be closed if it has existed in the connection pool for longer than this value. It must be set consistent with FE configuration `thrift_client_timeout_ms`.
 - Introduced in: -
 
 #### bRPC
@@ -2343,7 +2343,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum task queue lenggth of SCAN thread pool for Pipeline execution engine.
+- Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
 
 <!--
