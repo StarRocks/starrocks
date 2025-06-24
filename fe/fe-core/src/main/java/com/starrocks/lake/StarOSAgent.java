@@ -451,9 +451,6 @@ public class StarOSAgent {
         return workerId;
     }
 
-    // ATTN
-    // the partitionId is physical partitionId right now, but the partitionId is logical partitonId in 
-    // old version.
     public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
@@ -485,9 +482,6 @@ public class StarOSAgent {
         }
     }
 
-    // ATTN
-    // (https://github.com/StarRocks/starrocks/pull/60073)
-    // The partitionId of ShardGroupInfo may be different in different version
     public List<ShardGroupInfo> listShardGroup() {
         prepare();
         try {
@@ -498,6 +492,10 @@ public class StarOSAgent {
         }
     }
 
+    // ATTN
+    // (https://github.com/StarRocks/starrocks/pull/60073)
+    // The partitionId in pathInfo of LakeRollup may be different in different version.
+    // The partitionId should be physical partitionId but LakeRollup use logical partitonId before this pr.
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
                                    ComputeResource computeResource)
