@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -33,7 +34,6 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -74,18 +74,20 @@ public class MaterializedViewsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("MATERIALIZED_VIEW_ID", ScalarType.createVarchar(50))
+                        .column("MATERIALIZED_VIEW_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TABLE_SCHEMA", ScalarType.createVarchar(20))
                         .column("TABLE_NAME", ScalarType.createVarchar(50))
                         .column("REFRESH_TYPE", ScalarType.createVarchar(20))
                         .column("IS_ACTIVE", ScalarType.createVarchar(10))
                         .column("INACTIVE_REASON", ScalarType.createVarcharType(1024))
                         .column("PARTITION_TYPE", ScalarType.createVarchar(16))
-                        .column("TASK_ID", ScalarType.createVarchar(20))
+                        .column("TASK_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TASK_NAME", ScalarType.createVarchar(50))
-                        .column("LAST_REFRESH_START_TIME", ScalarType.createVarchar(20))
-                        .column("LAST_REFRESH_FINISHED_TIME", ScalarType.createVarchar(20))
-                        .column("LAST_REFRESH_DURATION", ScalarType.createVarchar(20))
+                        .column("LAST_REFRESH_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_FINISHED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
+                        .column("LAST_REFRESH_JOB_ID", ScalarType.createVarchar(64))
                         .column("LAST_REFRESH_STATE", ScalarType.createVarchar(20))
                         .column("LAST_REFRESH_FORCE_REFRESH", ScalarType.createVarchar(8))
                         .column("LAST_REFRESH_START_PARTITION", ScalarType.createVarchar(1024))
@@ -94,7 +96,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("LAST_REFRESH_MV_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
                         .column("LAST_REFRESH_ERROR_CODE", ScalarType.createVarchar(20))
                         .column("LAST_REFRESH_ERROR_MESSAGE", ScalarType.createVarchar(1024))
-                        .column("TABLE_ROWS", ScalarType.createVarchar(50))
+                        .column("TABLE_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("MATERIALIZED_VIEW_DEFINITION",
                                 ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(1024))
@@ -188,7 +190,13 @@ public class MaterializedViewsSystemTable extends SystemTable {
                 obj = ""; // Convert null string to empty string
             }
             ConstantOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
-            scalar = mayCast(scalar, column.getType());
+            try {
+                scalar = mayCast(scalar, column.getType());
+            } catch (Exception e) {
+                LOG.debug("Failed to cast scalar operator for column: {}, value: {}, type: {}",
+                        column.getName(), obj, valueType, e);
+                scalar = ConstantOperator.createNull(column.getType());
+            }
             result.add(scalar);
         }
         return result;
@@ -327,6 +335,6 @@ public class MaterializedViewsSystemTable extends SystemTable {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
-        return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+        return ShowMaterializedViewStatus.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
 }
