@@ -17,23 +17,11 @@ package com.starrocks.kudu.reader;
 import com.starrocks.jni.connector.ScannerFactory;
 import com.starrocks.jni.connector.ScannerHelper;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-
 public class KuduSplitScannerFactory implements ScannerFactory {
     static ClassLoader classLoader;
 
     static {
-        String basePath = System.getenv("STARROCKS_HOME");
-        List<File> preloadFiles = new ArrayList<>();
-        File dir = new File(basePath + "/lib/kudu-reader-lib");
-        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        dir = new File(basePath + "/lib/common-runtime-lib");
-        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "kudu scanner");
+        classLoader = ScannerHelper.createModuleClassLoader("kudu-reader-lib");
     }
 
     /**

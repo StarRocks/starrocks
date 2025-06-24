@@ -39,8 +39,7 @@ public class ChildFirstClassLoader extends URLClassLoader {
         super(urls, null);
         this.parentLoader = new ParentClassLoader(parent);
         // load native method class from parent
-        this.parentFirstClass = new ArrayList<>(
-                Arrays.asList("com.starrocks.utils.NativeMethodHelper", "org.slf4j.ILoggerFactory", "org.slf4j.Logger"));
+        this.parentFirstClass = new ArrayList<>(Arrays.asList("com.starrocks.utils.NativeMethodHelper"));
     }
 
     @Override
