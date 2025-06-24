@@ -186,6 +186,9 @@ public:
     TraceMetrics* metrics() { return &metrics_; }
     const TraceMetrics& metrics() const { return metrics_; }
 
+    uint32_t trace_level() { return trace_level_; }
+    void set_trace_level(uint32_t trace_level) { trace_level_ = trace_level; }
+
 private:
     friend class ScopedAdoptTrace;
     friend class RefCountedThreadSafe<Trace>;
@@ -218,6 +221,8 @@ private:
     std::vector<std::pair<StringPiece, scoped_refptr<Trace>>> child_traces_;
 
     TraceMetrics metrics_;
+
+    uint32_t trace_level_ = 0;
 
     Trace(const Trace&) = delete;
     const Trace& operator=(const Trace&) = delete;
