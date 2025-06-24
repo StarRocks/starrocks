@@ -644,7 +644,11 @@ Google GCS 用の `StorageCredentialParams`:
 
 Iceberg メタデータのキャッシュを StarRocks がどのように更新するかに関する一連のパラメータ。このパラメータセットはオプションです。
 
+<<<<<<< HEAD
 v3.3.3 以降、StarRocks は[定期的なメタデータ更新戦略](#appendix-periodic-metadata-refresh-strategy)をサポートしています。ほとんどの場合、`MetadataUpdateParams` を無視し、その中のポリシーパラメータを調整する必要はありません。これらのパラメータのデフォルト値は、すぐに使えるパフォーマンスを提供します。システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータキャッシングプランを調整できます。
+=======
+v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦略](#付録-a-定期的なメタデータリフレッシュ戦略) をサポートしています。ほとんどの場合、`MetadataUpdateParams` を無視し、そのポリシーパラメーターを調整する必要はありません。これらのパラメーターのデフォルト値は、すぐに使用できるパフォーマンスを提供します。システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータパースモードを調整できます。
+>>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205))
 
 | **パラメータ**                                 | **デフォルト**           | **説明**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -1379,7 +1383,11 @@ StarRocks は、最も最近使用されたものを優先してキャッシュ�
 - StarRocks は最初にメモリから要求されたメタデータを取得しようとします。メモリでメタデータがヒットしない場合、StarRocks はディスクからメタデータを取得しようとします。ディスクから取得したメタデータはメモリにロードされます。ディスクでもメタデータがヒットしない場合、StarRocks はリモートストレージからメタデータを取得し、取得したメタデータをメモリにキャッシュします。
 - StarRocks はメモリから削除されたメタデータをディスクに書き込みますが、ディスクから削除されたメタデータは直接破棄します。
 
+<<<<<<< HEAD
 v3.3.3 以降、StarRocks は[定期的なメタデータ更新戦略](#appendix-periodic-metadata-refresh-strategy)をサポートしています。システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータキャッシングプランを調整できます。
+=======
+v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦略](#付録-a-定期的なメタデータリフレッシュ戦略) をサポートしています。システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータキャッシュプランを調整できます。
+>>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205))
 
 #### Iceberg メタデータキャッシングに関する FE 設定
 
@@ -1443,7 +1451,21 @@ v3.3.3 以降、StarRocks は[定期的なメタデータ更新戦略](#appendix
 - デフォルト値: 86400
 - 説明: Iceberg メタデータキャッシュ更新タスクの有効期限。アクセスされた Iceberg catalog に対して、指定された時間を超えてアクセスされていない場合、StarRocks はそのキャッシュされたメタデータの更新を停止します。アクセスされていない Iceberg catalog に対して、StarRocks はそのキャッシュされたメタデータを更新しません。
 
+<<<<<<< HEAD
 ## 付録: 定期的なメタデータ更新戦略
+=======
+## 付録 A: 定期的なメタデータリフレッシュ戦略
+
+## Appendix A: Periodic Metadata Refresh Strategy
+
+Iceberg は [スナップショット](./iceberg_timetravel.md) をサポートしています。最新のスナップショットでは、最新の結果を得ることができる。したがって、キャッシュされたスナップショットのみがデータの鮮度に影響を与える。その結果、スナップショットを含むキャッシュのリフレッシュ戦略にのみ注意を払う必要がある。
+
+以下のフローチャートは、時間間隔をタイムライン上に示している。
+
+![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline.png)
+
+## 付録 B: メタデータファイルのパース
+>>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205))
 
 - **大量のメタデータに対する分散プラン**
 
@@ -1457,4 +1479,8 @@ v3.3.3 以降、StarRocks は[定期的なメタデータ更新戦略](#appendix
 
   StarRocks は、FE および BE/CN ノードの数、CPU コア数、現在のクエリに必要なマニフェストファイルの数など、さまざまな要因に基づいて適切なメタデータ取得方法を自動的に選択するように設計されています。この適応型アプローチにより、メタデータ関連のパラメータを手動で調整する必要なく、システムは動的にメタデータ取得を最適化します。これにより、StarRocks はシームレスなエクスペリエンスを提供し、さまざまな条件下で最適なクエリパフォーマンスを達成するために分散プランとローカルプランのバランスを取ります。
 
+<<<<<<< HEAD
 システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータキャッシングプランを調整できます。
+=======
+システム変数 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) を使用して Iceberg メタデータキャッシュプランを調整できます。
+>>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205))

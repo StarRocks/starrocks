@@ -526,7 +526,11 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
 
 指定元数据缓存更新策略的一组参数。StarRocks 根据该策略更新缓存的 Iceberg 元数据。此组参数为可选。
 
+<<<<<<< HEAD
 自 v3.3.3 起，StarRocks 采用[元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。大多数情况下，推荐您通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+=======
+从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#附录-a-周期性元数据刷新策略)。在大多数情况下，您可以忽略 `MetadataUpdateParams`，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据解析模式。
+>>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205))
 
 如果 Iceberg 数据更新频率较高，那么您可以对这些参数进行调优，从而优化该方案的性能。
 
@@ -1190,6 +1194,7 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 
 您可以通过以下 FE 配置项来设置 Iceberg 元数据缓存方式：
 
+<<<<<<< HEAD
 | **配置项**                                       | **单位** | **默认值**                                           | **含义**                                                     |
 | ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
 | enable_iceberg_metadata_disk_cache               | 无       | `false`                                              | 是否开启磁盘缓存。                                           |
@@ -1199,6 +1204,9 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
+=======
+从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#附录-a-周期性元数据刷新策略)。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
+>>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205))
 
 自 v3.3.3 起，Iceberg Catalog 支持 [元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)。您可以通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
 
@@ -1228,4 +1236,58 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 
   默认设置下，StarRocks 可以根据各种因素自动选择合适的元数据检索方法，包括 FE/BE/CN 节点的数量、核心数以及当前查询所需读取的 Manifest 文件数量。这种自适应的方法确保系统可以动态优化元数据的检索，无需手动调整元数据相关的参数。通过该方案，StarRocks 能在不同条件下平衡分布式和本地方案，实现最佳的查询性能，为用户提供无缝体验。
 
+<<<<<<< HEAD
 您可以通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+=======
+- 单位：秒  
+- 默认值：`604800`，相当于一周
+- 描述：从上次访问开始，磁盘上缓存条目过期的时间。
+
+##### iceberg_metadata_cache_max_entry_size
+
+- 单位：字节
+- 默认值：`8388608`，相当于 8 MB
+- 描述：可以缓存的文件的最大大小。超过此参数值的文件无法缓存。如果查询请求这些文件，StarRocks 将从远端存储中检索它们。
+
+##### enable_background_refresh_connector_metadata
+
+- 单位：-
+- 默认值：true
+- 描述：是否启用周期性 Iceberg 元数据缓存刷新。启用后，StarRocks 会轮询 Iceberg 集群的元存储（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Iceberg catalog 的缓存元数据以感知数据更改。`true` 表示启用 Iceberg 元数据缓存刷新，`false` 表示禁用。
+
+##### background_refresh_metadata_interval_millis
+
+- 单位：毫秒
+- 默认值：600000
+- 描述：两次连续 Iceberg 元数据缓存刷新之间的间隔。
+
+##### background_refresh_metadata_time_secs_since_last_access_sec
+
+- 单位：秒
+- 默认值：86400
+- 描述：Iceberg 元数据缓存刷新任务的过期时间。对于已访问的 Iceberg catalog，如果超过指定时间未访问，StarRocks 将停止刷新其缓存元数据。对于未访问的 Iceberg catalog，StarRocks 将不刷新其缓存元数据。
+
+## 附录 A：周期性元数据刷新策略
+
+Iceberg 支持 [Snapshot](./iceberg_timetravel.md)。有了最新 Snapshot，就能得到最新结果。因此，只有缓存 Snapshot 能影响数据的新鲜度。您只需注意包含快照的缓存的刷新策略即可。
+
+下面的流程图在时间轴上显示了时间间隔。
+
+![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline_zh.png)
+
+## 附录 B：元数据文件解析
+
+- **大规模元数据的分布式计划**
+
+  为了有效处理大规模元数据，StarRocks 使用多个 BE 和 CN 节点采用分布式方法。此方法利用现代查询引擎的并行计算能力，可以将读取、解压缩和过滤清单文件等任务分配到多个节点。通过并行处理这些清单文件，显著减少了元数据检索所需的时间，从而加快了作业计划。对于涉及大量清单文件的大型查询，这尤其有益，因为它消除了单点瓶颈并提高了整体查询执行效率。
+
+- **小规模元数据的本地计划**
+
+  对于较小的查询，其中清单文件的重复解压缩和解析可能会引入不必要的延迟，采用了不同的策略。StarRocks 缓存反序列化的内存对象，特别是 Avro 文件，以解决此问题。通过将这些反序列化的文件存储在内存中，系统可以绕过后续查询的解压缩和解析阶段。此缓存机制允许直接访问所需的元数据，显著减少了检索时间。因此，系统变得更加响应，并更适合满足高查询需求和物化视图重写需求。
+
+- **自适应元数据检索策略**（默认）
+
+  StarRocks 旨在根据各种因素自动选择适当的元数据检索方法，包括 FE 和 BE/CN 节点的数量、其 CPU 核心数以及当前查询所需的清单文件数量。此自适应方法确保系统动态优化元数据检索，而无需手动调整与元数据相关的参数。通过这样做，StarRocks 提供了无缝体验，在分布式和本地计划之间取得平衡，以在不同条件下实现最佳查询性能。
+
+您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
+>>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205))
