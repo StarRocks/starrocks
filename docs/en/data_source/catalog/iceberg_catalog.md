@@ -1416,4 +1416,4 @@ The following flowchart shows the time intervals on a timeline.
 
   StarRocks is designed to automatically select the appropriate metadata retrieval method based on various factors, including the number of FE and BE/CN nodes, their CPU core counts, and the number of manifest files required for the current query. This adaptive approach ensures that the system dynamically optimizes metadata retrieval without the need for manual adjustment of metadata-related parameters. By doing so, StarRocks provides a seamless experience, balancing between distributed and local plans to achieve optimal query performance under different conditions.
 
-You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/.md#plan_mode).
+You can adjust the Iceberg metadata caching plan using the system variable `plan_mode`.
