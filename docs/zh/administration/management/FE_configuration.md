@@ -1505,7 +1505,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：优化器中 ScalarOperator 进行优化的最大深度
+- 描述：优化器中 ScalarOperator 进行优化的最大深度。
 - 引入版本：-
 
 ##### max_scalar_operator_flat_children
