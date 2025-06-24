@@ -210,6 +210,7 @@ public class FileTable extends Table {
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
     }
 
     @Override

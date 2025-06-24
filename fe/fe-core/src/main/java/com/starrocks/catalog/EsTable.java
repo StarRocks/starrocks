@@ -490,6 +490,7 @@ public class EsTable extends Table implements GsonPostProcessable {
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
         GlobalStateMgr.getCurrentState().getEsRepository().deRegisterTable(this.id);
     }
 
