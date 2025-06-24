@@ -613,6 +613,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_EVENT_SCHEDULER = "enable_pipeline_event_scheduler";
 
+    public static final String PROFILE_THRES_HOLD = "profile_thres_hold";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1865,6 +1867,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_ASYNC_PROFILE_IN_BE)
     private boolean enableAsyncProfileInBe = true;
+
+    // when qps is high, only query exceeds profileThresHold ms will generate profile
+    @VarAttr(name = PROFILE_THRES_HOLD)
+    private long profileThresHold = 100L;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5046,6 +5052,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableAsyncProfileInBe() {
         return enableAsyncProfileInBe;
+    }
+
+    public long getProfileThresHold() {
+        return profileThresHold;
     }
 
     // Serialize to thrift object

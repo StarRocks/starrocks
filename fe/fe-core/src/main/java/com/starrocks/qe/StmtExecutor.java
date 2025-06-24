@@ -336,7 +336,28 @@ public class StmtExecutor {
         return this.coord;
     }
 
+    private RuntimeProfile buildTopLevelProfileForShortCircuit() {
+        RuntimeProfile profile = new RuntimeProfile("Query");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toProfileString());
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
+        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
+        profile.addChild(summaryProfile);
+
+        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+        profile.addChild(plannerProfile);
+        Tracers.toRuntimeProfile(plannerProfile);
+        return profile;
+    }
+
     private RuntimeProfile buildTopLevelProfile() {
+        if (coord.isShortCircuit()) {
+            return buildTopLevelProfileForShortCircuit();
+        }
         RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
@@ -1064,10 +1085,6 @@ public class StmtExecutor {
             return false;
         }
 
-        // This process will get information from the context, so it must be executed synchronously.
-        // Otherwise, the context may be changed, for example, containing the wrong query id.
-        profile = buildTopLevelProfile();
-
         final long profileCollectStartTime = System.currentTimeMillis();
         final long startTime = context.getStartTime();
         final TUniqueId executionId = context.getExecutionId();
@@ -1081,6 +1098,19 @@ public class StmtExecutor {
         } else {
             profilingPlan = plan == null ? null : plan.getProfilingPlan();
         }
+
+        long now = System.currentTimeMillis();
+        // totalTime should not include profile collect time
+        // since sometimes the profile collect time is very long.
+        long totalTimeMs = now - context.getStartTime();
+
+        if (ConnectProcessor.getCurrentQps() > 50 && totalTimeMs < 100) {
+            return false;
+        }
+
+        // This process will get information from the context, so it must be executed synchronously.
+        // Otherwise, the context may be changed, for example, containing the wrong query id.
+        profile = buildTopLevelProfile();
 
         final RuntimeProfile profileCopy = profile;
 
@@ -1099,9 +1129,6 @@ public class StmtExecutor {
                 profileCopy.addChild(coord.buildExecutionProfile(needMerge));
             }
 
-            // Update TotalTime to include the Profile Collect Time and the time to build the profile.
-            long now = System.currentTimeMillis();
-            long totalTimeMs = now - startTime;
             summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
             if (retryIndex > 0) {

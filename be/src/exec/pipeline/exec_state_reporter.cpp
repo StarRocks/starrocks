@@ -65,7 +65,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         runtime_state->update_report_load_status(&params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
 
-        if (query_ctx->enable_profile() && enable_async_profile_in_be) {
+        if (query_ctx->enable_profile() && !enable_async_profile_in_be) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
 
@@ -77,7 +77,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
             runtime_state->update_report_load_status(&params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->enable_profile() && enable_async_profile_in_be) {
+        if (query_ctx->enable_profile() && !enable_async_profile_in_be) {
             DCHECK(profile != nullptr);
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
