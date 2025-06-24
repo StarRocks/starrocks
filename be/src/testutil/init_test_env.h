@@ -105,6 +105,7 @@ int init_test_env(int argc, char** argv) {
     // for managing it.
     auto* cache_env = DataCache::GetInstance();
     config::datacache_enable = false;
+    config::block_cache_enable = false;
     st = cache_env->init(paths);
     CHECK(st.ok()) << st;
 
