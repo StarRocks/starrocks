@@ -33,28 +33,28 @@ This directory provides Docker-based build tools for StarRocks that use the offi
 
 ## 📋 Available Tools
 
-### 1. `docker-build.sh` - Full-Featured Build Script
+### 1. `build-in-docker.sh` - Full-Featured Build Script
 
 The main build script with all options from the original `build.sh`:
 
 ```bash
 # Basic usage
-./docker-build.sh                          # Build all (FE + BE)
-./docker-build.sh --fe                     # Build Frontend only
-./docker-build.sh --be                     # Build Backend only
-./docker-build.sh --fe --be --clean        # Clean and build both
+./build-in-docker.sh                          # Build all (FE + BE)
+./build-in-docker.sh --fe                     # Build Frontend only
+./build-in-docker.sh --be                     # Build Backend only
+./build-in-docker.sh --fe --be --clean        # Clean and build both
 
 # Advanced options
-./docker-build.sh --be --with-gcov          # Build BE with code coverage
-./docker-build.sh --fe --disable-java-check-style  # Skip checkstyle
-./docker-build.sh --be -j 8                 # Build with 8 parallel jobs
+./build-in-docker.sh --be --with-gcov          # Build BE with code coverage
+./build-in-docker.sh --fe --disable-java-check-style  # Skip checkstyle
+./build-in-docker.sh --be -j 8                 # Build with 8 parallel jobs
 
 # Development
-./docker-build.sh --shell                  # Interactive shell
-./docker-build.sh --test                   # Build and run tests
+./build-in-docker.sh --shell                  # Interactive shell
+./build-in-docker.sh --test                   # Build and run tests
 
 # Custom image
-./docker-build.sh --image starrocks/dev-env-ubuntu:latest --fe
+./build-in-docker.sh --image starrocks/dev-env-ubuntu:latest --fe
 ```
 
 ### 2. `docker-dev.sh` - Simple Wrapper
@@ -116,15 +116,15 @@ All original `build.sh` options are supported:
 
 ```bash
 # Backend build types
-BUILD_TYPE=Debug ./docker-build.sh --be      # Debug build
-BUILD_TYPE=Release ./docker-build.sh --be    # Release build (default)
-BUILD_TYPE=Asan ./docker-build.sh --be       # AddressSanitizer build
+BUILD_TYPE=Debug ./build-in-docker.sh --be      # Debug build
+BUILD_TYPE=Release ./build-in-docker.sh --be    # Release build (default)
+BUILD_TYPE=Asan ./build-in-docker.sh --be       # AddressSanitizer build
 
 # Feature flags
-./docker-build.sh --be --enable-shared-data  # Enable shared data
-./docker-build.sh --be --with-gcov           # Code coverage
-./docker-build.sh --be --with-bench          # Benchmarks
-./docker-build.sh --be --without-avx2        # Disable AVX2
+./build-in-docker.sh --be --enable-shared-data  # Enable shared data
+./build-in-docker.sh --be --with-gcov           # Code coverage
+./build-in-docker.sh --be --with-bench          # Benchmarks
+./build-in-docker.sh --be --without-avx2        # Disable AVX2
 ```
 
 ## 📁 Output and Artifacts
@@ -151,13 +151,13 @@ The Docker container mounts your local repository, so all build outputs are avai
    
    # Or run with correct user
    export UID=$(id -u) GID=$(id -g)
-   ./docker-build.sh --fe
+   ./build-in-docker.sh --fe
    ```
 
 2. **Out of Memory**
    ```bash
    # Increase Docker memory limit or reduce parallel jobs
-   ./docker-build.sh --be -j 2
+   ./build-in-docker.sh --be -j 2
    ```
 
 3. **Docker Image Not Found**
@@ -169,10 +169,10 @@ The Docker container mounts your local repository, so all build outputs are avai
 4. **Build Failures**
    ```bash
    # Clean build
-   ./docker-build.sh --clean --fe --be
-   
+   ./build-in-docker.sh --clean --fe --be
+
    # Check logs in interactive shell
-   ./docker-build.sh --shell
+   ./build-in-docker.sh --shell
    ```
 
 ### Debug Mode
@@ -181,7 +181,7 @@ For debugging build issues:
 
 ```bash
 # Open shell and run commands manually
-./docker-build.sh --shell
+./build-in-docker.sh --shell
 
 # Inside container:
 ./build.sh --fe --clean
@@ -210,7 +210,7 @@ docker pull starrocks/dev-env-ubuntu:latest
 
 ## 📊 Performance Tips
 
-1. **Use parallel builds**: `./docker-build.sh --be -j $(nproc)`
+1. **Use parallel builds**: `./build-in-docker.sh --be -j $(nproc)`
 2. **Persistent volumes**: Use Docker Compose for Maven cache persistence
 3. **Memory allocation**: Increase Docker memory limit for faster builds
 4. **SSD storage**: Use SSD for Docker storage driver

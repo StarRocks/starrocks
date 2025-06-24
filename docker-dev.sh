@@ -47,23 +47,23 @@ EOF
 case "${1:-}" in
     shell)
         log_info "Opening development shell..."
-        ./docker-build.sh --shell
+        ./build-in-docker.sh --shell
         ;;
     build-fe)
         log_info "Building Frontend..."
-        ./docker-build.sh --fe
+        ./build-in-docker.sh --fe
         ;;
     build-be)
         log_info "Building Backend..."
-        ./docker-build.sh --be
+        ./build-in-docker.sh --be
         ;;
     build-all)
         log_info "Building all components..."
-        ./docker-build.sh --fe --be
+        ./build-in-docker.sh --fe --be
         ;;
     clean-build)
         log_info "Clean building all components..."
-        ./docker-build.sh --fe --be --clean
+        ./build-in-docker.sh --fe --be --clean
         ;;
     test-fe)
         log_info "Running Frontend tests..."
@@ -75,7 +75,7 @@ case "${1:-}" in
         ;;
     test-all)
         log_info "Running all tests..."
-        ./docker-build.sh --test
+        ./build-in-docker.sh --test
         ;;
     *)
         usage
