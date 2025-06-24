@@ -113,10 +113,11 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return null;
         }
 
-        ColumnRefOperator sumOutputColumnRef = columnRefFactory.create(aggColumnRef.getName(), aggCall.getType(),
-                aggCall.isNullable());
+        ColumnRefOperator sumOutputColumnRef =
+                columnRefFactory.create("sum_" + aggCall.getFnName(), aggCall.getType(), aggCall.isNullable());
         {
-            // generate a placeholder column for scan node
+            // generate a placeholder column for scan node.
+            // ___count___ must be the column name for backend code.
             String metaColumnName = "___" + aggCall.getFnName() + "___";
             Column c = new Column(metaColumnName, Type.NULL);
             c.setIsAllowNull(true);
