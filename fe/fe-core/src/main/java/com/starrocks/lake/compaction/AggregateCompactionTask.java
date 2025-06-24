@@ -24,6 +24,7 @@ import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,8 +51,7 @@ public class AggregateCompactionTask extends CompactionTask {
         }
         try {
             CompactResponse response = responseFuture.get();
-            TStatusCode code = TStatusCode.findByValue(response.status.statusCode);
-            if (code != TStatusCode.OK) {
+            if (TStatusCode.findByValue(response.status.statusCode) != TStatusCode.OK) {
                 // TODO support partial success
                 return TaskResult.NONE_SUCCESS;
             } else {
