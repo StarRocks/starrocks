@@ -244,7 +244,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                         "         left join mv_dim_data1 d on a.item_id = d.item_id\n" +
                         "group by date_trunc(\"day\", a.datekey), a.item_id;");
 
-        starRocksAssert.refreshMV("refresh materialized view mv_test1");
+        starRocksAssert.refreshMV("refresh materialized view mv_test1 with sync mode;");
         MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_test1");
         Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
 
