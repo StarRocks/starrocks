@@ -49,7 +49,6 @@ static IntCounter system_alloc_cost_ns(MetricUnit::NANOSECONDS);
 static IntCounter system_free_cost_ns(MetricUnit::NANOSECONDS);
 
 void MemChunkAllocator::init_metrics() {
-
 #define REGISTER_METIRC_WITH_NAME(name, metric) StarRocksMetrics::instance()->metrics()->register_metric(#name, &metric)
 
 #define REGISTER_METIRC_WITH_PREFIX(prefix, name) REGISTER_METIRC_WITH_NAME(prefix##name, name)

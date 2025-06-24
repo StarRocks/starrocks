@@ -145,9 +145,9 @@ void calculate_metrics(void* arg_this) {
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
                 mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
-                mem_metrics->passthrough_mem_bytes.value(),
-                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(),
-                mem_metrics->datacache_mem_bytes.value(), mem_metrics->jit_cache_mem_bytes.value());
+                mem_metrics->passthrough_mem_bytes.value(), mem_metrics->clone_mem_bytes.value(),
+                mem_metrics->consistency_mem_bytes.value(), mem_metrics->datacache_mem_bytes.value(),
+                mem_metrics->jit_cache_mem_bytes.value());
 
         StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
