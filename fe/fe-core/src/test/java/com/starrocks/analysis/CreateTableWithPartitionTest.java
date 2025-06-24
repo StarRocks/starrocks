@@ -1060,26 +1060,9 @@ public class CreateTableWithPartitionTest extends StarRocksTestBase  {
 
         try {
             String alterTableSql = "ALTER TABLE r1 SET ('partition_retention_condition' = " +
-                    "'last_day(dt) > current_date() - interval 2 month')";
-            starRocksAssert.alterTableProperties(alterTableSql);
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions " +
-                    "for range partition tables but contains: last_day"));
-        }
-
-        try {
-            String alterTableSql = "ALTER TABLE r1 SET ('partition_retention_condition' = " +
-                    "'dt > current_date() - interval 1 month or last_day(dt) > current_date() - interval 2 month')";
-            starRocksAssert.alterTableProperties(alterTableSql);
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions " +
-                    "for range partition tables but contains: last_day"));
-        }
-
-        try {
-            String alterTableSql = "ALTER TABLE r1 SET ('partition_retention_condition' = " +
                     "'date_format(dt, \\'%m月%Y年\\') > current_date() - interval 2 month')";
             starRocksAssert.alterTableProperties(alterTableSql);
+            Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions " +
                     "for range partition tables but contains: date_format"));
@@ -1089,12 +1072,21 @@ public class CreateTableWithPartitionTest extends StarRocksTestBase  {
             String alterTableSql = "ALTER TABLE r1 SET ('partition_retention_condition' = " +
                     "'date_format(dt, \\'%a-%Y\\') > current_date() - interval 2 month')";
             starRocksAssert.alterTableProperties(alterTableSql);
+            Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions " +
                     "for range partition tables but contains: date_format"));
         }
+
+        String alterTableSql = "ALTER TABLE r1 SET ('partition_retention_condition' = " +
+                "'dt > current_date() - interval 1 month or last_day(dt) > current_date() - interval 2 month')";
+        starRocksAssert.alterTableProperties(alterTableSql);
+
+        alterTableSql = "ALTER TABLE r1 SET ('partition_retention_condition' = " +
+                "'last_day(dt) > current_date() - interval 2 month')";
+        starRocksAssert.alterTableProperties(alterTableSql);
         retentionCondition = r1.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+        Assert.assertEquals("last_day(dt) > current_date() - interval 2 month", retentionCondition);
         starRocksAssert.dropTable("r1");
     }
 

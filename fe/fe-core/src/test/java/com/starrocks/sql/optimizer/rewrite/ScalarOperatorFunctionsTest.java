@@ -1626,4 +1626,52 @@ public class ScalarOperatorFunctionsTest {
             assertEquals(String.format("test case failed: %s, result = %d", tc, result), tc.value, result);
         }
     }
+
+    @Test
+    public void testLastDayDefaultMonth() {
+        Object[][] testCases = {
+                // date, expected last day of month
+                {"2023-05-10T10:00:00", "2023-05-31"},
+                {"2024-02-01T00:00:00", "2024-02-29"}, // Leap year
+                {"2021-02-01T00:00:00", "2021-02-28"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input);
+            assertEquals("Failed case: " + Arrays.toString(tc), tc[1], result.getDate().toLocalDate().toString());
+        }
+    }
+
+    @Test
+    public void testLastDayWithUnit() {
+        Object[][] testCases = {
+                {"2023-03-15T00:00:00", "month", "2023-03-31"},
+                {"2023-03-15T00:00:00", "quarter", "2023-03-31"},
+                {"2023-05-01T00:00:00", "quarter", "2023-06-30"},
+                {"2023-05-01T00:00:00", "year", "2023-12-31"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator unit = ConstantOperator.createVarchar((String) tc[1]);
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+            assertEquals("Failed case: " + Arrays.toString(tc), tc[2], result.getDate().toLocalDate().toString());
+        }
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testLastDayWithInvalidUnit() {
+        ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse("2023-05-10T00:00:00"));
+        ConstantOperator unit = ConstantOperator.createVarchar("invalid");
+        ScalarOperatorFunctions.lastDay(input, unit);
+    }
+
+    @Test
+    public void testLastDayWithNull() {
+        ConstantOperator input = ConstantOperator.createNull(Type.DATETIME);
+        ConstantOperator unit = ConstantOperator.createVarchar("month");
+        ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+        assertEquals(true, result.isNull());
+    }
 }

@@ -5339,26 +5339,21 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
 
         try {
-            String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
-                    "'last_day(dt) > current_date() - interval 2 month')";
-            starRocksAssert.alterMvProperties(alterTableSql);
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions for " +
-                    "range partition tables but contains: last_day"));
-        }
-
-        try {
 
             String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
                     "'date_format(dt, \\'%m月%Y年\\') > current_date() - interval 2 month')";
             starRocksAssert.alterMvProperties(alterTableSql);
+            Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions for " +
                     "range partition tables but contains: date_format"));
         }
 
+        String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
+                "'last_day(dt) > current_date() - interval 2 month')";
+        starRocksAssert.alterMvProperties(alterTableSql);
         retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+        Assert.assertEquals("last_day(dt) > current_date() - interval 2 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("r1");
     }

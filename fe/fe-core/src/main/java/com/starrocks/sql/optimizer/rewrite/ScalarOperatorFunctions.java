@@ -66,6 +66,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Month;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -436,6 +437,47 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "last_day", argTypes = {DATE}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATE, VARCHAR}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE, isMonotonic = true),
+    })
+    public static ConstantOperator lastDay(ConstantOperator date, ConstantOperator... unitArgs) {
+        if (date.isNull()) {
+            return ConstantOperator.createNull(date.getType());
+        }
+
+        String unit = "month";
+        if (unitArgs.length > 0) {
+            if (unitArgs[0].isNull()) {
+                return ConstantOperator.createNull(date.getType());
+            }
+            unit = unitArgs[0].getVarchar().toLowerCase();
+        }
+
+        LocalDateTime dt = date.getDatetime();
+        LocalDate resultDate;
+        switch (unit) {
+            case "month":
+                resultDate = dt.with(TemporalAdjusters.lastDayOfMonth()).toLocalDate();
+                break;
+            case "quarter":
+                int currentQuarter = (dt.getMonthValue() - 1) / 3;
+                Month lastMonthOfQuarter = Month.of((currentQuarter + 1) * 3);
+                LocalDate quarterEnd = LocalDate.of(dt.getYear(), lastMonthOfQuarter, 1)
+                        .with(TemporalAdjusters.lastDayOfMonth());
+                resultDate = quarterEnd;
+                break;
+            case "year":
+                resultDate = LocalDate.of(dt.getYear(), 12, 31);
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid unit for last_day(): " + unit);
+        }
+
+        return ConstantOperator.createDateOrNull(resultDate.atStartOfDay());
+    }
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),

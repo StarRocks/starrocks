@@ -2804,9 +2804,28 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
     def print_table_partitions_num(self, table_name) -> str:
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
-        tools.assert_true(res["status"], "show schema change task error")
+        tools.assert_true(res["status"], "show table partitions error")
         ans = res["result"]
         return str(len(ans))
+
+    def print_plan_partition_selected_num(self, sql, table_name) -> str:
+        res = self.execute_sql("EXPLAIN %s" % sql, True)
+        tools.assert_true(res["status"], "explain sql error")
+        plan = res["result"]
+        tools.assert_true(len(plan) > 0, "explain sql result is empty")
+
+        lines = str(plan).split('\n')
+        # Search for the table scan node for the specified table
+        for line in lines:
+            if f'TABLE: {table_name}'.lower() in line.lower():
+                # Now look forward in the following lines for the partitions information
+                idx = lines.index(line)
+                for i in range(idx, min(idx + 10, len(lines))):  # Check next 10 lines max
+                    if 'partitions=' in lines[i]:
+                        parts = lines[i].split('partitions=')
+                        if len(parts) > 1:
+                            partition_info = parts[1].split(',')[0].replace('\'', '').strip()
+                            return partition_info
 
     def assert_table_partitions_num(self, table_name, expect_num):
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)

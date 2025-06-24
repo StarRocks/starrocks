@@ -472,6 +472,34 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
+    private static Stream<Arguments> partitionPruneWithLastDay() {
+        List<Arguments> arguments = Lists.newArrayList();
+        arguments.add(Arguments.of("select * from less_than_tbl where date_trunc('year', k1) is null",
+                "partitions=1/4"));
+        arguments.add(Arguments.of("select * from less_than_tbl where last_day(k1) is null",
+                "partitions=1/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(cast(d2 as datetime)) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(cast(d2 as date)) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = cast('2020-04-30' as date)",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = cast('2020-04-30' as datetime)",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = date_trunc('day', d2)",
+                "partitions=4/4"));
+        return arguments.stream();
+    }
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("partitionPruneWithLastDay")
+    @Order(6)
+    void canPrunePredicateSqls2(String sql, String expect) throws Exception {
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, expect);
+    }
+
     private static Stream<Arguments> exprPrunePartitionSqls() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) is null");
