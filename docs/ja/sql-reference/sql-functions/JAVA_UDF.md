@@ -536,6 +536,10 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## SQL データ型と Java データ型のマッピング
 
+> **NOTE**
+>
+> 現在、スカラー UDF でサポートされているのは、ネストされていない ARRAY と MAP パラメータ/リターンタイプのみです。
+
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
 | BOOLEAN        | java.lang.Boolean |
