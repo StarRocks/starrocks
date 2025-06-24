@@ -203,7 +203,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：rpc 最大字符串体大小。0 表示无限制
 - 引入版本：-
 
-##### thrift_rpc_max_body_size
+##### thrift_rpc_connection_max_valid_time_ms
 
 - 默认值：5000
 - 类型：Int
