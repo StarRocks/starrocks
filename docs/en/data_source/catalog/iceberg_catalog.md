@@ -1160,7 +1160,7 @@ Description: The file format of the Iceberg table. Only the Parquet format is su
 
 ###### compression_codec
 
-Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec).
+Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable `connector_sink_compression_codec`.
 
 ---
 
@@ -1330,7 +1330,7 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable `plan_mode`.
 
 #### FE Configurations on Iceberg metadata caching
 
@@ -1416,4 +1416,4 @@ The following flowchart shows the time intervals on a timeline.
 
   StarRocks is designed to automatically select the appropriate metadata retrieval method based on various factors, including the number of FE and BE/CN nodes, their CPU core counts, and the number of manifest files required for the current query. This adaptive approach ensures that the system dynamically optimizes metadata retrieval without the need for manual adjustment of metadata-related parameters. By doing so, StarRocks provides a seamless experience, balancing between distributed and local plans to achieve optimal query performance under different conditions.
 
-You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/.md#plan_mode).
