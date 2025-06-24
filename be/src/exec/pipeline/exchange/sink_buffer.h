@@ -99,6 +99,22 @@ public:
 
     void incr_sinker(RuntimeState* state);
 
+<<<<<<< HEAD
+=======
+    void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
+    void notify_observers() { _observable.notify_sink_observers(); }
+    auto defer_notify() {
+        return DeferOp([this]() {
+            _observable.notify_sink_observers();
+            if (bthread_self()) {
+                CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+            }
+        });
+    }
+
+    int64_t get_sent_bytes() const { return _bytes_sent; }
+
+>>>>>>> 4b74e7d831 ([Enhancement] Add transmitted bytes to FE Auditlog (#58346))
 private:
     using Mutex = bthread::Mutex;
 
@@ -124,6 +140,11 @@ private:
     // `accumulated_network_time / average_concurrency`
     // And we just pick the maximum accumulated_network_time among all destination
     int64_t _network_time();
+
+    void incr_sent_bytes(int64_t sent_bytes) {
+        _bytes_sent += sent_bytes;
+        _delta_bytes_sent += sent_bytes;
+    }
 
     FragmentContext* _fragment_ctx;
     MemTracker* const _mem_tracker;
@@ -181,6 +202,8 @@ private:
     std::atomic<int64_t> _request_enqueued = 0;
     std::atomic<int64_t> _bytes_sent = 0;
     std::atomic<int64_t> _request_sent = 0;
+
+    std::atomic<int64_t> _delta_bytes_sent = 0;
 
     int64_t _pending_timestamp = -1;
     mutable std::atomic<int64_t> _last_full_timestamp = -1;

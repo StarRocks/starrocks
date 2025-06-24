@@ -146,6 +146,15 @@ public class AuditEvent {
     @AuditField(value = "QueryFEAllocatedMemory")
     public long queryFeMemory = 0;
 
+<<<<<<< HEAD
+=======
+    @AuditField(value = "SessionId")
+    public String sessionId = "";
+
+    @AuditField(value = "TransmittedBytes")
+    public long transmittedBytes = -1;
+
+>>>>>>> 4b74e7d831 ([Enhancement] Add transmitted bytes to FE Auditlog (#58346))
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -374,6 +383,23 @@ public class AuditEvent {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public AuditEventBuilder setSessionId(String sessionId) {
+            auditEvent.sessionId = sessionId;
+            return this;
+        }
+
+        public AuditEventBuilder addTransmittedBytes(long transmittedBytes) {
+            if (auditEvent.transmittedBytes == -1) {
+                auditEvent.transmittedBytes = transmittedBytes;
+            } else {
+                auditEvent.transmittedBytes += transmittedBytes;
+            }
+            return this;
+        }
+
+>>>>>>> 4b74e7d831 ([Enhancement] Add transmitted bytes to FE Auditlog (#58346))
         public AuditEvent build() {
             return this.auditEvent;
         }
@@ -386,6 +412,7 @@ public class AuditEvent {
             this.auditEvent.scanRows = event.scanRows;
             this.auditEvent.spilledBytes = event.spilledBytes;
             this.auditEvent.returnRows = event.returnRows;
+            this.auditEvent.transmittedBytes = event.transmittedBytes;
         }
     }
 }

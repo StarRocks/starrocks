@@ -51,7 +51,7 @@ public:
                          const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
                          bool enable_exchange_perf, FragmentContext* const fragment_ctx,
-                         const std::vector<int32_t>& output_columns);
+                         const std::vector<int32_t>& output_columns, std::atomic<int32_t>& num_sinkers);
 
     ~ExchangeSinkOperator() override = default;
 
@@ -209,7 +209,11 @@ private:
 
     std::unique_ptr<Shuffler> _shuffler;
 
+<<<<<<< HEAD
     std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
+=======
+    std::atomic<int32_t>& _num_sinkers;
+>>>>>>> 4b74e7d831 ([Enhancement] Add transmitted bytes to FE Auditlog (#58346))
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
@@ -231,6 +235,8 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
+
     std::shared_ptr<SinkBuffer> _buffer;
     const TPartitionType::type _part_type;
 
@@ -249,6 +255,8 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t> _output_columns;
+
+    std::atomic<int32_t> _num_sinkers = 0;
 };
 
 } // namespace pipeline
