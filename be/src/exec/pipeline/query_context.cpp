@@ -227,7 +227,7 @@ std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
     return _sub_plan_query_statistics_recvr;
 }
 
-std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
+std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int64_t delta_transmitted_bytes) {
     auto query_statistic = std::make_shared<QueryStatistics>();
     // Not transmit delta if it's the final sink
     if (_is_final_sink) {
@@ -236,6 +236,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
 
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
+    query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
     {
         std::lock_guard l(_scan_stats_lock);
         for (const auto& [table_id, scan_stats] : _scan_stats) {
@@ -262,6 +263,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
     res->add_spill_bytes(get_spill_bytes());
+    res->add_transmitted_bytes(get_transmitted_bytes());
 
     {
         std::lock_guard l(_scan_stats_lock);
