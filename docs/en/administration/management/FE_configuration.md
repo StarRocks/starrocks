@@ -1513,7 +1513,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type：Int
 - Unit：-
 - Is mutable: Yes
-- Description: The max depth that scalar operator optimization can be applied
+- Description: The maximum depth that ScalarOperator optimization can be applied.
 - Introduced in: -
 
 ##### max_scalar_operator_flat_children
@@ -1522,7 +1522,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type：Int
 - Unit：-
 - Is mutable: Yes
-- Description：scalar operator maximum number of flat children.This limit is usually set to prevent the optimizer from using too much memory.
+- Description：The maximum number of flat children for ScalarOperator. You can set this limit to prevent the optimizer from using too much memory.
 - Introduced in: -
 
 ##### enable_statistic_collect
