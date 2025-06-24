@@ -595,11 +595,7 @@ Description: The service account that you want to impersonate.
 
 A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
 
-<<<<<<< HEAD:docs/en/data_source/catalog/iceberg_catalog.md
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
-=======
 From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata parsing mode using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
->>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205)):docs/en/data_source/catalog/iceberg/iceberg_catalog.md
 
 | **Parameter**                                 | **Default**           | **Description**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -1334,11 +1330,7 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-<<<<<<< HEAD:docs/en/data_source/catalog/iceberg_catalog.md
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
-=======
 From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
->>>>>>> f070f0132d ([Doc]update doc of cache for hive/iceberg (#60205)):docs/en/data_source/catalog/iceberg/iceberg_catalog.md
 
 #### FE Configurations on Iceberg metadata caching
 
