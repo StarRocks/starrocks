@@ -536,6 +536,13 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 
 ## Mapping between SQL data types and Java data types
 
+<<<<<<< HEAD
+=======
+> **NOTE**
+>
+> Currently, only non-nested ARRAY and MAP parameter/return types are supported for Scalar UDFs.
+
+>>>>>>> 180495417a ([Doc] add some description for some config (#60201))
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
 | BOOLEAN        | java.lang.Boolean |

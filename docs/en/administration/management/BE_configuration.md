@@ -189,27 +189,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The timeout for a thrift RPC.
 - Introduced in: -
 
-<!--
 ##### thrift_rpc_strict_mode
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Whether thrift's strict execution mode is enabled. For more information on thrift strict mode, see [Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md).
 - Introduced in: -
--->
 
-<!--
 ##### thrift_rpc_max_body_size
 
 - Default: 0
 - Type: Int
 - Unit:
 - Is mutable: No
-- Description:
+- Description: The maximum string body size of RPC. `0` indicates the size is unlimited.
 - Introduced in: -
--->
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Maximum valid time for a thrift RPC connection. A connection will be closed if it has existed in the connection pool for longer than this value. It must be set consistent with FE configuration `thrift_client_timeout_ms`.
+- Introduced in: -
 
 #### bRPC
 
@@ -2358,16 +2363,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
-<!--
 ##### pipeline_scan_thread_pool_queue_size
 
 - Default: 102400
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
--->
 
 <!--
 ##### pipeline_exec_thread_pool_thread_num
@@ -2380,27 +2383,41 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### pipeline_prepare_thread_pool_thread_num
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: Number of threads in the pipeline execution engine PREPARE fragment thread pool. `0` indicates the value is equal to the number of system VCPU core number.
 - Introduced in: -
--->
 
-<!--
 ##### pipeline_prepare_thread_pool_queue_size
 
 - Default: 102400
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The maximum queue lenggth of PREPARE fragment thread pool for Pipeline execution engine.
 - Introduced in: -
--->
+
+##### pipeline_poller_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: When this item is set to greater than `0`, if a driver takes longer than `pipeline_poller_timeout_guard_ms` for a single dispatch in the poller, then the information of the driver and operator is printed.
+- Introduced in: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: When this item is set to greater than `0`, if a plan fragment exceeds `pipeline_prepare_timeout_guard_ms` during the PREPARE process, a stack trace of the plan fragment is printed.
+- Introduced in: -
 
 <!--
 ##### pipeline_sink_io_thread_pool_thread_num
@@ -5311,4 +5328,26 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
+<<<<<<< HEAD
 - Introduced in: -
+=======
+- Introduced in: -
+
+##### load_replica_status_check_interval_ms_on_success
+
+- Default: 15000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc successes.
+- Introduced in: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
+- Introduced in: 3.5.1
+>>>>>>> 180495417a ([Doc] add some description for some config (#60201))
