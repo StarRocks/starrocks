@@ -41,11 +41,16 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.catalog.system.SystemTable;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+import com.starrocks.common.MaterializedViewExceptions;
+>>>>>>> 05d01b32f6 ([BugFix] Fix mv is not inactive after column rename (#60188))
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -705,7 +710,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * @param replay is this is a log replay operation
      */
     public void onDrop(Database db, boolean force, boolean replay) {
-        // Do nothing by default.
+        // inactive relative materialized views if the base table/view/external table is dropped.
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
     }
 
     /**
