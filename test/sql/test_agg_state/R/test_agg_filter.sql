@@ -54,6 +54,38 @@ None	1	250.00	250.00	None	[null]	[null]	[null]	1	0	None
 None	1	None	300.00	300.00	[null]	[null]	[null]	1	1	None
 None	1	None	500.00	None	[null]	[null]	[null]	1	1	500.00
 -- !result
+
+set sql_dialect='Trino';
+-- result:
+-- !result
+
+SELECT
+AVG(amount) FILTER (WHERE product = 'A') AS avg_amount_a,
+COUNT(*) FILTER (WHERE quantity > 15) AS count_large_quantity,
+MAX(amount) FILTER (WHERE product = 'B') AS max_amount_b,
+MIN(amount) FILTER (WHERE amount > 100) AS min_amount_large,
+SUM(amount) FILTER (WHERE product = 'C') AS sum_amount_c,
+ARRAY_AGG(product) FILTER (WHERE quantity < 20) AS products,
+ARRAY_AGG(DISTINCT product) FILTER (WHERE quantity < 20) AS distinct_products1,
+COUNT(amount) AS count_amount,
+COUNT(*) FILTER (WHERE amount > (SELECT AVG(amount) FROM sales)) AS count_above_avg,
+SUM(amount) FILTER (WHERE product IN (SELECT product FROM products WHERE category = 'Electronics')) AS sum_electronics
+FROM sales
+group by id
+order by id;
+-- result:
+100.00000000	0	None	None	None	["A"]	["A"]	1	0	None
+None	1	150.00	150.00	None	[null]	[null]	1	0	None
+200.00000000	0	None	200.00	None	["A"]	["A"]	1	0	None
+None	1	250.00	250.00	None	[null]	[null]	1	0	None
+None	1	None	300.00	300.00	[null]	[null]	1	1	None
+None	1	None	500.00	None	[null]	[null]	1	1	500.00
+-- !result
+
+set sql_dialect='StarRocks';
+-- result:
+-- !result
+
 drop table sales;
 -- result:
 -- !result
