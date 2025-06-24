@@ -84,6 +84,7 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
                     rewriter.rewrite(bpo, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
         }
+        simplifiedPredicate.setJoinDerived(true);
 
         // IN to SEMI-JOIN
         // NOT IN to ANTI-JOIN or NULL_AWARE_LEFT_ANTI_JOIN
