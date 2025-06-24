@@ -407,6 +407,8 @@ struct TMaterializedViewStatus {
     27: optional string query_rewrite_status
 
     28: optional string creator
+    29: optional string last_refresh_process_time
+    30: optional string last_refresh_job_id
 }
 
 struct TListPipesParams {
@@ -530,6 +532,8 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
+    15: optional string job_id
+    16: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {

@@ -38,7 +38,9 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"JOB_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -271,6 +273,35 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+        }
+        case 15: {
+            // job_id
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                const std::string* str = &task_run_info.job_id;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 16: {
+            // process_time
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                if (task_run_info.__isset.process_time) {
+                    int64_t complete_time = task_run_info.process_time;
+                    if (complete_time <= 0) {
+                        nullable_column->append_nulls(1);
+                    } else {
+                        DateTimeValue t;
+                        t.from_unixtime(complete_time, _runtime_state->timezone_obj());
+                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    }
+                } else {
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
         }
         default:
             break;

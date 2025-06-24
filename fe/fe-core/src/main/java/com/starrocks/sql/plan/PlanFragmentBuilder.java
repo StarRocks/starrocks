@@ -60,6 +60,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1725,7 +1726,9 @@ public class PlanFragmentBuilder {
                                 scanNode.setLabel(constantOperator.getVarchar());
                                 break;
                             case "JOB_ID":
-                                scanNode.setJobId(constantOperator.getBigint());
+                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
                                 break;
                             case "ID":
                                 if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME)

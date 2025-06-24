@@ -1027,11 +1027,13 @@ public class ShowExecutorTest {
         Assert.assertEquals("", resultSet.getString(8));
         Assert.assertEquals("\\N", resultSet.getString(9));
         Assert.assertEquals("\\N", resultSet.getString(10));
-        Assert.assertEquals("0.000", resultSet.getString(11));
-        Assert.assertEquals("", resultSet.getString(12));
-        Assert.assertEquals("false", resultSet.getString(13));
+        Assert.assertEquals("\\N", resultSet.getString(11));
+        Assert.assertEquals("0.000", resultSet.getString(12));
+        Assert.assertEquals("", resultSet.getString(13));
+        Assert.assertEquals("", resultSet.getString(14));
+        Assert.assertEquals("false", resultSet.getString(15));
         System.out.println(resultSet.getResultRows());
-        for (int i = 14; i < mvSchemaTable.size() - 5; i++) {
+        for (int i = 16; i < mvSchemaTable.size() - 5; i++) {
             System.out.println(i);
             Assert.assertEquals("", resultSet.getString(i));
         }
