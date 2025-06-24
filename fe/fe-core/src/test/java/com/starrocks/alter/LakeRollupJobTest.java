@@ -233,7 +233,7 @@ public class LakeRollupJobTest {
                     Assert.assertTrue(false);
                 }
                 long targetPartitionId = Long.parseLong(labels.get("partitionId"));
-                Assert.assertEquals(targetPartitionId, physicalPartition.getId());
+                Assert.assertEquals(targetPartitionId, partitionId);
             }
         }
     }

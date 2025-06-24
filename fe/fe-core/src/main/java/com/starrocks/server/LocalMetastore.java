@@ -1735,7 +1735,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (table.isCloudNativeTableOrMaterializedView()) {
                 // create shard group
                 shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                        createShardGroup(db.getId(), table.getId(), physicalPartitionId, indexId);
+                        createShardGroup(db.getId(), table.getId(), partitionId, indexId);
             }
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
             indexMap.put(indexId, rollup);
