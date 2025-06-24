@@ -78,12 +78,7 @@ under the License.
         <!-- azure native sdk -->
         <azure.version>1.2.34</azure.version>
         <fastutil.version>8.5.15</fastutil.version>
-<<<<<<< HEAD
-=======
-        <commons-beanutils.version>1.11.0</commons-beanutils.version>
-        <hbase.version>2.6.2</hbase.version>
         <async-profiler.version>4.0</async-profiler.version>
->>>>>>> 6626270de0 ([Enhancement] Upgrade async-profiler to 4.0 (#59204))
     </properties>
 
     <profiles>
