@@ -542,11 +542,6 @@ CONF_Bool(disable_mem_pools, "false");
 // to a relative large number or the performace is very very bad.
 CONF_Bool(use_mmap_allocate_chunk, "false");
 
-// Chunk Allocator's reserved bytes limit,
-// Default value is 2GB, increase this variable can improve performance, but will
-// acquire more free memory which can not be used by other modules
-CONF_Int64(chunk_reserved_bytes_limit, "0");
-
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
 
