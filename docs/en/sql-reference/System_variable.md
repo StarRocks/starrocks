@@ -596,7 +596,7 @@ Default value: `true`.
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
-* **Default**: false
+* **Default**: true 
 * **Introduced in**: v2.5
 
 ### populate_datacache_mode
