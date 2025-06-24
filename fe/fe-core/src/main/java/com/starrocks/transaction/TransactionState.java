@@ -645,6 +645,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
             // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
             TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getCallbackFactory().getCallback(callbackId);
+            if (callback == null && this.sourceType == LoadJobSourceType.BACKEND_STREAMING) {
+                callback = GlobalStateMgr.getCurrentState().getStreamLoadMgr().getTaskByLabel(this.label);
+            }
             // before status changed
             if (callback != null) {
                 switch (transactionStatus) {
@@ -661,7 +664,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
                         break;
                 }
             } else if (callbackId > 0) {
-                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED) {
+                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED
+                        && this.sourceType != LoadJobSourceType.BACKEND_STREAMING) {
+                    // BACKEND_STREAMING allows callback to be null
                     // Maybe listener has been deleted. The txn need to be aborted later.
                     throw new TransactionException(
                             "Failed to commit txn when callback " + callbackId + "could not be found");
@@ -677,6 +682,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
             TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getCallbackFactory().getCallback(callbackId);
+            if (callback == null && this.sourceType == LoadJobSourceType.BACKEND_STREAMING) {
+                callback = GlobalStateMgr.getCurrentState().getStreamLoadMgr().getTaskByLabel(this.label);
+            }
 
             // after status changed
             if (callback != null) {
