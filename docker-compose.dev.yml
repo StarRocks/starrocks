@@ -6,6 +6,7 @@ services:
     container_name: starrocks-dev-env
     volumes:
       - .:/workspace
+      - ~/.m2:/tmp/.m2
       - starrocks-maven-cache:/root/.m2
       - starrocks-build-cache:/workspace/output
     working_dir: /workspace
