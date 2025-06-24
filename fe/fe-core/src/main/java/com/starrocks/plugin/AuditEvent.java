@@ -154,6 +154,9 @@ public class AuditEvent {
     @AuditField(value = "SessionId")
     public String sessionId = "";
 
+    @AuditField(value = "TransmittedBytes")
+    public long transmittedBytes = -1;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -397,6 +400,15 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addTransmittedBytes(long transmittedBytes) {
+            if (auditEvent.transmittedBytes == -1) {
+                auditEvent.transmittedBytes = transmittedBytes;
+            } else {
+                auditEvent.transmittedBytes += transmittedBytes;
+            }
+            return this;
+        }
+
         public AuditEvent build() {
             return this.auditEvent;
         }
@@ -409,6 +421,7 @@ public class AuditEvent {
             this.auditEvent.scanRows = event.scanRows;
             this.auditEvent.spilledBytes = event.spilledBytes;
             this.auditEvent.returnRows = event.returnRows;
+            this.auditEvent.transmittedBytes = event.transmittedBytes;
         }
     }
 }
