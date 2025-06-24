@@ -1073,11 +1073,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-<<<<<<< HEAD
-        onReloadImpl();
-=======
-        onReload(false);
->>>>>>> 05d01b32f6 ([BugFix] Fix mv is not inactive after column rename (#60188))
+        onReload();
     }
 
     /**

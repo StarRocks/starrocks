@@ -46,11 +46,8 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.catalog.system.SystemTable;
-<<<<<<< HEAD
-import com.starrocks.common.io.Text;
-=======
 import com.starrocks.common.MaterializedViewExceptions;
->>>>>>> 05d01b32f6 ([BugFix] Fix mv is not inactive after column rename (#60188))
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
