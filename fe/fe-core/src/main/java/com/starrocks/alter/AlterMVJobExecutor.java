@@ -791,6 +791,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             mv.getTableProperty().getProperties()
                     .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
             mv.getTableProperty().setAutoRefreshPartitionsLimit(limit);
+            if (isNonPartitioned) {
+                throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
+                        + " does not support non-range-partitioned materialized view.");
+            }
         }
         // partition refresh number
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
@@ -809,10 +813,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             mv.getTableProperty().getProperties()
                     .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, strategy);
             mv.getTableProperty().setPartitionRefreshStrategy(strategy);
-            if (isNonPartitioned) {
-                throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY
-                        + " does not support non-partitioned materialized view.");
-            }
         }
         // exclude trigger tables
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
