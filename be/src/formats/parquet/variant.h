@@ -13,12 +13,7 @@
 
 namespace starrocks {
 
-enum class BasicType {
-    PRIMITIVE = 0,
-    SHORT_STRING = 1,
-    OBJECT = 2,
-    ARRAY = 3
-};
+enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
 
 std::string basic_type_to_string(BasicType type);
 
@@ -113,10 +108,8 @@ private:
 
 class Variant {
 public:
-    explicit Variant(const VariantMetadata &metadata, std::string_view value);
-    Variant(const std::string_view metadata, std::string_view value)
-        : Variant(VariantMetadata(metadata), value) {
-    }
+    explicit Variant(const VariantMetadata& metadata, std::string_view value);
+    Variant(const std::string_view metadata, std::string_view value) : Variant(VariantMetadata(metadata), value) {}
 
     static constexpr uint8_t kHeaderSizeBytes = 1;
     static constexpr size_t kDecimalScaleSizeBytes = 1;
@@ -191,11 +184,6 @@ private:
     template <typename DecimalType>
     StatusOr<DecimalValue<DecimalType>> get_primitive_decimal(VariantPrimitiveType type) const;
 
-    /// \brief Get the value of the object field by field id.
-    /// \return returns the value of the field with the given field id, or empty if the
-    ///         field id doesn't exist.
-    StatusOr<Variant> get_object_by_id(uint32_t id) const;
-
     VariantMetadata metadata_;
     /**
      * Value layout:
@@ -261,4 +249,4 @@ StatusOr<ObjectInfo> get_object_info(std::string_view value);
  *                             +-- is_large
  */
 StatusOr<ArrayInfo> get_array_info(std::string_view value);
-}
+} // namespace starrocks

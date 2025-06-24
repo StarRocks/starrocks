@@ -17,7 +17,6 @@
 #include <memory>
 #include <vector>
 
-#include "formats/parquet/variant.h"
 #include "runtime/memory/column_allocator.h"
 #include "types/int256.h"
 
@@ -104,9 +103,6 @@ using BitmapColumn = ObjectColumn<BitmapValue>;
 using PercentileColumn = ObjectColumn<PercentileValue>;
 using JsonColumnBase = ObjectColumn<JsonValue>;
 class JsonColumn;
-
-using VariantColumnBase = ObjectColumn<Variant>;
-class VariantColumn;
 
 class MapColumn;
 class StructColumn;

@@ -2,10 +2,9 @@
 // Created by xavier bai on 2025/6/17.
 //
 
-#include <gtest/gtest.h>
-
 #include <formats/parquet/variant.h>
 #include <fs/fs.h>
+#include <gtest/gtest.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -23,28 +22,24 @@ public:
     ~ParquetVariantTest() override = default;
 
 protected:
-    uint8_t primitiveHeader(VariantPrimitiveType primitive) {
-        return (static_cast<uint8_t>(primitive) << 2);
-    }
+    uint8_t primitiveHeader(VariantPrimitiveType primitive) { return (static_cast<uint8_t>(primitive) << 2); }
 
     void SetUp() override {
         std::string starrocks_home = getenv("STARROCKS_HOME");
         test_exec_dir = starrocks_home + "/be/test/formats/parquet/test_data/variant";
 
         _primitive_metadata_file_names = {
-            "primitive_null.metadata",          "primitive_boolean_true.metadata",
-            "primitive_boolean_false.metadata", "primitive_date.metadata",
-            "primitive_decimal4.metadata",      "primitive_decimal8.metadata",
-            "primitive_decimal16.metadata",     "primitive_float.metadata",
-            "primitive_double.metadata",        "primitive_int8.metadata",
-            "primitive_int16.metadata",         "primitive_int32.metadata",
-            "primitive_int64.metadata",         "primitive_binary.metadata",
-            "primitive_string.metadata",        "array_primitive.metadata",
+                "primitive_null.metadata",      "primitive_boolean_true.metadata", "primitive_boolean_false.metadata",
+                "primitive_date.metadata",      "primitive_decimal4.metadata",     "primitive_decimal8.metadata",
+                "primitive_decimal16.metadata", "primitive_float.metadata",        "primitive_double.metadata",
+                "primitive_int8.metadata",      "primitive_int16.metadata",        "primitive_int32.metadata",
+                "primitive_int64.metadata",     "primitive_binary.metadata",       "primitive_string.metadata",
+                "array_primitive.metadata",
         };
 
         _boolean_file_names = {
-            {"primitive_boolean_true.metadata", "primitive_boolean_true.value"},
-            {"primitive_boolean_false.metadata", "primitive_boolean_false.value"},
+                {"primitive_boolean_true.metadata", "primitive_boolean_true.value"},
+                {"primitive_boolean_false.metadata", "primitive_boolean_false.value"},
         };
     }
 
@@ -54,7 +49,8 @@ protected:
         return *random_access_file->read_all();
     }
 
-    std::pair<std::string, std::string> load_variant_data(const std::string& metadata_file, const std::string& value_file) {
+    std::pair<std::string, std::string> load_variant_data(const std::string& metadata_file,
+                                                          const std::string& value_file) {
         std::string metadata_content = read_file_content(test_exec_dir + "/" + metadata_file);
         std::string value_content = read_file_content(test_exec_dir + "/" + value_file);
 
@@ -70,8 +66,7 @@ protected:
 TEST_F(ParquetVariantTest, NullValue) {
     std::string_view empty_metadata(VariantMetadata::kEmptyMetadataChars, 3);
     const uint8_t null_chars[] = {primitiveHeader(VariantPrimitiveType::NULL_TYPE)};
-    Variant variant{empty_metadata,
-                         std::string_view{reinterpret_cast<const char*>(null_chars), 1}};
+    Variant variant{empty_metadata, std::string_view{reinterpret_cast<const char*>(null_chars), 1}};
     EXPECT_EQ(VariantType::NULL_TYPE, variant.type());
 }
 
@@ -175,7 +170,10 @@ TEST_F(ParquetVariantTest, StringValue) {
     auto [string_metadata, string_value] = load_variant_data("primitive_string.metadata", "primitive_string.value");
     Variant variant{std::string_view(string_metadata), std::string_view(string_value)};
     EXPECT_EQ(VariantType::STRING, variant.type());
-    EXPECT_EQ("This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!", *variant.get_string());
+    EXPECT_EQ(
+            "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes "
+            "several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!",
+            *variant.get_string());
 
     // short string
     auto [short_string_metadata, short_string_value] = load_variant_data("short_string.metadata", "short_string.value");
@@ -198,7 +196,8 @@ TEST_F(ParquetVariantTest, BinaryValue) {
 
 TEST_F(ParquetVariantTest, DecimalValue) {
     {
-        auto [decimal4_metadata, decimal4_value] = load_variant_data("primitive_decimal4.metadata", "primitive_decimal4.value");
+        auto [decimal4_metadata, decimal4_value] =
+                load_variant_data("primitive_decimal4.metadata", "primitive_decimal4.value");
         Variant variant{std::string_view(decimal4_metadata), std::string_view(decimal4_value)};
         EXPECT_EQ(VariantType::DECIMAL4, variant.type());
         auto decimal4_result = *variant.get_decimal4();
@@ -207,7 +206,8 @@ TEST_F(ParquetVariantTest, DecimalValue) {
         EXPECT_EQ("12.34", DecimalV3Cast::to_string<int32_t>(decimal4_result.value, 4, decimal4_result.scale));
     }
     {
-        auto [decimal8_metadata, decimal8_value] = load_variant_data("primitive_decimal8.metadata", "primitive_decimal8.value");
+        auto [decimal8_metadata, decimal8_value] =
+                load_variant_data("primitive_decimal8.metadata", "primitive_decimal8.value");
         Variant variant{std::string_view(decimal8_metadata), std::string_view(decimal8_value)};
         EXPECT_EQ(VariantType::DECIMAL8, variant.type());
         auto decimal8_result = *variant.get_decimal8();
@@ -216,23 +216,37 @@ TEST_F(ParquetVariantTest, DecimalValue) {
         EXPECT_EQ("12345678.90", DecimalV3Cast::to_string<int64_t>(decimal8_result.value, 10, decimal8_result.scale));
     }
     {
-        auto [decimal16_metadata, decimal16_value] = load_variant_data("primitive_decimal16.metadata", "primitive_decimal16.value");
+        auto [decimal16_metadata, decimal16_value] =
+                load_variant_data("primitive_decimal16.metadata", "primitive_decimal16.value");
         Variant variant{std::string_view(decimal16_metadata), std::string_view(decimal16_value)};
         EXPECT_EQ(VariantType::DECIMAL16, variant.type());
         auto decimal16_result = *variant.get_decimal16();
         EXPECT_EQ(2, decimal16_result.scale);
         EXPECT_EQ(1234567891234567890, decimal16_result.value);
-        EXPECT_EQ("12345678912345678.90", DecimalV3Cast::to_string<int128_t>(decimal16_result.value, 20, decimal16_result.scale));
+        EXPECT_EQ("12345678912345678.90",
+                  DecimalV3Cast::to_string<int128_t>(decimal16_result.value, 20, decimal16_result.scale));
     }
 }
 
 TEST_F(ParquetVariantTest, UUIDValue) {
     std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
-    const uint8_t uuid_chars[] = {
-        primitiveHeader(VariantPrimitiveType::UUID),
-        0xf2, 0x4f, 0x9b, 0x64, 0x81, 0xfa, 0x49, 0xd1,
-        0xb7, 0x4e, 0x8c, 0x09, 0xa6, 0xe3, 0x1c, 0x56
-    };
+    const uint8_t uuid_chars[] = {primitiveHeader(VariantPrimitiveType::UUID),
+                                  0xf2,
+                                  0x4f,
+                                  0x9b,
+                                  0x64,
+                                  0x81,
+                                  0xfa,
+                                  0x49,
+                                  0xd1,
+                                  0xb7,
+                                  0x4e,
+                                  0x8c,
+                                  0x09,
+                                  0xa6,
+                                  0xe3,
+                                  0x1c,
+                                  0x56};
 
     std::string_view uuid_string(reinterpret_cast<const char*>(uuid_chars), sizeof(uuid_chars));
     Variant variant{VariantMetadata(empty_metadata), uuid_string};
@@ -260,7 +274,8 @@ TEST_F(ParquetVariantTest, TimestampValue) {
         EXPECT_EQ(expect_mills * 1000, *variant.get_timestamp_micros());
     }
     {
-        auto [ts_ntz_metadata, ts_ntz_value] = load_variant_data("primitive_timestampntz.metadata", "primitive_timestampntz.value");
+        auto [ts_ntz_metadata, ts_ntz_value] =
+                load_variant_data("primitive_timestampntz.metadata", "primitive_timestampntz.value");
         Variant variant{std::string_view(ts_ntz_metadata), std::string_view(ts_ntz_value)};
         EXPECT_EQ(VariantType::TIMESTAMP_NTZ, variant.type());
         // 2025-04-16 12:34:56.78
@@ -270,8 +285,8 @@ TEST_F(ParquetVariantTest, TimestampValue) {
 }
 
 std::string epoch_day_to_date(int32_t epoch_days) {
-    std::time_t raw_time = epoch_days * 86400;  // to seconds
-    std::tm* ptm = std::gmtime(&raw_time);      // to UTC
+    std::time_t raw_time = epoch_days * 86400; // to seconds
+    std::tm* ptm = std::gmtime(&raw_time);     // to UTC
     char buffer[11];
     std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", ptm);
     return buffer;
@@ -487,4 +502,4 @@ TEST_F(ParquetVariantTest, ArrayNested) {
     }
 }
 
-}
+} // namespace starrocks::parquet
