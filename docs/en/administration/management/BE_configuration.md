@@ -195,7 +195,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether thrift's strict execution mode is enabled. thrift strict mode See https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md
+- Description: Whether thrift's strict execution mode is enabled. For more information on thrift strict mode, see [Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md).
 - Introduced in: -
 
 ##### thrift_rpc_max_body_size
@@ -204,7 +204,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit:
 - Is mutable: No
-- Description: rpc max string body size. 0 means unlimited
+- Description: The maximum string body size of RPC. `0` indicates the size is unlimited.
 - Introduced in: -
 
 ##### thrift_rpc_connection_max_valid_time_ms
@@ -213,8 +213,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: Maximum valid time for a thrift rpc connection. Just be consistent with FE's thrift_client_timeout_ms.
-The connection will be closed if it has existed in the connection pool for longer than this value.
+- Description: Maximum valid time for a thrift rpc connection. A connection will be closed if it has existed in the connection pool for longer than this value. It must be set consistent with FE configuration `thrift_client_timeout_ms`.
 - Introduced in: -
 
 #### bRPC
@@ -2344,7 +2343,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Pipeline execution engine scan maximum queue length for the thread pool task queue.
+- Description: The maximum task queue lenggth of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
 
 <!--
@@ -2364,7 +2363,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Number of threads in the pipeline execution engine prepare fragment's thread pool. 0 means equal to the number of system VCPUs
+- Description: Number of threads in the pipeline execution engine PREPARE fragment thread pool. `0` indicates the value is equal to the number of system VCPU core number.
 - Introduced in: -
 
 ##### pipeline_prepare_thread_pool_queue_size
@@ -2373,7 +2372,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Pipeline execution engine execute prepare fragment queue length in the thread pool.
+- Description: The maximum queue lenggth of PREPARE fragment thread pool for Pipeline execution engine.
 - Introduced in: -
 
 ##### pipeline_poller_timeout_guard_ms
@@ -2382,7 +2381,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: If this value is greater than 0, if a driver takes longer than `pipeline_poller_timeout_guard_ms` for a single dispatch in the poller, then this driver as well as operator information is printed.
+- Description: When this item is set to greater than `0`, if a driver takes longer than `pipeline_poller_timeout_guard_ms` for a single dispatch in the poller, then the information of the driver and operator is printed.
 - Introduced in: -
 
 ##### pipeline_prepare_timeout_guard_ms
@@ -2391,7 +2390,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: If this value is greater than 0, a stack trace of the plan fragment is printed if a plan fragment exceeds `pipeline_prepare_timeout_guard_ms` during the prepare process.
+- Description: When this item is set to greater than `0`, if a plan fragment exceeds `pipeline_prepare_timeout_guard_ms` during the PREPARE process, a stack trace of the plan fragment is printed.
 - Introduced in: -
 
 <!--
