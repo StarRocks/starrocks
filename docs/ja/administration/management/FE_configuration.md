@@ -348,32 +348,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: FE ノード内の Thrift サーバーが保持するバックログキューの長さ。
 - 導入バージョン: -
 
-##### thrift_rpc_strict_mode
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: Thrift の Strict 実行モードが有効かどうか。Thrift の Strict モードについては、[Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md) を参照してください。
-- 導入バージョン: -
-
-##### thrift_rpc_max_body_size
-
-- デフォルト: 0
-- タイプ: Int
-- 単位:
-- 変更可能: いいえ
-- 説明: RPC の文字列ボディの最大サイズ。`0` は無制限であることを示す。
-- 導入バージョン: -
-
-##### thrift_rpc_connection_max_valid_time_ms
-
-- デフォルト: 5000
-- タイプ: Int
-- 単位: Milliseconds
-- 変更可能: いいえ
-- 説明: Thrift RPC 接続の最大有効時間。コネクションプールにこの値以上存在すると、コネクションは閉じられます。この値は FE 設定 `thrift_client_timeout_ms` と一致するように設定する必要があります。
-
 ##### brpc_idle_wait_max_time
 
 - デフォルト: 10000
