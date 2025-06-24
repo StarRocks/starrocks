@@ -51,11 +51,12 @@ public class AggregateCompactionTask extends CompactionTask {
         }
         try {
             CompactResponse response = responseFuture.get();
-            if (CollectionUtils.isEmpty(response.failedTablets)) {
-                return TaskResult.ALL_SUCCESS;
-            } else {
+            TStatusCode code = TStatusCode.findByValue(response.status.statusCode);
+            if (code != TStatusCode.OK) {
                 // TODO support partial success
                 return TaskResult.NONE_SUCCESS;
+            } else {
+                return TaskResult.ALL_SUCCESS;
             }
         } catch (ExecutionException e) {
             return TaskResult.NONE_SUCCESS;

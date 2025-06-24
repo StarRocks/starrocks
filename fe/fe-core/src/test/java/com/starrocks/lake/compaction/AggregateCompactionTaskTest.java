@@ -166,7 +166,8 @@ public class AggregateCompactionTaskTest {
         };
         Assert.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, task.getResult());
 
-        mockResponse.failedTablets = Lists.newArrayList(1L);
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = TStatusCode.CANCELLED.getValue();
         new Expectations() {
             {
                 mockFuture.get(); 
