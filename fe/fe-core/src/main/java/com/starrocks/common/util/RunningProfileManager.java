@@ -66,7 +66,7 @@ public class RunningProfileManager {
         final RunningProfile queryProfile = profiles.get(request.getQuery_id());
         if (queryProfile == null) {
             status = new TStatus(TStatusCode.NOT_FOUND);
-            LOG.warn("asyncProfileReport query not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
+            LOG.debug("asyncProfileReport query not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
             status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + " not found");
             return status;
         }
