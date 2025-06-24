@@ -522,6 +522,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         try {
             if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
+                // check if the materialized view can be activated without rebuilding relationships.
                 materializedView.fixRelationship();
                 if (materializedView.isActive()) {
                     return null;

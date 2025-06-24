@@ -103,7 +103,12 @@ public class MVActiveChecker extends FrontendDaemon {
                 if (table.isMaterializedView()) {
                     MaterializedView mv = (MaterializedView) table;
                     if (!mv.isActive()) {
-                        tryToActivate(mv, true);
+                        try {
+                            tryToActivate(mv, true);
+                        } catch (Exception e) {
+                            LOG.warn("[MVActiveChecker] failed to activate MV {} in database {}",
+                                    mv.getName(), db.getFullName(), e);
+                        }
                     }
                 }
             }

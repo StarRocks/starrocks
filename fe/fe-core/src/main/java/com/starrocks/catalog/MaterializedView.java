@@ -1107,7 +1107,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-        onReloadImpl(false);
+        onReload(false);
     }
 
     /**
@@ -1937,43 +1937,41 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: This method should be only called once in FE restart phase.
      */
     private void analyzePartitionExprs() {
-        try {
-            // initialize table to base table info cache
-            for (BaseTableInfo tableInfo : this.baseTableInfos) {
-                this.tableToBaseTableInfoCache.put(MvUtils.getTableChecked(tableInfo), tableInfo);
-            }
-            // analyze partition exprs for ref base tables
-            analyzeRefBaseTablePartitionExprs();
-            // analyze partition exprs
-            Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs(false);
-            ConnectContext connectContext = ConnectContext.buildInner();
-            if (refBaseTablePartitionExprs != null) {
-                for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
-                    if (refBaseTableOpt.isEmpty()) {
-                        continue;
-                    }
-                    Table refBaseTable = refBaseTableOpt.get();
-                    if (!refBaseTablePartitionExprs.containsKey(refBaseTable)) {
-                        continue;
-                    }
-                    List<Expr> partitionExprs = refBaseTablePartitionExprs.get(refBaseTable);
-                    TableName tableName = new TableName(baseTableInfo.getCatalogName(),
-                            baseTableInfo.getDbName(), baseTableInfo.getTableName());
-                    for (Expr partitionExpr : partitionExprs) {
-                        analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
-                    }
+        // Don't use try-catch here, so can inactive mv if analyze failed, see #onReload()
+
+        // initialize table to base table info cache
+        for (BaseTableInfo tableInfo : this.baseTableInfos) {
+            this.tableToBaseTableInfoCache.put(MvUtils.getTableChecked(tableInfo), tableInfo);
+        }
+        // analyze partition exprs for ref base tables
+        analyzeRefBaseTablePartitionExprs();
+        // analyze partition exprs
+        Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs(false);
+        ConnectContext connectContext = ConnectContext.buildInner();
+        if (refBaseTablePartitionExprs != null) {
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
+                if (refBaseTableOpt.isEmpty()) {
+                    continue;
+                }
+                Table refBaseTable = refBaseTableOpt.get();
+                if (!refBaseTablePartitionExprs.containsKey(refBaseTable)) {
+                    continue;
+                }
+                List<Expr> partitionExprs = refBaseTablePartitionExprs.get(refBaseTable);
+                TableName tableName = new TableName(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), baseTableInfo.getTableName());
+                for (Expr partitionExpr : partitionExprs) {
+                    analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
                 }
             }
-            // analyze partition slots for ref base tables
-            analyzeRefBaseTablePartitionSlots();
-            // analyze partition columns for ref base tables
-            analyzeRefBaseTablePartitionColumns();
-            // analyze partition retention condition
-            analyzeMVRetentionCondition(connectContext);
-        } catch (Exception e) {
-            LOG.warn("Analyze partition exprs failed", e);
         }
+        // analyze partition slots for ref base tables
+        analyzeRefBaseTablePartitionSlots();
+        // analyze partition columns for ref base tables
+        analyzeRefBaseTablePartitionColumns();
+        // analyze partition retention condition
+        analyzeMVRetentionCondition(connectContext);
     }
 
     public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
