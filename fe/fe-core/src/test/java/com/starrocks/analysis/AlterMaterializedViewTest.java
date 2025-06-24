@@ -455,7 +455,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
         checker.runForTest(true);
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+        Assert.assertTrue(mv.getInactiveReason().contains("base-table dropped: base_tbl_active"));
 
         // create the table again, and activate it
         connectContext.setThreadLocalInfo();

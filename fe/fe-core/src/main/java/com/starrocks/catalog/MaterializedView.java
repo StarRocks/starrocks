@@ -1107,7 +1107,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-        onReloadImpl(false);
+        onReload(false);
     }
 
     /**
