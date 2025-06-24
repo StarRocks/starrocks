@@ -609,6 +609,10 @@ vectorized_functions = [
     [50402, 'last_day', True, False, 'DATE', ['DATETIME'], 'TimeFunctions::last_day'],
     [50403, 'last_day', True, False, 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format',
      'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+    [50404, 'last_day', True, False, 'DATE', ['DATE'], 'TimeFunctions::last_day_date'],
+    [50405, 'last_day', True, False, 'DATE', ['DATE', 'VARCHAR'], 'TimeFunctions::last_day_date_with_format',
+     'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+
     [50501, 'makedate', True, False, 'DATE', ['INT', 'INT'], 'TimeFunctions::make_date'],
     [50610, 'time_format', True, False, 'VARCHAR', ['TIME', 'VARCHAR'], 'TimeFunctions::time_format'],
 
