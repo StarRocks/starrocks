@@ -134,6 +134,8 @@ struct FileInfo {
     std::optional<int64_t> size;
     std::string encryption_meta;
     std::shared_ptr<FileSystem> fs;
+    // It is used to store the file offset of the bundle file.
+    std::optional<int64_t> bundle_file_offset;
 };
 
 struct FileWriteStat {
@@ -209,6 +211,10 @@ public:
                                                                                const FileInfo& file_info) {
         return new_random_access_file(opts, file_info.path);
     }
+
+    // Used for sharing segment files only.
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file_with_bundling(
+            const RandomAccessFileOptions& opts, const FileInfo& file_info);
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
