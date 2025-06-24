@@ -504,7 +504,8 @@ int64_t ArrayColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return (xor_checksum ^ _elements->xor_checksum(element_from, element_to));
 }
 
-void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol,
+                                       bool is_inf_nan_convert_to_null) const {
     DCHECK_LT(idx, size());
     const size_t offset = _offsets->get_data()[idx];
     const size_t array_size = _offsets->get_data()[idx + 1] - offset;
@@ -512,11 +513,11 @@ void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_
     buf->begin_push_array();
     auto* elements = _elements.get();
     if (array_size > 0) {
-        elements->put_mysql_row_buffer(buf, offset);
+        elements->put_mysql_row_buffer(buf, offset, false, is_inf_nan_convert_to_null);
     }
     for (size_t i = 1; i < array_size; i++) {
         buf->separator(',');
-        elements->put_mysql_row_buffer(buf, offset + i);
+        elements->put_mysql_row_buffer(buf, offset + i, false, is_inf_nan_convert_to_null);
     }
     buf->finish_push_array();
 }

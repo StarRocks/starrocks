@@ -83,11 +83,14 @@ public:
 
     const RowDescriptor& get_row_desc() const { return _row_desc; }
 
+    bool isInfNanConvertToNull() const { return _is_inf_nan_convert_to_null; }
+
 private:
     Status prepare_exprs(RuntimeState* state);
     const RowDescriptor& _row_desc;
     TResultSinkType::type _sink_type;
     bool _is_binary_format;
+    bool _is_inf_nan_convert_to_null;
     // set format_type when sink type is HTTP
     TResultSinkFormatType::type _format_type;
     // set file options when sink type is FILE

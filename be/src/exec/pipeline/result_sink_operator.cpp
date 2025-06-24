@@ -42,7 +42,8 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     // Create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
-        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format, profile);
+        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format,
+                                                      _is_inf_nan_convert_to_null, profile);
         break;
     case TResultSinkType::STATISTIC:
         _writer = std::make_shared<StatisticResultWriter>(_sender.get(), _output_expr_ctxs, profile);

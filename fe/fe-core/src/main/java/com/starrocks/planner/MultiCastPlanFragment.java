@@ -57,7 +57,7 @@ public class MultiCastPlanFragment extends PlanFragment {
     }
 
     @Override
-    public void createDataSink(TResultSinkType resultSinkType) {
+    public void createDataSink(TResultSinkType resultSinkType, boolean enableInfNanConvertToNull) {
         if (sink != null) {
             return;
         }

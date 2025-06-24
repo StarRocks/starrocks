@@ -71,6 +71,7 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
     }
 
     _is_binary_format = sink.is_binary_row;
+    _is_inf_nan_convert_to_null = sink.is_inf_nan_convert_to_null;
 }
 
 Status ResultSink::prepare_exprs(RuntimeState* state) {
@@ -101,7 +102,8 @@ Status ResultSink::prepare(RuntimeState* state) {
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
         _writer.reset(new (std::nothrow)
-                              MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format, _profile));
+                              MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format,
+                              _is_inf_nan_convert_to_null, _profile));
         break;
     case TResultSinkType::FILE:
         CHECK(_file_opts.get() != nullptr);

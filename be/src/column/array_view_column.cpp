@@ -223,7 +223,8 @@ int64_t ArrayViewColumn::xor_checksum(uint32_t from, uint32_t to) const {
     throw std::runtime_error("ArrayViewColumn::xor_checksum() is not supported");
 }
 
-void ArrayViewColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+void ArrayViewColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol,
+                                           bool is_inf_nan_convert_to_null) const {
     DCHECK(false) << "ArrayViewColumn::put_mysql_row_buffer() is not supported";
     throw std::runtime_error("ArrayViewColumn::put_mysql_row_buffer() is not supported");
 }

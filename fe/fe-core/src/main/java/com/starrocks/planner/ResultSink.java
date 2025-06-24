@@ -60,10 +60,12 @@ public class ResultSink extends DataSink {
     private String brokerName;
     private TResultFileSinkOptions fileSinkOptions;
     private boolean isBinaryRow;
+    private boolean isInfNanConvertToNull;
 
-    public ResultSink(PlanNodeId exchNodeId, TResultSinkType sinkType) {
+    public ResultSink(PlanNodeId exchNodeId, TResultSinkType sinkType, boolean enableInfNanConvertToNull) {
         this.exchNodeId = exchNodeId;
         this.sinkType = sinkType;
+        this.isInfNanConvertToNull = enableInfNanConvertToNull;
     }
 
     @Override
@@ -85,6 +87,7 @@ public class ResultSink extends DataSink {
             tResultSink.setFormat(((HttpConnectContext) ConnectContext.get()).getResultSinkFormatType());
         }
         tResultSink.setIs_binary_row(isBinaryRow);
+        tResultSink.setIs_inf_nan_convert_to_null(isInfNanConvertToNull);
         result.setResult_sink(tResultSink);
         return result;
     }
@@ -142,5 +145,9 @@ public class ResultSink extends DataSink {
 
     public void setBinaryRow(boolean isBinaryRow) {
         this.isBinaryRow = isBinaryRow;
+    }
+
+    public void setInfNanConvertToNull(boolean isInfNanConvertToNull) {
+        this.isInfNanConvertToNull = isInfNanConvertToNull;
     }
 }
