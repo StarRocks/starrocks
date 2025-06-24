@@ -1396,11 +1396,11 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 
 ## Appendix A: Periodic Metadata Refresh Strategy
 
-Iceberg supports [snapshots](./iceberg_timetravel.md). With the newest snapshot, you can get the newest result. Therefore, only cached snapshots can influence data freshness. As a result, you only need to pay attention to the refresh strategy of cache that contains snapshot.
+Iceberg supports snapshots from v3.4. With the newest snapshot, you can get the newest result. Therefore, only cached snapshots can influence data freshness. As a result, you only need to pay attention to the refresh strategy of cache that contains snapshot.
 
 The following flowchart shows the time intervals on a timeline.
 
-![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline.png)
+![Timeline for updating and discarding cached metadata](../../_assets/iceberg_catalog_timeline.png)
 
 ## Appendix B: Metadata File Parsing
 
