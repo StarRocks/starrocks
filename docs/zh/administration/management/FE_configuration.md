@@ -1499,6 +1499,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：优化器重写 ScalarOperator 允许的最大次数。
 - 引入版本：-
 
+##### max_scalar_operator_optimize_depth
+
+- 默认值：256
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：优化器中 ScalarOperator 进行优化的最大深度。
+- 引入版本：-
+
+##### max_scalar_operator_flat_children
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：优化器中 ScalarOperator 允许最多后代节点数量, 这个限制通常是避免优化器使用过多内存。
+- 引入版本：-
+
 ##### enable_statistic_collect
 
 - 默认值：true
