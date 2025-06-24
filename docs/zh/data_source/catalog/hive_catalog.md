@@ -1233,7 +1233,7 @@ REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 
 如下图所示。
 
-![Update policy on timeline](../../_assets/catalog_timeline_zh.png)
+![Update policy on timeline](../../_assets/hive_catalog_timeline_zh.png)
 
 StarRocks 采用如下策略更新和淘汰缓存的元数据：
 
