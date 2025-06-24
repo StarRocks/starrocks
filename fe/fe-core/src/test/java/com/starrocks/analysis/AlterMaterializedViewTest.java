@@ -183,6 +183,113 @@ public class AlterMaterializedViewTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testInactiveMV() throws Exception {
+
+        starRocksAssert
+                .withTable("CREATE TABLE IF NOT EXISTS par_tbl1\n" +
+                        "(\n" +
+                        "    datekey DATETIME,\n" +
+                        "    item_id STRING,\n" +
+                        "    v1      INT\n" +
+                        ")PRIMARY KEY (`datekey`,`item_id`)\n" +
+                        "    PARTITION BY date_trunc('day', `datekey`);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl1 values ('2025-01-01', '1', 1);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl1 values ('2025-01-02', '1', 1);");
+
+        starRocksAssert
+                .withTable("CREATE TABLE IF NOT EXISTS par_tbl2\n" +
+                        "(\n" +
+                        "    datekey DATETIME,\n" +
+                        "    item_id STRING,\n" +
+                        "    v1      INT\n" +
+                        ")PRIMARY KEY (`datekey`,`item_id`)\n" +
+                        "    PARTITION BY date_trunc('day', `datekey`);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl2 values ('2025-01-01', '1', 2);");
+        executeInsertSql(connectContext, "INSERT INTO par_tbl2 values ('2025-01-02', '1', 1);");
+
+        starRocksAssert
+                .withTable("CREATE TABLE IF NOT EXISTS dim_data\n" +
+                        "(\n" +
+                        "    item_id STRING,\n" +
+                        "    v1 INT\n" +
+                        ")PRIMARY KEY (`item_id`);");
+        executeInsertSql(connectContext, "INSERT INTO dim_data values ('1', 4);");
+
+        starRocksAssert
+                .withMaterializedView("CREATE\n" +
+                        "MATERIALIZED VIEW mv_dim_data1\n" +
+                        "REFRESH ASYNC EVERY(INTERVAL 60 MINUTE)\n" +
+                        "AS\n" +
+                        "select *\n" +
+                        "from dim_data;");
+
+        starRocksAssert
+                .withMaterializedView("CREATE\n" +
+                        "MATERIALIZED VIEW mv_test1\n" +
+                        "REFRESH ASYNC EVERY(INTERVAL 60 MINUTE)\n" +
+                        "PARTITION BY p_time\n" +
+                        "PROPERTIES (\n" +
+                        "\"excluded_trigger_tables\" = \"mv_dim_data1\",\n" +
+                        "\"excluded_refresh_tables\" = \"mv_dim_data1\",\n" +
+                        "\"partition_refresh_number\" = \"1\"\n" +
+                        ")\n" +
+                        "AS\n" +
+                        "select date_trunc(\"day\", a.datekey) as p_time, sum(a.v1) + sum(b.v1) as v1\n" +
+                        "from par_tbl1 a\n" +
+                        "         left join par_tbl2 b on a.datekey = b.datekey and a.item_id = b.item_id\n" +
+                        "         left join mv_dim_data1 d on a.item_id = d.item_id\n" +
+                        "group by date_trunc(\"day\", a.datekey), a.item_id;");
+
+        starRocksAssert.refreshMV("refresh materialized view mv_test1 with sync mode;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_test1");
+        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+
+        String alterMvSql = "alter materialized view mv_test1 INACTIVE";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertFalse(mv.isActive());
+
+        alterMvSql = "alter materialized view mv_test1 ACTIVE";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+        Assert.assertTrue(mv.isActive());
+        baseTableVisibleVersionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+
+        alterMvSql = "alter materialized view mv_test1 INACTIVE";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertFalse(mv.isActive());
+
+        alterMvSql = "alter materialized view mv_test1 ACTIVE";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+        Assert.assertTrue(mv.isActive());
+        // Don't refresh base table version map
+        baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+
+        // inactive mv when base table's schema changed
+        Database db = starRocksAssert.getDb(connectContext.getDatabase());
+        Table parTbl1 = starRocksAssert.getTable(connectContext.getDatabase(), "par_tbl1");
+        AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) parTbl1, Set.of("item_id"));
+        baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertTrue(baseTableVisibleVersionMap.isEmpty());
+    }
+
+>>>>>>> 05d01b32f6 ([BugFix] Fix mv is not inactive after column rename (#60188))
     @Test
     public void testAlterMVOnView() throws Exception {
         final String mvName = "mv_on_view_1";
@@ -347,7 +454,7 @@ public class AlterMaterializedViewTest {
         Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
         checker.runForTest(true);
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+        Assert.assertTrue(mv.getInactiveReason().contains("base-table dropped: base_tbl_active"));
 
         // create the table again, and activate it
         connectContext.setThreadLocalInfo();

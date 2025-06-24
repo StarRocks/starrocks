@@ -400,6 +400,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
         if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterTableFromResource(
                     String.join(".", getCatalogName(), hiveDbName, hiveTableName));
