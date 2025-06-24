@@ -55,6 +55,7 @@ public:
     // merge column with filter, and save result to filer.
     // `all_zero` means, after merging, if there is only zero value in filter.
     static void merge_two_filters(const ColumnPtr& column, Filter* __restrict filter, bool* all_zero = nullptr);
+    static void merge_two_anti_filters(const ColumnPtr& column, NullData& null_data, Filter* __restrict filter);
     static void merge_filters(const Columns& columns, Filter* __restrict filter);
     static void merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected,
                                   bool* all_zero = nullptr);
@@ -77,7 +78,6 @@ public:
      * @param col must be a boolean column
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
-
     // Find the first non-null value in [start, end), return end if all null
     static size_t find_nonnull(const Column* col, size_t start, size_t end);
 
