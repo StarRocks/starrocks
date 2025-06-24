@@ -111,6 +111,8 @@ public:
         });
     }
 
+    int64_t get_sent_bytes() const { return _bytes_sent; }
+
 private:
     using Mutex = bthread::Mutex;
 
@@ -136,6 +138,11 @@ private:
     // `accumulated_network_time / average_concurrency`
     // And we just pick the maximum accumulated_network_time among all destination
     int64_t _network_time();
+
+    void incr_sent_bytes(int64_t sent_bytes) {
+        _bytes_sent += sent_bytes;
+        _delta_bytes_sent += sent_bytes;
+    }
 
     FragmentContext* _fragment_ctx;
     MemTracker* const _mem_tracker;
@@ -200,6 +207,8 @@ private:
     std::atomic<int64_t> _request_enqueued = 0;
     std::atomic<int64_t> _bytes_sent = 0;
     std::atomic<int64_t> _request_sent = 0;
+
+    std::atomic<int64_t> _delta_bytes_sent = 0;
 
     int64_t _pending_timestamp = -1;
     mutable std::atomic<int64_t> _last_full_timestamp = -1;
