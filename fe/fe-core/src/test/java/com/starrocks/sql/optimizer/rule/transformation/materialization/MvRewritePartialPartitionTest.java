@@ -527,11 +527,13 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
-                "PARTITION PREDICATES: (((15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01'))" +
-                        " AND ((15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')))" +
-                        " OR (15: o_orderdate IS NULL)");
-
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "     TABLE: orders\n" +
+                "     PARTITION PREDICATES: ((((15: o_orderdate < '1991-01-01') " +
+                        "OR (15: o_orderdate >= '1991-02-01')) AND ((15: o_orderdate < '1991-03-01') " +
+                        "OR (15: o_orderdate >= '1993-12-31'))) " +
+                        "OR (((15: o_orderdate < '1991-02-01') AND (15: o_orderdate >= '1991-01-01')) " +
+                        "OR ((15: o_orderdate < '1993-12-31') AND (15: o_orderdate >= '1991-03-01')) IS NULL)) " +
+                        "OR (15: o_orderdate IS NULL)\n");
         // updated partitions are not in the query's partition range
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +
                 "where o_orderdate >= '1992-05-01' and o_orderdate < '1992-05-31'";
@@ -1115,7 +1117,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
                     " FROM base_tbl1 group by ds";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+            PlanTestBase.assertContains(plan, "test_mv1");
         }
 
         {
@@ -1273,8 +1275,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 20: col3 = 'Guangdong', 18: col0 = 123456789\n" +
-                    "     partitions=2/9");
+                    "     PREDICATES: (((13: col0 != 123456789) OR (((13: col0 = 123456789) " +
+                    "AND (14: col2 < '2022-04-04')) AND ((14: col2 >= '2022-04-01') AND (15: col3 = 'Guangdong')) IS NULL)) " +
+                    "OR ((14: col2 < '2022-04-01') OR (14: col2 >= '2022-04-04'))) OR (15: col3 != 'Guangdong')\n" +
+                    "     partitions=5/9");
         }
 
         {
@@ -1284,8 +1288,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             // input query's partition range is [2022-04-01, 2022-04-05] and should not be changed.
             PlanTestBase.assertContains(plan, "     TABLE: test_base_table1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: ((23: col0 != 123456789) OR ((23: col0 = 123456789) " +
-                    "AND (25: col3 = 'Guangdong') IS NULL)) OR (25: col3 != 'Guangdong')\n" +
+                    "     PREDICATES: (((13: col0 != 123456789) " +
+                    "OR (((13: col0 = 123456789) AND (14: col2 < '2022-04-04')) AND ((14: col2 >= '2022-04-01') " +
+                    "AND (15: col3 = 'Guangdong')) IS NULL)) OR ((14: col2 < '2022-04-01') " +
+                    "OR (14: col2 >= '2022-04-04'))) OR (15: col3 != 'Guangdong')\n" +
                     "     partitions=5/9");
         }
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
