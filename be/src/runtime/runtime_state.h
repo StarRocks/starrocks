@@ -337,6 +337,13 @@ public:
 
     bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
     bool enable_spill_partitionwise_agg() const { return enable_agg_spill() && spill_partitionwise_agg(); }
+    int spill_partitionwise_agg_partition_num() const {
+        if (_spill_options->spill_partitionwise_agg_partition_num <= 0) {
+            return config::spill_init_partition;
+        } else {
+            return std::max(std::min(_spill_options->spill_partitionwise_agg_partition_num, 256), 4);
+        }
+    }
     bool enable_spill_partitionwise_agg_skew_elimination() const {
         return enable_agg_spill() && spill_partitionwise_agg_skew_elimination();
     }

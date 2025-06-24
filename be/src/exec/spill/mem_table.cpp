@@ -50,7 +50,12 @@ Status UnorderedMemTable::append(ChunkPtr chunk) {
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk_mem_usage);
     auto num_rows = chunk->num_rows();
     _num_rows += chunk->num_rows();
-    if (_chunks.empty() || _chunks.back()->num_rows() + num_rows > _runtime_state->chunk_size()) {
+    if (_chunks.empty() || _chunks.back()->num_rows() >= _runtime_state->chunk_size()) {
+        _chunks.emplace_back(std::move(chunk));
+    } else if (_chunks.back()->num_rows() + num_rows > _runtime_state->chunk_size()) {
+        auto count = _runtime_state->chunk_size() - _chunks.back()->num_rows();
+        _chunks.back()->append(*chunk, chunk->num_rows() - count, count);
+        chunk->set_num_rows(chunk->num_rows() - count);
         _chunks.emplace_back(std::move(chunk));
     } else {
         _chunks.back()->append(*chunk);

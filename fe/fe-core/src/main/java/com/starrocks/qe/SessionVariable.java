@@ -209,6 +209,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
 
     public static final String SPILL_PARTITIONWISE_AGG = "spill_partitionwise_agg";
+    public static final String SPILL_PARTITIONWISE_AGG_PARTITION_NUM = "spill_partitionwise_agg_partition_num";
     public static final String SPILL_PARTITIONWISE_AGG_SKEW_ELIMINATION = "spill_partitionwise_agg_skew_elimination";
     public static final String ENABLE_SPILL_BUFFER_READ = "enable_spill_buffer_read";
     public static final String MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER = "max_spill_read_buffer_bytes_per_driver";
@@ -1354,6 +1355,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SPILL_PARTITIONWISE_AGG)
     public boolean spillPartitionWiseAgg = false;
+
+    @VarAttr(name = SPILL_PARTITIONWISE_AGG_PARTITION_NUM, flag = VariableMgr.INVISIBLE)
+    public int spillPartitionWiseAggPartitionNum = 32;
 
     @VarAttr(name = SPILL_PARTITIONWISE_AGG_SKEW_ELIMINATION, flag = VariableMgr.INVISIBLE)
     public boolean spillPartitionWiseAggSkewElimination = true;
@@ -3376,6 +3380,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.spillPartitionWiseAgg;
     }
 
+    public void setSpillPartitionWiseAggPartitionNum(int value) {
+        this.spillPartitionWiseAggPartitionNum = value;
+    }
+
+    public int getSpillPartitionWiseAggPartitionNum() {
+        return this.spillPartitionWiseAggPartitionNum;
+    }
+
     public void setSpillPartitionWiseAggSkewElimination(boolean value) {
         this.spillPartitionWiseAggSkewElimination = value;
     }
@@ -5111,6 +5123,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             spillOptions.setSpillable_operator_mask(spillableOperatorMask);
             spillOptions.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
             spillOptions.setSpill_partitionwise_agg(spillPartitionWiseAgg);
+            spillOptions.setSpill_partitionwise_agg_partition_num(spillPartitionWiseAggPartitionNum);
             spillOptions.setSpill_partitionwise_agg_skew_elimination(spillPartitionWiseAggSkewElimination);
             spillOptions.setSpill_enable_direct_io(spillEnableDirectIO);
             spillOptions.setSpill_rand_ratio(spillRandRatio);

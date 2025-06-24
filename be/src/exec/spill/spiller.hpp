@@ -47,7 +47,18 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& gua
                     << ",spiller:" << this;
 
     if (_chunk_builder.chunk_schema()->empty()) {
-        _chunk_builder.chunk_schema()->set_schema(chunk);
+        if (!_opts.splittable && _opts.init_partition_nums > 0) {
+            // For splittable spiller, we need to set the schema before spilling.
+            // This is because the partitioned spiller needs to know the schema of the chunk.
+            std::shared_ptr<Chunk> new_chunk = chunk->clone_empty(0);
+            new_chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+            _chunk_builder.chunk_schema()->set_schema(new_chunk);
+        } else {
+            // For non-splittable spiller, we can set the schema after spilling.
+            // This is because the raw spiller does not need to know the schema of the chunk.
+            _chunk_builder.chunk_schema()->set_schema(chunk);
+        }
+
         RETURN_IF_ERROR(_serde->prepare());
         _init_max_block_nums();
     }

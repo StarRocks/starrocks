@@ -1,4 +1,8 @@
 -- name: test_spill_partition_wise_agg
+function: prepare_data("ssb", "${db[0]}")
+-- result:
+None
+-- !result
 drop table if exists res_table;
 -- result:
 -- !result
@@ -36,7 +40,6 @@ PARTITION p6 VALUES [("19970101"), ("19980101")),
 PARTITION p7 VALUES [("19980101"), ("19990101")))
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48 
 PROPERTIES (
-"colocate_with" = "groupa1",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -46,7 +49,6 @@ PROPERTIES (
 -- !result
 insert into lineorder2 select * from lineorder;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_10e946dda2304f5fb79627f4f6ee3a1d.lineorder'.")
 -- !result
 insert into lineorder2 
 select 384 as lo_orderkey, 

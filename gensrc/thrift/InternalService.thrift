@@ -173,7 +173,8 @@ struct TSpillOptions {
   25: optional i64 spill_hash_join_probe_op_max_bytes;
 
   26: optional bool spill_partitionwise_agg;
-  27: optional bool spill_partitionwise_agg_skew_elimination;
+  27: optional i32 spill_partitionwise_agg_partition_num;
+  28: optional bool spill_partitionwise_agg_skew_elimination;
 }
 
 // Query options with their respective defaults

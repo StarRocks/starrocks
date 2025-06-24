@@ -181,8 +181,7 @@ Status SpillablePartitionWiseDistinctSinkOperatorFactory::prepare(RuntimeState* 
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     // init spill options
-    _spill_options = std::make_shared<spill::SpilledOptions>(config::spill_init_partition);
-
+    _spill_options = std::make_shared<spill::SpilledOptions>(state->spill_partitionwise_agg_partition_num());
     _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;

@@ -1,4 +1,5 @@
 -- name: test_spill_partition_wise_agg
+function: prepare_data("ssb", "${db[0]}")
 drop table if exists res_table;
 drop table if exists lineorder2;
 CREATE TABLE `lineorder2` (
@@ -32,7 +33,6 @@ PARTITION p6 VALUES [("19970101"), ("19980101")),
 PARTITION p7 VALUES [("19980101"), ("19990101")))
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48 
 PROPERTIES (
-"colocate_with" = "groupa1",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",

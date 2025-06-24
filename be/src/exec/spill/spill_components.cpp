@@ -600,6 +600,14 @@ Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<S
         mem_table->reset();
         RETURN_IF_ERROR(
                 _compact_skew_chunks(input_num_rows, chunks, _spiller->options().opt_aggregator_params.value()));
+
+        if (!_spiller->options().splittable) {
+            std::for_each(chunks.begin(), chunks.end(), [](auto& chunk) {
+                DCHECK(chunk != nullptr);
+                chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+            });
+        }
+
         for (const auto& chunk : chunks) {
             RETURN_IF_ERROR(mem_table->append(chunk));
         }
