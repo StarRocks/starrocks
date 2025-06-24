@@ -49,6 +49,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
@@ -231,6 +232,29 @@ public class ScalarOperatorFunctions {
             Pair<Long, Long> value = computeYearWeekValue(year, month, day, weekBehaviour | 2);
             return value.first * 100 + value.second;
         }
+    }
+
+    public static class HashFunctions {
+        private static final long XX_HASH3_64_SEED = 0;
+
+        public static long hash64(String value, long seed) {
+            byte[] data = value.getBytes();
+            LongHashFunction hasher = LongHashFunction.xx3(seed);
+            return hasher.hashBytes(data, 0, data.length);
+        }
+    }
+
+    @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT)
+    public static ConstantOperator xxHash64(ConstantOperator... input) {
+        Preconditions.checkArgument(input.length > 0);
+        long hashValue = HashFunctions.XX_HASH3_64_SEED;
+        for (ConstantOperator constantOperator : input) {
+            if (constantOperator.isNull()) {
+                return ConstantOperator.createNull(Type.BIGINT);
+            }
+            hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
+        }
+        return ConstantOperator.createBigint(hashValue);
     }
 
     /**
