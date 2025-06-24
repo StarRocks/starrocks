@@ -1568,7 +1568,7 @@ Iceberg 支持 [Snapshot](./iceberg_timetravel.md)。有了最新 Snapshot，就
 
 下面的流程图在时间轴上显示了时间间隔。
 
-![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline.png)
+![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline_zh.png)
 
 ## 附录 B：元数据文件解析
 
