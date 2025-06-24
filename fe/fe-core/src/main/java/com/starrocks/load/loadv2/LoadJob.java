@@ -1220,7 +1220,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     @Override
-    public void onTaskFailed(long taskId, FailMsg failMsg) {
+    public void onTaskFailed(long taskId, FailMsg failMsg, TaskAttachment attachment) {
     }
 
     // This analyze will be invoked after the replay is finished.

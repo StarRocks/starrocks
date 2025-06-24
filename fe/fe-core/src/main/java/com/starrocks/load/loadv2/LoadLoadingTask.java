@@ -295,6 +295,8 @@ public class LoadLoadingTask extends LoadTask {
                         curCoordinator.getRejectedRecordPaths(),
                         System.currentTimeMillis() - writeBeginTime);
             } else {
+                attachment = new BrokerLoadingTaskAttachment(signature,
+                        TabletFailInfo.fromThrift(curCoordinator.getFailInfos()));
                 throw new LoadException(status.getErrorMsg());
             }
         } else {
