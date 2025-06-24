@@ -170,8 +170,11 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                 Lists.newArrayList(sumOutputColumnRef, ConstantOperator.createBigint(0)),
                 Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
                         Function.CompareMode.IS_IDENTICAL));
-        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(
-                Maps.newHashMap(Collections.singletonMap(aggColumnRef, ifNullCall)));
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
+        newProjectMap.putAll(newAggOperator.getColumnRefMap());
+        newProjectMap.remove(sumOutputColumnRef);
+        newProjectMap.put(aggColumnRef, ifNullCall);
+        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjectMap);
 
         // project(ifnull) -> agg(sum(__count__)) -> scan
         OptExpression optExpression = OptExpression.create(newProjectOperator);
