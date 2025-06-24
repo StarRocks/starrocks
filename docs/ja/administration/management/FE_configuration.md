@@ -348,12 +348,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: FE ノード内の Thrift サーバーが保持するバックログキューの長さ。
 - 導入バージョン: -
 
-
-
-
-
-
-
 ##### brpc_idle_wait_max_time
 
 - デフォルト: 10000
@@ -1048,6 +1042,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: はい
 - 説明: オプティマイザがスカラーオペレーターを書き換える最大回数。
+- 導入バージョン: -
+
+##### max_scalar_operator_optimize_depth
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperator 最適化を適用できる最大深度。
+- 導入バージョン: -
+
+##### max_scalar_operator_flat_children
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperator のフラットチルドレンの最大数。この上限を設定することで、オプティマイザがメモリを使いすぎるのを防ぐことができます。
 - 導入バージョン: -
 
 ##### enable_statistic_collect
