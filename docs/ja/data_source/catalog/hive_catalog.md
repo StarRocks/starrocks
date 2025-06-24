@@ -1224,7 +1224,7 @@ v2.5.5 以降、StarRocks は頻繁にアクセスされる Hive catalog のキ�
 
 以下の図は、理解を容易にするための時間間隔をタイムライン上に示しています。
 
-![Timeline for updating and discarding cached metadata](../../_assets/catalog_timeline.png)
+![Timeline for updating and discarding cached metadata](../../_assets/hive_catalog_timeline.png)
 
 その後、StarRocks は次のルールに従ってメタデータを更新または破棄します：
 
