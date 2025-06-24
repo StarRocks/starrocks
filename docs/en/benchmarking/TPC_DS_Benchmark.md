@@ -14,7 +14,7 @@ This benchmark tests a total of 99 complex SQL queries against 24 tables whose d
 
 The test is performed against the TPC-DS 1 TB dataset on StarRocks and Trino. The unit of the following results are milliseconds.
 
-![TPC-DS-SR](../_assets/benchmark/SSB-SR.png)
+![TPC-DS-SR](../_assets/benchmark/TPC-DS-SR.png)
 
 For StarRocks, the test queries are performed on its native tables (under both shared-nothing and shared-data architecture) and Iceberg Catalog (under shared-data architecture). For Trino, the test queries are performed on the same Iceberg Catalog. Both tests for StarRocks and Trino on the Iceberg Catalog use AWS Glue as the metastore, and Parquet-formatted data with ZSTD compression.
 

@@ -14,7 +14,7 @@ TPC-DS 模拟了决策支持系统的几个普遍适用的方面，包括查询�
 
 测试在 StarRocks 和 Trino 上对 TPC-DS 1 TB 数据集进行。以下结果的单位是毫秒。
 
-![TPC-DS-SR](../_assets/benchmark/SSB-SR.png)
+![TPC-DS-SR](../_assets/benchmark/TPC-DS-SR.png)
 
 对于 StarRocks，测试查询在其内表（在存算一体和存算分离架构下）和 Iceberg Catalog（在存算分离架构下）上进行。对于 Trino，测试查询在相同的 Iceberg Catalog 上进行。StarRocks 和 Trino 在 Iceberg Catalog 上的测试都使用 AWS Glue 作为元存储，并使用 ZSTD 压缩的 Parquet 格式数据。
 

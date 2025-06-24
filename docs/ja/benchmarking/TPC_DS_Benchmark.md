@@ -14,7 +14,7 @@ TPC-DS は、意思決定支援システムの一般的に適用可能な側面�
 
 テストは、StarRocks と Trino 上で TPC-DS 1 TB データセットに対して実施されます。以下の結果の単位はミリ秒です。
 
-![TPC-DS-SR](../_assets/benchmark/SSB-SR.png)
+![TPC-DS-SR](../_assets/benchmark/TPC-DS-SR.png)
 
 StarRocks では、テストクエリはその内部テーブル（共有なしおよび共有データアーキテクチャの両方）と Iceberg Catalog（共有データアーキテクチャの下）で実行されます。Trino では、同じ Iceberg Catalog でテストクエリが実行されます。Iceberg Catalog 上の StarRocks と Trino の両方のテストは、メタストアとして AWS Glue を使用し、ZSTD 圧縮された Parquet 形式のデータを使用します。
 
