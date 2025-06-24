@@ -100,7 +100,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             long feCheckpointJournalId = consistentIds.first;
             if (feImageJournalId < feCheckpointJournalId) {
                 Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(feImageJournalId,
-                        feCheckpointJournalId);
+                        feCheckpointJournalId, job.needClusterSnapshotInfo());
                 if (!createFEImageRet.first) {
                     errMsg = "checkpoint failed for FE image: " + createFEImageRet.second;
                     break;
@@ -115,7 +115,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             long starMgrCheckpointJournalId = consistentIds.second;
             if (starMgrImageJournalId < starMgrCheckpointJournalId) {
                 Pair<Boolean, String> createStarMgrImageRet = starMgrController
-                        .runCheckpointControllerWithIds(starMgrImageJournalId, starMgrCheckpointJournalId);
+                        .runCheckpointControllerWithIds(starMgrImageJournalId, starMgrCheckpointJournalId, false);
                 if (!createStarMgrImageRet.first) {
                     errMsg = "checkpoint failed for starMgr image: " + createStarMgrImageRet.second;
                     break;
@@ -124,6 +124,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 errMsg = "checkpoint journal id for starMgr is smaller than image version";
                 break;
             }
+            job.setClusterSnapshotInfo(feController.getClusterSnapshotInfo());
             LOG.info("Finished create image for starMgr image, version: {}", consistentIds.second);
 
             // step 3: upload all finished image file
