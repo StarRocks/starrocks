@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "exec/pipeline/ProfileManager.h"
+#include "exec/pipeline/profile_manager.h"
 #include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"

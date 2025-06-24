@@ -124,6 +124,15 @@ public class ConnectProcessor {
 
     protected StmtExecutor executor = null;
 
+    private static final Object QPS_LOCK = new Object();
+    private static volatile long lastQpsCheckTime = System.currentTimeMillis();
+    private static volatile long lastQueryCount = MetricRepo.COUNTER_QUERY_ALL.getValue();
+    private static volatile double lastQps = 0.0;
+
+    public static double getCurrentQps() {
+        return lastQps;
+    }
+
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
     }
@@ -263,6 +272,25 @@ public class ConnectProcessor {
                         ctx.getSessionVariable().getBigQueryLogScanBytesThreshold());
                 ctx.getAuditEventBuilder().setBigQueryLogScanRowsThreshold(
                         ctx.getSessionVariable().getBigQueryLogScanRowsThreshold());
+            }
+
+            // calculate qps if necessary
+            long now = System.currentTimeMillis();
+            long currentQueryCount = MetricRepo.COUNTER_QUERY_ALL.getValue();
+            long intervalMs = now - lastQpsCheckTime;
+            long intervalCount = currentQueryCount - lastQueryCount;
+            if (intervalMs >= 1000 || intervalCount >= 50) {
+                synchronized (QPS_LOCK) {
+                    if (now - lastQpsCheckTime >= 1000 || currentQueryCount - lastQueryCount >= 50) {
+                        if (intervalMs > 0) {
+                            lastQps = intervalCount * 1000.0 / intervalMs;
+                        } else {
+                            lastQps = 0.0;
+                        }
+                        lastQpsCheckTime = now;
+                        lastQueryCount = currentQueryCount;
+                    }
+                }
             }
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);

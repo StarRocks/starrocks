@@ -16,12 +16,12 @@
 
 #include <memory>
 
-#include "profile_manager.h"
 #include "agent/master_info.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
+#include "profile_manager.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"

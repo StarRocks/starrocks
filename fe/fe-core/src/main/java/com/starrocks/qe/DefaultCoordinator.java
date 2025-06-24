@@ -473,6 +473,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public boolean enableAsyncProfileInBe() {
+        // right now only support pipeline query which is not short circuit query
         return jobSpec.isNeedReport() && jobSpec.isEnablePipeline() && !isShortCircuit && !isLoad() &&
                 connectContext.getSessionVariable().isEnableAsyncProfileInBe();
     }
