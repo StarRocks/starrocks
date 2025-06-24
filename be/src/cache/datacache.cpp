@@ -251,7 +251,7 @@ void DataCache::try_release_resource_before_core_dump() {
     };
 
     if (_local_cache != nullptr && need_release("data_cache")) {
-        (void) _local_cache->update_mem_quota(0, false);
+        (void)_local_cache->update_mem_quota(0, false);
     }
 }
 
