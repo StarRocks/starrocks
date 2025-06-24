@@ -248,6 +248,9 @@ public class ScalarOperatorFunctions {
         Preconditions.checkArgument(input.length > 0);
         long hashValue = HashFunctions.XX_HASH3_64_SEED;
         for (ConstantOperator constantOperator : input) {
+            if (constantOperator.isNull()) {
+                return ConstantOperator.createNull(Type.BIGINT);
+            }
             hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
         }
         return ConstantOperator.createBigint(hashValue);
