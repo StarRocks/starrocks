@@ -795,26 +795,6 @@ PROPERTIES(
 );
 ```
 
-または
-
-```SQL
-CREATE TABLE example_db.table_hash
-(
-    k1 BIGINT,
-    k2 LARGEINT,
-    v1 VARCHAR(2048) REPLACE,
-    v2 SMALLINT SUM DEFAULT "10"
-)
-ENGINE=olap
-PRIMARY KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2)
-PROPERTIES(
-    "storage_type"="column",
-    "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2015-06-04 00:00:00"
-);
-```
-
 ### レンジパーティション、ハッシュバケット法、列指向（カラムナ）ストレージを使用し、ストレージ媒体とクールダウン時間を設定した重複キーテーブルを作成する
 
 LESS THAN

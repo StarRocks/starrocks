@@ -906,26 +906,6 @@ PROPERTIES(
 );
 ```
 
-或
-
-``` sql
-CREATE TABLE example_db.table_hash
-(
-    k1 BIGINT,
-    k2 LARGEINT,
-    v1 VARCHAR(2048) REPLACE,
-    v2 SMALLINT DEFAULT "10"
-)
-ENGINE = olap
-PRIMARY KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2)
-PROPERTIES(
-    "storage_type" = "column",
-    "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2025-06-04 00:00:00"
-);
-```
-
 ### 创建分区表
 
 创建一个 olap 表，使用 Range 分区，使用 Hash 分桶，默认使用列存，相同 key 的记录同时存在，设置初始存储介质和冷却时间。
