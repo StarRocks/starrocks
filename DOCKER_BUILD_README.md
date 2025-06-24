@@ -35,7 +35,7 @@ This directory provides Docker-based build tools for StarRocks that use the offi
 
 ### 1. `build-in-docker.sh` - Full-Featured Build Script
 
-The main build script with all options from the original `build.sh`:
+The main build script that automatically passes through all `build.sh` options:
 
 ```bash
 # Basic usage
@@ -55,6 +55,9 @@ The main build script with all options from the original `build.sh`:
 
 # Custom image
 ./build-in-docker.sh --image starrocks/dev-env-ubuntu:latest --fe
+
+# Future build.sh options work automatically
+./build-in-docker.sh --be --new-future-option
 ```
 
 ### 2. `docker-dev.sh` - Simple Wrapper
@@ -70,6 +73,10 @@ Quick commands for common tasks:
 ./docker-dev.sh test-fe         # Run FE tests
 ./docker-dev.sh test-be         # Run BE tests
 ./docker-dev.sh test-all        # Run all tests
+
+# Pass through any build.sh options
+./docker-dev.sh build --be --with-gcov
+./docker-dev.sh build --fe --new-option
 ```
 
 ### 3. `docker-compose.dev.yml` - Docker Compose
@@ -95,6 +102,14 @@ docker-compose -f docker-compose.dev.yml down -v
 ```
 
 ## 🔧 Configuration
+
+### Volume Mounts
+
+The Docker scripts automatically mount:
+- **Source code**: `$(pwd):/workspace` - Your local repository
+- **Maven cache**: `~/.m2:/tmp/.m2` - Maven dependencies cache for faster builds
+
+**Note**: The Maven cache is shared between your host system and the Docker container, so dependencies downloaded during builds are persisted and reused across build sessions.
 
 ### Environment Variables
 
@@ -138,7 +153,11 @@ output/
 └── java-extensions/    # Java extensions
 ```
 
-The Docker container mounts your local repository, so all build outputs are available on your host system.
+The Docker container mounts your local repository and Maven cache, so all build outputs are available on your host system and dependencies are cached for faster subsequent builds.
+
+**Multi-User Support**: Container names include username and user ID to prevent conflicts on shared development machines (e.g., `starrocks-build-username-1001-1234567890`).
+
+**Automatic Extensibility**: All unrecognized options are automatically passed through to `build.sh`, so new build options work without updating the Docker scripts.
 
 ## 🐛 Troubleshooting
 
@@ -211,9 +230,10 @@ docker pull starrocks/dev-env-ubuntu:latest
 ## 📊 Performance Tips
 
 1. **Use parallel builds**: `./build-in-docker.sh --be -j $(nproc)`
-2. **Persistent volumes**: Use Docker Compose for Maven cache persistence
+2. **Maven cache**: Automatically mounted from `~/.m2` for faster dependency resolution
 3. **Memory allocation**: Increase Docker memory limit for faster builds
 4. **SSD storage**: Use SSD for Docker storage driver
+5. **Persistent volumes**: Use Docker Compose for additional cache persistence
 
 ## 🤝 Integration with IDEs
 

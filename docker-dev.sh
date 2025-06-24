@@ -23,7 +23,7 @@ usage() {
     cat << EOF
 Simple Docker development wrapper for StarRocks
 
-Usage: $0 <command>
+Usage: $0 <command> [additional_options]
 
 COMMANDS:
     shell           Open interactive shell in dev environment
@@ -34,12 +34,15 @@ COMMANDS:
     test-fe         Run Frontend tests
     test-be         Run Backend tests
     test-all        Run all tests
+    build           Pass through any build.sh options directly
 
 EXAMPLES:
-    $0 shell           # Open development shell
-    $0 build-fe         # Build Frontend
-    $0 clean-build      # Clean and build everything
-    $0 test-fe          # Run Frontend tests
+    $0 shell                        # Open development shell
+    $0 build-fe                     # Build Frontend
+    $0 clean-build                  # Clean and build everything
+    $0 test-fe                      # Run Frontend tests
+    $0 build --be --with-gcov       # Pass through custom build options
+    $0 build --fe --new-option      # Any new build.sh option works
 
 EOF
 }
@@ -76,6 +79,11 @@ case "${1:-}" in
     test-all)
         log_info "Running all tests..."
         ./build-in-docker.sh --test
+        ;;
+    build)
+        # Pass through all remaining arguments to build-in-docker.sh
+        shift
+        ./build-in-docker.sh "$@"
         ;;
     *)
         usage
