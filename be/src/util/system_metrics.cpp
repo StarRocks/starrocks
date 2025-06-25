@@ -291,7 +291,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
     registry->register_metric("jit_cache_mem_bytes", &_memory_metrics->jit_cache_mem_bytes);
     registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
-    registry->register_metric("chunk_allocator_mem_bytes", &_memory_metrics->chunk_allocator_mem_bytes);
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
     registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
@@ -386,7 +385,6 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(page_cache_mem_tracker, storage_page_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(jit_cache_mem_tracker, jit_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
-    SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
     SET_MEM_METRIC_VALUE(passthrough_mem_tracker, passthrough_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
