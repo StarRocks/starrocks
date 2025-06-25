@@ -285,6 +285,10 @@ public class TypeManager {
         if (ConnectContext.get() != null && SessionVariableConstants.DECIMAL.equalsIgnoreCase(ConnectContext.get()
                 .getSessionVariable().getCboEqBaseType())) {
             baseType = Type.DEFAULT_DECIMAL128;
+            // TODO(stephen): support auto scale up decimal precision
+            if (type1.isDecimal256() || type2.isDecimal256()) {
+                baseType = Type.DEFAULT_DECIMAL256;
+            }
             if (type1.isDecimalOfAnyVersion() || type2.isDecimalOfAnyVersion()) {
                 baseType = type1.isDecimalOfAnyVersion() ? type1 : type2;
             }
