@@ -97,6 +97,10 @@ set @last_refresh_time = (
 );
 -- result:
 -- !result
+select sleep(3);
+-- result:
+1
+-- !result
 refresh materialized view user_tags_mv1 force with sync mode;
 select 
     TABLE_NAME,
