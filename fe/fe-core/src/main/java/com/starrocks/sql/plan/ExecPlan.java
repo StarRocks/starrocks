@@ -144,17 +144,6 @@ public class ExecPlan {
     public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
     }
-<<<<<<< HEAD
-=======
-
-    public Map<Integer, PlanFragment> getSplitProduceFragments() {
-        return splitProduceFragments;
-    }
-
-    public Map<PhysicalHashJoinOperator, HashJoinNode> getJoinNodeMap() {
-        return joinNodeMap;
-    }
->>>>>>> 0a72bd1684 ([BugFix] Use operator id not node id for feedback (#57695))
 
     public OptExpression getPhysicalPlan() {
         return physicalPlan;
