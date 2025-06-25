@@ -269,7 +269,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(SystemInfoService infoService) {
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(SystemInfoService infoService,
+            boolean allowDecommission) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
@@ -282,7 +283,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 }
                 ReplicaState state = replica.getState();
                 if (infoService.checkBackendAlive(replica.getBackendId())
-                        && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
+                        && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER
+                                || (allowDecommission && state == ReplicaState.DECOMMISSION))) {
                     map.put(replica, replica.getPathHash());
                 }
             }
