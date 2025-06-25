@@ -166,6 +166,18 @@ public class ExecPlan {
         optExpressions.put(id, optExpression);
     }
 
+    public static void assignOperatorIds(OptExpression root) {
+        IdGenerator<PlanNodeId> operatorIdGenerator = PlanNodeId.createGenerator();
+        assignOperatorIds(root, operatorIdGenerator);
+    }
+
+    private static void assignOperatorIds(OptExpression root, IdGenerator<PlanNodeId> operatorIdGenerator) {
+        root.getOp().setOperatorId(operatorIdGenerator.getNextId().asInt());
+        for (OptExpression child : root.getInputs()) {
+            assignOperatorIds(child, operatorIdGenerator);
+        }
+    }
+
     public OptExpression getOptExpression(int planNodeId) {
         return optExpressions.get(planNodeId);
     }
