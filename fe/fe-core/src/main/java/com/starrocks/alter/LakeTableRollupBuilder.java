@@ -70,12 +70,11 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
         for (Partition partition : olapTable.getPartitions()) {
             long partitionId = partition.getId();
             TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-
+            // create shard group
+            long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
+                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
-                // create shard group
-                long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId,
                         MaterializedIndex.IndexState.SHADOW, shardGroupId);
@@ -100,9 +99,15 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                         .collect(Collectors.toList());
                 List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                         originTablets.size(),
+<<<<<<< HEAD
                         olapTable.getPartitionFilePathInfo(partitionId),
                         olapTable.getPartitionFileCacheInfo(partitionId),
                         shardGroupId, originTableIds, shardProperties, workerGroupId.get());
+=======
+                        olapTable.getPartitionFilePathInfo(physicalPartitionId),
+                        olapTable.getPartitionFileCacheInfo(physicalPartitionId),
+                        shardGroupId, originTableIds, shardProperties, computeResource);
+>>>>>>> 15648435bb ([BugFix] LakeRollup should use physical partition ID instead of partition ID. (#60073))
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TabletMeta shadowTabletMeta =
