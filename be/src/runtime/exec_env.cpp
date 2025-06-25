@@ -233,7 +233,6 @@ Status GlobalEnv::_init_mem_tracker() {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
     _update_mem_tracker->set_level(2);
-    _chunk_allocator_mem_tracker = regist_tracker(MemTrackerType::CHUNK_ALLOCATOR, -1, process_mem_tracker());
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
@@ -244,7 +243,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _poco_connection_pool_mem_tracker = regist_tracker(MemTrackerType::POCO_CONNECTION_POOL, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
-    MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
+    MemChunkAllocator::init_metrics();
 
     return Status::OK();
 }

@@ -1055,7 +1055,7 @@ int meta_tool_main(int argc, char** argv) {
     google::ParseCommandLineFlags(&argc, &argv, true);
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
-    starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
+    starrocks::MemChunkAllocator::init_metrics();
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();

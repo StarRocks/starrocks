@@ -61,7 +61,7 @@ MemPool::~MemPool() {
     int64_t total_bytes_released = 0;
     for (auto& chunk : chunks_) {
         total_bytes_released += chunk.chunk.size;
-        MemChunkAllocator::instance()->free(chunk.chunk);
+        MemChunkAllocator::free(chunk.chunk);
     }
     StarRocksMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
 }
@@ -80,7 +80,7 @@ void MemPool::free_all() {
     int64_t total_bytes_released = 0;
     for (auto& chunk : chunks_) {
         total_bytes_released += chunk.chunk.size;
-        MemChunkAllocator::instance()->free(chunk.chunk);
+        MemChunkAllocator::free(chunk.chunk);
     }
     chunks_.clear();
     next_chunk_size_ = INITIAL_CHUNK_SIZE;
@@ -132,7 +132,7 @@ bool MemPool::find_chunk(size_t min_size, bool check_limits) {
 
     // Allocate a new chunk. Return early if allocate fails.
     MemChunk chunk;
-    if (!MemChunkAllocator::instance()->allocate(chunk_size, &chunk)) {
+    if (!MemChunkAllocator::allocate(chunk_size, &chunk)) {
         if (tls_thread_status.is_catched()) {
             throw std::bad_alloc();
         } else {
