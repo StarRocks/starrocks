@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -33,11 +34,13 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
@@ -78,7 +81,13 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                                                LogicalScanOperator scanOperator,
                                                OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
+
+        // only need to handle count(*)
         Map<ColumnRefOperator, CallOperator> aggs = aggregationOperator.getAggregations();
+        Preconditions.checkArgument(aggs.entrySet().size() == 1);
+        ColumnRefOperator aggColumnRef = aggs.entrySet().iterator().next().getKey();
+        CallOperator aggCall = aggs.entrySet().iterator().next().getValue();
+        Preconditions.checkArgument(aggCall.getFnName().equals(FunctionSet.COUNT) && !aggCall.isDistinct());
 
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
@@ -104,35 +113,24 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return null;
         }
 
-        ColumnRefOperator placeholderColumn = null;
-
-        for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
-            CallOperator aggCall = kv.getValue();
-            // ___count___
+        ColumnRefOperator sumOutputColumnRef =
+                columnRefFactory.create("sum_" + aggCall.getFnName(), aggCall.getType(), aggCall.isNullable());
+        {
+            // generate a placeholder column for scan node.
+            // ___count___ must be the column name for backend code.
             String metaColumnName = "___" + aggCall.getFnName() + "___";
-            Type columnType = aggCall.getType();
+            Column c = new Column(metaColumnName, Type.NULL);
+            c.setIsAllowNull(true);
+            ColumnRefOperator placeholderColumn =
+                    columnRefFactory.create(metaColumnName, aggCall.getType(), aggCall.isNullable());
+            columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);
+            columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
+            newScanColumnRefs.put(placeholderColumn, c);
 
-            if (placeholderColumn == null) {
-                Column c = new Column(metaColumnName, Type.NULL);
-                c.setIsAllowNull(true);
-                placeholderColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
-                columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);
-                columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
-                newScanColumnRefs.put(placeholderColumn, c);
-            }
-
-            Function aggFunction = aggCall.getFunction();
-            String newAggFnName = aggCall.getFnName();
-            Type newAggReturnType = aggCall.getType();
-            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM,
-                        new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
-                newAggFnName = FunctionSet.SUM;
-                newAggReturnType = Type.BIGINT;
-            }
-            CallOperator newAggCall = new CallOperator(newAggFnName, newAggReturnType,
-                    Collections.singletonList(placeholderColumn), aggFunction);
-            newAggCalls.put(kv.getKey(), newAggCall);
+            CallOperator sumCall = new CallOperator(FunctionSet.SUM, Type.BIGINT,
+                    Collections.singletonList(placeholderColumn),
+                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL));
+            newAggCalls.put(sumOutputColumnRef, sumCall);
         }
 
         Map<Column, ColumnRefOperator> newScanColumnMeta = Maps.newHashMap();
@@ -163,12 +161,27 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             LOG.warn("Exception caught when set scan operator predicates", e);
             return null;
         }
+
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), newAggCalls);
-
         newAggOperator.setProjection(aggregationOperator.getProjection());
-        OptExpression optExpression = OptExpression.create(newAggOperator);
-        optExpression.getInputs().add(OptExpression.create(newMetaScan));
+
+        // ifnull(sum(__count__)), 0) to avoid null result
+        CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
+                Lists.newArrayList(sumOutputColumnRef, ConstantOperator.createBigint(0)),
+                Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
+                        Function.CompareMode.IS_IDENTICAL));
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
+        newProjectMap.putAll(newAggOperator.getColumnRefMap());
+        newProjectMap.remove(sumOutputColumnRef);
+        newProjectMap.put(aggColumnRef, ifNullCall);
+        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjectMap);
+
+        // project(ifnull) -> agg(sum(__count__)) -> scan
+        OptExpression optExpression = OptExpression.create(newProjectOperator);
+        OptExpression aggExpression = OptExpression.create(newAggOperator);
+        optExpression.getInputs().add(aggExpression);
+        aggExpression.getInputs().add(OptExpression.create(newMetaScan));
         return optExpression;
     }
 
