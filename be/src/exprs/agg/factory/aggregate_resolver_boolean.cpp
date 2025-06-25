@@ -22,17 +22,7 @@ namespace starrocks {
 
 void AggregateFuncResolver::register_boolean() {
     auto bool_or_func = std::make_shared<BoolOrAggregateFunction>();
-
-    _infos_mapping.emplace(std::make_tuple("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, false, false), bool_or_func);
-    _infos_mapping.emplace(std::make_tuple("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, false, true), bool_or_func);
-
-    _infos_mapping.emplace(std::make_tuple("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, true, false), bool_or_func);
-    _infos_mapping.emplace(std::make_tuple("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, true, true), bool_or_func);
-
-    _infos_mapping.emplace(std::make_tuple("boolor_agg", TYPE_BOOLEAN, TYPE_BOOLEAN, false, false), bool_or_func);
-    _infos_mapping.emplace(std::make_tuple("boolor_agg", TYPE_BOOLEAN, TYPE_BOOLEAN, false, true), bool_or_func);
-    _infos_mapping.emplace(std::make_tuple("boolor_agg", TYPE_BOOLEAN, TYPE_BOOLEAN, true, false), bool_or_func);
-    _infos_mapping.emplace(std::make_tuple("boolor_agg", TYPE_BOOLEAN, TYPE_BOOLEAN, true, true), bool_or_func);
+    add_aggregate_mapping_notnull<TYPE_BOOLEAN, TYPE_BOOLEAN>("bool_or", true, bool_or_func);
 }
 
 } // namespace starrocks

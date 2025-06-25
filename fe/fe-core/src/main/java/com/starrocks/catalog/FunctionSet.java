@@ -300,6 +300,8 @@ public class FunctionSet {
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
+    public static final String BOOL_OR = "bool_or";
+    public static final String BOOL_AGG = "boolor_agg";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";

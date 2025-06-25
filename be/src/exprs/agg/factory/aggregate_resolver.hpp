@@ -250,11 +250,6 @@ public:
         return nullptr;
     }
 
-    template <LogicalType ArgLT, LogicalType ResultLT, bool IsWindowFunc, bool IsNull>
-    std::enable_if_t<!isArithmeticLT<ArgLT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
-        return nullptr;
-    }
-
     AggregateFuncResolver(const AggregateFuncResolver&) = delete;
     const AggregateFuncResolver& operator=(const AggregateFuncResolver&) = delete;
 
