@@ -180,7 +180,7 @@ TEST_F(DataCacheUtilsTest, clean_stale_cache_data) {
     }
 
     std::string stale_data_path_conf = fmt::format("{};{};{}", old_dir, old_dir2, new_dir);
-    std::vector<std::string> cur_cache_paths = { std::filesystem::absolute(std::filesystem::path(new_dir)) };
+    std::vector<std::string> cur_cache_paths = {std::filesystem::absolute(std::filesystem::path(new_dir))};
     DataCacheUtils::clean_stale_datacache(stale_data_path_conf, cur_cache_paths);
 
     {

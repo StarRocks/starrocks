@@ -1305,17 +1305,16 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * lru: the typical `Least Recently Used` eviction policy.
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
-// Only used to clean the old and stale datacache files.
-// Users usually do not need to configure it.
-CONF_String(datacache_stale_data_path, "");
-CONF_Alias(datacache_stale_data_path, datacache_disk_path);
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with
 // the old configuration files.
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
-CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+// The `block_cache_disk_path` and `datacache_disk_path` has been deprecated,
+// users should not configure it.
+CONF_String(block_cache_disk_path, "");
+CONF_Alias(block_cache_disk_path, datacache_disk_path);
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
