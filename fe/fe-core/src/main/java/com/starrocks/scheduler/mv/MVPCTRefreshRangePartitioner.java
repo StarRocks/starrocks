@@ -294,10 +294,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
         // check the related partition table
         Set<String> mvToRefreshPartitionNames = getMvPartitionNamesToRefresh(mvRangePartitionNames);
-        if (mv.getVirtualPartitionMapping() != null) {
-            // if mv has virtual partition mapping, should refresh all partitions in the mapping
-            mvToRefreshPartitionNames.addAll(mv.getVirtualPartitionMapping().keySet());
-        }
         if (mvToRefreshPartitionNames.isEmpty()) {
             logger.info("No need to refresh materialized view partitions");
             return mvToRefreshPartitionNames;

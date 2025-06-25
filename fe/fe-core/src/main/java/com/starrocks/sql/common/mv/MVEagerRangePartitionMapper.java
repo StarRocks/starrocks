@@ -161,27 +161,31 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
                 .max(Map.Entry.comparingByValue())
                 .get();
 
-        PartitionMapping head;
         String functionName = maxRange.getKey();
-        if (functionName.equalsIgnoreCase(FunctionSet.DATE_ADD)) {
-            head = Collections.max(originMappings);
-        } else if (functionName.equalsIgnoreCase(FunctionSet.DATE_SUB)) {
-            head = Collections.min(originMappings);
-        } else {
-            throw new SemanticException("Unsupported function for mv partition mapping: " + functionName);
-        }
-
         // Generate partition mapping set
-        for (Integer i = 0; i < maxRange.getValue(); i++) {
-            LocalDateTime lowerDateTime = SyncPartitionUtils.nextUpperDateTime(head.getLowerDateTime(),
-                    granularity, functionName);
-            LocalDateTime upperDateTime = SyncPartitionUtils.nextUpperDateTime(head.getUpperDateTime(),
-                    granularity, functionName);
-            PartitionMapping nextMapping = new PartitionMapping(lowerDateTime, upperDateTime);
-            head = nextMapping;
-            result.add(nextMapping);
-        }
+        // For example, func2Range: DATE_ADD->1, if the original partition mappings are:
+        // 2023-10-01 00:00:00, 2023-10-02 00:00:00
+        // 2023-10-02 00:00:00, 2023-10-03 00:00:00
+        // 2023-10-10 00:00:00, 2023-10-11 00:00:00
+        // Generate the virtual partitions:
+        // 2023-10-03 00:00:00, 2023-10-04 00:00:00
+        // 2023-10-11 00:00:00, 2023-10-12 00:00:00
+        for (PartitionMapping originMapping : originMappings) {
+            PartitionMapping tempMapping = new PartitionMapping(
+                    originMapping.getLowerDateTime(), originMapping.getUpperDateTime());
 
+            for (Integer i = 0; i < maxRange.getValue(); i++) {
+                LocalDateTime lowerDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getLowerDateTime(),
+                        granularity, functionName);
+                LocalDateTime upperDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getUpperDateTime(),
+                        granularity, functionName);
+                PartitionMapping nextMapping = new PartitionMapping(lowerDateTime, upperDateTime);
+                tempMapping = nextMapping;
+                result.add(nextMapping);
+            }
+
+        }
+        result.removeAll(originMappings);
         return result;
     }
 
