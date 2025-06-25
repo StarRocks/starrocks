@@ -1,5 +1,8 @@
 #include "exec/pipeline/table_function_operator.h"
 
+#include "exec/chunk_buffer_memory_manager.h"
+#include "exec/pipeline/exchange/local_exchange.h"
+#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 
@@ -162,6 +165,59 @@ TEST_F(TableFunctionOperatorTest, check_mem_leak) {
     TableFunctionOperator op(&factory, 1, 1, 0, _tnode);
     ASSERT_TRUE(op.prepare(&_runtime_state).ok());
     op.close(&_runtime_state);
+}
+
+TEST_F(TableFunctionOperatorTest, key_partition_exchanger) {
+    auto pseudo_plan_node_id = -200;
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(4096, 134217728);
+
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    auto c = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true);
+    c->append_datum(Datum(1));
+    c->append_datum(Datum(2));
+    c->append_datum(Datum(1));
+    c->append_datum(Datum(2));
+    auto null_datum = Datum();
+    null_datum.set_null();
+    c->append_datum(null_datum);
+    c->append_datum(null_datum);
+    chunk->append_column(std::move(c), 0);
+    ObjectPool _pool;
+    auto _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+
+    std::vector<TExprNode> nodes;
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::INT);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 0;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+    std::vector<ExprContext*> expr_ctxs;
+    Expr::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr);
+    Expr::prepare(expr_ctxs, _runtime_state);
+    Expr::open(expr_ctxs, _runtime_state);
+
+    auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(1, pseudo_plan_node_id, mem_mgr);
+    local_exchange_source->set_degree_of_parallelism(1);
+    auto source = local_exchange_source->create(1, 1);
+    auto local_exchange = std::make_shared<KeyPartitionExchanger>(mem_mgr, local_exchange_source.get(), expr_ctxs, 1,
+                                                                  std::vector<std::string>{"identity"});
+
+    local_exchange->accept(chunk, 0);
+
+    auto local_exchange2 = std::make_shared<KeyPartitionExchanger>(mem_mgr, local_exchange_source.get(), expr_ctxs, 1,
+                                                                   std::vector<std::string>{});
+    local_exchange2->accept(chunk, 0);
 }
 
 } // namespace starrocks::pipeline

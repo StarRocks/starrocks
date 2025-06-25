@@ -90,7 +90,7 @@ StatusOr<std::string> HiveUtils::iceberg_make_partition_name(
             const auto& meta = metadatas.at(i);
             auto column = columns[i];
             ASSIGN_OR_RETURN(std::string value,
-                             iceberg_column_value(meta.type, column, transform_exprs[i], field_is_null[i]));
+                             iceberg_column_value(meta.type, column, 0, transform_exprs[i], field_is_null[i]));
             if (!support_null_partition && field_is_null[i]) {
                 return Status::NotSupported("Partition value can't be null.");
             }
@@ -101,7 +101,7 @@ StatusOr<std::string> HiveUtils::iceberg_make_partition_name(
             ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk));
             auto type = column_evaluators[i]->type();
             ASSIGN_OR_RETURN(std::string value,
-                             iceberg_column_value(type, column, transform_exprs[i], field_is_null[i]));
+                             iceberg_column_value(type, column, 0, transform_exprs[i], field_is_null[i]));
             if (!support_null_partition && field_is_null[i]) {
                 return Status::NotSupported("Partition value can't be null.");
             }
@@ -112,22 +112,24 @@ StatusOr<std::string> HiveUtils::iceberg_make_partition_name(
 }
 
 StatusOr<std::string> HiveUtils::iceberg_column_value(const TypeDescriptor& type_desc, const ColumnPtr& column,
-                                                      const std::string& transform_expr, int8_t& is_null) {
+                                                      const int idx, const std::string& transform_expr,
+                                                      int8_t& is_null) {
     std::string value;
     is_null = false;
-    if (column->size() < 1) {
-        return Status::InternalError("column size of extra chunk in make partition name is less than one");
-    } else if (column->is_null(0)) {
+    if (idx >= column->size()) {
+        return Status::InternalError("column size of extra chunk in make partition name is less than index:" +
+                                     std::to_string(idx));
+    } else if (column->is_null(idx)) {
         value = "null";
         is_null = true;
     } else if (transform_expr == "void") {
         value = "null";
         is_null = true;
     } else if (transform_expr == "year") {
-        const auto years_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        const auto years_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         value = std::to_string(years_from_epoch + 1970);
     } else if (transform_expr == "month") {
-        const auto months_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        const auto months_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         int year = 1970 + months_from_epoch / 12;
         int month = months_from_epoch % 12 + 1;
         std::tm timeinfo = {};
@@ -137,25 +139,25 @@ StatusOr<std::string> HiveUtils::iceberg_column_value(const TypeDescriptor& type
         std::strftime(buffer, sizeof(buffer), "%Y-%m", &timeinfo);
         value = std::string(buffer);
     } else if (transform_expr == "day") {
-        const auto days_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        const auto days_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(days_from_epoch) * 86400;
         std::tm* gmt = std::gmtime(&seconds);
         char buffer[20];
         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", gmt);
         value = std::string(buffer);
     } else if (transform_expr == "hour") {
-        const auto hours_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        const auto hours_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(hours_from_epoch) * 3600;
         std::tm* gmt = std::gmtime(&seconds);
         char buffer[20];
         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", gmt);
         value = std::string(buffer);
     } else if (transform_expr.compare(0, 8, "truncate") == 0) {
-        ASSIGN_OR_RETURN(value, column_value(type_desc, column, 0));
+        ASSIGN_OR_RETURN(value, column_value(type_desc, column, idx));
     } else if (transform_expr.compare(0, 6, "bucket") == 0) {
-        ASSIGN_OR_RETURN(value, column_value(type_desc, column, 0));
+        ASSIGN_OR_RETURN(value, column_value(type_desc, column, idx));
     } else if (transform_expr == "identity") {
-        ASSIGN_OR_RETURN(value, column_value(type_desc, column, 0));
+        ASSIGN_OR_RETURN(value, column_value(type_desc, column, idx));
     } else {
         return Status::InternalError("Unsupported type for iceberg partition transform:" + transform_expr);
     }

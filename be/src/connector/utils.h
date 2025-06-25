@@ -46,7 +46,8 @@ public:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
 
     static StatusOr<std::string> iceberg_column_value(const TypeDescriptor& type_desc, const ColumnPtr& column,
-                                                      const std::string& transform_expr, int8_t& is_null);
+                                                      const int idx, const std::string& transform_expr,
+                                                      int8_t& is_null);
 
     template <typename T>
     static StatusOr<std::string> format_decimal_value(T value, int scale);

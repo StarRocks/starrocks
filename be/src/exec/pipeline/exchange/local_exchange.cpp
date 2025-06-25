@@ -266,10 +266,12 @@ size_t OrderedPartitionExchanger::_find_min_channel_id() {
 
 KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                                              LocalExchangeSourceOperatorFactory* source,
-                                             std::vector<ExprContext*> partition_expr_ctxs, const size_t num_sinks)
+                                             std::vector<ExprContext*> partition_expr_ctxs, const size_t num_sinks,
+                                             std::vector<std::string> transform_exprs)
         : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
           _source(source),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)),
+          _transform_exprs(std::move(transform_exprs)) {}
 
 Status KeyPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
@@ -297,15 +299,23 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
         partition_columns.push_back(std::move(partition_column));
     }
 
-    std::unordered_map<std::vector<std::string>, std::vector<uint32_t>> key2indices;
-    std::unordered_map<std::vector<std::string>, std::vector<std::pair<TypeDescriptor, ColumnPtr>>> key2datum;
+    std::map<std::vector<std::optional<std::string>>, std::vector<uint32_t>> key2indices;
+    std::map<std::vector<std::optional<std::string>>, std::vector<std::pair<TypeDescriptor, ColumnPtr>>> key2datum;
     for (int i = 0; i < num_rows; i++) {
-        std::vector<std::string> partition_key;
+        std::vector<std::optional<std::string>> partition_key;
 
         for (int j = 0; j < partition_columns.size(); j++) {
             auto type = _partition_expr_ctxs[j]->root()->type();
-            ASSIGN_OR_RETURN(auto partition_value, connector::HiveUtils::column_value(type, partition_columns[j], i));
-            partition_key.push_back(std::move(partition_value));
+            int8_t is_null = 0;
+            std::string partition_value;
+
+            if (_transform_exprs.size() > 0) {
+                ASSIGN_OR_RETURN(partition_value, connector::HiveUtils::iceberg_column_value(
+                                                          type, partition_columns[j], i, _transform_exprs[j], is_null));
+            } else {
+                ASSIGN_OR_RETURN(partition_value, connector::HiveUtils::column_value(type, partition_columns[j], i));
+            }
+            partition_key.emplace_back(is_null ? std::nullopt : std::make_optional(partition_value));
         }
         key2indices[partition_key].push_back(i);
         //record the origin datum of partition key
