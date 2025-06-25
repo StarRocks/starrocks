@@ -14,7 +14,10 @@
 
 package com.starrocks.alter;
 
+import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.RollupProcDir;
@@ -38,6 +41,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class LakeRollupJobTest {
@@ -162,6 +166,59 @@ public class LakeRollupJobTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCreateSyncMvWithEnableFileBundling() throws Exception {
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        lakeRollupJob4.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, lakeRollupJob4.getJobState());
+
+        lakeRollupJob4.runWaitingTxnJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, lakeRollupJob4.getJobState());
+
+        List<List<Comparable>> infos = new ArrayList<>();
+        lakeRollupJob4.getInfo(infos);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertTrue(!infos.get(0).get(10).equals(FeConstants.NULL_STRING));
+
+        Assert.assertEquals(1, infos.size());
+        lakeRollupJob4.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, lakeRollupJob4.getJobState());
+
+        while (lakeRollupJob4.getJobState() != AlterJobV2.JobState.FINISHED) {
+            lakeRollupJob4.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob4.getJobState());
+
+        for (Partition partition : table.getPartitions()) {
+            long partitionId = partition.getId();
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                List<ShardGroupInfo> shardGroupInfos = null;
+                shardGroupInfos = GlobalStateMgr.getCurrentState().getStarOSAgent().listShardGroup();
+                Assert.assertTrue(shardGroupInfos != null && !shardGroupInfos.isEmpty());
+                Optional<ShardGroupInfo> targetGroup = shardGroupInfos.stream()
+                        .filter(group -> group.getGroupId() == physicalPartition.getShardGroupId())
+                        .findFirst();
+                Assert.assertTrue(targetGroup.isPresent());
+                Map<String, String> labels = targetGroup.get().getLabelsMap();
+                if (!labels.containsKey("partitionId")) {
+                    Assert.assertTrue(false);
+                }
+                long targetPartitionId = Long.parseLong(labels.get("partitionId"));
+                Assert.assertEquals(targetPartitionId, partitionId);
+            }
+        }
+    }
+
+    @Test
+>>>>>>> 15648435bb ([BugFix] LakeRollup should use physical partition ID instead of partition ID. (#60073))
     public void testGetInfo() {
         List<List<Comparable>> infos = new ArrayList<>();
         lakeRollupJob.getInfo(infos);
