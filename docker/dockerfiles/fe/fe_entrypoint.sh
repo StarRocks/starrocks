@@ -94,7 +94,7 @@ probe_leader_for_pod0()
             log_stderr "FE service is alive, check if has leader ..."
 
             memlist=`show_frontends $svc`
-            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $2}'`
+            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $3}'`
             if [[ "x$leader" != "x" ]] ; then
                 # has leader, done
                 log_stderr "Find leader: $leader!"
@@ -145,7 +145,7 @@ probe_leader_for_podX()
         NC="nc -z -w 2"
         if $NC $svc $QUERY_PORT ; then
             log_stderr "FE service is alive, check if has leader ..."
-            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $2}'`
+            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $3}'`
             if [[ "x$leader" != "x" ]] ; then
                 # has leader, done
                 log_stderr "Find leader: $leader!"
