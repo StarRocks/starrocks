@@ -221,12 +221,11 @@ public class Utils {
         return true;
     }
 
-    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
-                                               long baseVersion, long newVersion,
-                                               Map<Long, Double> compactionScores,
-                                               Map<ComputeNode, List<Long>> nodeToTablets,
-                                               ComputeResource computeResource,
-                                               Map<Long, Long> tabletRowNum) 
+    public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                                           long baseVersion, long newVersion,
+                                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                                           ComputeResource computeResource,
+                                                           AggregatePublishVersionRequest request)
             throws NoAliveBackendException, RpcException {
         if (nodeToTablets == null) {
             nodeToTablets = new HashMap<>();
@@ -256,13 +255,6 @@ public class Utils {
             throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
         }
 
-        // choose one aggregator
-        LakeAggregator lakeAggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(computeResource);
-        if (aggregatorNode == null) {
-            throw new NoAliveBackendException("No alive compute node for handle aggregate publish version");
-        }
-        AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         List<ComputeNodePB> computeNodes = new ArrayList<>();
         List<PublishVersionRequest> publishReqs = new ArrayList<>();
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
@@ -285,15 +277,45 @@ public class Utils {
             computeNodes.add(computeNodePB);
             publishReqs.add(singleReq);
         }
+        if (request.getComputeNodes() != null) {
+            List<ComputeNodePB> originalComputeNodes = new ArrayList<>(request.getComputeNodes());
+            computeNodes.addAll(originalComputeNodes);
+        }
+        if (request.getPublishReqs() != null) {
+            List<PublishVersionRequest> originalPublishReqs = new ArrayList<>(request.getPublishReqs());
+            publishReqs.addAll(originalPublishReqs);
+        }
+
         request.setComputeNodes(computeNodes);
-        request.setPublishReqs(publishReqs);
+        request.setPublishReqs(publishReqs);                
+    }
+
+    public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                                                          long baseVersion, ComputeResource computeResource,
+                                                          Map<Long, Double> compactionScores,
+                                                          Map<Long, Long> tabletRowNum) 
+            throws NoAliveBackendException, RpcException {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (computeResource == null || !warehouseManager.isResourceAvailable(computeResource)) {
+            LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}[{}]", computeResource,
+                    warehouseManager.getBackgroundWarehouse().getId(),
+                    warehouseManager.getBackgroundWarehouse().getName());
+            computeResource = warehouseManager.getBackgroundComputeResource();
+        }
+
+        // choose one aggregator
+        LakeAggregator lakeAggregator = new LakeAggregator();
+        ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(computeResource);
+        if (aggregatorNode == null) {
+            throw new NoAliveBackendException("No alive compute node for handle aggregate publish version");
+        }
 
         LakeService lakeService = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
         Future<PublishVersionResponse> future = lakeService.aggregatePublishVersion(request);
 
         try {
             PublishVersionResponse response = future.get();
-            
             if (response != null) {
                 TStatusCode code = TStatusCode.findByValue(response.status.statusCode);
                 if (code != TStatusCode.OK) {
@@ -313,6 +335,24 @@ public class Utils {
             }
         } catch (Exception e) {
             throw new RpcException(aggregatorNode.getHost(), e.getMessage());
+        }
+    }
+
+    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                               long baseVersion, long newVersion,
+                                               Map<Long, Double> compactionScores,
+                                               Map<ComputeNode, List<Long>> nodeToTablets,
+                                               ComputeResource computeResource,
+                                               Map<Long, Long> tabletRowNum)
+            throws NoAliveBackendException, RpcException {
+        AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
+        try {
+            createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion,
+                                                nodeToTablets, computeResource, request);
+            sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
+                                               tabletRowNum);
+        } catch (Exception e) {
+            throw e;
         }
     }
 
