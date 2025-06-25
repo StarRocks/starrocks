@@ -335,7 +335,8 @@ public class ConnectProcessor {
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog())
-                .setWarehouse(ctx.getCurrentWarehouseName());
+                .setWarehouse(ctx.getCurrentWarehouseName())
+                .setCustomQueryId(ctx.getCustomQueryId());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
         ctx.getState().setIsQuery(true);
@@ -346,7 +347,7 @@ public class ConnectProcessor {
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
             if (Config.enable_print_sql) {
-                LOG.info("Begin to execute sql, type: query，query id:{}, sql:{}", ctx.getQueryId(), originStmt);
+                LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
             }
             List<StatementBase> stmts;
             try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
