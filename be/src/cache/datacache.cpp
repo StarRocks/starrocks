@@ -41,11 +41,7 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
     _global_env = GlobalEnv::GetInstance();
     _store_paths = store_paths;
     _block_cache = std::make_shared<BlockCache>();
-
-    if (!config::datacache_enable) {
-        config::disable_storage_page_cache = true;
-        config::block_cache_enable = false;
-    }
+    _page_cache = std::make_shared<StoragePageCache>();
 
 #if defined(WITH_STARCACHE)
     if (config::datacache_engine == "" || config::datacache_engine == "cachelib" ||
@@ -57,6 +53,12 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
 #else
     config::datacache_engine = "lrucache";
 #endif
+
+    if (!config::datacache_enable) {
+        config::disable_storage_page_cache = true;
+        config::block_cache_enable = false;
+        return Status::OK();
+    }
 
     ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
 
@@ -129,7 +131,7 @@ Status DataCache::_init_lrucache_engine(const CacheOptions& cache_options) {
 }
 
 Status DataCache::_init_page_cache() {
-    _page_cache = std::make_shared<StoragePageCache>(_local_cache.get());
+    _page_cache->init(_local_cache.get());
     _page_cache->init_metrics();
     LOG(INFO) << "storage page cache init successfully";
     return Status::OK();
