@@ -13,11 +13,6 @@
 namespace starrocks::pipeline {
 RuntimeProfile* ProfileManager::build_merged_instance_profile(
         const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material, ObjectPool* obj_pool) {
-    // LOG(WARNING) << "Before task - fragment_profile_material content: "
-    //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
-    //              << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
-    //              << " instance_is_done=" << fragment_profile_material->instance_is_done
-    //              << " be_number=" << fragment_profile_material->be_number;
     RuntimeProfile* new_instance_profile = nullptr;
     RuntimeProfile* instance_profile = fragment_profile_material->_instance_profile.get();
     if (fragment_profile_material->_profile_level >= TPipelineProfileLevel::type::DETAIL) {
@@ -44,7 +39,7 @@ RuntimeProfile* ProfileManager::build_merged_instance_profile(
                 continue;
             }
 
-            auto* merged_driver_profile = RuntimeProfile::merge_isomorphic_profiles<true>(obj_pool, driver_profiles);
+            auto* merged_driver_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool, driver_profiles);
 
             // use the name of pipeline' profile as pipeline driver's
             merged_driver_profile->set_name(pipeline_profile->name());
@@ -123,14 +118,14 @@ ProfileManager::ProfileManager() {
 }
 
 void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
-    auto profile_task = [=, fragment_profile_material = std::move(fragment_profile_material)]() {
+    auto profile_merge_task = [=, fragment_profile_material = std::move(fragment_profile_material)]() {
         SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
         ObjectPool obj_pool;
         RuntimeProfile* merged_instance_profile = build_merged_instance_profile(fragment_profile_material, &obj_pool);
         std::shared_ptr<TFragmentProfile> params =
                 create_report_profile_params(fragment_profile_material, merged_instance_profile);
-        auto report_task = [params, fragment_profile_material, this]() {
+        auto profile_report_task = [params, fragment_profile_material, this]() {
             SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
             const auto& fe_addr = fragment_profile_material->_fe_addr;
             int max_retry_times = config::report_exec_rpc_request_retry_num;
@@ -160,21 +155,18 @@ void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMat
                 }
                 break;
             }
-
-            // LOG(WARNING) << "report task: "
-            //              << " instance_is_done=" << fragment_profile_material->_instance_is_done
-            //              << " _instance_id=" << fragment_profile_material->_instance_id
-            //              << " queryId=" << print_id(fragment_profile_material->_query_id)
-            //              << " report success=" << success;
         };
 
-        (void)_report_thread_pool->submit_func(std::move(report_task));
+        Status submit_report_status = _report_thread_pool->submit_func(std::move(profile_report_task));
+        if (!submit_report_status.ok()) {
+            profile_report_task();
+        }
     };
 
-    Status status = _merge_thread_pool->submit_func(profile_task);
+    Status status = _merge_thread_pool->submit_func(profile_merge_task);
     if (!status.ok()) {
-        LOG(WARNING) << "Cannot submit profile report: " << status.to_string();
-        profile_task();
+        LOG(WARNING) << "Cannot submit merge-profile task: " << status.to_string();
+        profile_merge_task();
     }
 }
 

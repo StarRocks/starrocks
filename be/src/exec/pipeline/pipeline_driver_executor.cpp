@@ -333,8 +333,11 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 done, query_ctx->query_id(), fragment_ctx->runtime_state()->fragment_instance_id(),
                 fragment_ctx->runtime_state()->query_options().query_type, fe_addr);
         if (enable_async_profile_in_be) {
+            // new async way: profile merger thread-pool will merge profile and toThrift
+            // profile report thread-pool will call asyncProfileReport rpc
             _profile_manager->build_and_report_profile(fragment_profile_material);
         } else {
+            // the old sync way: driver merge profile and toThrift, then call report_exec_status rpc
             query_profile = ProfileManager::build_merged_instance_profile(fragment_profile_material, &obj_pool);
             // Load channel profile will be merged on FE
             load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();

@@ -925,7 +925,6 @@ void RuntimeProfile::foreach_children(Visitor&& callback) {
     }
 }
 
-template <bool isFinal>
 RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
                                                           bool require_identical) {
     DCHECK(!profiles.empty());
@@ -968,6 +967,10 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     auto names_it = profile->_child_counter_map.find(name);
                     if (names_it != profile->_child_counter_map.end()) {
                         for (auto& child_name : names_it->second) {
+                            auto child_counter_it = profile->_counter_map.find(child_name);
+                            if (child_counter_it != profile->_counter_map.end()) {
+                                __builtin_prefetch(child_counter_it->second.first, 0, 1);
+                            }
                             name_queue.push(child_name);
                         }
                     }
@@ -1388,13 +1391,5 @@ std::string RuntimeProfile::get_children_name_string() {
 
     return ss.str();
 }
-
-template RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles<true>(ObjectPool* obj_pool,
-                                                                         std::vector<RuntimeProfile*>& profiles,
-                                                                         bool require_identical);
-
-template RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles<false>(ObjectPool* obj_pool,
-                                                                          std::vector<RuntimeProfile*>& profiles,
-                                                                          bool require_identical);
 
 } // namespace starrocks

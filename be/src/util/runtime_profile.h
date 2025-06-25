@@ -688,12 +688,8 @@ public:
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile for the final merge
     // running profile will create new profile for merge
-    template <bool isFinal = false>
     static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
                                                      bool require_identical = true);
-
-    // static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
-    //                                                  bool require_identical = true);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
