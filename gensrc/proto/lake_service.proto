@@ -297,6 +297,12 @@ message VacuumRequest {
     repeated TabletInfoPB tablet_infos = 7;
     // Whether enable file bundling
     optional bool enable_file_bundling = 8;
+    // retain version info of tablet metadata
+    // The version here means the version of tablet metadata or the physical partition version
+    // (because vacuun request is send by <node, physical partition>)
+    // All tablet metadata and their data files of these verisons should be retained and can not be
+    // vaccummed.
+    repeated int64 retain_versions = 9;
 }
 
 message VacuumResponse {
