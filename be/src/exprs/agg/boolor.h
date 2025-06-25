@@ -80,8 +80,8 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   size_t row_start, size_t row_end) const {
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
         if (this->data(state).result) {
             return;
         }
@@ -91,7 +91,7 @@ public:
             const auto& data_column = nullable_column.data_column();
             const auto& column = down_cast<const InputColumnType&>(*data_column);
 
-            for (size_t i = row_start; i < row_end; ++i) {
+            for (size_t i = 0; i < chunk_size; ++i) {
                 if (!nullable_column.is_null(i)) {
                     bool value = column.get_data()[i];
                     if (value) {
@@ -103,7 +103,7 @@ public:
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
 
-            for (size_t i = row_start; i < row_end; ++i) {
+            for (size_t i = 0; i < chunk_size; ++i) {
                 bool value = column.get_data()[i];
                 if (value) {
                     this->data(state).result = true;

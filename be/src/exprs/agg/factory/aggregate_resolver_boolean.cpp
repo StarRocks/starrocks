@@ -24,7 +24,6 @@ void AggregateFuncResolver::register_boolean() {
     auto bool_or_func = std::make_shared<BoolOrAggregateFunction>();
 
     _infos_mapping.emplace(std::make_tuple("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, false, false), bool_or_func);
-
     _infos_mapping.emplace(std::make_tuple("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, false, true), bool_or_func);
 
     _infos_mapping.emplace(std::make_tuple("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, true, false), bool_or_func);
