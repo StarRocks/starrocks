@@ -27,6 +27,8 @@ set @last_refresh_time = (
     from information_schema.materialized_views where table_name = 'user_tags_mv1'
 );
 
+select sleep(3);
+
 -- multiple refresh tasks
 refresh materialized view user_tags_mv1 force with sync mode;
 select 
