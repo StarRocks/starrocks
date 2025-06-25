@@ -89,10 +89,10 @@ public:
         if (columns[0]->is_nullable()) {
             const auto& nullable_column = down_cast<const NullableColumn&>(*columns[0]);
             const auto& data_column = nullable_column.data_column();
-            const auto& column = down_cast<const InputColumnType&>(*data_column);
 
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (!nullable_column.is_null(i)) {
+                    const auto& column = down_cast<const InputColumnType&>(*data_column);
                     bool value = column.get_data()[i];
                     if (value) {
                         this->data(state).result = true;
@@ -192,6 +192,23 @@ public:
         } else {
             auto* output = down_cast<BooleanColumn*>(to);
             output->append(this->data(state).result);
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        DCHECK_GT(end, start);
+
+        for (size_t i = start; i < end; ++i) {
+            if (dst->is_nullable()) {
+                auto* nullable = down_cast<NullableColumn*>(dst);
+                auto& data_column = nullable->data_column();
+                auto* output = down_cast<BooleanColumn*>(data_column.get());
+                output->get_data()[i] = this->data(state).result;
+            } else {
+                auto* output = down_cast<BooleanColumn*>(dst);
+                output->get_data()[i] = this->data(state).result;
+            }
         }
     }
 

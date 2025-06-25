@@ -1589,10 +1589,10 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void testInPredicate() throws Exception {
-        String sql = "select bool_agg(v1) from t0";
+    public void testBoolOrAgg() throws Exception {
+        String sql = "select boolor_agg(v1) from t0";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "bool_agg");
+        assertContains(plan, "bool_or");
     }
 
 

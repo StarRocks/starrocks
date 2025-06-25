@@ -300,8 +300,6 @@ public class FunctionSet {
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
-    public static final String BOOL_OR = "bool_or";
-    public static final String BOOL_AGG = "boolor_agg";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -1647,12 +1645,6 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.BOOL_OR,
                 Lists.newArrayList(Type.BOOLEAN),
                 Type.BOOLEAN, Type.BOOLEAN,
-                false, false, false));
-
-        // BOOLOR_AGG: Alias for BOOL_OR
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.BOOLOR_AGG,
-                Lists.newArrayList(Type.BOOLEAN),
-                Type.BOOLEAN, Type.BOOLEAN,
-                false, false, false));
+                false, true, false));
     }
 }

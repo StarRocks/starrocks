@@ -35,7 +35,7 @@ public class SyntaxSugars {
         FUNCTION_PARSER = ImmutableMap.<String, Function<FunctionCallExpr, FunctionCallExpr>>builder()
                 .put(FunctionSet.ILIKE, SyntaxSugars::ilike)
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
-                .put(FunctionSet.BOOL_AGG, SyntaxSugars::boolAgg)
+                .put(FunctionSet.BOOLOR_AGG, SyntaxSugars::boolOrAgg)
                 .put(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH, SyntaxSugars::hllSketchCount)
                 .build();
     }
@@ -80,7 +80,7 @@ public class SyntaxSugars {
         return new FunctionCallExpr(FunctionSet.DS_HLL_COUNT_DISTINCT, call.getChildren());
     }
 
-    private static FunctionCallExpr boolAgg(FunctionCallExpr call) {
+    private static FunctionCallExpr boolOrAgg(FunctionCallExpr call) {
         return new FunctionCallExpr(FunctionSet.BOOL_OR, call.getChildren());
     }
 }
