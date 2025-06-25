@@ -280,6 +280,8 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
     return put_tablet_metadata(std::move(metadata_ptr));
 }
 
+DEFINE_FAIL_POINT(get_real_location_failed);
+DEFINE_FAIL_POINT(tablet_meta_not_found);
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
 Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
@@ -288,7 +290,8 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     }
 
     BundleTabletMetadataPB bundle_meta;
-    auto partition_location = tablet_metadata_root_location(tablet_metas.begin()->first);
+    ASSIGN_OR_RETURN(auto partition_location,
+                     _location_provider->real_location(tablet_metadata_root_location(tablet_metas.begin()->first)));
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
     for (auto& [tablet_id, meta] : tablet_metas) {
         (*bundle_meta.mutable_tablet_to_schema())[tablet_id] = meta.schema().id();
@@ -393,13 +396,8 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
-    // There are several possible cases for getting tablet metadata:
-    // 1. If the partition is an bundle partition (in cache),
-    //    then we will first try to read the metadata from the bundle metadata location,
-    //    if not found, then we will read the metadata from the single tablet metadata.
-    // 2. If the partition is not an bundle partition (not in cache),
-    //    then we will read the metadata from the single tablet metadata location.
-    if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
+    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
+    if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
         tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
         if (tablet_metadata_or.status().is_not_found()) {
             tablet_metadata_or =
@@ -428,7 +426,8 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     }
     StatusOr<TabletMetadataPtr> metadata_or;
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
-    if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
+    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
+    if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
         metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
         if (metadata_or.status().is_not_found()) {
             metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
