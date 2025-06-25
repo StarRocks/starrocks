@@ -96,6 +96,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -333,6 +334,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+        }
+        return appendVirtualPartitions(tentative, mvToRefreshedPartitions);
+    }
+
+    /**
+     * Appends virtual partitions to the set of materialized view partitions to be refreshed.
+     *
+     * @param tentative Indicates whether the operation is tentative or final.
+     * @param mvToRefreshedPartitions The set of materialized view partitions to be refreshed.
+     * @return A set of materialized view partitions including virtual partitions if applicable.
+     */
+    private Set<String> appendVirtualPartitions(boolean tentative, Set<String> mvToRefreshedPartitions) {
+        if (tentative) {
+            return mvToRefreshedPartitions;
+        }
+        int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
+        if (CollectionUtils.isEmpty(mvToRefreshedPartitions) || mvToRefreshedPartitions.size() <= partitionRefreshNumber) {
+            HashSet<String> newSet = Sets.newHashSet(mvToRefreshedPartitions);
+            newSet.addAll(mv.getVirtualPartitionMapping().keySet());
+            mvContext.getExecuteOption().setVirtualPartitions(mv.getVirtualPartitionMapping().keySet());
+            return newSet;
         }
         return mvToRefreshedPartitions;
     }
@@ -752,6 +774,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         int priority = mvContext.executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
                 mvContext.executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        option.setVirtualPartitions(mvContext.getExecuteOption().getVirtualPartitions());
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, properties);

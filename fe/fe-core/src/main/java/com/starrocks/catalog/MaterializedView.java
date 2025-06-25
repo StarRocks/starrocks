@@ -552,8 +552,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // and in each round of checkpoint
     private boolean reloaded = false;
 
-    private transient Map<String, Range<PartitionKey>> virtualPartitionMapping;
-    private transient List<Expr> unionOtherOutputExpression;
+    // This is used to store the virtual partition of union expressions.
+    private volatile Map<String, Range<PartitionKey>> virtualPartitionMapping;
+    private volatile List<Expr> unionOtherOutputExpression;
+    @SerializedName(value = "serializedUnionOtherOutputExprs")
+    private List<ExpressionSerializedObject> serializedUnionOtherOutputExprs;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -1883,6 +1886,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
         }
+        this.serializedUnionOtherOutputExprs = new ArrayList<>();
+        if (unionOtherOutputExpression != null) {
+            for (Expr unionOtherOutputExpr : unionOtherOutputExpression) {
+                if (unionOtherOutputExpr != null) {
+                    serializedUnionOtherOutputExprs.add(
+                            new ExpressionSerializedObject(unionOtherOutputExpr.toSql()));
+                }
+            }
+        }
     }
 
     @Override
@@ -1923,6 +1935,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
                     partitionExprMaps.put(partitionExpr, partitionSlotRef);
                 }
+            }
+        }
+
+        if (serializedUnionOtherOutputExprs != null) {
+            unionOtherOutputExpression = new ArrayList<>();
+            for (ExpressionSerializedObject expressionSql : serializedUnionOtherOutputExprs) {
+                Expr unionOtherOutputExpr = parsePartitionExpr(expressionSql.getExpressionSql());
+                if (unionOtherOutputExpr == null) {
+                    LOG.warn("parse union other output expr failed, sql: {}", expressionSql.getExpressionSql());
+                    continue;
+                }
+                unionOtherOutputExpression.add(unionOtherOutputExpr);
             }
         }
     }

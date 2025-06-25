@@ -389,6 +389,7 @@ public class MaterializedViewAnalyzer {
             QueryRelation queryRelation = queryStatement.getQueryRelation();
             List<Expr> unionOtherOutputExpression;
             if (queryRelation instanceof UnionRelation) {
+                // if the query relation is union relation, we need to get the other output expression
                 unionOtherOutputExpression = ((UnionRelation) queryRelation).getOtherOutputExpression();
                 statement.setUnionOtherOutputExpression(unionOtherOutputExpression);
             }

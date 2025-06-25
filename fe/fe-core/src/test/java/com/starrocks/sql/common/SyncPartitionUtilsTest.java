@@ -28,12 +28,14 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.mv.MVEagerRangePartitionMapper;
 import com.starrocks.sql.common.mv.MVLazyRangePartitionMapper;
@@ -41,6 +43,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,6 +54,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.PRangeCell.toRangeMap;
+import static com.starrocks.sql.common.TimeUnitUtils.DAY;
+import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
+import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
+import static com.starrocks.sql.common.TimeUnitUtils.MONTH;
+import static com.starrocks.sql.common.TimeUnitUtils.QUARTER;
+import static com.starrocks.sql.common.TimeUnitUtils.WEEK;
+import static com.starrocks.sql.common.TimeUnitUtils.YEAR;
 
 public class SyncPartitionUtilsTest {
 
@@ -756,4 +766,69 @@ public class SyncPartitionUtilsTest {
                 res);
     }
 
+
+    @Test
+    public void testNextUpperDateTime_MINUTE_SUB() {
+        LocalDateTime input = LocalDateTime.of(2023, 6, 15, 10, 30, 0, 0);
+        LocalDateTime expected = LocalDateTime.of(2023, 6, 15, 10, 29, 0, 0);
+        Assert.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, MINUTE, FunctionSet.DATE_SUB));
+    }
+
+    @Test
+    public void testNextUpperDateTime_HOUR_SUB() {
+        LocalDateTime input = LocalDateTime.of(2023, 6, 15, 10, 0, 0, 0);
+        LocalDateTime expected = LocalDateTime.of(2023, 6, 15, 9, 0, 0, 0);
+        Assert.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, HOUR, FunctionSet.DATE_SUB));
+    }
+
+    @Test
+    public void testNextUpperDateTime_DAY_SUB() {
+        LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
+        LocalDateTime expected = LocalDateTime.of(2023, 6, 14, 0, 0, 0, 0);
+        Assert.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, DAY, FunctionSet.DATE_SUB));
+    }
+
+    @Test
+    public void testNextUpperDateTime_WEEK_SUB() {
+        LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
+        LocalDateTime expected = LocalDateTime.of(2023, 6, 8, 0, 0, 0, 0);
+        Assert.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, WEEK, FunctionSet.DATE_SUB));
+    }
+
+    @Test
+    public void testNextUpperDateTime_MONTH_SUB() {
+        LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
+        LocalDateTime expected = LocalDateTime.of(2023, 5, 1, 0, 0, 0, 0);
+        Assert.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, MONTH, FunctionSet.DATE_SUB));
+    }
+
+    @Test
+    public void testNextUpperDateTime_QUARTER_SUB() {
+        LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
+        LocalDateTime expected = LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0);
+        Assert.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, QUARTER, FunctionSet.DATE_SUB));
+    }
+
+    @Test
+    public void testNextUpperDateTime_YEAR_SUB() {
+        LocalDateTime input = LocalDateTime.of(2023, 6, 15, 0, 0, 0, 0);
+        LocalDateTime expected = LocalDateTime.of(2022, 1, 1, 0, 0, 0, 0);
+        Assert.assertEquals(expected, SyncPartitionUtils.nextUpperDateTime(input, YEAR, FunctionSet.DATE_SUB));
+    }
+
+    @Test
+    public void testNextUpperDateTime_InvalidDateFunc() {
+        LocalDateTime input = LocalDateTime.now();
+        Assert.assertThrows(SemanticException.class, () -> {
+            SyncPartitionUtils.nextUpperDateTime(input, MINUTE, "INVALID_FUNC");
+        });
+    }
+
+    @Test
+    public void testNextUpperDateTime_InvalidGranularity() {
+        LocalDateTime input = LocalDateTime.now();
+        Assert.assertThrows(SemanticException.class, () -> {
+            SyncPartitionUtils.nextUpperDateTime(input, "INVALID_GRANULARITY", FunctionSet.DATE_SUB);
+        });
+    }
 }
