@@ -76,7 +76,6 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import jline.internal.Log;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -605,7 +604,7 @@ public class PartitionSelector {
                 return result;
             }
         } catch (Exception e) {
-            Log.warn("Failed to prune partitions by FE's constant evaluation, transform to partitions_meta instead",
+            LOG.warn("Failed to prune partitions by FE's constant evaluation, transform to partitions_meta instead",
                     e);
         }
 
