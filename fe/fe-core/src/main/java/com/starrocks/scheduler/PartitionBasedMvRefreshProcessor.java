@@ -360,6 +360,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
         if (CollectionUtils.isEmpty(mvToRefreshedPartitions) || mvToRefreshedPartitions.size() <= partitionRefreshNumber) {
+            if (mv.getVirtualPartitionMapping() == null || mv.getVirtualPartitionMapping().isEmpty()) {
+                return mvToRefreshedPartitions;
+            }
             HashSet<String> newSet = Sets.newHashSet(mvToRefreshedPartitions);
             newSet.addAll(mv.getVirtualPartitionMapping().keySet());
             mvContext.getExecuteOption().setVirtualPartitions(mv.getVirtualPartitionMapping().keySet());
