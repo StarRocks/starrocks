@@ -1381,10 +1381,12 @@ public class FunctionSet {
             }
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
-            Type retType = Type.DECIMAL128;
+            Type retType;
             // TODO(stephen): support auto scale up decimal precision
             if (type.isDecimal256()) {
                 retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
             }
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(type), retType, retType,
@@ -1416,6 +1418,8 @@ public class FunctionSet {
             // TODO(stephen): support auto scale up decimal precision
             if (type.isDecimal256()) {
                 retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
             }
             addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
                     Lists.newArrayList(type), retType, Type.VARBINARY,
@@ -1511,10 +1515,12 @@ public class FunctionSet {
                     false, true, false));
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
-            Type retType = Type.DECIMAL128;
+            Type retType;
             // TODO(stephen): support auto scale up decimal precision
             if (type.isDecimal256()) {
                 retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
             }
             addBuiltin(AggregateFunction.createBuiltin(AVG,
                     Lists.newArrayList(type), retType, Type.VARBINARY,

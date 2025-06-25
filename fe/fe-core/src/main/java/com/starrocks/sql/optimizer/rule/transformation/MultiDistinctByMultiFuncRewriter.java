@@ -118,10 +118,13 @@ public class MultiDistinctByMultiFuncRewriter {
                         Lists.newArrayList(sumColRef, countColRef));
                 if (multiAvg.getType().isDecimalV3()) {
                     // There is not need to apply ImplicitCastRule to divide operator of decimal types.
-                    // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-                    ScalarType decimalType = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    // but we should cast BIGINT-typed countColRef into DECIMAL(38,0) or DECIMAL(76,0).
+                    // TODO(stephen): support auto scale up decimal precision
+                    ScalarType decimalType;
                     if (multiAvg.getType().isDecimal256()) {
                         decimalType = ScalarType.createDecimalV3NarrowestType(76, 0);
+                    } else {
+                        decimalType = ScalarType.createDecimalV3NarrowestType(38, 0);
                     }
                     multiAvg.getChildren().set(
                             1, new CastOperator(decimalType, multiAvg.getChild(1), true));

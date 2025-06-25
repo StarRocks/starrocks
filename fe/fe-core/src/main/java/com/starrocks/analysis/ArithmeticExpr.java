@@ -293,11 +293,13 @@ public class ArithmeticExpr extends Expr {
                     result.rhsTargetType = ScalarType.createDecimalV3Type(commonPtype, rhsPrecision, rhsScale);
                     return result;
                 } else if (returnScale <= maxDecimalPrecision) {
-                    // returnPrecision > 38 and returnScale <= 38, the multiplication is computable but the result maybe
-                    // overflow, so use decimal128 arithmetic and adopt maximum decimal precision(38) as precision of
-                    // the result.
+                    // returnPrecision > maxDecimalPrecision(38 or 76) and returnScale <= maxDecimalPrecision,
+                    // the multiplication is computable but the result maybe overflow,
+                    // so use decimal128 or decimal256 arithmetic and adopt maximum decimal precision(38) or precision(76)
+                    // as precision of the result.
                     // for examples:
                     // decimal128(23,5) * decimal64(18,4) => decimal128(38, 9).
+                    // TODO(stephen): support auto scale up decimal precision
                     result.returnType =
                             ScalarType.createDecimalV3Type(defaultMaxDecimalType, maxDecimalPrecision, returnScale);
                     result.lhsTargetType =

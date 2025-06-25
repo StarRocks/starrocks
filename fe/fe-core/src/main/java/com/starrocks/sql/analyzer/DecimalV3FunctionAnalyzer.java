@@ -288,10 +288,11 @@ public class DecimalV3FunctionAnalyzer {
         if (!argType.isDecimalV3()) {
             return fn;
         }
-        ScalarType decimalType =
-                ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
+        ScalarType decimalType;
         if (argType.isDecimal256()) {
             decimalType = ScalarType.createDecimalV3NarrowestType(76, ((ScalarType) argType).getScalarScale());
+        } else {
+            decimalType = ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
         }
         AggregateFunction newFn = new AggregateFunction(
                 fn.getFunctionName(), Arrays.asList(sumFn.getArgs()), decimalType,
@@ -315,11 +316,12 @@ public class DecimalV3FunctionAnalyzer {
         }
         ScalarType decimalType = (ScalarType) argType;
         AggregateFunction fn = (AggregateFunction) sumFn;
-        ScalarType retType = ScalarType.createDecimalV3Type(
-                PrimitiveType.DECIMAL128, 38, decimalType.getScalarScale());
+        ScalarType retType;
         // TODO(stephen): support auto scale up decimal precision
         if (argType.isDecimal256()) {
             retType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, decimalType.getScalarScale());
+        } else {
+            retType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, decimalType.getScalarScale());
         }
         AggregateFunction newFn = new AggregateFunction(
                 fn.getFunctionName(), Collections.singletonList(decimalType), retType,
@@ -437,10 +439,13 @@ public class DecimalV3FunctionAnalyzer {
                 commonType = argumentTypes[0];
             } else if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3()) {
                 ScalarType argScalarType = (ScalarType) argumentTypes[0];
-                int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                int precision;
                 if (argScalarType.isDecimal256()) {
                     precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
+                } else {
+                    precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
                 }
+                
                 int scale = argScalarType.getScalarScale();
                 // TODO(by satanson): Maybe accumulating narrower decimal types to wider decimal types directly w/o
                 //  casting the narrower type to the wider type is sound and efficient.
