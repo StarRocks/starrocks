@@ -2152,7 +2152,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     LocalTablet localTablet = (LocalTablet) tablet;
                     Multimap<Replica, Long> bePathsMap =
                             localTablet.getNormalReplicaBackendPathMap(
-                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false);
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new StarRocksException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                         "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
@@ -2445,7 +2445,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LocalTablet localTablet = (LocalTablet) tablet;
                         Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(
-                                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false);
                         if (bePathsMap.keySet().size() < quorum) {
                             String errorMsg = String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                             "tablet_id: %s, replicas: %s. Check quorum number failed" +
