@@ -41,6 +41,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.qe.OriginStatement;
@@ -158,7 +159,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
 
-            enableTabletCreationOptimization |= table.isFileBundling();
+            // disable tablet creation optimaization to avoid overwriting files with the same name.
+            if (table.isFileBundling()) {
+                enableTabletCreationOptimization = false;
+            }
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIdToRollupIndex.size();
             } else {
@@ -678,6 +682,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             boolean useAggregatePublish = table.isFileBundling();
+            AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
@@ -695,9 +700,14 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 rollUpTxnInfo.commitTime = finishedTimeMs / 1000;
                 rollUpTxnInfo.txnType = TxnTypePB.TXN_NORMAL;
                 rollUpTxnInfo.gtid = watershedGtid;
-                // publish rollup tablets
-                Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                        1, commitVersion, computeResource, useAggregatePublish);
+                if (!useAggregatePublish) {
+                    // publish rollup tablets
+                    Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
+                            1, commitVersion, computeResource, false);
+                } else {
+                    Utils.createSubRequestForAggregatePublish(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), 
+                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request);
+                }
 
                 TxnInfoPB originTxnInfo = new TxnInfoPB();
                 originTxnInfo.txnId = -1L;
@@ -705,10 +715,17 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 originTxnInfo.commitTime = finishedTimeMs / 1000;
                 originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
                 originTxnInfo.gtid = watershedGtid;
-                // publish origin tablets
-                Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                        commitVersion, computeResource, useAggregatePublish);
-
+                if (!useAggregatePublish) {
+                    // publish origin tablets
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
+                            commitVersion, computeResource, false);
+                } else {
+                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
+                            commitVersion - 1, commitVersion, null, computeResource, request);
+                }
+            }
+            if (useAggregatePublish) {
+                Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
             }
             return true;
         } catch (Exception e) {

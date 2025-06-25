@@ -547,6 +547,16 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         // collect meta files to vacuum at partition level
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+        // a special case:
+        // if a table enable file_bundling and finished alter job, the new created tablet will create initial tablet metadata
+        // its own tablet_id to avoid overwriting the initial tablet metadata.
+        // After that, we need to vacuum these metadata file using its own tablet_id
+        if (vacuum_version_range->min_version <= 1) {
+            for (auto& tablet_info : tablet_infos) {
+                RETURN_IF_ERROR(metafile_deleter.delete_file(
+                        join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
+            }
+        }
         for (auto v = vacuum_version_range->min_version; v < vacuum_version_range->max_version; v++) {
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
         }
