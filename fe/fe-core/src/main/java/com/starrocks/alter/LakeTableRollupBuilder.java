@@ -99,15 +99,9 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                         .collect(Collectors.toList());
                 List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                         originTablets.size(),
-<<<<<<< HEAD
-                        olapTable.getPartitionFilePathInfo(partitionId),
-                        olapTable.getPartitionFileCacheInfo(partitionId),
-                        shardGroupId, originTableIds, shardProperties, workerGroupId.get());
-=======
                         olapTable.getPartitionFilePathInfo(physicalPartitionId),
                         olapTable.getPartitionFileCacheInfo(physicalPartitionId),
-                        shardGroupId, originTableIds, shardProperties, computeResource);
->>>>>>> 15648435bb ([BugFix] LakeRollup should use physical partition ID instead of partition ID. (#60073))
+                        shardGroupId, originTableIds, shardProperties, workerGroupId.get());
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TabletMeta shadowTabletMeta =
