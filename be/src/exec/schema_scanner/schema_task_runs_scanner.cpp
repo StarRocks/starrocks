@@ -273,6 +273,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 15: {
             // job_id
@@ -282,6 +283,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 16: {
             // process_time
