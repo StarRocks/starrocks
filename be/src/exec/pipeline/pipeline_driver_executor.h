@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "exec/pipeline/profile_manager.h"
 #include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -24,6 +23,7 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/profile_manager.h"
 #include "runtime/runtime_state.h"
 #include "util/factory_method.h"
 #include "util/limit_setter.h"
@@ -100,8 +100,6 @@ private:
     void _worker_thread();
     StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                                   ObjectPool* obj_pool);
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 

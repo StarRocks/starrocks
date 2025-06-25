@@ -38,7 +38,6 @@
 #include <sys/time.h> // NOLINT
 
 #include <atomic>
-#include <boost/container/vector.hpp>
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -89,7 +88,7 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
     (profile)->add_child_counter(                                                                                      \
-            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 1, min_max_type), \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
             parent)
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
     (profile)->add_child_counter(                                  \
@@ -140,7 +139,7 @@ public:
     public:
         static TCounterStrategy create_strategy(
                 TCounterAggregateType::type aggregate_type,
-                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 1,
+                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 0,
                 TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             TCounterStrategy strategy;
             strategy.aggregate_type = aggregate_type;
@@ -152,7 +151,7 @@ public:
 
         static TCounterStrategy create_strategy(
                 TUnit::type type, TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
-                int64_t display_threshold = 1,
+                int64_t display_threshold = 0,
                 TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
             return create_strategy(aggregate_type, merge_type, display_threshold, min_max_type);
@@ -212,7 +211,7 @@ public:
         int64_t display_threshold() const { return _strategy.display_threshold; }
         bool should_display() const {
             int64_t threshold = _strategy.display_threshold;
-            return _value.load() > threshold;
+            return threshold == 0 || _value.load() > threshold;
         }
 
     private:
@@ -636,6 +635,8 @@ private:
 
     ChildVector _children;
 
+    // when query enable async_profile_in_be, fragment's profile will be given to other thread for merging and report
+    // so we must hold its shared ptr to void UAF
     std::vector<std::shared_ptr<RuntimeProfile>> _childre_holder;
     mutable std::mutex _children_lock; // protects _child_map, _children and _childre_holder
 
@@ -686,8 +687,7 @@ private:
 public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
-    // The merged result will be stored in the first profile for the final merge
-    // running profile will create new profile for merge
+    // The merged result will be stored in a new profile whose memory is owned by obj_pool
     static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
                                                      bool require_identical = true);
 
