@@ -529,7 +529,7 @@ INSERT ステートメントを使用してデータをロードする際に厳�
 ### enable_scan_datacache
 
 * **説明**: データキャッシュ機能を有効にするかどうかを指定します。この機能を有効にすると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細は [Data Cache](../data_source/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
-* **デフォルト**: false
+* **デフォルト**: true
 * **導入バージョン**: v2.5
 
 ### populate_datacache_mode
