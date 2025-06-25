@@ -909,8 +909,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         return;                                                  \
     }
 
-<<<<<<< HEAD
-=======
 #define RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS() \
     if (UNLIKELY(match_count > state->chunk_size())) {      \
         _probe_state->cur_probe_index = i;                  \
@@ -932,7 +930,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         return;                                                  \
     }
 
->>>>>>> adedb6d506 ([BugFix] Fix unsupported nestloop null-aware left anti join  (#60119))
 #define COWAIT_IF_CHUNK_FULL()                              \
     if (_probe_state->match_count == state->chunk_size()) { \
         _probe_state->has_remain = true;                    \
