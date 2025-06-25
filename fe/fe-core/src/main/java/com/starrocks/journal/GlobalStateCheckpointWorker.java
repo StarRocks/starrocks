@@ -34,7 +34,13 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
         globalStateMgr.setEditLog(new EditLog(null));
         globalStateMgr.setJournal(journal);
         try {
+<<<<<<< HEAD
             globalStateMgr.loadImage(imageDir);
+=======
+            globalStateMgr.loadImage();
+            // This is required because the loadImage() may find no image to load, and the initDefaultWarehouse() will
+            // be skipped.
+>>>>>>> 54de8d5890 ([BugFix] fix default_warehouse initialization in multiple scenarios (#60164))
             globalStateMgr.initDefaultWarehouse();
 
             checkEpoch(epoch);
