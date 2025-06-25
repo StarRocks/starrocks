@@ -22,6 +22,7 @@ set(EXPR_FILES
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
+  agg/factory/aggregate_resolver_boolean.cpp
   agg/factory/aggregate_resolver_hypothesis_testing.cpp
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp

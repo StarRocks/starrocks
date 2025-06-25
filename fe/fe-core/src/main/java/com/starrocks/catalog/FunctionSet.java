@@ -548,6 +548,9 @@ public class FunctionSet {
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
     public static final String AGG_STATE_IF_SUFFIX = "_if";
 
+    public static final String BOOL_OR = "bool_or";
+    public static final String BOOLOR_AGG = "boolor_agg";
+
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =
@@ -876,6 +879,7 @@ public class FunctionSet {
         TableFunction.initBuiltins(this);
         VectorizedBuiltinFunctions.initBuiltins(this);
         initAggregateBuiltins();
+        addBooleanAggregateFunctions();
     }
 
     public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
@@ -1633,5 +1637,14 @@ public class FunctionSet {
             builtinFunctions.addAll(entry.getValue());
         }
         return builtinFunctions;
+    }
+
+    // Boolean aggregate functions
+    private void addBooleanAggregateFunctions() {
+        // BOOL_OR: Returns true if any value in the expression is true
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.BOOL_OR,
+                Lists.newArrayList(Type.BOOLEAN),
+                Type.BOOLEAN, Type.BOOLEAN,
+                false, true, false));
     }
 }
