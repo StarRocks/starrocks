@@ -174,6 +174,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    if (config::enable_https) {
+        auto sslOptions = options.mutable_ssl_options();
+        sslOptions->default_cert.certificate = config::ssl_certificate_path;
+        sslOptions->default_cert.private_key = config::ssl_private_key_path;
+    }
+
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.LakeService";
     const auto methods = {"abort_txn",
