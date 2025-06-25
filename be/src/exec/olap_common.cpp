@@ -704,7 +704,7 @@ bool ColumnValueRange<T>::is_empty_value_range() const {
 
 template <class T>
 bool ColumnValueRange<T>::is_full_value_range() const {
-    if (is_fixed_value_range()) {
+    if (_is_init_state || is_fixed_value_range()) {
         return false;
     }
 
