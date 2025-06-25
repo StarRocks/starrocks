@@ -238,6 +238,17 @@ public abstract class BulkLoadJob extends LoadJob {
         return failInfos;
     }
 
+    // Update failInfos under load job write lock when task is failed
+    protected void updateTabletFailInfos(TaskAttachment attachment) {
+    }
+
+    @Override
+    protected void reset() {
+        super.reset();
+        commitInfos.clear();
+        failInfos.clear();
+    }
+
     /**
      * Not retryable cases
      * 1. already retry too many times
@@ -252,8 +263,8 @@ public abstract class BulkLoadJob extends LoadJob {
     }
 
     @Override
-    public void onTaskFailed(long taskId, FailMsg failMsg) {
-        boolean needRetry = false;
+    public void onTaskFailed(long taskId, FailMsg failMsg, TaskAttachment attachment) {
+        List<TabletFailInfo> lastFailInfos = null;
         writeLock();
         try {
             // check if job has been completed
@@ -265,27 +276,30 @@ public abstract class BulkLoadJob extends LoadJob {
                 return;
             }
 
-            needRetry = isRetryable(failMsg);
+            updateTabletFailInfos(attachment);
+            lastFailInfos = Lists.newArrayList(failInfos);
+
+            boolean needRetry = isRetryable(failMsg);
             if (!needRetry) {
+                // For not retryable failure, cancel job and return
                 unprotectedExecuteCancel(failMsg, true);
                 logFinalOperation();
+                return;
             }
         } finally {
             writeUnlock();
         }
 
         // For retryable failure, should abort the transaction and retry as soon as possible
-        if (needRetry) {
-            try {
-                LOG.debug("Loading task with retryable failure try to abort transaction, " +
-                                "job_id: {}, task_id: {}, txn_id: {}, task fail message: {}",
-                        id, taskId, transactionId, failMsg.getMsg());
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
-                        dbId, transactionId, failMsg.getMsg());
-            } catch (StarRocksException e) {
-                LOG.warn("Loading task failed to abort transaction, job_id: {}, task_id: {}, txn_id: {}, " +
-                        "task fail message: {}, abort exception:", id, taskId, transactionId, failMsg.getMsg(), e);
-            }
+        try {
+            LOG.debug("Loading task with retryable failure try to abort transaction, " +
+                            "job_id: {}, task_id: {}, txn_id: {}, task fail message: {}",
+                    id, taskId, transactionId, failMsg.getMsg());
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    dbId, transactionId, failMsg.getMsg(), lastFailInfos);
+        } catch (StarRocksException e) {
+            LOG.warn("Loading task failed to abort transaction, job_id: {}, task_id: {}, txn_id: {}, " +
+                    "task fail message: {}, abort exception:", id, taskId, transactionId, failMsg.getMsg(), e);
         }
     }
 

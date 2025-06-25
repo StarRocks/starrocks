@@ -33,18 +33,16 @@ sidebar_position: 20
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "ldap",
-    "ldap_server_host" = "",
-    "ldap_server_port" = "",
-    "ldap_bind_base_dn" = "",
-    "ldap_user_search_attr" = "",
-    "ldap_user_group_match_attr" = "",
-    "ldap_bind_root_dn" = "",
-    "ldap_bind_root_pwd" = "",
-    "ldap_cache_refresh_interval" = "",
-    "ldap_ssl_conn_allow_insecure" = "{true | false}",
-    "ldap_ssl_conn_trust_store_path" = "",
-    "ldap_ssl_conn_trust_store_pwd" = "",
+    "type" = "authentication_ldap_simple",
+    "authentication_ldap_simple_server_host" = "",
+    "authentication_ldap_simple_server_port" = "",
+    "authentication_ldap_simple_bind_base_dn" = "",
+    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_bind_root_dn" = "",
+    "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+    "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+    "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
     "comment" = ""
 )
 ```
@@ -59,69 +57,59 @@ PROPERTIES (
 ##### type
 
 - 必需：是
-- 描述：安全集成的类型。指定为 `ldap`。
+- 描述：安全集成的类型。指定为 `authentication_ldap_simple`。
 
-##### ldap_server_host
+##### authentication_ldap_simple_server_host
 
 - 必需：否
 - 描述：LDAP 服务的 IP 地址。默认值：`127.0.0.1`。
 
-##### ldap_server_port
+##### authentication_ldap_simple_server_port
 
 - 必需：否
 - 描述：LDAP 服务的端口。默认值：`389`。
 
-##### ldap_bind_base_dn
+##### authentication_ldap_simple_bind_base_dn
 
 - 必需：是
 - 描述：集群搜索的 LDAP 用户的基本专有名称 (DN)。
 
-##### ldap_user_search_attr
+##### authentication_ldap_simple_user_search_attr
 
 - 必需：是
 - 描述：用于登录 LDAP 服务的用户属性，例如 `uid`。
 
-##### ldap_user_group_match_attr
-
-- 必需：否
-- 描述：如果用户作为组成员的属性与用户的 DN 不同，则必须指定此参数。例如，如果用户的 DN 是 `uid=bob,ou=people,o=starrocks,dc=com`，但其作为组成员的属性是 `memberUid=bob,ou=people,o=starrocks,dc=com`，则需要将 `ldap_user_search_attr` 指定为 `uid`，`ldap_user_group_match_attr` 指定为 `memberUid`。如果未指定此参数，则使用您在 `ldap_user_search_attr` 中指定的值。您还可以指定正则表达式来匹配组中的成员。正则表达式必须以 `regex:` 为前缀。假设一个组有一个成员 `CN=Poornima K Hebbar (phebbar),OU=User Policy 0,OU=All Users,DC=SEA,DC=CORP,DC=EXPECN,DC=com`。如果您将此属性指定为 `regex:CN=.*\\(([^)]+)\\)`，它将匹配成员 `phebbar`。
-
-##### ldap_bind_root_dn
+##### authentication_ldap_simple_bind_root_dn
 
 - 必需：是
 - 描述：LDAP 服务的管理员 DN。
 
-##### ldap_bind_root_pwd
+##### authentication_ldap_simple_bind_root_pwd
 
 - 必需：是
 - 描述：LDAP 服务的管理员密码。
 
-##### ldap_cache_refresh_interval
+##### authentication_ldap_simple_ssl_conn_allow_insecure
 
 - 必需：否
-- 描述：集群自动刷新缓存的 LDAP 组信息的间隔。单位：秒。默认值：`900`。
+- 描述：是否允许使用非加密方式连接到 LDAP 服务器。默认值：`true`。将此值设置为 `false` 表示访问ldap需要使用ssl加密。
 
-##### ldap_ssl_conn_allow_insecure
-
-- 必需：否
-- 描述：是否使用非 SSL 连接到 LDAP 服务器。默认值：`true`。将此值设置为 `false` 表示启用 LDAP over SSL。有关启用 SSL 的详细说明，请参阅 [SSL Authentication](../ssl_authentication.md)。
-
-##### ldap_ssl_conn_trust_store_path
+##### authentication_ldap_simple_ssl_conn_trust_store_path
 
 - 必需：否
-- 描述：存储 LDAP SSL 证书的本地路径。
+- 描述：存储 LDAP 服务器的 SSL CA 证书的本地路径。支持 pem 和 jks 格式。如果证书是由受信机构颁发的，这里可以不用配置。
 
-##### ldap_ssl_conn_trust_store_pwd
+##### authentication_ldap_simple_ssl_conn_trust_store_pwd
 
 - 必需：否
-- 描述：访问本地存储的 LDAP SSL 证书所用的密码。
+- 描述：访问本地存储的 LDAP 服务器的 SSL CA 证书所用的密码。pem 格式的证书不需要密码，只有 jsk 格式的才需要。
 
 ##### group_provider
 
 - 必需：否
 - 描述：与安全集成结合使用的 Group Provider 名称。多个 Group Provider 用逗号分隔。设置后，StarRocks 将在用户登录时记录每个指定提供者下的用户组信息。从 v3.5 开始支持。有关启用 Group Provider 的详细说明，请参阅 [Authenticate User Groups](../group_provider.md)。
 
-##### authenticated_group_list
+##### permitted_groups
 
 - 必需：否
 - 描述：允许登录到 StarRocks 的组名称。多个组用逗号分隔。确保指定的组可以通过组合的 Group Provider 检索。从 v3.5 开始支持。

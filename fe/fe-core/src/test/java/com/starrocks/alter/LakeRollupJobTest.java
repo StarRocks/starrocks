@@ -14,7 +14,10 @@
 
 package com.starrocks.alter;
 
+import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.RollupProcDir;
@@ -38,6 +41,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class LakeRollupJobTest {
@@ -111,7 +115,7 @@ public class LakeRollupJobTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES(\n" +
-                        "    \"enable_partition_aggregation\" = \"true\"\n" +
+                        "    \"file_bundling\" = \"true\"\n" +
                         ");");
 
         String sql = "create materialized view mv1 as\n" +
@@ -185,7 +189,7 @@ public class LakeRollupJobTest {
     }
 
     @Test
-    public void testCreateSyncMvWithEnablePartitionAggregation() throws Exception {
+    public void testCreateSyncMvWithEnableFileBundling() throws Exception {
         new MockUp<LakeRollupJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -213,6 +217,25 @@ public class LakeRollupJobTest {
             Thread.sleep(100);
         }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob4.getJobState());
+
+        for (Partition partition : table.getPartitions()) {
+            long partitionId = partition.getId();
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                List<ShardGroupInfo> shardGroupInfos = null;
+                shardGroupInfos = GlobalStateMgr.getCurrentState().getStarOSAgent().listShardGroup();
+                Assert.assertTrue(shardGroupInfos != null && !shardGroupInfos.isEmpty());
+                Optional<ShardGroupInfo> targetGroup = shardGroupInfos.stream()
+                        .filter(group -> group.getGroupId() == physicalPartition.getShardGroupId())
+                        .findFirst();
+                Assert.assertTrue(targetGroup.isPresent());
+                Map<String, String> labels = targetGroup.get().getLabelsMap();
+                if (!labels.containsKey("partitionId")) {
+                    Assert.assertTrue(false);
+                }
+                long targetPartitionId = Long.parseLong(labels.get("partitionId"));
+                Assert.assertEquals(targetPartitionId, partitionId);
+            }
+        }
     }
 
     @Test

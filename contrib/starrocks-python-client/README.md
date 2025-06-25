@@ -65,3 +65,11 @@ with engine.connect() as connection:
     rows = connection.execute(tbl.select()).fetchall()
     print(rows)
 ```
+
+## Contributing
+### Unit tests
+To run tests for Starrocks SQLAlchamy dialect (this module), run:
+```bash
+pytest
+```
+It will run SQLAlchemy tests as well as Starrocks tests. For more details, please check [SQLAlchemy dialect developing](https://github.com/sqlalchemy/sqlalchemy/blob/main/README.dialects.rst)

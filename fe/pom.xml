@@ -81,6 +81,7 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
+        <async-profiler.version>4.0</async-profiler.version>
     </properties>
 
     <profiles>
@@ -951,6 +952,10 @@ under the License.
                         <groupId>org.jdom</groupId>
                         <artifactId>jdom2</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1121,13 +1126,6 @@ under the License.
                 <version>12.4.2.jre11</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
-            <dependency>
-                <groupId>com.mysql</groupId>
-                <artifactId>mysql-connector-j</artifactId>
-                <version>9.2.0</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
             <dependency>
                 <groupId>com.mockrunner</groupId>
@@ -1170,6 +1168,12 @@ under the License.
             </dependency>
 
             <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>security</artifactId>
+                <version>202</version>
+            </dependency>
+
+            <dependency>
                 <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-sdk-core</artifactId>
                 <version>${odps.version}</version>
@@ -1177,6 +1181,10 @@ under the License.
                     <exclusion>
                         <groupId>org.codehaus.jackson</groupId>
                         <artifactId>jackson-mapper-asl</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.ini4j</groupId>
+                        <artifactId>ini4j</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1474,6 +1482,13 @@ under the License.
                 <groupId>it.unimi.dsi</groupId>
                 <artifactId>fastutil</artifactId>
                 <version>${fastutil.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/tools.profiler/async-profiler -->
+            <dependency>
+                <groupId>tools.profiler</groupId>
+                <artifactId>async-profiler</artifactId>
+                <version>${async-profiler.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

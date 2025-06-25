@@ -25,7 +25,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.journal.CheckpointException;
+import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.journal.GlobalStateCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
@@ -252,6 +256,7 @@ public class ClusterSnapshotTest {
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
                 .getItems().get(0).state == "SNAPSHOTING");
         job.setState(ClusterSnapshotJobState.UPLOADING);
+        Assert.assertTrue(job.isUploading());
         logSnapshotJob.setSnapshotJob(job);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
@@ -276,7 +281,8 @@ public class ClusterSnapshotTest {
             }
 
             @Mock
-            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId) {
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                                                                        boolean needClusterSnapshotInfo) {
                 return Pair.create(true, "");
             }
         };
@@ -404,5 +410,113 @@ public class ClusterSnapshotTest {
         Assert.assertTrue(job2.getStarMgrJournalId() == 6666L);
         Assert.assertTrue(job2.isFinished());
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
+    }
+
+    @Test
+    public void testRunAfterCatalogReady() {
+        CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
+        ClusterSnapshotCheckpointScheduler scheduler = new ClusterSnapshotCheckpointScheduler(feController,
+                starMgrController);
+        long beginTime = scheduler.lastAutomatedJobStartTimeMs;
+
+        setAutomatedSnapshotOn(false);
+        scheduler.runAfterCatalogReady();
+        scheduler.runAfterCatalogReady();
+
+
+        new MockUp<ClusterSnapshotCheckpointScheduler>() {
+            @Mock
+            protected void runCheckpointScheduler(ClusterSnapshotJob job) {
+                Assert.assertTrue(job != null);
+            }
+        };
+
+        long oldValue = Config.automated_cluster_snapshot_interval_seconds;
+        Config.automated_cluster_snapshot_interval_seconds = 0L;
+        scheduler.runAfterCatalogReady();
+        long endTime = scheduler.lastAutomatedJobStartTimeMs;
+        Config.automated_cluster_snapshot_interval_seconds = oldValue;
+
+        Assert.assertTrue(beginTime != endTime);
+    }
+
+    @Test
+    public void testGetClusterSnapshotInfoFromCheckpoint() throws Exception {
+        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        final CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
+        final CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
+        final ClusterSnapshotInfo info = new ClusterSnapshotInfo(null);
+        ClusterSnapshotJob job = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        Assert.assertTrue(!job.needClusterSnapshotInfo());
+        Assert.assertTrue(job.isAutomated());
+        job.setClusterSnapshotInfo(null);
+
+        CheckpointWorker worker = GlobalStateMgr.getCurrentState().getCheckpointWorker();
+        Deencapsulation.setField(worker, "servingGlobalState", GlobalStateMgr.getCurrentState());
+        worker.setNextCheckpoint(GlobalStateMgr.getCurrentState().getEpoch(), 0L, true);
+
+        {
+            new MockUp<ClusterSnapshotJob>() {
+                @Mock
+                public boolean needClusterSnapshotInfo() {
+                    return true;
+                }
+            };
+    
+            new MockUp<CheckpointController>() {
+                @Mock
+                public long getImageJournalId() {
+                    return -10L;
+                }
+            };
+    
+            new MockUp<CheckpointWorker>() {
+                @Mock
+                public void setNextCheckpoint(long epoch, long journalId,
+                                              boolean needClusterSnapshotInfo) throws CheckpointException {
+                    Deencapsulation.setField(feController, "workerNodeName", "workerNodeName");
+                    feController.finishCheckpoint(-1L, "workerNodeName", new ClusterSnapshotInfo(new HashMap<>()));
+                }
+            };
+    
+            new MockUp<GlobalStateCheckpointWorker>() {
+                @Mock
+                void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
+                    if (needClusterSnapshotInfo) {
+                        Deencapsulation.setField(info, "dbInfos", new HashMap<>());
+                    }
+                }
+            };
+    
+            ClusterSnapshotCheckpointScheduler scheduler =
+                    new ClusterSnapshotCheckpointScheduler(feController, starMgrController);
+            Assert.assertTrue(feController != null);
+            try {
+                scheduler.runCheckpointScheduler(job);
+            } catch (Exception ignore) {
+            }
+    
+            Assert.assertTrue(feController.getClusterSnapshotInfo() != null);
+        }
+
+
+        new MockUp<BDBJEJournal>() {
+            @Mock
+            public long getMaxJournalId() {
+                return 0L;
+            }
+        };
+        new MockUp<CheckpointWorker>() {
+            @Mock
+            protected boolean preCheckParamValid(long epoch, long journalId) {
+                return true;
+            }
+        };
+        try {
+            Deencapsulation.invoke(worker, "runAfterCatalogReady");
+        } catch (Exception ignore) {
+        }
+        Assert.assertTrue(info.isEmpty());
     }
 }

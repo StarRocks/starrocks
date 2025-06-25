@@ -21,30 +21,26 @@
 
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
-#include "util/disk_info.h"
 #include "util/parse_util.h"
 
 namespace starrocks {
 void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics) {
-    switch (metrics.status) {
-    case DataCacheStatus::NORMAL:
-        t_metrics.__set_status(TDataCacheStatus::NORMAL);
-        break;
-    case DataCacheStatus::UPDATING:
-        t_metrics.__set_status(TDataCacheStatus::UPDATING);
-        break;
-    case DataCacheStatus::LOADING:
-        t_metrics.__set_status(TDataCacheStatus::LOADING);
-        break;
-    default:
-        t_metrics.__set_status(TDataCacheStatus::ABNORMAL);
-    }
-
+    t_metrics.__set_status(DataCacheStatusUtils::to_thrift(metrics.status));
     t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
     t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
     t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
     t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
 }
+
+#ifdef WITH_STARCACHE
+void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const StarCacheMetrics& metrics) {
+    t_metrics.__set_status(DataCacheStatusUtils::to_thrift(static_cast<DataCacheStatus>(metrics.status)));
+    t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
+    t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
+    t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
+    t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
+}
+#endif
 
 Status DataCacheUtils::parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
                                                      size_t* mem_size) {
@@ -167,8 +163,19 @@ Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const 
 }
 
 dev_t DataCacheUtils::disk_device_id(const std::string& disk_path) {
+    std::filesystem::path cur_path(disk_path);
+    cur_path = std::filesystem::absolute(cur_path);
+
+    // Traverse from the current path to the ancestor node and find the first existing path
+    while (!cur_path.empty()) {
+        if (std::filesystem::exists(cur_path) || cur_path == cur_path.root_path()) {
+            break;
+        }
+        cur_path = cur_path.parent_path();
+    }
+
     struct stat s;
-    if (stat(disk_path.c_str(), &s) != 0) {
+    if (stat(cur_path.c_str(), &s) != 0) {
         return 0;
     }
     return s.st_dev;

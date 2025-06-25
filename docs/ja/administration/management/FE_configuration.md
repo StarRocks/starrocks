@@ -348,12 +348,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: FE ノード内の Thrift サーバーが保持するバックログキューの長さ。
 - 導入バージョン: -
 
-
-
-
-
-
-
 ##### brpc_idle_wait_max_time
 
 - デフォルト: 10000
@@ -1050,6 +1044,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: オプティマイザがスカラーオペレーターを書き換える最大回数。
 - 導入バージョン: -
 
+##### max_scalar_operator_optimize_depth
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperator 最適化を適用できる最大深度。
+- 導入バージョン: -
+
+##### max_scalar_operator_flat_children
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperator のフラットチルドレンの最大数。この上限を設定することで、オプティマイザがメモリを使いすぎるのを防ぐことができます。
+- 導入バージョン: -
+
 ##### enable_statistic_collect
 
 - デフォルト: true
@@ -1564,6 +1576,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: 秒
 - 変更可能: はい
 - 説明: Routine Load ジョブ内のタスクが遅延すると、Routine Load ジョブは UNSTABLE 状態に設定されます。具体的には、消費されているメッセージのタイムスタンプと現在の時間の差がこのしきい値を超え、データソースに未消費のメッセージが存在する場合です。
+- 導入バージョン: -
+
+##### enable_routine_load_lag_metrics
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Routine Load パーティションのオフセットラグをメトリクスで収集するかどうか。この項目を `true` に設定すると、Kafka API を呼び出してパーティションの最新のオフセットを取得することに注意。
+- 導入バージョン: -
+
+##### min_routine_load_lag_for_metrics
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 監視メトリクスに表示される Routine Load ジョブの最小オフセットラグ。オフセットラグがこの値より大きい Routine Load ジョブは、メトリクスに表示されます。
 - 導入バージョン: -
 
 ##### max_tolerable_backend_down_num
@@ -2202,6 +2232,78 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: Azure Blob Storage のリクエストを承認するために使用される共有アクセス署名 (SAS)。
 - 導入バージョン: v3.1
+
+##### azure_adls2_endpoint
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 アカウントのエンドポイント、例えば `https://test.dfs.core.windows.net`。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_path
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 のデータ保存に使用するパス。ファイルシステム名とディレクトリ名で構成され、例えば `testfilesystem/starrocks` のようになる。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_shared_key
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される Shared Key。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_sas_token
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名（SAS）。
+- 導入バージョン: v3.4.1
+
+##### azure_adls2_oauth2_use_managed_identity
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。
+- 導入バージョン: v3.4.4
+
+##### azure_adls2_oauth2_tenant_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。
+- 導入バージョン: v3.4.4
+
+##### azure_adls2_oauth2_client_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。
+- 導入バージョン: v3.4.4
+
+##### azure_use_native_sdk
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Azure Blob Storage へのアクセスにネイティブ SDK を使用し、Managed Identity と Service Principal による認証を許可するかどうか。この項目を `false` に設定すると、Shared Key と SAS Token による認証のみが許可される。
+- 導入バージョン: v3.4.4
 
 ##### lake_compaction_score_selector_min_score
 

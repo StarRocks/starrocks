@@ -15,8 +15,8 @@
 
 package com.starrocks.metric;
 
-import com.google.api.client.util.Lists;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.google.common.collect.Lists;
+import com.starrocks.scheduler.Constants;
 
 import java.util.List;
 
@@ -51,7 +51,7 @@ public class MaterializedViewMetricsBlackHoleEntity implements IMaterializedView
     }
 
     @Override
-    public void increaseRefreshJobStatus(PartitionBasedMvRefreshProcessor.RefreshJobStatus status) {
+    public void increaseRefreshJobStatus(Constants.TaskRunState status) {
 
     }
 

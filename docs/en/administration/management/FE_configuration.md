@@ -1507,6 +1507,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of times that the optimizer can rewrite a scalar operator.
 - Introduced in: -
 
+##### max_scalar_operator_optimize_depth
+
+- Default：256
+- Type：Int
+- Unit：-
+- Is mutable: Yes
+- Description: The maximum depth that ScalarOperator optimization can be applied.
+- Introduced in: -
+
+##### max_scalar_operator_flat_children
+
+- Default：10000
+- Type：Int
+- Unit：-
+- Is mutable: Yes
+- Description：The maximum number of flat children for ScalarOperator. You can set this limit to prevent the optimizer from using too much memory.
+- Introduced in: -
+
 ##### enable_statistic_collect
 
 - Default: true
@@ -2252,6 +2270,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Routine Load job is set to the UNSTABLE state if any task within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed and the current time exceeds this threshold, and unconsumed messages exist in the data source.
+- Introduced in: -
+
+##### enable_routine_load_lag_metrics
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect Routine Load Kafka partition offset lag metrics. Please note that set this item to `true` will call the Kafka API to get the partition's latest offset.
+- Introduced in: -
+
+##### min_routine_load_lag_for_metrics
+
+- Default: 10000
+- Type: INT
+- Unit: -
+- Is mutable: Yes
+- Description: The minimum offset lag of Routine Load jobs to be shown in monitoring metrics. Routine Load jobs whose offset lags are greater than this value will be displayed in the metrics.
 - Introduced in: -
 
 ##### max_tolerable_backend_down_num
@@ -3115,6 +3151,42 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.1
+
+##### azure_adls2_oauth2_use_managed_identity
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_adls2_oauth2_tenant_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_adls2_oauth2_client_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.4
+
+##### azure_use_native_sdk
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
+- Introduced in: v3.4.4
 
 <!--
 ##### starmgr_grpc_timeout_seconds

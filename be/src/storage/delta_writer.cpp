@@ -20,6 +20,7 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/load_fail_point.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -750,7 +751,10 @@ Status DeltaWriter::commit() {
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
         !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) &&
         !_storage_engine->update_manager()->update_state_mem_tracker()->any_limit_exceeded()) {
-        auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
+        Status st;
+        FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
+                load_pk_preload, st, PK_PRELOAD_FP_ACTION(_opt.txn_id, _opt.tablet_id),
+                _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get()));
         if (!st.ok() && !st.is_uninitialized()) {
             _set_state(kAborted, st);
             return st;
@@ -766,9 +770,11 @@ Status DeltaWriter::commit() {
         }
     }
     auto replica_ts = watch.elapsed_time();
-
-    auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
-                                                          _cur_rowset, false);
+    Status res;
+    FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
+            load_commit_txn, res, COMMIT_TXN_FP_ACTION(_opt.txn_id, _opt.tablet_id),
+            _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
+                                                       _cur_rowset, false));
     auto commit_txn_ts = watch.elapsed_time();
 
     if (!res.ok()) {

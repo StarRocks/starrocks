@@ -47,7 +47,6 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
@@ -78,7 +77,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DateUtils;
@@ -1501,6 +1499,7 @@ public class OlapTable extends Table {
     }
 
     public void dropPartitionAndReserveTablet(String partitionName) {
+        // reserveTablets is true and partition is not recycled, so dbId -1 is ok.
         dropPartition(-1, partitionName, true, true);
     }
 
@@ -2222,14 +2221,14 @@ public class OlapTable extends Table {
      *
      * return the old partition.
      */
-    public Partition replacePartition(Partition newPartition) {
+    public Partition replacePartition(long dbId, Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
 
         // For cloud native table, add partition into recycle Bin after truncate table.
         // It is no necessary for share nothing mode because file will be deleted throught
         // tablet report in this case.
         if (this.isCloudNativeTableOrMaterializedView()) {
-            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, oldPartition);
             recyclePartitionInfo.setRecoverable(false);
             GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
         }
@@ -2352,7 +2351,7 @@ public class OlapTable extends Table {
 
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
-            for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIdx.getTabletIds()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
                 if (replicaBackendIds.size() < replicationNum) {
@@ -2486,9 +2485,9 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
-    public Boolean enablePartitionAggregation() {
+    public Boolean isFileBundling() {
         if (tableProperty != null) {
-            return tableProperty.enablePartitionAggregation();
+            return tableProperty.isFileBundling();
         }
         return false;
     }
@@ -2780,13 +2779,13 @@ public class OlapTable extends Table {
         tableProperty.buildDataCachePartitionDuration();
     }
 
-    public void setEnablePartitionAggregation(boolean enablePartitionAggregation) {
+    public void setFileBundling(boolean fileBundling) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION,
-                        Boolean.valueOf(enablePartitionAggregation).toString());
-        tableProperty.buildEnablePartitionAggregation();
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
+                        Boolean.valueOf(fileBundling).toString());
+        tableProperty.buildFileBundling();
     }
 
     public void setStorageCoolDownTTL(PeriodDuration duration) {
@@ -2850,7 +2849,7 @@ public class OlapTable extends Table {
         }
     }
 
-    public void replaceMatchPartitions(List<String> tempPartitionNames) {
+    public void replaceMatchPartitions(long dbId, List<String> tempPartitionNames) {
         for (String partitionName : tempPartitionNames) {
             Partition partition = tempPartitions.getPartition(partitionName);
             if (partition != null) {
@@ -2859,7 +2858,7 @@ public class OlapTable extends Table {
                 Partition oldPartition = nameToPartition.get(oldPartitionName);
                 if (oldPartition != null) {
                     // drop old partition
-                    dropPartition(-1, oldPartitionName, true);
+                    dropPartition(dbId, oldPartitionName, true);
                 }
                 // add new partition
                 addPartition(partition);
@@ -2895,7 +2894,7 @@ public class OlapTable extends Table {
      * names are still p1 and p2.
      *
      */
-    public void replaceTempPartitions(List<String> partitionNames, List<String> tempPartitionNames,
+    public void replaceTempPartitions(long dbId, List<String> partitionNames, List<String> tempPartitionNames,
                                       boolean strictRange, boolean useTempPartitionName) throws DdlException {
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
@@ -2958,7 +2957,7 @@ public class OlapTable extends Table {
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
             // This will also drop all tablets of the partition from TabletInvertedIndex
-            dropPartition(-1, partitionName, true);
+            dropPartition(dbId, partitionName, true);
         }
 
         // 2. add temp partitions' range info to rangeInfo, and remove them from
@@ -2987,14 +2986,14 @@ public class OlapTable extends Table {
 
     // used for unpartitioned table in insert overwrite
     // replace partition with temp partition
-    public void replacePartition(String sourcePartitionName, String tempPartitionName) {
+    public void replacePartition(long dbId, String sourcePartitionName, String tempPartitionName) {
         if (partitionInfo.getType() != PartitionType.UNPARTITIONED) {
             return;
         }
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            dropPartition(-1, sourcePartitionName, true);
+            dropPartition(dbId, sourcePartitionName, true);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);
@@ -3335,12 +3334,12 @@ public class OlapTable extends Table {
     // If you are modifying this function, please check if you need to modify LakeTable.onDrop also.
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
+
         // drop all temp partitions of this table, so that there is no temp partitions
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        AlterMVJobExecutor.inactiveRelatedMaterializedView(this,
-                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
         }
@@ -3468,8 +3467,8 @@ public class OlapTable extends Table {
             }
         }
 
-        if (enablePartitionAggregation()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, enablePartitionAggregation().toString());
+        if (isFileBundling()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, isFileBundling().toString());
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
@@ -3810,7 +3809,7 @@ public class OlapTable extends Table {
         return null;
     }
 
-    public boolean allowUpdatePartitionAggregation() {
+    public boolean allowUpdateFileBundling() {
         for (Partition partition : getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 if (physicalPartition.getMetadataSwitchVersion() != 0) {

@@ -135,6 +135,7 @@ This project is used by the following companies. Learn more about their use case
 - [Eightfold.ai](https://www.youtube.com/watch?v=qNk_-QTZk3E)
 - [Grab](https://engineering.grab.com/building-a-spark-observability)
 - [HerdWatch](https://medium.com/p/a7916a7e87bf)
+- [iQiyi](https://medium.com/starrocks-engineering/real-time-analytics-at-scale-why-we-use-starrocks-0aa3c859cbeb)
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
 - [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)
 - [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
@@ -145,4 +146,5 @@ This project is used by the following companies. Learn more about their use case
 - [Verisoul](https://celerdata.com/blog/verisoul-enables-real-time-analytics-by-transitioning-off-bigquery)
 - [Vivo](https://medium.com/starrocks-engineering/vivos-journey-to-a-high-performance-lakehouse-with-starrocks-56a502a0fde8) 
 - [Xiaohongshu/RedNote](https://www.youtube.com/watch?v=2cvIZY4EDak&list=PL0eWwaesODdiJ0aXLzSTyNfkjjIFYpOTf)
+- [Zepto](https://blog.zeptonow.com/data-that-delivers-real-time-insights-for-brand-success-in-quick-commerce-b8b9e994d20b)
 

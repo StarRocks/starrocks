@@ -229,6 +229,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Int
 * **Introduced in**: v3.3.0
 
+### custom_query_id (session)
+
+* **Description**: Used to bind some external identifier to a current query. Can be set using `SET SESSION custom_query_id = 'my-query-id';` before executing a query. The value is reset after query is finished. This value can be passed to `KILL QUERY 'my-query-id'`. Value can be found in audit logs as a `customQueryId` field.
+* **Default**: ""
+* **Data type**: String
+* **Introduced in**: v3.4.0
+
 ### enable_sync_materialized_view_rewrite
 
 * **Description**: Whether to enable query rewrite based on synchronous materialized views.
@@ -596,7 +603,7 @@ Default value: `true`.
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
-* **Default**: false
+* **Default**: true 
 * **Introduced in**: v2.5
 
 ### populate_datacache_mode

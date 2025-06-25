@@ -277,7 +277,6 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
     for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
         part->id = t_part.id;
-        part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
         if (t_part.indexes.size() != num_indexes) {
             std::stringstream ss;
@@ -291,13 +290,23 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
                   [](const OlapTableIndexTablets& lhs, const OlapTableIndexTablets& rhs) {
                       return lhs.index_id < rhs.index_id;
                   });
+
+        // If virtual buckets is not set, set its value with tablets.
+        // This may happen during cluster upgrading, when BE is upgraded to the new version but FE is still on the old version.
+        for (auto& index : part->indexes) {
+            if (!index.__isset.virtual_buckets) {
+                index.__set_virtual_buckets(index.tablets);
+            }
+        }
+
         // check index
         for (int j = 0; j < num_indexes; ++j) {
-            if (part->indexes[j].index_id != _schema->indexes()[j]->index_id) {
+            const auto& index_tablets = part->indexes[j];
+            const auto& index_schema = _schema->indexes()[j];
+            if (index_tablets.index_id != index_schema->index_id) {
                 std::stringstream ss;
                 ss << "partition's index is not equal with schema's"
-                   << ", part_index=" << part->indexes[j].index_id
-                   << ", schema_index=" << _schema->indexes()[j]->index_id;
+                   << ", part_index=" << index_tablets.index_id << ", schema_index=" << index_schema->index_id;
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
@@ -489,7 +498,6 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
             }
         }
 
-        part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
         if (t_part.indexes.size() != num_indexes - _schema->shadow_index_size()) {
             std::stringstream ss;
@@ -504,6 +512,15 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
                   [](const OlapTableIndexTablets& lhs, const OlapTableIndexTablets& rhs) {
                       return lhs.index_id < rhs.index_id;
                   });
+
+        // If virtual buckets is not set, set its value with tablets.
+        // This may happen during cluster upgrading, when BE is upgraded to the new version but FE is still on the old version.
+        for (auto& index : part->indexes) {
+            if (!index.__isset.virtual_buckets) {
+                index.__set_virtual_buckets(index.tablets);
+            }
+        }
+
         // check index
         // If an add_partition operation is executed during the ALTER process, the ALTER operation will be canceled first.
         // Therefore, the latest indexes will not include shadow indexes.

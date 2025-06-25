@@ -84,7 +84,7 @@ public class LakePublishBatchTest {
                 ")" +
                 "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
-                "\", \"storage_medium\" = \"SSD\", \"enable_partition_aggregation\" = \"false\")";
+                "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"false\")";
         starRocksAssert.withTable(sql1);
 
         String sql2 = "create table " + TABLE_AGG_ON +
@@ -97,7 +97,7 @@ public class LakePublishBatchTest {
                 ")" +
                 "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
-                "\", \"storage_medium\" = \"SSD\", \"enable_partition_aggregation\" = \"true\")";
+                "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"true\")";
         starRocksAssert.withTable(sql2);
     }
 
@@ -119,7 +119,7 @@ public class LakePublishBatchTest {
         int num = 0;
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIndex.getTabletIds()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     if (num % 2 == 0) {
@@ -188,7 +188,7 @@ public class LakePublishBatchTest {
 
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIndex.getTabletIds()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets.add(tabletCommitInfo);
@@ -222,7 +222,7 @@ public class LakePublishBatchTest {
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIndex.getTabletIds()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets.add(tabletCommitInfo);
@@ -280,7 +280,7 @@ public class LakePublishBatchTest {
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIndex.getTabletIds()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets.add(tabletCommitInfo);
@@ -341,7 +341,7 @@ public class LakePublishBatchTest {
         int num = 0;
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+            for (Long tabletId : baseIndex.getTabletIds()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     if (num % 2 == 0) {

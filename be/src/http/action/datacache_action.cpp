@@ -22,11 +22,15 @@
 #include <string>
 
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
-#include "cache/local_cache.h"
+#include "cache/local_cache_engine.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/starcache_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -34,25 +38,6 @@ const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_STAT = "stat";
 const static std::string ACTION_APP_STAT = "app_stat";
-
-std::string cache_status_str(const DataCacheStatus& status) {
-    std::string str_status;
-    switch (status) {
-    case DataCacheStatus::NORMAL:
-        str_status = "NORMAL";
-        break;
-    case DataCacheStatus::UPDATING:
-        str_status = "UPDATING";
-        break;
-    case DataCacheStatus::ABNORMAL:
-        str_status = "ABNORMAL";
-        break;
-    case DataCacheStatus::LOADING:
-        str_status = "LOADING";
-        break;
-    }
-    return str_status;
-}
 
 bool DataCacheAction::_check_request(HttpRequest* req) {
     if (req->method() != HttpMethod::GET) {
@@ -73,7 +58,7 @@ void DataCacheAction::handle(HttpRequest* req) {
     }
     if (!_local_cache || !_local_cache->is_initialized()) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
-    } else if (_local_cache->engine_type() != DataCacheEngineType::STARCACHE) {
+    } else if (_local_cache->engine_type() != LocalCacheEngineType::STARCACHE) {
         _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
     } else if (req->param(ACTION_KEY) == ACTION_STAT) {
         _handle_stat(req);
@@ -97,8 +82,9 @@ void DataCacheAction::_handle_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
 #ifdef WITH_STARCACHE
         auto& allocator = root.GetAllocator();
-        auto&& metrics = _local_cache->cache_metrics(2);
-        std::string status = cache_status_str(metrics.status);
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(_local_cache);
+        auto&& metrics = starcache->starcache_metrics(2);
+        std::string status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         rapidjson::Value status_value;
         status_value.SetString(status.c_str(), status.length(), allocator);

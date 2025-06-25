@@ -788,6 +788,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // retain old column name
         modColumn.setName(oriColumn.getName());
+        modColumn.setColumnId(oriColumn.getColumnId());
         modColumn.setUniqueId(oriColumn.getUniqueId());
 
         if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
@@ -1974,10 +1975,17 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
+
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties
@@ -2113,7 +2121,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             boolean enablePersistentIndex = false;
             String persistentIndexType = "";
-            boolean aggregateTabletMetadata = false;
+            boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
@@ -2148,15 +2156,15 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), persistentIndexType));
                     return null;
                 }
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-                aggregateTabletMetadata = PropertyAnalyzer.analyzeBooleanProp(properties,
-                            PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, false);
-                if (aggregateTabletMetadata == olapTable.enablePartitionAggregation()) {
-                    LOG.info(String.format("table: %s enable_partition_aggregation is %s, nothing need to do",
-                            olapTable.getName(), aggregateTabletMetadata));
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+                enableFileBundling = PropertyAnalyzer.analyzeBooleanProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, false);
+                if (enableFileBundling == olapTable.isFileBundling()) {
+                    LOG.info(String.format("table: %s file_bundling is %s, nothing need to do",
+                            olapTable.getName(), enableFileBundling));
                     return null;
                 }
-                metaType = TTabletMetaType.ENABLE_PARTITION_AGGREGATION;
+                metaType = TTabletMetaType.ENABLE_FILE_BUNDLING;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -2166,7 +2174,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, aggregateTabletMetadata);
+                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");

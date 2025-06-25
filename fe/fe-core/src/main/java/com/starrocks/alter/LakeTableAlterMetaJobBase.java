@@ -73,7 +73,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
     private AgentBatchTask batchTask = null;
-    private boolean enablePartitionAggregation = false;
+    private boolean isFileBundling = false;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
@@ -112,10 +112,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
-        // TODO(zhangqiang)
-        // if update partition aggregation, can we skip write txn log?
+
         try {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, table, partition);
@@ -134,9 +133,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
-    protected abstract boolean isAggregateMetadata();
+    protected abstract boolean enableFileBundling();
 
-    protected abstract boolean isSplitMetadata();
+    protected abstract boolean disableFileBundling();
 
     @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
@@ -173,7 +172,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
 
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
@@ -216,7 +215,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
             // set visible version
             updateVisibleVersion(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
@@ -244,7 +243,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            enablePartitionAggregation = table.enablePartitionAggregation();
+            isFileBundling = table.isFileBundling();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -271,10 +270,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
             // there are two scenario we should use aggregate_publish
-            // 1. this task is change `enable_partition_aggregation`
-            // 2. the table is enable_partition_aggregation and this task is not change `enable_partition_aggregation`
+            // 1. this task is change `file_bundling` to true
+            // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
             //    to false.
-            boolean useAggregatePublish = isAggregateMetadata() || (enablePartitionAggregation && !isSplitMetadata());
+            boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -427,7 +426,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
-            if (isAggregateMetadata() || isSplitMetadata()) {
+            if (enableFileBundling() || disableFileBundling()) {
                 partition.setMetadataSwitchVersion(commitVersion);
             }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
@@ -443,9 +442,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected long getWatershedTxnId() {
         return watershedTxnId;
     }
-
-    // Only for reducing data writing after the first log, so we don't do deep copy
-    protected abstract LakeTableAlterMetaJobBase getShadowCopy();
 
     @Override
     protected boolean cancelImpl(String errMsg) {
@@ -543,25 +539,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
-    }
-
-    protected void copyOnlyForNonFirstLog(LakeTableAlterMetaJobBase copied) {
-        copied.watershedTxnId = this.watershedTxnId;
-        copied.watershedGtid = this.watershedGtid;
-        copied.physicalPartitionIndexMap = this.physicalPartitionIndexMap;
-        copied.commitVersionMap = this.commitVersionMap;
-
-        copied.type = this.type;
-        copied.jobId = this.jobId;
-        copied.jobState = this.jobState;
-        copied.dbId = this.dbId;
-        copied.tableId = this.tableId;
-        copied.tableName = this.tableName;
-        copied.errMsg = this.errMsg;
-        copied.createTimeMs = this.createTimeMs;
-        copied.finishedTimeMs = this.finishedTimeMs;
-        copied.timeoutMs = this.timeoutMs;
-        copied.warehouseId = this.warehouseId;
     }
 
     // for test

@@ -17,24 +17,11 @@ package com.starrocks.paimon.reader;
 import com.starrocks.jni.connector.ScannerFactory;
 import com.starrocks.jni.connector.ScannerHelper;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-
 public class PaimonSplitScannerFactory implements ScannerFactory {
     static ClassLoader classLoader;
 
     static {
-        String basePath = System.getenv("STARROCKS_HOME");
-        List<File> preloadFiles = new ArrayList<>();
-        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
-        File dir = new File(basePath + "/lib/paimon-reader-lib");
-        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        dir = new File(basePath + "/lib/common-runtime-lib");
-        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "paimon scanner");
+        classLoader = ScannerHelper.createModuleClassLoader("paimon-reader-lib");
     }
 
     /**

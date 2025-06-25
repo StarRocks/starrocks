@@ -542,11 +542,6 @@ CONF_Bool(disable_mem_pools, "false");
 // to a relative large number or the performace is very very bad.
 CONF_Bool(use_mmap_allocate_chunk, "false");
 
-// Chunk Allocator's reserved bytes limit,
-// Default value is 2GB, increase this variable can improve performance, but will
-// acquire more free memory which can not be used by other modules
-CONF_Int64(chunk_reserved_bytes_limit, "0");
-
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
 
@@ -1703,6 +1698,4 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
-
-CONF_mInt32(max_update_tablet_version_internal_ms, "5000");
 } // namespace starrocks::config

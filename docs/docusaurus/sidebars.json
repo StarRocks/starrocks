@@ -237,7 +237,7 @@
                         "data_source/catalog/hive_catalog",
                         {
                             "type": "category",
-                            "label": "Iceberg",
+                            "label": "Iceberg catalog",
                             "link": {
                                 "type": "doc",
                                 "id": "data_source/catalog/iceberg/iceberg_catalog"
@@ -499,6 +499,7 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
+                "administration/http_interface",
         {
             "type": "category",
             "label": "User Privileges and Authentication",

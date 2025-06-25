@@ -1635,7 +1635,7 @@ TEST(LakeVacuumTest2, test_delete_files_retry4) {
     EXPECT_GT(attempts, 1);
 }
 
-TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
+TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
@@ -1719,19 +1719,28 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
             }
             )DEL");
 
+    TabletSchemaPB schema_pb1;
+    {
+        schema_pb1.set_id(0);
+        schema_pb1.set_num_short_key_columns(1);
+        schema_pb1.set_keys_type(DUP_KEYS);
+    }
     // create SharedTabletMetadata
     std::map<int64_t, TabletMetadataPB> tablet_metas_v1;
+    t600_v1->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v1[600] = *t600_v1;
     tablet_metas_v1[601] = *t601_v1;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v1));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    t600_v2->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v2[600] = *t600_v2;
     tablet_metas_v2[601] = *t601_v2;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v2));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
+    t600_v3->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v3[600] = *t600_v3;
     tablet_metas_v3[601] = *t601_v3;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v3));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
@@ -1758,11 +1767,11 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
         request.set_min_retain_version(3);
         request.set_grace_timestamp(grace_timestamp);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(2, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -1789,11 +1798,11 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_metadata) {
         // deleted
         request.set_grace_timestamp(grace_timestamp + 1);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_EQ(4, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
@@ -1815,6 +1824,12 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat");
+    TabletSchemaPB schema_pb1;
+    {
+        schema_pb1.set_id(0);
+        schema_pb1.set_num_short_key_columns(1);
+        schema_pb1.set_keys_type(DUP_KEYS);
+    }
 
     auto t600_v1 = json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -1995,17 +2010,20 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
 
     // create SharedTabletMetadata
     std::map<int64_t, TabletMetadataPB> tablet_metas_v1;
+    t600_v1->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v1[600] = *t600_v1;
     tablet_metas_v1[601] = *t601_v1;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v1));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    t600_v2->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v2[600] = *t600_v2;
     tablet_metas_v2[601] = *t601_v2;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v2));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
+    t600_v3->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v3[600] = *t600_v3;
     tablet_metas_v3[601] = *t601_v3;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v3));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
     metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
@@ -2032,11 +2050,11 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         request.set_min_retain_version(3);
         request.set_grace_timestamp(grace_timestamp);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(2, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -2061,11 +2079,11 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         // deleted
         request.set_grace_timestamp(grace_timestamp + 1);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_EQ(4, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
@@ -2078,9 +2096,10 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
 
     // after compaction
     std::map<int64_t, TabletMetadataPB> tablet_metas_v4;
+    t600_v4->mutable_schema()->CopyFrom(schema_pb1);
     tablet_metas_v4[600] = *t600_v4;
     tablet_metas_v4[601] = *t601_v4;
-    ASSERT_OK(_tablet_mgr->put_aggregate_tablet_metadata(tablet_metas_v4));
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v4));
 
     // shared files will be deleted.
     {
@@ -2100,11 +2119,11 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         request.set_min_retain_version(4);
         request.set_grace_timestamp(grace_timestamp + 1);
         request.set_min_active_txn_id(12345);
-        request.set_enable_partition_aggregation(true);
+        request.set_enable_file_bundling(true);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(5, response.vacuumed_files());
+        EXPECT_EQ(7, response.vacuumed_files());
         EXPECT_EQ(16384, response.vacuumed_file_size());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));

@@ -792,28 +792,30 @@ public class AggStateCombinatorTest extends MVTestBase {
             String sql1 = "select k1, " + Joiner.on(", ").join(unionColumns)
                     + " from test_agg_state_table group by k1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
-            PlanTestBase.assertContains(plan, "|  aggregate: multi_distinct_sum_union[([6: v4, VARBINARY, true]); " +
-                    "args: VARBINARY; result: VARBINARY; args nullable: true; " +
-                    "result nullable: true], multi_distinct_sum_union[([7: v5, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([8: v6, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([9: v7, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([10: v8, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([11: v9, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([12: v10, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([2: v0, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([3: v1, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([4: v2, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_union[([5: v3, VARBINARY, true]); args: VARBINARY; " +
-                    "result: VARBINARY; args nullable: true; result nullable: true]");
+            PlanTestBase.assertContains(plan, "aggregate: multi_distinct_sum_union[([5: v3, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([6: v4, VARBINARY, true]); args: VARBINARY; result: VARBINARY; " +
+                    "args nullable: true; result nullable: true], " +
+                    "multi_distinct_sum_union[([7: v5, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([8: v6, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true], " +
+                    "multi_distinct_sum_union[([9: v7, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([10: v8, VARBINARY, true]); " +
+                    "args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([11: v9, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([12: v10, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([13: v11, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([2: v0, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([3: v1, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_union[([4: v2, VARBINARY, true]);" +
+                    " args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
                     "     table: test_agg_state_table, rollup: test_agg_state_table");
         }
@@ -823,28 +825,29 @@ public class AggStateCombinatorTest extends MVTestBase {
             String sql1 = "select k1, " + Joiner.on(", ").join(mergeColumns)
                     + " from test_agg_state_table group by k1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
-            PlanTestBase.assertContains(plan, "|  aggregate: multi_distinct_sum_merge[([6: v4, VARBINARY, true]); " +
-                    "args: VARBINARY; result: BIGINT; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([7: v5, VARBINARY, true]); args: VARBINARY; " +
-                    "result: BIGINT; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([8: v6, VARBINARY, true]); args: VARBINARY; " +
-                    "result: BIGINT; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([9: v7, VARBINARY, true]); args: VARBINARY; " +
-                    "result: LARGEINT; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([10: v8, VARBINARY, true]); args: VARBINARY; " +
-                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([11: v9, VARBINARY, true]); args: VARBINARY; " +
-                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([12: v10, VARBINARY, true]); args: VARBINARY; " +
-                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([2: v0, VARBINARY, true]); args: VARBINARY; " +
-                    "result: DOUBLE; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([3: v1, VARBINARY, true]); args: VARBINARY; " +
-                    "result: DOUBLE; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([4: v2, VARBINARY, true]); args: VARBINARY; " +
-                    "result: BIGINT; args nullable: true; result nullable: true], " +
-                    "multi_distinct_sum_merge[([5: v3, VARBINARY, true]); args: VARBINARY; " +
-                    "result: BIGINT; args nullable: true; result nullable: true]");
+            PlanTestBase.assertContains(plan, "|  aggregate: multi_distinct_sum_merge[([5: v3, VARBINARY, true]);" +
+                    " args: VARBINARY; result: BIGINT; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([6: v4, VARBINARY, true]); args: VARBINARY; result: BIGINT;" +
+                    " args nullable: true; result nullable: true], multi_distinct_sum_merge[([7: v5, VARBINARY, true]);" +
+                    " args: VARBINARY; result: BIGINT; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([8: v6, VARBINARY, true]);" +
+                    " args: VARBINARY; result: BIGINT; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([9: v7, VARBINARY, true]);" +
+                    " args: VARBINARY; result: LARGEINT; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([10: v8, VARBINARY, true]);" +
+                    " args: VARBINARY; result: DECIMAL128(38,2); args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([11: v9, VARBINARY, true]);" +
+                    " args: VARBINARY; result: DECIMAL128(38,2); args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([12: v10, VARBINARY, true]);" +
+                    " args: VARBINARY; result: DECIMAL128(38,2); args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([13: v11, VARBINARY, true]);" +
+                    " args: VARBINARY; result: DECIMAL128(38,2); args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([2: v0, VARBINARY, true]);" +
+                    " args: VARBINARY; result: DOUBLE; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([3: v1, VARBINARY, true]);" +
+                    " args: VARBINARY; result: DOUBLE; args nullable: true; result nullable: true]," +
+                    " multi_distinct_sum_merge[([4: v2, VARBINARY, true]);" +
+                    " args: VARBINARY; result: BIGINT; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
                     "     table: test_agg_state_table, rollup: test_agg_state_table");
         }

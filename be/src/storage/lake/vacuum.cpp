@@ -498,9 +498,8 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
-                                     int64_t grace_timestamp, bool enable_partition_aggregation,
-                                     int64_t* vacuumed_files, int64_t* vacuumed_file_size, int64_t* vacuumed_version,
-                                     int64_t* extra_file_size) {
+                                     int64_t grace_timestamp, bool enable_file_bundling, int64_t* vacuumed_files,
+                                     int64_t* vacuumed_file_size, int64_t* vacuumed_version, int64_t* extra_file_size) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
@@ -513,7 +512,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
     };
     std::unique_ptr<VacuumTabletMetaVerionRange> vacuum_version_range;
-    if (enable_partition_aggregation) {
+    if (enable_file_bundling) {
         vacuum_version_range = std::make_unique<VacuumTabletMetaVerionRange>();
     }
     AsyncBundleFileDeleter bundle_file_deleter(config::lake_vacuum_min_batch_delete_size);
@@ -529,7 +528,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                                                 extra_file_size));
         RETURN_IF_ERROR(datafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
-        if (!enable_partition_aggregation) {
+        if (!enable_file_bundling) {
             RETURN_IF_ERROR(metafile_deleter.finish());
             (*vacuumed_files) += metafile_deleter.delete_count();
         }
@@ -544,10 +543,20 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         RETURN_IF_ERROR(bundle_file_deleter.finish());
         (*vacuumed_files) += bundle_file_deleter.delete_count();
     }
-    if (enable_partition_aggregation) {
+    if (enable_file_bundling) {
         // collect meta files to vacuum at partition level
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+        // a special case:
+        // if a table enable file_bundling and finished alter job, the new created tablet will create initial tablet metadata
+        // its own tablet_id to avoid overwriting the initial tablet metadata.
+        // After that, we need to vacuum these metadata file using its own tablet_id
+        if (vacuum_version_range->min_version <= 1) {
+            for (auto& tablet_info : tablet_infos) {
+                RETURN_IF_ERROR(metafile_deleter.delete_file(
+                        join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
+            }
+        }
         for (auto v = vacuum_version_range->min_version; v < vacuum_version_range->max_version; v++) {
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
         }
@@ -646,7 +655,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
               [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); });
 
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
-                                           request.enable_partition_aggregation(), &vacuumed_files, &vacuumed_file_size,
+                                           request.enable_file_bundling(), &vacuumed_files, &vacuumed_file_size,
                                            &vacuumed_version, &extra_file_size));
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {

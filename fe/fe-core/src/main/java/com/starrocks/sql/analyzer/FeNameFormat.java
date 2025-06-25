@@ -185,6 +185,10 @@ public class FeNameFormat {
         checkCommonName("warehouse", warehouseName);
     }
 
+    public static void checkCNGroupName(String cngroupName) {
+        checkCommonName("cngroup", cngroupName);
+    }
+
     public static void checkStorageVolumeName(String svName) {
         checkCommonName("storage volume", svName);
     }

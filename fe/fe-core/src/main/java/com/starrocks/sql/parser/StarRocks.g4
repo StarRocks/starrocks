@@ -1424,7 +1424,7 @@ dropBaselinePlanStatement
 
 showBaselinePlanStatement
     : SHOW BASELINE (WHERE expression)?
-
+    | SHOW BASELINE ON queryRelation
     ;
 
 disableBaselinePlanStatement
@@ -1443,7 +1443,7 @@ createResourceGroupStatement
     ;
 
 dropResourceGroupStatement
-    : DROP RESOURCE GROUP identifier
+    : DROP RESOURCE GROUP (IF EXISTS)? identifier
     ;
 
 alterResourceGroupStatement

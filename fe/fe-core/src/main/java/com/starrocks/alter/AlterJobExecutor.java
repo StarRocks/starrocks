@@ -435,7 +435,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
-                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
                     locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -610,6 +610,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             ErrorReport.wrapWithRuntimeException(() ->
                     schemaChangeHandler.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
+
+            // If modified columns are already done, inactive related mv
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) table, modifiedColumns);
+
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }

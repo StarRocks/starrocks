@@ -1271,6 +1271,11 @@ public class GlobalStateMgr {
             replayer = null;
         }
 
+        if (!isDefaultWarehouseCreated) {
+            // A brand-new cluster was up for the first time, the leader node initializes its default warehouse here.
+            initDefaultWarehouse();
+        }
+
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
 
@@ -1311,10 +1316,6 @@ public class GlobalStateMgr {
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
             insertOverwriteJobMgr.cancelRunningJobs();
-
-            if (!isDefaultWarehouseCreated) {
-                initDefaultWarehouse();
-            }
 
             MetricRepo.init();
 
@@ -1524,18 +1525,18 @@ public class GlobalStateMgr {
             return;
         }
 
-        // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
+        if (!isDefaultWarehouseCreated) {
+            // A brand-new cluster was up for the first time, the follower/observer node initializes its default warehouse here.
+            initDefaultWarehouse();
+        }
 
+        // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
         if (replayer == null) {
             createReplayer();
             replayer.start();
         }
 
         startAllNodeTypeDaemonThreads();
-
-        if (!isDefaultWarehouseCreated) {
-            initDefaultWarehouse();
-        }
 
         MetricRepo.init();
 

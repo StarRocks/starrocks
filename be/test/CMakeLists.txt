@@ -65,11 +65,13 @@ set(EXEC_FILES
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
+        ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
+        ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -175,6 +177,7 @@ set(EXEC_FILES
         ./exprs/vectorized_literal_test.cpp
         ./exprs/min_max_predicate_test.cpp
         ./exprs/in_const_predicate_test.cpp
+        ./exprs/table_function/test_list_rowsets.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -332,6 +335,7 @@ set(EXEC_FILES
         ./storage/rowset/index_page_test.cpp
         ./storage/rowset/metadata_cache_test.cpp
         ./storage/rowset/page_io_test.cpp
+        ./storage/rowset/page_handle_test.cpp
         ./storage/index/vector_index_test.cpp
         ./storage/index/vector_search_test.cpp
         ./storage/snapshot_meta_test.cpp
@@ -436,9 +440,12 @@ set(EXEC_FILES
         ./runtime/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
+        ./runtime/load_fail_point_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./types/int256_test.cpp
+        ./types/int256_arithmetic_test.cpp
         ./types/type_checker_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
@@ -503,6 +510,7 @@ set(EXEC_FILES
         ./util/uuid_generator_test.cpp
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
+        ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/bit_packing_test.cpp
         ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
@@ -520,6 +528,7 @@ set(EXEC_FILES
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
         ./util/byte_stream_split_test.cpp
+        ./util/url_coding_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
@@ -536,11 +545,10 @@ set(EXEC_FILES
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
+        ./storage/lake/tablet_retain_info_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp
-        ./cache/object_cache/lrucache_module_test.cpp
-        ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
@@ -554,9 +562,9 @@ endif()
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./cache/disk_space_monitor_test.cpp)
+    list(APPEND EXEC_FILES ./cache/lrucache_engine_test.cpp)
+    list(APPEND EXEC_FILES ./cache/starcache_engine_test.cpp)
     list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./cache/object_cache/starcache_module_test.cpp)
-    list(APPEND EXEC_FILES ./cache/object_cache/object_cache_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 

@@ -357,8 +357,6 @@ import com.starrocks.thrift.TUpdateFailPointRequest;
 import com.starrocks.thrift.TUpdateFailPointResponse;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
-import com.starrocks.thrift.TUpdateTabletVersionRequest;
-import com.starrocks.thrift.TUpdateTabletVersionResult;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.thrift.TWarehouseInfo;
@@ -1265,7 +1263,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
-                request.getUser(), request.getUser_ip(), timeoutSecond * 1000, resp, false, warehouseId);
+                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
             throw resp.getException();
@@ -2123,9 +2121,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
+            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
     }
@@ -2154,7 +2152,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     LocalTablet localTablet = (LocalTablet) tablet;
                     Multimap<Replica, Long> bePathsMap =
                             localTablet.getNormalReplicaBackendPathMap(
-                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false);
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new StarRocksException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                         "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
@@ -2285,7 +2283,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        if (txnState.getPartitionNameToTPartition().size() > Config.max_partitions_in_one_batch) {
+        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
                                     "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
@@ -2400,7 +2398,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (String partitionName : partitionColNames) {
             // get partition info from snapshot
-            TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition().get(partitionName);
+            TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition(olapTable.getId()).get(partitionName);
             if (tPartition != null) {
                 partitions.add(tPartition);
                 for (TOlapTableIndexTablets index : tPartition.getIndexes()) {
@@ -2447,7 +2445,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LocalTablet localTablet = (LocalTablet) tablet;
                         Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(
-                                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false);
                         if (bePathsMap.keySet().size() < quorum) {
                             String errorMsg = String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                             "tablet_id: %s, replicas: %s. Check quorum number failed" +
@@ -2535,12 +2533,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
+            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
-        txnState.getPartitionNameToTPartition().put(partition.getName(), tPartition);
+        txnState.getPartitionNameToTPartition(olapTable.getId()).put(partition.getName(), tPartition);
     }
 
     @Override
@@ -2989,7 +2987,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStartCheckpointResponse response = new TStartCheckpointResponse();
         try {
-            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id());
+            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id(), false);
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3020,7 +3018,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         try {
             if (request.isIs_success()) {
-                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name(), null);
             } else {
                 controller.cancelCheckpoint(request.getNode_name(), request.getMessage());
             }
@@ -3211,11 +3209,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TUpdateFailPointResponse response = new TUpdateFailPointResponse();
         response.setStatus(status);
         return response;
-    }
-
-    @Override
-    public TUpdateTabletVersionResult updateTabletVersion(TUpdateTabletVersionRequest request) {
-        return leaderImpl.updateTabletVersion(request);
     }
 
     @NotNull

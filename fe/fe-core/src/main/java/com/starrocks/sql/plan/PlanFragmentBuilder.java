@@ -60,6 +60,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -926,16 +927,16 @@ public class PlanFragmentBuilder {
                         selectedNonEmptyPartitionIds.add(partitionId);
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
-                        final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
-                        List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
-                        totalTabletsNum += selectedTable.getTablets().size();
+                        final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexId);
+                        totalTabletsNum += selectedIndex.getTablets().size();
+                        List<Long> allTabletIds = selectedIndex.getTabletIds();
                         for (int i = 0; i < allTabletIds.size(); i++) {
                             tabletId2BucketSeq.put(allTabletIds.get(i), i);
                         }
                         scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                         List<Tablet> tablets =
-                                selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
-                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
+                                selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
+                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
                     }
                 }
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
@@ -1725,7 +1726,9 @@ public class PlanFragmentBuilder {
                                 scanNode.setLabel(constantOperator.getVarchar());
                                 break;
                             case "JOB_ID":
-                                scanNode.setJobId(constantOperator.getBigint());
+                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
                                 break;
                             case "ID":
                                 if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME)
@@ -1964,6 +1967,7 @@ public class PlanFragmentBuilder {
             }
             tupleDescriptor.computeMemLayout();
 
+            final int dstSlotCount = tupleDescriptor.getSlots().size();
             if (valuesOperator.getRows().isEmpty()) {
                 EmptySetNode emptyNode = new EmptySetNode(context.getNextNodeId(),
                         Lists.newArrayList(tupleDescriptor.getId()));
@@ -1980,6 +1984,12 @@ public class PlanFragmentBuilder {
 
                 List<List<Expr>> consts = new ArrayList<>();
                 for (List<ScalarOperator> row : valuesOperator.getRows()) {
+                    if (row.size() != dstSlotCount) {
+                        throw new StarRocksPlannerException(
+                                String.format("The number of columns in each row of values %s must be equal to the number of " +
+                                        "slots %s", row.size(), dstSlotCount),
+                                INTERNAL_ERROR);
+                    }
                     List<Expr> exprRow = new ArrayList<>();
                     for (ScalarOperator field : row) {
                         exprRow.add(ScalarOperatorToExpr.buildExecExpression(
@@ -2679,7 +2689,8 @@ public class PlanFragmentBuilder {
         }
 
         private List<Expr> extractConjuncts(ScalarOperator predicate, ExecPlan context) {
-            return Utils.extractConjuncts(predicate).stream()
+            return Utils.extractConjuncts(predicate).stream().sorted((l, r) ->
+                            Boolean.compare(r.isJoinDerived(), l.isJoinDerived()))
                     .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
@@ -3644,7 +3655,7 @@ public class PlanFragmentBuilder {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
-            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).collect(Collectors.toList());
+            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).toList();
             Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             for (BinaryPredicateOperator s : eqOnPredicates) {

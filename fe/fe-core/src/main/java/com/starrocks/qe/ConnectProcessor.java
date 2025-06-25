@@ -51,6 +51,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -227,7 +228,8 @@ public class ConnectProcessor {
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
-                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
+                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
+                .setSessionId(ctx.getSessionId().toString());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -283,7 +285,8 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
-            ctx.getAuditEventBuilder().setStmt(origStmt);
+            // but redact sensitive credentials first
+            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
         } else {
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
@@ -331,7 +334,8 @@ public class ConnectProcessor {
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog())
-                .setWarehouse(ctx.getCurrentWarehouseName());
+                .setWarehouse(ctx.getCurrentWarehouseName())
+                .setCustomQueryId(ctx.getCustomQueryId());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
         ctx.getState().setIsQuery(true);
@@ -342,7 +346,7 @@ public class ConnectProcessor {
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
             if (Config.enable_print_sql) {
-                LOG.info("Begin to execute sql, type: query，query id:{}, sql:{}", ctx.getQueryId(), originStmt);
+                LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
             }
             List<StatementBase> stmts;
             try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {

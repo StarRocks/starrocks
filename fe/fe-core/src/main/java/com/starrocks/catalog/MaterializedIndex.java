@@ -102,7 +102,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     @SerializedName(value = "rowCount")
     private long rowCount;
 
-    // Virtual buckets. Each virtual bucket saves a tablet id.
+    // Virtual buckets in order.
+    // There is a tablet id for each virtual bucket,
+    // which means this virtual bucket's data is stored in this tablet.
     // We divide data into virtual buckets and then arrange these virtual buckets
     // into physical buckets, which are tablets.
     // Each virtual bucket is associated with a tablet. Multiple virtual buckets are
@@ -112,7 +114,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     private Map<Long, Tablet> idToTablets;
 
-    // Deprecated, virtual buckets keeps tablet order, keep this for compatibility
+    // Since virtual buckets keeps the order, this can be deprecated if idToTablets persists
     @SerializedName(value = "tablets")
     private List<Tablet> tablets;
 
@@ -194,6 +196,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return shardGroupId;
     }
 
+    // The virtual buckets are in order
     public List<Long> getVirtualBuckets() {
         return virtualBuckets;
     }
@@ -202,7 +205,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return tablets;
     }
 
-    public List<Long> getTabletIdsInOrder() {
+    // With virtual buckets, the order of tablets is irrelevant
+    public List<Long> getTabletIds() {
         List<Long> tabletIds = Lists.newArrayListWithCapacity(tablets.size());
         for (Tablet tablet : tablets) {
             tabletIds.add(tablet.getId());
@@ -306,6 +310,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return virtualBucketIndexes;
     }
 
+    // With virtual buckets, the order index of tablets is irrelevant.
+    // Keep this method only for colocate table in shared-nothing mode,
+    // in which we do not implement tablet split and merge and virtual buckets are the same with tabletIds.
     public int getTabletOrderIdx(long tabletId) {
         int idx = 0;
         for (Tablet tablet : tablets) {
