@@ -40,6 +40,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_others();
     register_retract_functions();
     register_hypothesis_testing();
+    register_boolean();
 }
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
