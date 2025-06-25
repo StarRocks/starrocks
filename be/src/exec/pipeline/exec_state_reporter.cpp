@@ -60,6 +60,8 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
     status.set_t_status(&params);
     params.__set_done(done);
 
+    // right now enable_async_profile_in_be is false for load, so load task will still use exec_state_report interface
+    // enable_async_profile_in_be is true for query, so query will not go here unless set enable_async_profile_in_be = false
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
         runtime_state->update_report_load_status(&params);

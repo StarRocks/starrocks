@@ -20,15 +20,12 @@
 namespace starrocks {
 
 void* CounterMemoryPool::allocate(size_t size) {
-    // 确保大小是 ALIGNMENT 的倍数
     size = (size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
 
-    // 如果当前块没有足够的空间，分配新块
     if (_current_block == nullptr || _current_block_offset + size > BLOCK_SIZE) {
         allocate_new_block();
     }
 
-    // 从当前块分配内存
     void* ptr = _current_block + _current_block_offset;
     _current_block_offset += size;
     return ptr;
@@ -41,4 +38,4 @@ void CounterMemoryPool::allocate_new_block() {
     _current_block_offset = 0;
 }
 
-} // namespace starrocks 
+} // namespace starrocks

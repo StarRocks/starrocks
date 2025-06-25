@@ -1080,7 +1080,7 @@ public class StmtExecutor {
         // since sometimes the profile collect time is very long.
         long totalTimeMs = now - startTime;
 
-        if (ConnectProcessor.getCurrentQps() > 50 && totalTimeMs < 100) {
+        if (ConnectProcessor.getCurrentQps() > 50 && totalTimeMs < context.sessionVariable.getProfileThresHold()) {
             if (enableAsyncProfileInBe) {
                 RunningProfileManager.getInstance().removeProfile(executionId);
             }

@@ -123,8 +123,6 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.util.DebugUtil.printId;
-
 public class DefaultCoordinator extends Coordinator {
     private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
 
@@ -276,7 +274,7 @@ public class DefaultCoordinator extends Coordinator {
 
         TUniqueId queryId = jobSpec.getQueryId();
 
-        LOG.info("Execution Profile: {}", printId(queryId));
+        LOG.info("Execution Profile: {}", DebugUtil.printId(queryId));
 
         FragmentInstanceExecState execState = FragmentInstanceExecState.createFakeExecution(queryId, address);
         executionDAG.addExecution(execState);
@@ -308,7 +306,7 @@ public class DefaultCoordinator extends Coordinator {
 
         shortCircuitExecutor =
                 ShortCircuitExecutor.create(context, fragments, scanNodes, descTable, isBinaryRow,
-                        jobSpec.isNeedReport(),
+                        context.isProfileEnabled(),
                         jobSpec.getPlanProtocol(), coordinatorPreprocessor.getWorkerProvider());
 
         if (null != shortCircuitExecutor) {
@@ -476,7 +474,7 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public boolean enableAsyncProfileInBe() {
         // right now only support pipeline query which is not short circuit query
-        return jobSpec.isNeedReport() && jobSpec.isEnablePipeline() && !isShortCircuit && !isLoad() &&
+        return connectContext.isProfileEnabled() && jobSpec.isEnablePipeline() && !isShortCircuit && !isLoad() &&
                 connectContext.getSessionVariable().isEnableAsyncProfileInBe();
     }
 
@@ -501,16 +499,16 @@ public class DefaultCoordinator extends Coordinator {
         if (LOG.isDebugEnabled()) {
             if (!jobSpec.getScanNodes().isEmpty()) {
                 LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
-                        printId(jobSpec.getQueryId()),
+                        DebugUtil.printId(jobSpec.getQueryId()),
                         jobSpec.getScanNodes().get(0).treeToThrift());
             }
             if (!jobSpec.getFragments().isEmpty()) {
                 LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
-                        printId(jobSpec.getQueryId()),
+                        DebugUtil.printId(jobSpec.getQueryId()),
                         jobSpec.getFragments().get(0).toThrift());
             }
             LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
-                    printId(jobSpec.getQueryId()), jobSpec.getDescTable());
+                    DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
         }
 
         if (slot != null && slot.getPipelineDop() > 0 &&
@@ -594,7 +592,7 @@ public class DefaultCoordinator extends Coordinator {
         try {
             scheduler.tryScheduleNextTurn(fragmentInstanceId);
         } catch (Exception e) {
-            LOG.warn("schedule fragment:{} next internal error:", printId(fragmentInstanceId), e);
+            LOG.warn("schedule fragment:{} next internal error:", DebugUtil.printId(fragmentInstanceId), e);
             cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
             return Status.internalError(e.getMessage());
         }
@@ -641,7 +639,7 @@ public class DefaultCoordinator extends Coordinator {
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(
                     jobSpec.getLoadJobId(), jobSpec.getQueryId(), executionDAG.getInstanceIds(), relatedBackendIds);
-            LOG.info("dispatch load job: {} to {}", printId(jobSpec.getQueryId()),
+            LOG.info("dispatch load job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()),
                     coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds());
         }
 
@@ -668,7 +666,7 @@ public class DefaultCoordinator extends Coordinator {
                 jobSpec.getQueryOptions().query_timeout * 1000);
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("dispatch query job: {} to {}", printId(jobSpec.getQueryId()), execBeAddr);
+            LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()), execBeAddr);
         }
 
         // set the broker address for OUTFILE sink
@@ -915,8 +913,8 @@ public class DefaultCoordinator extends Coordinator {
             queryStatus.setStatus(status);
             LOG.warn(
                     "one instance report fail throw updateStatus(), need cancel. job id: {}, query id: {}, instance id: {}",
-                    jobSpec.getLoadJobId(), printId(jobSpec.getQueryId()),
-                    instanceId != null ? printId(instanceId) : "NaN");
+                    jobSpec.getLoadJobId(), DebugUtil.printId(jobSpec.getQueryId()),
+                    instanceId != null ? DebugUtil.printId(instanceId) : "NaN");
             cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
         } finally {
             lock.unlock();
@@ -979,7 +977,7 @@ public class DefaultCoordinator extends Coordinator {
         if (!status.ok()) {
             connectContext.setErrorCodeOnce(status.getErrorCodeString());
             LOG.warn("get next fail, need cancel. status {}, query id: {}", status,
-                    printId(jobSpec.getQueryId()));
+                    DebugUtil.printId(jobSpec.getQueryId()));
         }
         updateStatus(status, null /* no instance id */);
 
@@ -1037,7 +1035,7 @@ public class DefaultCoordinator extends Coordinator {
                 if (message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     queryProfile.finishAllInstances(Status.OK);
                     LOG.info("count down profileDoneSignal since backend has crashed, query id: {}",
-                            printId(jobSpec.getQueryId()));
+                            DebugUtil.printId(jobSpec.getQueryId()));
                 }
             } finally {
                 unlock();
@@ -1116,13 +1114,13 @@ public class DefaultCoordinator extends Coordinator {
         if (!execState.updateExecStatus(params)) {
             LOG.info("duplicate report fragment exec status, query id: {}, instance id: {}, backend id: {}, " +
                             "status: {}, exec state: {}",
-                    printId(jobSpec.getQueryId()),
-                    printId(params.getFragment_instance_id()),
+                    DebugUtil.printId(jobSpec.getQueryId()),
+                    DebugUtil.printId(params.getFragment_instance_id()),
                     params.getBackend_id(), params.status, execState.getState());
             return;
         }
 
-        final String instanceId = printId(params.getFragment_instance_id());
+        final String instanceId = DebugUtil.printId(params.getFragment_instance_id());
         final boolean isDone = params.isDone();
         // Create a CompletableFuture chain for handling updates
         final CompletableFuture<Void> future = CompletableFuture.completedFuture(null)
@@ -1194,8 +1192,8 @@ public class DefaultCoordinator extends Coordinator {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
             LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
-                    status, printId(jobSpec.getQueryId()),
-                    printId(params.getFragment_instance_id()),
+                    status, DebugUtil.printId(jobSpec.getQueryId()),
+                    DebugUtil.printId(params.getFragment_instance_id()),
                     params.getBackend_id());
             updateStatus(status, params.getFragment_instance_id());
         }
@@ -1211,7 +1209,7 @@ public class DefaultCoordinator extends Coordinator {
         // called repeatedly. Otherwise, it will cause commit with wrong commit info.
         if (jobSpec.isLoadType() && execState.getState().isFinished() && queryProfile.isFinished()) {
             throw new RuntimeException(String.format("updateFinishInstance called after fragment is finished:%s, query_id:%s",
-                    instanceId, printId(params.getQuery_id())));
+                    instanceId, DebugUtil.printId(params.getQuery_id())));
         }
         try {
             lock();
@@ -1276,7 +1274,8 @@ public class DefaultCoordinator extends Coordinator {
             // Ideally, it should wait indefinitely, but out of defense, set timeout
             boolean isFinished = queryProfile.waitForProfileReported(timeout, TimeUnit.SECONDS);
             if (!isFinished) {
-                LOG.warn("failed to get profile {} within {} seconds", printId(jobSpec.getQueryId()), timeout);
+                LOG.warn("failed to get profile {} within {} seconds", DebugUtil.printId(jobSpec.getQueryId()),
+                        timeout);
             }
         }
 
@@ -1293,9 +1292,7 @@ public class DefaultCoordinator extends Coordinator {
         if (executionDAG.getExecutions().isEmpty() && (!isShortCircuit)) {
             return false;
         }
-        if (!jobSpec.isNeedReport()) {
-            return false;
-        }
+
         boolean enableAsyncProfile = true;
         if (connectContext != null && connectContext.getSessionVariable() != null) {
             enableAsyncProfile = connectContext.getSessionVariable().isEnableAsyncProfile();
@@ -1307,7 +1304,7 @@ public class DefaultCoordinator extends Coordinator {
 
         if (!enableAsyncProfile || !queryProfile.addListener(task)) {
             if (enableAsyncProfile) {
-                LOG.info("Profile task is full, execute in sync mode, query id = {}", printId(queryId));
+                LOG.info("Profile task is full, execute in sync mode, query id = {}", DebugUtil.printId(queryId));
             }
             collectProfileSync();
             task.accept(false);
