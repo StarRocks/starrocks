@@ -36,6 +36,8 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
         globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage();
+            // This is required because the loadImage() may find no image to load, and the initDefaultWarehouse() will
+            // be skipped.
             globalStateMgr.initDefaultWarehouse();
 
             checkEpoch(epoch);
