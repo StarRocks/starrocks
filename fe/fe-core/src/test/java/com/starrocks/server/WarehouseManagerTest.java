@@ -379,4 +379,12 @@ public class WarehouseManagerTest {
         desc.setTable(table);
         return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode");
     }
+
+    @Test
+    public void testBackgroundWarehouse() {
+        WarehouseManager mgr = new WarehouseManager();
+        mgr.initDefaultWarehouse();
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundWarehouse(123).getId());
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundComputeResource(123).getWarehouseId());
+    }
 }
