@@ -95,6 +95,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 String sql = sqlString[i];
                 String plan = getFragmentPlan(sql);
                 assertContains(plan, "___count___");
+                assertContains(plan, "ifnull");
             }
         }
         // negative cases.
@@ -121,6 +122,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 String sql = sqlString[i];
                 // just make sure it's not stuck.
                 String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
@@ -141,6 +143,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 String sql = sqlString[i];
                 String plan = getFragmentPlan(sql);
                 assertContains(plan, "___count___");
+                assertContains(plan, "ifnull");
             }
         }
         // negative cases.
