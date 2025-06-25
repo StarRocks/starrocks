@@ -35,6 +35,7 @@
 package com.starrocks.clone;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.util.TimeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -135,6 +136,8 @@ public class TabletSchedulerStat {
     public AtomicLong counterColocateBalanceRound = new AtomicLong(0L);
 
     private TabletSchedulerStat lastSnapshot = null;
+    private static final String SNAPSHOT_TIME_ITEM = "last snapshot time";
+    private AtomicLong lastSnapshotTime = new AtomicLong(-1L);
 
     /*
      * make a snapshot of current stat,
@@ -152,6 +155,7 @@ public class TabletSchedulerStat {
 
                 ((AtomicLong) field.get(lastSnapshot)).set(((AtomicLong) field.get(this)).get());
             }
+            lastSnapshotTime.set(System.currentTimeMillis());
         } catch (ClassNotFoundException | IllegalArgumentException | IllegalAccessException e) {
             LOG.warn("Failed to execute snapshot", e);
             lastSnapshot = null;
@@ -162,8 +166,13 @@ public class TabletSchedulerStat {
         return lastSnapshot;
     }
 
+    /**
+     * For show proc "/cluster_balance/sched_stat";
+     * item, snapshot value, incremental value since snapshot
+     */
     public List<List<String>> getBrief() {
         List<List<String>> result = Lists.newArrayList();
+        long snapshotTime = lastSnapshotTime.get();
         try {
             Class<?> clazz = Class.forName(this.getClass().getName());
             Field[] fields = clazz.getDeclaredFields();
@@ -173,10 +182,20 @@ public class TabletSchedulerStat {
                 }
 
                 List<String> info = Lists.newArrayList();
+                long current = ((AtomicLong) field.get(this)).get();
+                long last = lastSnapshot == null ? 0 : ((AtomicLong) field.get(lastSnapshot)).get();
                 info.add(field.getAnnotation(StatField.class).value());
-                info.add(String.valueOf(((AtomicLong) field.get(this)).get()));
+                info.add(String.valueOf(last));
+                info.add(String.valueOf(current - last));
                 result.add(info);
             }
+
+            // add time info
+            List<String> info = Lists.newArrayList();
+            info.add(SNAPSHOT_TIME_ITEM);
+            info.add(TimeUtils.longToTimeString(snapshotTime));
+            info.add(String.format("%ds", snapshotTime <= 0 ? 0L : (System.currentTimeMillis() - snapshotTime) / 1000));
+            result.add(info);
         } catch (ClassNotFoundException | IllegalArgumentException | IllegalAccessException e) {
             LOG.warn("Failed to execute getBrief", e);
             return Lists.newArrayList();
