@@ -40,7 +40,6 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,8 +83,7 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
         Map<String, Range<PartitionKey>> result = generatePartitionRange(granularity, partitionType, mappings);
         Map<String, Range<PartitionKey>> virtualPartitionRangeMap = generatePartitionRange(granularity, partitionType,
                 virtualPartitionMapping);
-        PartitionRangeWrapper wrapper = new PartitionRangeWrapper(result, virtualPartitionRangeMap);
-        return wrapper;
+        return new PartitionRangeWrapper(result, virtualPartitionRangeMap);
     }
 
     /**
@@ -121,31 +119,26 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
 
         Map<String, Integer> func2Range = new HashMap<>();
         for (Expr unionExpr : mv.getUnionOtherOutputExpression()) {
-            if (!(unionExpr instanceof FunctionCallExpr)) {
+            if (!(unionExpr instanceof FunctionCallExpr functionCallExpr)) {
                 continue;
             }
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) unionExpr;
             if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 continue;
             }
 
             for (Expr child : functionCallExpr.getChildren()) {
-                if (child instanceof StringLiteral) {
-                    StringLiteral granularityLiteral = (StringLiteral) child;
+                if (child instanceof StringLiteral granularityLiteral) {
                     if (!granularityLiteral.getStringValue().equalsIgnoreCase(granularity)) {
                         return result;
                     }
-                } else if (child instanceof TimestampArithmeticExpr) {
-                    TimestampArithmeticExpr timestampArithmeticExpr = (TimestampArithmeticExpr) child;
+                } else if (child instanceof TimestampArithmeticExpr timestampArithmeticExpr) {
                     String functionName = timestampArithmeticExpr.getFuncName();
                     for (Expr timestampArithmeticExprChild : timestampArithmeticExpr.getChildren()) {
-                        if (timestampArithmeticExprChild instanceof SlotRef) {
-                            SlotRef slotRefChild = (SlotRef) timestampArithmeticExprChild;
+                        if (timestampArithmeticExprChild instanceof SlotRef slotRefChild) {
                             if (!slotRefChild.getColumnName().equalsIgnoreCase(mvPartitionSlotRef.getColumnName())) {
                                 return result;
                             }
-                        } else if (timestampArithmeticExprChild instanceof IntLiteral) {
-                            IntLiteral intLiteralChild = (IntLiteral) timestampArithmeticExprChild;
+                        } else if (timestampArithmeticExprChild instanceof IntLiteral intLiteralChild) {
                             func2Range.put(functionName, Integer.valueOf(intLiteralChild.getStringValue()));
                         }
                     }
@@ -174,7 +167,7 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
             PartitionMapping tempMapping = new PartitionMapping(
                     originMapping.getLowerDateTime(), originMapping.getUpperDateTime());
 
-            for (Integer i = 0; i < maxRange.getValue(); i++) {
+            for (int i = 0; i < maxRange.getValue(); i++) {
                 LocalDateTime lowerDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getLowerDateTime(),
                         granularity, functionName);
                 LocalDateTime upperDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getUpperDateTime(),
