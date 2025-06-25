@@ -70,12 +70,11 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
         for (Partition partition : olapTable.getPartitions()) {
             long partitionId = partition.getId();
             TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-
+            // create shard group
+            long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
+                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
-                // create shard group
-                long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId,
                         MaterializedIndex.IndexState.SHADOW, shardGroupId);
@@ -100,8 +99,8 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                         .collect(Collectors.toList());
                 List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                         originTablets.size(),
-                        olapTable.getPartitionFilePathInfo(partitionId),
-                        olapTable.getPartitionFileCacheInfo(partitionId),
+                        olapTable.getPartitionFilePathInfo(physicalPartitionId),
+                        olapTable.getPartitionFileCacheInfo(physicalPartitionId),
                         shardGroupId, originTableIds, shardProperties, workerGroupId.get());
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
