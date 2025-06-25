@@ -60,6 +60,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1725,7 +1726,9 @@ public class PlanFragmentBuilder {
                                 scanNode.setLabel(constantOperator.getVarchar());
                                 break;
                             case "JOB_ID":
-                                scanNode.setJobId(constantOperator.getBigint());
+                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
                                 break;
                             case "ID":
                                 if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME)
@@ -2686,7 +2689,8 @@ public class PlanFragmentBuilder {
         }
 
         private List<Expr> extractConjuncts(ScalarOperator predicate, ExecPlan context) {
-            return Utils.extractConjuncts(predicate).stream()
+            return Utils.extractConjuncts(predicate).stream().sorted((l, r) ->
+                            Boolean.compare(r.isJoinDerived(), l.isJoinDerived()))
                     .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
@@ -3651,7 +3655,7 @@ public class PlanFragmentBuilder {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
-            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).collect(Collectors.toList());
+            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).toList();
             Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             for (BinaryPredicateOperator s : eqOnPredicates) {

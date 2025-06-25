@@ -23,6 +23,7 @@ displayed_sidebar: docs
   - Parquet
   - ORC
   - CSV
+  - Avro（自 v3.4.4 起支持，仅支持导入）
 
 自 v3.2 版本起，除了基本数据类型，FILES() 还支持复杂数据类型 ARRAY、JSON、MAP 和 STRUCT。
 
@@ -115,11 +116,40 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 #### data_format
 
-数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
+数据文件的格式。有效值：`parquet`、`orc`、`csv` 和 `avro`（自 v3.4.4 起支持，仅支持导入）。
 
 特定数据文件格式需要额外参数指定细节选项。
 
 `list_files_only` 设置为 `true` 时，无需指定 `data_format`。
+
+##### Parquet
+
+Parquet 格式示例：
+
+```SQL
+"format"="parquet",
+"parquet.use_legacy_encoding" = "true"  -- 仅用于数据导出
+```
+
+###### parquet.use_legacy_encoding
+
+控制 DATETIME 和 DECIMAL 数据类型的编码技术。有效值：`true` 和 `false`（默认）。该属性仅支持数据导出。
+
+如果设置为 `true`：
+
+- 对于 DATETIME 类型，系统使用 `INT96` 编码方式。
+- 对于 DECIMAL 类型，系统使用 `fixed_len_byte_array` 编码方式。
+
+如果设置为 `false`：
+
+- 对于 DATETIME 类型，系统使用 `INT64` 编码方式。
+- 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码方式。
+
+:::note
+
+对于 DECIMAL 128 数据类型，仅可使用 `fixed_len_byte_array` 编码。`parquet.use_legacy_encoding` 不生效。
+
+:::
 
 ##### CSV
 
@@ -225,7 +255,9 @@ FILES() 的 Schema 检测并不是完全严格的。例如，在读取 CSV 文�
 
 StarRocks 访问存储系统的认证配置。
 
-StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 认证访问 AWS S3 以及 Google Cloud Storage，以及通过 Shared Key 访问 Azure Blob Storage。
+StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 认证访问 AWS S3 以及 Google Cloud Storage，以及通过 Shared Key、SAS Token、Managed Identity 以及 Service Principal 访问 Azure Blob Storage。
+
+##### HDFS
 
 - 如果您使用简单认证接入访问 HDFS 集群：
 
@@ -241,6 +273,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | username                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
   | password                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
 
+##### AWS S3
+
 - 如果您使用 IAM User 认证访问 AWS S3：
 
   ```SQL
@@ -254,6 +288,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | aws.s3.access_key | 是       | 用于指定访问 AWS S3 存储空间的 Access Key。              |
   | aws.s3.secret_key | 是       | 用于指定访问 AWS S3 存储空间的 Secret Key。              |
   | aws.s3.region     | 是       | 用于指定需访问的 AWS S3 存储空间的地区，如 `us-west-2`。 |
+
+##### GCS
 
 - 如果您使用 IAM User 认证访问 GCS：
 
@@ -269,17 +305,63 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | fs.s3a.secret.key | 是       | 用于指定访问 GCS 存储空间的 Secret Key。              |
   | fs.s3a.endpoint   | 是       | 用于指定需访问的 GCS 存储空间的 Endpoint，如 `storage.googleapis.com`。请勿在 Endpoint 地址中指定 `https`。 |
 
+##### Azure
+
 - 如果您使用 Shared Key 访问 Azure Blob Storage：
 
   ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
   "azure.blob.shared_key" = "<shared_key>"
   ```
 
   | **参数**                   | **必填** | **说明**                                                 |
   | -------------------------- | -------- | ------------------------------------------------------ |
-  | azure.blob.storage_account | 是       | 用于指定 Azure Blob Storage Account 名。                  |
   | azure.blob.shared_key      | 是       | 用于指定访问 Azure Blob Storage 存储空间的 Shared Key。     |
+
+- 如果您使用 SAS token 访问 Azure Blob Storage：
+
+  ```SQL
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
+  ```
+
+  | **参数**                   | **必填** | **说明**                                                 |
+  | -------------------------- | -------- | ------------------------------------------------------ |
+  | azure.blob.sas_token       | 是       | 用于指定访问 Azure Blob Storage 存储空间的 SAS Token。 |
+
+- 如果您使用 Managed Identity 访问 Azure Blob Storage（自 v3.4.4 起支持）：
+
+  :::note
+  - 只支持以 Client ID 为凭证的 User-assigned Managed Identity。
+  - FE 动态配置 `azure_use_native_sdk`（默认值：`true`）控制是否允许系统使用 Managed Identity 和 Service Principal 进行身份验证。
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_use_managed_identity" = "true",
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>"
+  ```
+
+  | **参数**                                | **必填** | **说明**                                                |
+  | -------------------------------------- | -------- | ------------------------------------------------------ |
+  | azure.blob.oauth2_use_managed_identity | 是       | 是否使用 Managed Identity 访问 Azure Blob Storage 存储空间。将此项设置为 `true`。                 |
+  | azure.blob.oauth2_client_id            | 是       | 用于访问 Azure Blob Storage 存储空间的 Managed Identity 的 Client ID。                |
+
+- 如果您使用 Service Principal 访问 Azure Blob Storage（自 v3.4.4 起支持）：
+
+  :::note
+  - 仅支持 Client Secret 凭证。
+  - FE 动态配置 `azure_use_native_sdk`（默认值：`true`）控制是否允许系统使用 Managed Identity 和 Service Principal 进行身份验证。
+  :::
+
+  ```SQL
+  "azure.blob.oauth2_client_id" = "<oauth2_client_id>",
+  "azure.blob.oauth2_client_secret" = "<oauth2_client_secret>",
+  "azure.blob.oauth2_tenant_id" = "<oauth2_tenant_id>"
+  ```
+
+  | **参数**                                | **必填** | **说明**                                                |
+  | -------------------------------------- | -------- | ------------------------------------------------------ |
+  | azure.blob.oauth2_client_id            | 是       | 用于访问 Azure Blob Storage 存储空间的 Service Principal 的 Client ID。                    |
+  | azure.blob.oauth2_client_secret        | 是       | 用于访问 Azure Blob Storage 存储空间的 Service Principal 的 Client Secret。          |
+  | azure.blob.oauth2_tenant_id            | 是       | 用于访问 Azure Blob Storage 存储空间的 Service Principal 的 Tenant ID。                |
 
 #### columns_from_path
 
@@ -908,4 +990,71 @@ INSERT INTO FILES(
     'format' = 'parquet'
 )
 SELECT * FROM sales_records;
+```
+
+#### 示例八：Avro 文件
+
+导入 Avro 文件数据：
+
+```SQL
+INSERT INTO avro_tbl
+  SELECT * FROM FILES(
+    "path" = "hdfs://xxx.xx.xx.x:yyyy/avro/primitive.avro", 
+    "format" = "avro"
+);
+```
+
+查询 Avro 文件数据：
+
+```SQL
+SELECT * FROM FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/complex.avro", "format" = "avro")\G
+*************************** 1. row ***************************
+record_field: {"id":1,"name":"avro"}
+  enum_field: HEARTS
+ array_field: ["one","two","three"]
+   map_field: {"a":1,"b":2}
+ union_field: 100
+ fixed_field: 0x61626162616261626162616261626162
+1 row in set (0.05 sec)
+```
+
+查看 Avro 文件的 Schema 信息：
+
+```SQL
+DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
++------------------------+------------------+------+
+| Field                  | Type             | Null |
++------------------------+------------------+------+
+| decimal_bytes          | decimal(10,2)    | YES  |
+| decimal_fixed          | decimal(10,2)    | YES  |
+| uuid_string            | varchar(1048576) | YES  |
+| date                   | date             | YES  |
+| time_millis            | int              | YES  |
+| time_micros            | bigint           | YES  |
+| timestamp_millis       | datetime         | YES  |
+| timestamp_micros       | datetime         | YES  |
+| local_timestamp_millis | bigint           | YES  |
+| local_timestamp_micros | bigint           | YES  |
+| duration               | varbinary(12)    | YES  |
++------------------------+------------------+------+
+```
+
+#### 示例九：使用 Managed Identity 和 Service Principal 访问 Azure Blob Storage
+
+```SQL
+-- Managed Identity
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_use_managed_identity" = "true",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-aaaaaaaaaaaa"
+);
+-- Service Principal
+SELECT * FROM FILES(
+    "path" = "wasbs://storage-container@storage-account.blob.core.windows.net/ssb_1g/customer/*",
+    "format" = "parquet",
+    "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
+    "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
+    "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
 ```

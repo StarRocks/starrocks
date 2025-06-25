@@ -3308,9 +3308,9 @@ Status TimeFunctions::datediff_close(FunctionContext* context, FunctionContext::
     return Status::OK();
 }
 
-// last_day
-StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Columns& columns) {
-    ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
+template <LogicalType DATE_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_last_day(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<DATE_TYPE> data_column(columns[0]);
     auto size = columns[0]->size();
 
     ColumnBuilder<TYPE_DATE> result(size);
@@ -3327,13 +3327,24 @@ StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Colu
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// last_day_date
+StatusOr<ColumnPtr> TimeFunctions::last_day_date(FunctionContext* context, const Columns& columns) {
+    return _last_day<TYPE_DATE>(context, columns);
+}
+
+// last_day
+StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Columns& columns) {
+    return _last_day<TYPE_DATETIME>(context, columns);
+}
+
 Status TimeFunctions::_error_date_part() {
     return Status::InvalidArgument("avaiable data_part parameter is year/month/quarter");
 }
 
+template <LogicalType DATE_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_const(std::string& format_content, FunctionContext* context,
                                                                const Columns& columns) {
-    ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
+    ColumnViewer<DATE_TYPE> data_column(columns[0]);
     auto size = columns[0]->size();
 
     ColumnBuilder<TYPE_DATE> result(size);
@@ -3374,8 +3385,9 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_const(std::string& form
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+template <LogicalType DATE_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format(FunctionContext* context, const Columns& columns) {
-    ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
+    ColumnViewer<DATE_TYPE> data_column(columns[0]);
     ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
     auto size = columns[0]->size();
 
@@ -3405,14 +3417,26 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format(FunctionContext* contex
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// last_day_with_format
 StatusOr<ColumnPtr> TimeFunctions::last_day_with_format(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     auto* state = reinterpret_cast<LastDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state->const_optional) {
         std::string format_content = state->optional_content;
-        return _last_day_with_format_const(format_content, context, columns);
+        return _last_day_with_format_const<TYPE_DATETIME>(format_content, context, columns);
     }
-    return _last_day_with_format(context, columns);
+    return _last_day_with_format<TYPE_DATETIME>(context, columns);
+}
+
+// last_day_date_with_format
+StatusOr<ColumnPtr> TimeFunctions::last_day_date_with_format(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+    auto* state = reinterpret_cast<LastDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state->const_optional) {
+        std::string format_content = state->optional_content;
+        return _last_day_with_format_const<TYPE_DATE>(format_content, context, columns);
+    }
+    return _last_day_with_format<TYPE_DATE>(context, columns);
 }
 
 Status TimeFunctions::last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {

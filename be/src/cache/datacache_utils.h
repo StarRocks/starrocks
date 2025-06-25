@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "cache/local_cache.h"
+#include "cache/cache_metrics.h"
+#include "cache/local_cache_engine.h"
 #include "gen_cpp/DataCache_types.h"
 
 namespace starrocks {
@@ -22,6 +23,10 @@ namespace starrocks {
 class DataCacheUtils {
 public:
     static void set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics);
+
+#ifdef WITH_STARCACHE
+    static void set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const StarCacheMetrics& metrics);
+#endif
 
     static Status parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
                                                 size_t* mem_size);

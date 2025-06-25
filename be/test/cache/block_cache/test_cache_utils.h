@@ -18,8 +18,8 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/peer_cache_wrapper.h"
-#include "cache/starcache_wrapper.h"
+#include "cache/peer_cache_engine.h"
+#include "cache/starcache_engine.h"
 #include "common/logging.h"
 #include "testutil/assert.h"
 
@@ -49,8 +49,8 @@ public:
     }
 
     static std::shared_ptr<BlockCache> create_cache(const CacheOptions& options) {
-        auto local_cache = std::make_shared<StarCacheWrapper>();
-        auto remote_cache = std::make_shared<PeerCacheWrapper>();
+        auto local_cache = std::make_shared<StarCacheEngine>();
+        auto remote_cache = std::make_shared<PeerCacheEngine>();
         auto block_cache = std::make_shared<BlockCache>();
         EXPECT_OK(local_cache->init(options));
         EXPECT_OK(remote_cache->init(options));

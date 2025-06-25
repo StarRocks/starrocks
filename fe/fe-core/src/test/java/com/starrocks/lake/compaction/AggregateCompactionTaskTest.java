@@ -21,8 +21,10 @@ import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.TabletCommitInfo;
 import mockit.Expectations;
 import mockit.Mock;
@@ -150,6 +152,8 @@ public class AggregateCompactionTaskTest {
         aggregateRequest.requests.add(request);
         aggregateRequest.computeNodes.add(nodePB);
         CompactResponse mockResponse = new CompactResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = TStatusCode.OK.getValue();
 
         CompactionTask task = new AggregateCompactionTask(10043, lakeService, aggregateRequest);
         Field field = task.getClass().getSuperclass().getDeclaredField("responseFuture");
@@ -166,7 +170,8 @@ public class AggregateCompactionTaskTest {
         };
         Assert.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, task.getResult());
 
-        mockResponse.failedTablets = Lists.newArrayList(1L);
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = TStatusCode.CANCELLED.getValue();
         new Expectations() {
             {
                 mockFuture.get(); 

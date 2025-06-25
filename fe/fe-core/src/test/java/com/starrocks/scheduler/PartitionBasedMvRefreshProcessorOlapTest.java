@@ -65,6 +65,7 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -185,6 +186,19 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl17\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view test.union_all_mv\n" +
                         "partition by dt \n" +
                         "distributed by hash(k2) buckets 10\n" +
@@ -203,6 +217,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         "refresh deferred manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl4.k1, tbl4.k2 from tbl4;")
+                .withMaterializedView("create materialized view test.mv3\n" +
+                        "partition by date_trunc('month',k1) \n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh deferred manual\n" +
+                        "properties('replication_num' = '1')\n" +
+                        "as select tbl17.k1, tbl17.k2 from tbl17;")
                 .withMaterializedView("create materialized view test.mv_inactive\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
@@ -334,6 +354,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             Assert.fail(e.getMessage());
         }
     }
+
+
 
     @Test
     public void testMvWithoutPartition() {
@@ -529,7 +551,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
-            public void processTaskRun(TaskRunContext context) throws Exception {
+            public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
                 throw new RuntimeException("new exception");
             }
         };
@@ -543,6 +565,44 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         MaterializedView.BasePartitionInfo newP0PartitionInfo = baseTableVisibleVersionMap2.get(tbl1.getId()).get("p0");
         Assert.assertEquals(3, newP0PartitionInfo.getVersion());
     }
+
+
+
+    @Test
+    public void testRefreshWithRetry() {
+        List<TUniqueId> retryExecutorIds = new ArrayList<>();
+        int originalRetryNum = connectContext.getSessionVariable().getQueryDebugOptions().getMaxRefreshMaterializedViewRetryNum();
+        connectContext.getSessionVariable().getQueryDebugOptions().setMaxRefreshMaterializedViewRetryNum(2);
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
+            int runNum = 0;
+            @Mock
+            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt)
+                    throws Exception {
+                if (runNum < 1) {
+                    runNum++;
+                    throw new RuntimeException("do refresh failed at first time");
+                }
+                TUniqueId executionId = mvContext.getCtx().getExecutionId();
+                retryExecutorIds.add(executionId);
+                throw new RuntimeException("do refresh failed at second time");
+            }
+        };
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            String insertSql = "insert into tbl17 partition(p0) values('2021-12-01', 2, 10);";
+            executeInsertSql(connectContext, insertSql);
+            MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv3"));
+            Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(taskRun);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        connectContext.getSessionVariable().getQueryDebugOptions().setMaxRefreshMaterializedViewRetryNum(originalRetryNum);
+        Assert.assertEquals(1, retryExecutorIds.size());
+    }
+
 
     public void testBaseTablePartitionRename(TaskRun taskRun)
             throws Exception {
@@ -2698,5 +2758,90 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             });
                 }
         );
+    }
+
+    @Test
+    public void partitionsToRefreshReturnsEmptySetWhenNoPartitionsExist() {
+        starRocksAssert.withMTables(ImmutableList.of(new MTable("tt1", "k1",
+                List.of(
+                        "k1 date",
+                        "k2 int",
+                        "v1 int"
+                ),
+
+                "k1",
+                List.of(
+                        "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                        "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                        "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                        "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                        "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                )
+                )),
+                () -> {
+                    starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv1 \n" +
+                            "partition by date_trunc('day',k1) \n" +
+                            "distributed by random \n" +
+                            "refresh deferred manual\n" +
+                            "as select * from tt1;");
+                    TaskRunContext taskRunContext = new TaskRunContext();
+                    MaterializedView mv = getMv("test_mv1");
+                    taskRunContext.setCtx(connectContext);
+                    Map<String, String> props = Maps.newHashMap();
+                    props.put(MV_ID, String.valueOf(mv.getId()));
+                    taskRunContext.setProperties(props);
+                    taskRunContext.setTaskType(Constants.TaskType.MANUAL);
+
+                    PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+                    processor.prepare(taskRunContext);
+
+                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
+                    Set<String> result = processor.checkMvToRefreshedPartitions(mvTaskRunContext, false);
+                    Assert.assertTrue(result.isEmpty());
+                });
+    }
+
+    @Test
+    public void partitionsToRefreshReturnsNoneEmptyWithForceRefreshStrategy() {
+        starRocksAssert.withMTables(ImmutableList.of(new MTable("tt1", "k1",
+                        List.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                )),
+                () -> {
+                    starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv1 \n" +
+                            "partition by k1 \n" +
+                            "distributed by random \n" +
+                            "refresh deferred manual\n" +
+                            "properties('partition_refresh_strategy' = 'force')\n" +
+                            "as select * from tt1;");
+                    TaskRunContext taskRunContext = new TaskRunContext();
+                    MaterializedView mv = getMv("test_mv1");
+                    taskRunContext.setCtx(connectContext);
+                    Map<String, String> props = Maps.newHashMap();
+                    props.put(MV_ID, String.valueOf(mv.getId()));
+                    taskRunContext.setProperties(props);
+                    taskRunContext.setTaskType(Constants.TaskType.MANUAL);
+
+                    PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+                    processor.prepare(taskRunContext);
+
+                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
+                    Set<String> result = processor.checkMvToRefreshedPartitions(mvTaskRunContext, false);
+                    Assert.assertFalse(result.isEmpty());
+                    Set<String> expect = ImmutableSet.of("p0", "p1", "p2", "p3", "p4");
+                    Assert.assertEquals(expect, result);
+                });
     }
 }

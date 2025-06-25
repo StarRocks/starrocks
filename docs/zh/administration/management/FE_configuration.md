@@ -1499,6 +1499,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：优化器重写 ScalarOperator 允许的最大次数。
 - 引入版本：-
 
+##### max_scalar_operator_optimize_depth
+
+- 默认值：256
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：优化器中 ScalarOperator 进行优化的最大深度。
+- 引入版本：-
+
+##### max_scalar_operator_flat_children
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：优化器中 ScalarOperator 允许最多后代节点数量, 这个限制通常是避免优化器使用过多内存。
+- 引入版本：-
+
 ##### enable_statistic_collect
 
 - 默认值：true
@@ -2244,6 +2262,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：是
 - 描述：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 引入版本：-
+
+##### enable_routine_load_lag_metrics
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否收集 Routine Load Partition Offset Lag 的指标。请注意，将此项目设置为 `true` 会调用 Kafka API 来获取 Partition 的最新 Offset。
+- 引入版本：-
+
+##### min_routine_load_lag_for_metrics
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：要在监控指标中显示的 Routine Load 任务的最小 Offset Lag。Offset Lag 大于此值的 Routine Load 任务将显示在指标中。
 - 引入版本：-
 
 ##### max_tolerable_backend_down_num
@@ -3073,6 +3109,78 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：访问 Azure Blob Storage 的共享访问签名（SAS）。
 - 引入版本：v3.1
 
+##### azure_adls2_endpoint
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：Azure Data Lake Storage Gen2 帐户的端点。示例：`https://test.dfs.core.windows.net`。
+- 引入版本：v3.4.1
+
+##### azure_adls2_path
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于存储数据的 Azure Data Lake Storage Gen2 路径，由文件系统名称和目录名称组成。示例：`testfilesystem/starrocks`。
+- 引入版本：v3.4.1
+
+##### azure_adls2_shared_key
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Shared Key。
+- 引入版本：v3.4.1
+
+##### azure_adls2_sas_token
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的共享访问签名 (SAS)。
+- 引入版本：v3.4.1
+
+##### azure_adls2_oauth2_use_managed_identity
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：No
+- 描述：是否使用 Managed Identity 用于授权 Azure Data Lake Storage Gen2 请求。
+- 引入版本：v3.4.4
+
+##### azure_adls2_oauth2_tenant_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：No
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Tenant ID。
+- 引入版本：v3.4.4
+
+##### azure_adls2_oauth2_client_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：No
+- 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。
+- 引入版本：v3.4.4
+
+##### azure_use_native_sdk
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否使用 Native SDK 访问 Azure Blob Storage，从而允许使用 Managed Identity 和 Service Principal 进行身份验证。如果该项设置为 `false`，则只允许使用 Shared Key 和 SAS 令牌进行身份验证。
+- 引入版本：v3.4.4
+
 <!--
 ##### starmgr_grpc_timeout_seconds
 
@@ -3253,7 +3361,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：false
 - 类型：Boolean
-- Unit: -
+- 单位：-
 - 是否动态：是
 - 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
 - 引入版本：v3.3.4
@@ -3262,7 +3370,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：0.15
 - 类型：Double
-- Unit: -
+- 单位：-
 - 是否动态：是
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4

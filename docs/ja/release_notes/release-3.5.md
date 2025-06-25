@@ -6,12 +6,12 @@ displayed_sidebar: docs
 
 ## v3.5.0-RC01
 
-リリース日： 2025 年 5 月 21 日
+リリース日： 2025 年 6 月 13 日
 
 ### アップグレードに関する注意
 
 - StarRocks v3.5.0 以降は JDK 17 以上が必要です。
-  - v3.4 以前からのアップグレードでは、StarRocks が依存する JDK  バージョンを 17 以上に更新し、FE の構成ファイル **fe.conf** の `JAVA_OPTS` にある JDK 17 と互換性のないオプション（CMS や GC 関連など）を削除する必要があります。
+  - v3.4 以前からのアップグレードでは、StarRocks が依存する JDK  バージョンを 17 以上に更新し、FE の構成ファイル **fe.conf** の `JAVA_OPTS` にある JDK 17 と互換性のないオプション（CMS や GC 関連など）を削除する必要があります。v3.5 設定ファイルの`JAVA_OPTS`のデフォルト値を推奨する。
   - 外部カタログを使用するクラスタでは、BE の構成ファイル **be.conf** の`JAVA_OPTS` 設定項目に `--add-opens=java.base/java.util=ALL-UNNAMED` を追加する必要がある。
   - また、v3.5.0 以降、StarRocks は特定の JDK バージョン向けの JVM 構成を提供しません。すべての JDK バージョンに対して共通の `JAVA_OPTS` を使用します。
 
@@ -37,7 +37,7 @@ displayed_sidebar: docs
   - パーティション単位でのカーディナリティ推定をサポート。システムビュー `_statistics_.column_statistics` を使用して各パーティションの NDV を記録。[#51513](https://github.com/StarRocks/starrocks/pull/51513)
   - [複数列に対する Joint NDV の収集](https://docs.starrocks.io/ja/docs/using_starrocks/Cost_based_optimizer/#%E8%A4%87%E6%95%B0%E5%88%97%E3%81%AE%E5%85%B1%E5%90%8C%E7%B5%B1%E8%A8%88)をサポートし、列間に相関がある場合の CBO 最適化精度を向上。[#56481](https://github.com/StarRocks/starrocks/pull/56481) [#56715](https://github.com/StarRocks/starrocks/pull/56715) [#56766](https://github.com/StarRocks/starrocks/pull/56766) [#56836](https://github.com/StarRocks/starrocks/pull/56836)
   - ヒストグラムを使用した Join ノードのカーディナリティと in_predicate の選択性推定をサポートし、データ偏り時の精度を改善。[#57874](https://github.com/StarRocks/starrocks/pull/57874)
-  - [Query Feedback](https://docs.starrocks.io/ja/docs/using_starrocks/query_feedback/) をサポート。同一構造で異なるパラメータを持つクエリを同一グループに分類し、実行計画の最適化に役立つ情報を共有。[#58306](https://github.com/StarRocks/starrocks/pull/58306)
+  - [Query Feedback](https://docs.starrocks.io/ja/docs/using_starrocks/query_feedback/) を最適化。同一構造で異なるパラメータ値を持つクエリを同一グループに分類し、実行計画の最適化に役立つ情報を共有。[#58306](https://github.com/StarRocks/starrocks/pull/58306)
 - 特定のシナリオで Bloom Filter に代わる最適化手段として Runtime Bitset Filter をサポート。[#57157](https://github.com/StarRocks/starrocks/pull/57157)
 - Join Runtime Filter のストレージレイヤへのプッシュダウンをサポート。[#55124](https://github.com/StarRocks/starrocks/pull/55124)
 - Pipeline Event Scheduler をサポート。[#54259](https://github.com/StarRocks/starrocks/pull/54259)
@@ -62,20 +62,20 @@ displayed_sidebar: docs
 
 ### マテリアライズドビュー
 
-- 複数のパーティション列または式の指定をサポートし、より柔軟なパーティショニング戦略を構成可能に。[#52576](https://github.com/StarRocks/starrocks/issues/52576)
+- 複数のパーティション列を持つマテリアライズドビューの作成をサポートし、より柔軟なパーティショニング戦略を構成可能に。[#52576](https://github.com/StarRocks/starrocks/issues/52576)
 - `query_rewrite_consistency` を `force_mv` に設定することで、クエリリライト時にマテリアライズドビューの使用を強制可能に。これにより、ある程度のデータ鮮度を犠牲にしてパフォーマンスの安定性を確保。[#53819](https://github.com/StarRocks/starrocks/pull/53819)
 
 ### ロードとアンロード
 
 - JSON 解析エラーが発生した場合、`pause_on_json_parse_error` プロパティを `true` に設定することで Routine Load ジョブを一時停止可能に。[#56062](https://github.com/StarRocks/starrocks/pull/56062)
-- **[Experimental]** [複数の SQL 文を含むトランザクション](https://docs.starrocks.io/ja/docs/loading/SQL_transaction/)（現時点では INSERT のみ対応）をサポート。トランザクションの開始・適用・取り消しにより、複数のロード操作に ACID 特性を提供。[#53978](https://github.com/StarRocks/starrocks/issues/53978)
+- **[Beta]** [複数の SQL 文を含むトランザクション](https://docs.starrocks.io/ja/docs/loading/SQL_transaction/)（現時点では INSERT のみ対応）をサポート。トランザクションの開始・適用・取り消しにより、複数のロード操作に ACID 特性を提供。[#53978](https://github.com/StarRocks/starrocks/issues/53978)
 
 ### 関数
 
 - セッションおよびグローバルレベルでシステム変数 `lower_upper_support_utf8` を導入し、`upper()` や `lower()` などの大文字・小文字変換関数が UTF-8（特に非 ASCII 文字）をより適切に扱えるように改善。[#56192](https://github.com/StarRocks/starrocks/pull/56192)
 - 新しい関数を追加：
   - [`field()`](https://docs.starrocks.io/ja/docs/sql-reference/sql-functions/string-functions/field/) [#55331](https://github.com/StarRocks/starrocks/pull/55331)
-  - `ds_theta_count_distinct()` [#56960](https://github.com/StarRocks/starrocks/pull/56960)
+  - [`ds_theta_count_distinct()`](https://docs.starrocks.io/ja/docs/sql-reference/sql-functions/aggregate-functions/ds_theta_count_distinct/) [#56960](https://github.com/StarRocks/starrocks/pull/56960)
   - [`array_flatten()`](https://docs.starrocks.io/ja/docs/sql-reference/sql-functions/array-functions/array_flatten/) [#50080](https://github.com/StarRocks/starrocks/pull/50080)
   - [`inet_aton()`](https://docs.starrocks.io/ja/docs/sql-reference/sql-functions/string-functions/inet_aton/) [#51883](https://github.com/StarRocks/starrocks/pull/51883)
-  - `percentile_approx_weight()` [#57410](https://github.com/StarRocks/starrocks/pull/57410)
+  - [`percentile_approx_weight()`](https://docs.starrocks.io/ja/docs/sql-reference/sql-functions/aggregate-functions/percentile_approx_weight/) [#57410](https://github.com/StarRocks/starrocks/pull/57410)

@@ -407,6 +407,8 @@ struct TMaterializedViewStatus {
     27: optional string query_rewrite_status
 
     28: optional string creator
+    29: optional string last_refresh_process_time
+    30: optional string last_refresh_job_id
 }
 
 struct TListPipesParams {
@@ -530,6 +532,8 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
+    15: optional string job_id
+    16: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -781,6 +785,7 @@ struct TAuditStatistics {
     6: optional i64 cpu_cost_ns
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
+    10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
 }
 
@@ -2127,16 +2132,6 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
-struct TUpdateTabletVersionRequest {
-    1: optional Types.TBackend backend;
-    2: optional i64 signature;
-    3: optional list<MasterService.TTabletVersionPair> tablet_versions;
-}
-
-struct TUpdateTabletVersionResult {
-    1: optional Status.TStatus status;
-}
-
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2278,7 +2273,5 @@ service FrontendService {
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
-
-    TUpdateTabletVersionResult updateTabletVersion(1: TUpdateTabletVersionRequest request)
 }
 

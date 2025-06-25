@@ -595,7 +595,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
     }
     if (_options.upload != nullptr && _options.upload->__isset.hdfs_write_buffer_size_kb) {
-        hdfs_write_buffer_size = _options.upload->__isset.hdfs_write_buffer_size_kb;
+        hdfs_write_buffer_size = _options.upload->hdfs_write_buffer_size_kb;
     }
 
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);

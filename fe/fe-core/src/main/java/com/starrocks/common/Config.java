@@ -180,6 +180,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int slow_lock_stack_trace_reserve_levels = 15;
 
+    @ConfField(mutable = true)
+    public static boolean slow_lock_print_stack = true;
+
     @ConfField
     public static String custom_config_dir = "/conf";
 
@@ -1892,6 +1895,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int authentication_ldap_simple_server_port = 389;
 
+    @ConfField(mutable = true, comment = "false to enable ssl connection")
+    public static boolean authentication_ldap_simple_ssl_conn_allow_insecure = true;
+
+    @ConfField(mutable = true, comment = "ldap ssl trust store file path, supports perm and jks formats")
+    public static String authentication_ldap_simple_ssl_conn_trust_store_path = "";
+
+    @ConfField(mutable = true, comment = "LDAP SSL trust store file password; " +
+            "no password is required for files in PEM format.")
+    public static String authentication_ldap_simple_ssl_conn_trust_store_pwd = "";
+
     /**
      * users search base in ldap directory for authentication_ldap_simple
      */
@@ -2880,11 +2893,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
 
-    @ConfField(mutable = true)
-    public static long lake_min_compaction_interval_ms_on_success = 10000;
+    @ConfField(mutable = true, aliases = {"lake_min_compaction_interval_ms_on_success"})
+    public static long lake_compaction_interval_ms_on_success = 10000;
 
-    @ConfField(mutable = true)
-    public static long lake_min_compaction_interval_ms_on_failure = 60000;
+    @ConfField(mutable = true, aliases = {"lake_min_compaction_interval_ms_on_failure"})
+    public static long lake_compaction_interval_ms_on_failure = 60000;
 
     @ConfField(mutable = true)
     public static String lake_compaction_warehouse = "default_warehouse";

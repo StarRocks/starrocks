@@ -57,6 +57,7 @@
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -98,7 +99,7 @@ DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
               "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_txn_log, print_lake_schema");
+              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -165,6 +166,8 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=scan_dcgs --root_path=</path/to/storage/path> --tablet_id=<tabletid>
     print_lake_metadata:
       cat <tablet_meta_file.meta> | {progname} --operation=print_lake_metadata
+    print_lake_bundle_metadata:
+      cat <tablet_meta_file.meta> | {progname} --operation=print_lake_bundle_metadata
     print_lake_txn_log:
       cat <tablet_transaction_log_file.log> | {progname} --operation=print_lake_txn_log
     print_lake_schema:
@@ -1170,6 +1173,72 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_bundle_metadata") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
+        auto file_size = input_data.size();
+        auto bundle_metadata_or = starrocks::lake::TabletManager::parse_bundle_tablet_metadata("input", input_data);
+        if (!bundle_metadata_or.ok()) {
+            std::cerr << "Fail to parse bundle metadata: " << bundle_metadata_or.status() << '\n';
+            return -1;
+        }
+        const auto& bundle_metadata = bundle_metadata_or.value();
+        // foreach tablet_meta from bundle_metadata.tablet_meta_pages
+        for (const auto& page : bundle_metadata->tablet_meta_pages()) {
+            const starrocks::PagePointerPB& page_pointer = page.second;
+            auto offset = page_pointer.offset();
+            auto size = page_pointer.size();
+            if (offset + size > file_size) {
+                std::cerr << "Invalid page pointer for tablet " << page.first << ": offset + size exceeds file size\n";
+                return -1;
+            }
+
+            auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
+            std::string_view metadata_str = std::string_view(input_data.data() + offset);
+            if (!metadata->ParseFromArray(metadata_str.data(), size)) {
+                std::cerr << "Fail to parse tablet metadata for tablet " << page.first << '\n';
+                return -1;
+            }
+
+            int64_t tablet_id = page.first;
+            std::cout << "Tablet ID: " << tablet_id << '\n';
+            auto schema_id = bundle_metadata->tablet_to_schema().find(tablet_id);
+            if (schema_id == bundle_metadata->tablet_to_schema().end()) {
+                std::cerr << "tablet " << tablet_id
+                          << " metadata can not find schema in shared metadata, maybe the bundle is not complete\n";
+                return -1;
+            }
+            auto schema_it = bundle_metadata->schemas().find(schema_id->second);
+            if (schema_it == bundle_metadata->schemas().end()) {
+                std::cerr << "tablet " << tablet_id << " metadata can not find schema(" << schema_id->second
+                          << ") in shared metadata, maybe the bundle is not complete\n";
+                return -1;
+            } else {
+                metadata->mutable_schema()->CopyFrom(schema_it->second);
+                auto& item = (*metadata->mutable_historical_schemas())[schema_id->second];
+                item.CopyFrom(schema_it->second);
+            }
+
+            for (auto& [_, schema_id] : metadata->rowset_to_schema()) {
+                schema_it = bundle_metadata->schemas().find(schema_id);
+                if (schema_it == bundle_metadata->schemas().end()) {
+                    std::cerr << "rowset metadata can not find schema(" << schema_id
+                              << ") in shared metadata, maybe the bundle is not complete\n";
+                    return -1;
+                } else {
+                    auto& item = (*metadata->mutable_historical_schemas())[schema_id];
+                    item.CopyFrom(schema_it->second);
+                }
+            }
+            json2pb::Pb2JsonOptions options;
+            options.pretty_json = true;
+            std::string json;
+            std::string error;
+            if (!json2pb::ProtoMessageToJson(*metadata, &json, options, &error)) {
+                std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+                return -1;
+            }
+            std::cout << json << '\n';
+        }
     } else if (FLAGS_operation == "print_lake_txn_log") {
         starrocks::TxnLogPB txn_log;
         if (!txn_log.ParseFromIstream(&std::cin)) {

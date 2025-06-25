@@ -210,7 +210,7 @@ public class RestBaseAction extends BaseAction {
             LOG.warn(e.getMessage(), e);
             throw new DdlException(e.getMessage());
         }
-        response.updateHeader(HttpHeaderNames.LOCATION.toString(), resultUriObj.toString());
+        response.updateHeader(HttpHeaderNames.LOCATION.toString(), resultUriObj.toASCIIString());
         writeResponse(request, response, HttpResponseStatus.TEMPORARY_REDIRECT);
     }
 

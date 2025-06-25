@@ -254,17 +254,16 @@ public class MvRewriteUnionTest extends MVTestBase {
 
         PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
         PlanTestBase.assertContainsIgnoreColRefs(plan8, "5:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 24: t1d = 20: v1");
-        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+                        "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 24: t1d = 20: v1",
                 "     TABLE: test_all_type2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
-        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 24: t1d < 120",
                 "     TABLE: t02\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (20: v1 >= 100) OR (20: v1 IS NULL), 20: v1 < 120\n" +
+                        "     partitions=1/1");
         dropMv("test", "join_agg_union_mv_2");
     }
 

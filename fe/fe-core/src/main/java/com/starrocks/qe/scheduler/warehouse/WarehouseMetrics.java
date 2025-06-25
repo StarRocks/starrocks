@@ -17,7 +17,7 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;

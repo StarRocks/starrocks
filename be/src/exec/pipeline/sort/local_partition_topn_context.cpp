@@ -100,7 +100,8 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
         TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
 
-        TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
+        TypeDescriptor arg_type = fn.arg_types.empty() ? TypeDescriptor::from_logical_type(TYPE_UNKNOWN)
+                                                       : TypeDescriptor::from_thrift(fn.arg_types[0]);
 
         // Collect arg_typedescs for aggregate function.
         std::vector<FunctionContext::TypeDesc> arg_typedescs;

@@ -20,9 +20,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -98,8 +100,12 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                boolean isPartialSuccess = false;
+                if (txnState.getTxnCommitAttachment() != null) {
+                    isPartialSuccess = ((CompactionTxnCommitAttachment) txnState.getTxnCommitAttachment()).getForceCommit();
+                }
                 compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
-                        txnState.getTransactionId());
+                        txnState.getTransactionId(), isPartialSuccess);
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
@@ -115,6 +121,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
             }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
+        }
+
+        if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            warehouseManager.recordWarehouseInfoForTable(tableId, txnState.getWarehouseId());
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {

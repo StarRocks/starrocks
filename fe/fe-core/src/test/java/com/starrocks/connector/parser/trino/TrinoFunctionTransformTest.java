@@ -197,11 +197,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select parse_datetime('2023-08-02T14:37:02', 'yyyy-MM-dd''T''HH:mm:ss''Z''')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02T14:37:02', 'yyyy-MM-ddTHH:mm:ss')");
 
+        connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         sql = "select last_day_of_month(timestamp '2023-07-01 00:00:00');";
         assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
 
         sql = "select last_day_of_month(date '2023-07-01');";
-        assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
+        assertPlanContains(sql, "last_day('2023-07-01', 'month')");
+        connectContext.getSessionVariable().setDisableFunctionFoldConstants(false);
 
         sql = "select date_diff('month', timestamp '2023-07-31', timestamp '2023-08-01');";
         assertPlanContains(sql, "date_diff('month', '2023-08-01 00:00:00', '2023-07-31 00:00:00')");

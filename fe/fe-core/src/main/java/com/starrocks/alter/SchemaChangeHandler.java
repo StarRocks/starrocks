@@ -788,6 +788,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // retain old column name
         modColumn.setName(oriColumn.getName());
+        modColumn.setColumnId(oriColumn.getColumnId());
         modColumn.setUniqueId(oriColumn.getUniqueId());
 
         if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
@@ -1974,10 +1975,17 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
+
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties

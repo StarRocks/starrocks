@@ -214,4 +214,13 @@ inline std::string_view basename(std::string_view path) {
     return path.substr(path.find_last_of('/') + 1);
 }
 
+// get prefix name
+inline std::string_view prefix_name(std::string_view path) {
+    auto pos = path.find_last_of('/');
+    if (pos == std::string_view::npos) {
+        return path;
+    }
+    return path.substr(0, pos);
+}
+
 } // namespace starrocks::lake
