@@ -14,10 +14,7 @@
 
 package com.starrocks.alter;
 
-import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.RollupProcDir;
@@ -41,7 +38,6 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class LakeRollupJobTest {
