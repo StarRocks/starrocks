@@ -1,0 +1,28 @@
+-- name: test_bool_or
+
+CREATE TABLE `t1` (
+  `c0` bigint NOT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL,
+  `c3` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- test empty input
+select bool_or(c0), boolor_agg(c1), bool_or(c2), bool_or(c3), bool_or(null) from t1;
+
+insert into t1 SELECT generate_series, generate_series, generate_series, null FROM TABLE(generate_series(1,  40960));
+
+-- basic test
+select bool_or(c0), boolor_agg(c1), bool_or(c2), bool_or(c3), bool_or(null) from t1;
+
+-- test force_streaming
+set streaming_preaggregation_mode="force_streaming";
+select sum (a), sum(b), sum(c),sum(d), sum(e) from (select bool_or(c0) a, boolor_agg(c1) b, bool_or(c2) c, bool_or(c3) d, bool_or(null) e from t1 group by c0) t;
+--
+select sum(a) from ( select bool_or(c0) over (partition by c2 order by c3) a from t1) t;
