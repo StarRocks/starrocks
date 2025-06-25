@@ -33,17 +33,11 @@ struct BoolOrAggregateData {
 };
 
 struct BoolOrElement {
-    void operator()(BoolOrAggregateData& state, const bool& value) const { 
-        state.result = state.result || value;
-    }
-    
-    static bool is_sync(BoolOrAggregateData& state, const bool& right) { 
-        return !state.result && right; 
-    }
-    
-    static bool equals(const BoolOrAggregateData& state, const bool& right) {
-        return state.result == right;
-    }
+    void operator()(BoolOrAggregateData& state, const bool& value) const { state.result = state.result || value; }
+
+    static bool is_sync(BoolOrAggregateData& state, const bool& right) { return !state.result && right; }
+
+    static bool equals(const BoolOrAggregateData& state, const bool& right) { return state.result == right; }
 };
 
 class BoolOrAggregateFunction final
@@ -91,12 +85,12 @@ public:
         if (this->data(state).result) {
             return;
         }
-        
+
         if (columns[0]->is_nullable()) {
             const auto& nullable_column = down_cast<const NullableColumn&>(*columns[0]);
             const auto& data_column = nullable_column.data_column();
             const auto& column = down_cast<const InputColumnType&>(*data_column);
-            
+
             for (size_t i = row_start; i < row_end; ++i) {
                 if (!nullable_column.is_null(i)) {
                     bool value = column.get_data()[i];
@@ -108,7 +102,7 @@ public:
             }
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-            
+
             for (size_t i = row_start; i < row_end; ++i) {
                 bool value = column.get_data()[i];
                 if (value) {
@@ -120,17 +114,17 @@ public:
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                            int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                            int64_t frame_end) const override {
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         if (this->data(state).result) {
             return;
         }
-        
+
         if (columns[0]->is_nullable()) {
             const auto& nullable_column = down_cast<const NullableColumn&>(*columns[0]);
             const auto& data_column = nullable_column.data_column();
             const auto& column = down_cast<const InputColumnType&>(*data_column);
-            
+
             for (size_t i = frame_start; i < frame_end; ++i) {
                 if (!nullable_column.is_null(i)) {
                     bool value = column.get_data()[i];
@@ -142,7 +136,7 @@ public:
             }
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-            
+
             for (size_t i = frame_start; i < frame_end; ++i) {
                 bool value = column.get_data()[i];
                 if (value) {
@@ -204,4 +198,4 @@ public:
     std::string get_name() const override { return "bool_or"; }
 };
 
-} // namespace starrocks 
+} // namespace starrocks

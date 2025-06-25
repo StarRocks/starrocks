@@ -36,4 +36,4 @@ void AggregateFuncResolver::register_boolean() {
     _infos_mapping.emplace(std::make_tuple("boolor_agg", TYPE_BOOLEAN, TYPE_BOOLEAN, true, true), bool_or_func);
 }
 
-} // namespace starrocks 
+} // namespace starrocks
