@@ -483,64 +483,6 @@ void GlobalDriverExecutor::iterate_immutable_blocking_driver(const ConstDriverCo
     _blocked_driver_poller->for_each_driver(call);
 }
 
-RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContext* query_ctx,
-                                                                     FragmentContext* fragment_ctx,
-                                                                     ObjectPool* obj_pool) {
-    auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
-    if (!query_ctx->enable_profile()) {
-        return instance_profile;
-    }
-
-    if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
-        return instance_profile;
-    }
-
-    RuntimeProfile* new_instance_profile = nullptr;
-    int64_t process_raw_timer = 0;
-    DeferOp defer([&new_instance_profile, &process_raw_timer]() {
-        if (new_instance_profile != nullptr) {
-            auto* process_timer = ADD_TIMER(new_instance_profile, "BackendProfileMergeTime");
-            COUNTER_SET(process_timer, process_raw_timer);
-        }
-    });
-
-    SCOPED_RAW_TIMER(&process_raw_timer);
-    std::vector<RuntimeProfile*> pipeline_profiles;
-    instance_profile->get_children(&pipeline_profiles);
-
-    std::vector<RuntimeProfile*> merged_driver_profiles;
-    for (auto* pipeline_profile : pipeline_profiles) {
-        std::vector<RuntimeProfile*> driver_profiles;
-        pipeline_profile->get_children(&driver_profiles);
-
-        if (driver_profiles.empty()) {
-            continue;
-        }
-
-        auto* merged_driver_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool, driver_profiles);
-
-        // use the name of pipeline' profile as pipeline driver's
-        merged_driver_profile->set_name(pipeline_profile->name());
-
-        // add all the info string and counters of the pipeline's profile
-        // to the pipeline driver's profile
-        merged_driver_profile->copy_all_info_strings_from(pipeline_profile);
-        merged_driver_profile->copy_all_counters_from(pipeline_profile);
-
-        merged_driver_profiles.push_back(merged_driver_profile);
-    }
-
-    new_instance_profile = obj_pool->add(new RuntimeProfile(instance_profile->name()));
-    new_instance_profile->copy_all_info_strings_from(instance_profile);
-    new_instance_profile->copy_all_counters_from(instance_profile);
-    for (auto* merged_driver_profile : merged_driver_profiles) {
-        merged_driver_profile->reset_parent();
-        new_instance_profile->add_child(merged_driver_profile, true, nullptr);
-    }
-
-    return new_instance_profile;
-}
-
 void GlobalDriverExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids,
                                      const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
     _thread_pool->bind_cpus(cpuids, borrowed_cpuids);

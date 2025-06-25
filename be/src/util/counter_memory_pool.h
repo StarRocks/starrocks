@@ -20,6 +20,8 @@
 
 namespace starrocks {
 
+// this pool is used to make same level's counter is near to each other
+// so when merge profile, the breadth-first traversal algorithm can have less cache miss
 class CounterMemoryPool {
 public:
     static constexpr size_t BLOCK_SIZE = 4096; // 1KB
