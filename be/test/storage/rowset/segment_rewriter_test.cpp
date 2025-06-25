@@ -54,7 +54,6 @@ protected:
 
     void TearDown() override {
         ASSERT_TRUE(fs::remove_all(kSegmentDir).ok());
-        StoragePageCache::instance()->prune();
     }
 
     const std::string kSegmentDir = "./segment_rewriter_test";

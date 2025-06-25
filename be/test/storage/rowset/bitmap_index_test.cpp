@@ -63,7 +63,7 @@ protected:
         _opts.use_page_cache = true;
         _opts.stats = &_stats;
     }
-    void TearDown() override { StoragePageCache::instance()->prune(); }
+    void TearDown() override = default;
 
     void get_bitmap_reader_iter(RandomAccessFile* rfile, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
                                 BitmapIndexIterator** iter) {
