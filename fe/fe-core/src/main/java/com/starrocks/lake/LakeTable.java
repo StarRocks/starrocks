@@ -43,6 +43,7 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
@@ -57,7 +58,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -285,24 +285,6 @@ public class LakeTable extends OlapTable {
         }
     }
 
-    private Optional<Long> extractIdFromPath(String path) {
-        if (path == null) {
-            return Optional.empty();
-        }
-    
-        int lastSlashIndex = path.lastIndexOf('/');
-        if (lastSlashIndex == -1 || lastSlashIndex == path.length() - 1) {
-            return Optional.empty();
-        }
-    
-        String idPart = path.substring(lastSlashIndex + 1);
-        try {
-            return Optional.of(Long.parseLong(idPart));
-        } catch (NumberFormatException e) {
-            return Optional.empty();
-        }
-    }
-
     public boolean checkLakeRollupAllowFileBundling() {
         return getPartitions().stream()
             .flatMap(partition -> partition.getSubPartitions().stream())
@@ -326,7 +308,7 @@ public class LakeTable extends OlapTable {
                     return false;
                 }
                 return shardInfos.stream()
-                    .allMatch(shardInfo -> extractIdFromPath(shardInfo.getFilePath().getFullPath())
+                    .allMatch(shardInfo -> LakeTableHelper.extractIdFromPath(shardInfo.getFilePath().getFullPath())
                         .map(id -> id == physicalPartitionId)
                         .orElse(false));
             });

@@ -18,6 +18,8 @@ import com.google.common.collect.Table;
 import com.staros.client.StarClientException;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StarStatus;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
@@ -421,11 +423,16 @@ public class LakeTableAlterMetaJobTest {
         try {
             String alterStmtStr = "alter table test.t12 set ('file_bundling'='true')";
             List<ShardInfo> shardInfos = new ArrayList<>();
-            ShardInfo shardInfo1 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002")).build();
-            ShardInfo shardInfo2 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10003")).build();
-            shardInfos.add(shardInfo1);
-            shardInfos.add(shardInfo2);
-            
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
+                        throws StarClientException {
+                    throw new StarClientException(
+                        StarStatus.newBuilder().setStatusCode(StatusCode.INTERNAL).setErrorMsg("injected error")
+                                .build());
+                }
+            };
+            Assert.assertFalse(table2.checkLakeRollupAllowFileBundling());
             new MockUp<StarOSAgent>() {
                 @Mock
                 public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
@@ -433,6 +440,17 @@ public class LakeTableAlterMetaJobTest {
                     return shardInfos;
                 }
             };
+
+            Assert.assertTrue(table2.checkLakeRollupAllowFileBundling());
+            ShardInfo shardInfo1 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002/")).build();
+            shardInfos.add(shardInfo1);
+            Assert.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            shardInfos.clear();
+
+            ShardInfo shardInfo2 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10003")).build();
+            ShardInfo shardInfo3 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002")).build();
+            shardInfos.add(shardInfo2);
+            shardInfos.add(shardInfo3);
     
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
