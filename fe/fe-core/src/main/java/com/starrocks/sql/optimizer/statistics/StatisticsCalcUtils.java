@@ -176,17 +176,23 @@ public class StatisticsCalcUtils {
 
     private static long deltaRows(Table table, long totalRowCount) {
         long tblRowCount = 0L;
+        Table copiedTable;
+        if (table.isOlapTable()) {
+            copiedTable = new OlapTable();
+            ((OlapTable) table).copyOnlyForQuery((OlapTable) copiedTable);
+        } else {
+            copiedTable = table;
+        }
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentStatisticStorage()
-                .getTableStatistics(table.getId(), table.getPartitions());
-
-        for (Partition partition : table.getPartitions()) {
+                .getTableStatistics(copiedTable.getId(), copiedTable.getPartitions());
+        for (Partition partition : copiedTable.getPartitions()) {
             long partitionRowCount;
             Optional<Long> statistic = tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
             partitionRowCount = statistic.orElseGet(partition::getRowCount);
             tblRowCount += partitionRowCount;
         }
         if (tblRowCount < totalRowCount) {
-            return Math.max(1, (totalRowCount - tblRowCount) / table.getPartitions().size());
+            return Math.max(1, (totalRowCount - tblRowCount) / copiedTable.getPartitions().size());
         } else {
             return 0;
         }
