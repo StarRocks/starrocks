@@ -92,7 +92,6 @@ Status LoadSpillBlockManager::init() {
     std::vector<std::shared_ptr<spill::Dir>> remote_dirs;
     // Remote FS can also use data cache to speed up.
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_remote_spill_path));
-    RETURN_IF_ERROR(fs->create_dir_if_missing(_remote_spill_path));
     auto dir = std::make_shared<spill::RemoteDir>(_remote_spill_path, std::move(fs), nullptr, INT64_MAX);
     remote_dirs.emplace_back(dir);
     _remote_dir_manager = std::make_unique<spill::DirManager>(remote_dirs);
