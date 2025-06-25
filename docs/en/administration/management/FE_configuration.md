@@ -2935,27 +2935,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 - Introduced in: -
 
-<!--
-##### shard_group_clean_threshold_sec
-
-- Default: 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### star_mgr_meta_sync_interval_sec
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### cloud_native_meta_port
 
@@ -3375,6 +3354,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
+
+##### shard_group_clean_threshold_sec
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Protection time period for FE to clean unused tablet/shard groups in shared data mode. Tablet/shard groups won't be cleaned if created within this period.
+- Introduced in: -
+
+##### star_mgr_meta_sync_interval_sec
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The interval for FE to run the periodical meta data synchronization with StarMgr.
+- Introduced in: -
+
+##### meta_sync_force_delete_shard_meta
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Allow deleting shared data meta directly bypass cleaning the remote storage files. Used only when there are too many shards to be cleaned and the clean up procedure can't keep up which leads extreme memory pressure to FE JVM. Be noticed that the data files belong to the shards/tablets will never be cleaned.
+- Introduced in: v3.2.10, v3.3.3
 
 ### Other
 

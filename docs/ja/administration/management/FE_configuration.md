@@ -2449,6 +2449,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 共有データクラスタでのワーカー間の tablet バランスを判断するためにシステムが使用するしきい値。アンバランスファクターは次のように計算されます: `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。ファクターが `lake_balance_tablets_threshold` を超える場合、tablet バランスがトリガーされます。この項目は `lake_enable_balance_tablets_between_workers` が `true` に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.4
 
+##### shard_group_clean_threshold_sec
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: Seconds
+- 変更可能: はい
+- 説明: ストレージ・計算分離クラスター下でtablet/shard Groups。を保持する期間この期間内にあるtablet/shard Groupsは自動的にクリーンアップされません。
+- 導入バージョン: -
+
+##### star_mgr_meta_sync_interval_sec
+
+- デフォルト: 600
+- タイプ: Long
+- 単位: Seconds
+- 変更可能: いいえ
+- 説明: ストレージ・計算分離クラスター下におけるFE実行とStarMgrメタデータ照合クリーンアップタスクの周期。
+- 導入バージョン: -
+
+##### meta_sync_force_delete_shard_meta
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ストレージ・計算分離クラスター下では、メタデータを直接削除し、リモートストレージ上の対応するデータをクリーンアップしないことが許可されています。ただし、ストレージ・計算分離クラスター内のクリーンアップ対象shardの数量が過剰で、FEノードのJVMメモリ圧力が過大になる場合にのみ有効化することを推奨します。有効化すると、クリーンアップされたshardに対応するリモートストレージ上のデータファイルは、これ以降自動的にクリーンアップされる機会がなくなります。
+- 導入バージョン: v3.2.10, v3.3.3
+
 ### その他
 
 ##### tmp_dir
