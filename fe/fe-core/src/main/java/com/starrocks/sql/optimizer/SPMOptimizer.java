@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateAggFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
@@ -125,6 +126,7 @@ public class SPMOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
         // Put EliminateAggRule after PRUNE_COLUMNS to give a chance to prune group bys before eliminate aggregations.
         scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
+        scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         deriveLogicalProperty(tree);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
@@ -242,6 +244,7 @@ public class SPMOptimizer extends Optimizer {
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
             scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
+            scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         }
 
         return tree;
