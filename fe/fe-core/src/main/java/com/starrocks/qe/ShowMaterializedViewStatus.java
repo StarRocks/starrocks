@@ -693,14 +693,10 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, Strings.nullToEmpty(this.getTaskName()));
         // start time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshStartTime()));
-        // process start time
-        addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
         // process finish time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshEndTime()));
         // process duration
         addField(resultRow, formatDuration(refreshJobStatus.getTotalProcessDuration()));
-        // last refresh job id
-        addField(resultRow, refreshJobStatus.getJobId());
         // last refresh state
         addField(resultRow, refreshJobStatus.getRefreshState());
         // whether it's force refresh
@@ -731,6 +727,10 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, queryRewriteStatus);
         // owner
         addField(resultRow, refreshJobStatus.getTaskOwner());
+        // process start time
+        addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
+        // last refresh job id
+        addField(resultRow, refreshJobStatus.getJobId());
 
         return resultRow;
     }

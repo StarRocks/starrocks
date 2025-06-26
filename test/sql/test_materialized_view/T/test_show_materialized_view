@@ -43,5 +43,12 @@ set @this_refresh_time = (
 select if(@last_refresh_time != @this_refresh_time, 
     'refreshed', concat('no refresh after ', @last_refresh_time));
 
+[UC]show materialized views where name like 'user_tags_mv1';
+[UC]show materialized views where name like '%user_tags_mv1%';
+[UC]show materialized views where name = 'user_tags_mv1';
+
+[UC]show materialized views from test_show_materialized_view where name like 'user_tags_mv1';
+[UC]show materialized views from test_show_materialized_view where name like '%user_tags_mv1%';
+[UC]show materialized views from test_show_materialized_view where name = 'user_tags_mv1';
 
 drop database test_show_materialized_view;
