@@ -998,67 +998,68 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     // if this counter first appears, set it value and min/max
                     if (counter_number_map.find(name) == counter_number_map.end()) {
                         counter_number_map.emplace(name, std::make_pair(counter->value(), 1));
+                        // set value at first, if counter is skip_merge, merged_counter's value will be first counter's value
+                        // else merged_counter's value will be set at the last profile
                         merged_counter->set(counter->value());
-                        if (!counter->skip_min_max()) {
-                            if (!merged_counter->min_value().has_value()) {
-                                merged_counter->set_min(merged_counter->value());
+                        if (!counter->skip_min_max() && !counter->skip_merge()) {
+                            if (!counter->min_value().has_value()) {
+                                merged_counter->set_min(counter->value());
+                            } else {
+                                merged_counter->set_min(counter->min_value().value());
                             }
-                            if (!merged_counter->max_value().has_value()) {
-                                merged_counter->set_max(merged_counter->value());
+                            if (!counter->max_value().has_value()) {
+                                merged_counter->set_max(counter->value());
+                            } else {
+                                merged_counter->set_max(counter->max_value().value());
                             }
                         }
                         continue;
                     }
 
                     // this counter already exist in merged_profile, update this counter
-                    if (merged_counter != counter) {
-                        DCHECK(merged_counter->type() == counter->type())
-                                << "find non-isomorphic counter, profile_name=" << merged_profile->name()
-                                << ", counter_name=" << name
-                                << ", exist_type=" << std::to_string(merged_counter->type())
-                                << ", another_type=" << std::to_string(counter->type());
+                    DCHECK(merged_counter->type() == counter->type())
+                            << "find non-isomorphic counter, profile_name=" << merged_profile->name()
+                            << ", counter_name=" << name << ", exist_type=" << std::to_string(merged_counter->type())
+                            << ", another_type=" << std::to_string(counter->type());
 
-                        if (merged_counter->type() != counter->type()) {
-                            continue;
-                        }
-                        if (counter->skip_merge()) {
-                            continue;
-                        }
+                    if (merged_counter->type() != counter->type()) {
+                        continue;
+                    }
+                    if (counter->skip_merge()) {
+                        continue;
+                    }
 
-                        // update min/max
-                        if (!counter->skip_min_max()) {
-                            if (counter->min_value().has_value()) {
-                                DCHECK(merged_counter->min_value().has_value());
-                                if (merged_counter->min_value().value() > counter->min_value().value()) {
-                                    merged_counter->set_min(counter->min_value().value());
-                                }
-                            } else {
-                                merged_counter->set_min(std::min(merged_counter->value(), counter->value()));
-                            }
+                    // update min/max
+                    if (!counter->skip_min_max()) {
+                        int64_t counter_min_value =
+                                counter->min_value().has_value() ? counter->min_value().value() : counter->value();
+                        int64_t counter_max_value =
+                                counter->max_value().has_value() ? counter->max_value().value() : counter->value();
 
-                            if (counter->max_value().has_value()) {
-                                DCHECK(merged_counter->max_value().has_value());
-                                if (merged_counter->max_value().value() < counter->max_value().value()) {
-                                    merged_counter->set_max(counter->max_value().value());
-                                }
-                            } else {
-                                merged_counter->set_max(std::max(merged_counter->value(), counter->value()));
-                            }
+                        DCHECK(merged_counter->min_value().has_value());
+                        DCHECK(merged_counter->max_value().has_value());
+                        if (counter_min_value < merged_counter->min_value().value()) {
+                            merged_counter->set_min(counter_min_value);
                         }
 
-                        // update sum and number, set value if the last
-                        auto it = counter_number_map.find(name);
-                        DCHECK(it != counter_number_map.end());
-                        it->second.first += counter->value();
-                        it->second.second++;
-
-                        if (i == profiles.size() - 1) {
-                            int64_t merged_value = it->second.first;
-                            if (merged_counter->is_avg()) {
-                                merged_value /= it->second.second;
-                            }
-                            merged_counter->set(merged_value);
+                        if (counter_max_value > merged_counter->max_value().value()) {
+                            merged_counter->set_max(counter_max_value);
                         }
+                    }
+
+                    // update sum and number
+                    auto it = counter_number_map.find(name);
+                    DCHECK(it != counter_number_map.end());
+                    it->second.first += counter->value();
+                    it->second.second++;
+
+                    // set value if the last
+                    if (i == profiles.size() - 1) {
+                        int64_t merged_value = it->second.first;
+                        if (merged_counter->is_avg()) {
+                            merged_value /= it->second.second;
+                        }
+                        merged_counter->set(merged_value);
                     }
                 }
             }
