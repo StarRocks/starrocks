@@ -1079,16 +1079,27 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Reload the materialized view with original active state.
+     * NOTE: This method will not try to activate the materialized view.
+     * @param postLoadImage: whether this reload is called after FE's image loading process.
+     */
+    public void onReload(boolean postLoadImage) {
+        onReload(postLoadImage, isActive());
+    }
+
+    /**
      * `postLoadImage` is used to distinct wether it's called after FE's image loading process,
      * such as FE startup or checkpointing.
      *
      * Note!! The `onReload` method is called in some other scenarios such as - schema change of a materialize view.
      * The reloaded flag was introduced only to increase the speed of FE startup and checkpointing.
      * It shouldn't affect the behavior of other operations which might indeed need to do a reload process.
+     *
+     * @param postLoadImage whether this reload is called after FE's image loading process.
+     * @param desiredActive whether the materialized view should be active after reload.
      */
-    public void onReload(boolean postLoadImage) {
+    private void onReload(boolean postLoadImage, boolean desiredActive) {
         try {
-            boolean desiredActive = active;
             active = false;
             boolean reloadActive = onReloadImpl(postLoadImage);
             if (desiredActive && reloadActive) {
@@ -1107,7 +1118,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-        onReloadImpl(false);
+        onReload(false, true);
     }
 
     /**
@@ -1936,42 +1947,55 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: This method should be only called once in FE restart phase.
      */
     private void analyzePartitionExprs() {
-        try {
-            // initialize table to base table info cache
-            for (BaseTableInfo tableInfo : this.baseTableInfos) {
-                this.tableToBaseTableInfoCache.put(MvUtils.getTableChecked(tableInfo), tableInfo);
-            }
-            // analyze partition exprs for ref base tables
-            analyzeRefBaseTablePartitionExprs();
-            // analyze partition exprs
-            Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs(false);
-            ConnectContext connectContext = ConnectContext.buildInner();
-            if (refBaseTablePartitionExprs != null) {
-                for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
-                    if (refBaseTableOpt.isEmpty()) {
-                        continue;
-                    }
-                    Table refBaseTable = refBaseTableOpt.get();
-                    if (!refBaseTablePartitionExprs.containsKey(refBaseTable)) {
-                        continue;
-                    }
-                    List<Expr> partitionExprs = refBaseTablePartitionExprs.get(refBaseTable);
-                    TableName tableName = new TableName(baseTableInfo.getCatalogName(),
-                            baseTableInfo.getDbName(), baseTableInfo.getTableName());
-                    for (Expr partitionExpr : partitionExprs) {
-                        analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
-                    }
+        // Don't use try-catch here, so can inactive mv if analyze failed, see #onReload()
+
+        // initialize table to base table info cache
+        for (BaseTableInfo tableInfo : this.baseTableInfos) {
+            this.tableToBaseTableInfoCache.put(MvUtils.getTableChecked(tableInfo), tableInfo);
+        }
+        // analyze partition exprs for ref base tables
+        analyzeRefBaseTablePartitionExprs();
+        // analyze partition exprs
+        Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs(false);
+        ConnectContext connectContext = ConnectContext.buildInner();
+        if (refBaseTablePartitionExprs != null) {
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
+                if (refBaseTableOpt.isEmpty()) {
+                    continue;
+                }
+                Table refBaseTable = refBaseTableOpt.get();
+                if (!refBaseTablePartitionExprs.containsKey(refBaseTable)) {
+                    continue;
+                }
+                List<Expr> partitionExprs = refBaseTablePartitionExprs.get(refBaseTable);
+                TableName tableName = new TableName(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), baseTableInfo.getTableName());
+                for (Expr partitionExpr : partitionExprs) {
+                    analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
                 }
             }
-            // analyze partition slots for ref base tables
-            analyzeRefBaseTablePartitionSlots();
-            // analyze partition columns for ref base tables
-            analyzeRefBaseTablePartitionColumns();
-            // analyze partition retention condition
-            analyzeMVRetentionCondition(connectContext);
-        } catch (Exception e) {
-            LOG.warn("Analyze partition exprs failed", e);
+        }
+
+        // analyze partition slots for ref base tables
+        analyzeRefBaseTablePartitionSlots();
+        // analyze partition columns for ref base tables
+        analyzeRefBaseTablePartitionColumns();
+        // analyze partition retention condition
+        analyzeMVRetentionCondition(connectContext);
+
+        // add a check for partition columns to ensure they are not empty if the table is partitioned.
+        // throw exception is ok which will make mv inactive to avoid using it in query rewrite.
+        if (partitionExprMaps != null && !partitionExprMaps.isEmpty()) {
+            Preconditions.checkArgument(refBaseTablePartitionColumnsOpt.isPresent() &&
+                    !refBaseTablePartitionColumnsOpt.get().isEmpty(), String.format("Ref base table " +
+                    "partition columns should not be empty:%s", refBaseTablePartitionColumnsOpt));
+            Preconditions.checkArgument(refBaseTablePartitionExprsOpt.isPresent() &&
+                    !refBaseTablePartitionExprsOpt.get().isEmpty(), String.format("Ref base table " +
+                    "partition exprs should not be empty:%s", refBaseTablePartitionExprsOpt));
+            Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
+                    !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
+                    "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
         }
     }
 
