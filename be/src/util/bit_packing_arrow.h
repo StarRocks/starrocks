@@ -28,8 +28,8 @@
 namespace starrocks::util::bitpacking_arrow {
 
 template <typename OutType, int BIT_WIDTH>
-static const uint8_t* UnpackValues_ARROW(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
-                                         OutType* __restrict__ out) {
+static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
+                                   OutType* __restrict__ out) {
     int batch_size = num_values / 32 * 32;
     const int byte_width = 8;
     if constexpr (sizeof(OutType) == 4) {
@@ -92,12 +92,12 @@ static const uint8_t* UnpackValues_ARROW(const uint8_t* __restrict__ in, int64_t
 
 // the in_bytes is enough for num_values, that should be checked by caller.
 template <typename OutType>
-static const uint8_t* UnpackValues_ARROW(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
-                                         int64_t num_values, OutType* __restrict__ out) {
+static const uint8_t* UnpackValues(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
+                                   OutType* __restrict__ out) {
 #pragma push_macro("UNPACK_ARROW_VALUES_CASE")
 #define UNPACK_ARROW_VALUES_CASE(ignore1, i, ignore2) \
     case i:                                           \
-        return UnpackValues_ARROW<OutType, i>(in, in_bytes, num_values, out);
+        return UnpackValues<OutType, i>(in, in_bytes, num_values, out);
 
     switch (bit_width) {
         // Expand cases from 0 to 64.

@@ -99,9 +99,9 @@ void BitUnpackBench::SetUp() {
                                                                                                                     \
     void BitUnpackBench::do_bench_##WIDTH##_avx2(int bit_width) {                                                   \
         auto source = bitPackedData[bit_width];                                                                     \
-        starrocks::util::bitpacking_arrow::UnpackValues_ARROW(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
-                                                              source.size() * sizeof(uint64_t), kNumValues,         \
-                                                              result##WIDTH##_.data());                             \
+        starrocks::util::bitpacking_arrow::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),       \
+                                                        source.size() * sizeof(uint64_t), kNumValues,               \
+                                                        result##WIDTH##_.data());                                   \
     }                                                                                                               \
                                                                                                                     \
     void BitUnpackBench::do_bench_##WIDTH##_bmi(int bit_width) {                                                    \

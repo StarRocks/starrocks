@@ -20,8 +20,8 @@
 
 #include "bench/bit_copy.h"
 #include "util/bit_packing.h"
-#include "util/bit_packing_default.h"
 #include "util/bit_packing_arrow.h"
+#include "util/bit_packing_default.h"
 
 namespace starrocks {
 
@@ -79,9 +79,9 @@ void BitPackingSIMDTest::populateBitPacked() {
             starrocks::util::bitpacking_default::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
                                                               source.size() * sizeof(uint64_t), kNumValues,         \
                                                               result[0].data());                                    \
-            starrocks::util::bitpacking_arrow::UnpackValues_ARROW(                                                  \
-                    bit_width, reinterpret_cast<uint8_t*>(source.data()), source.size() * sizeof(uint64_t),         \
-                    kNumValues, result[1].data());                                                                  \
+            starrocks::util::bitpacking_arrow::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),   \
+                                                            source.size() * sizeof(uint64_t), kNumValues,           \
+                                                            result[1].data());                                      \
             starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),               \
                                                 source.size() * sizeof(uint64_t), kNumValues, result[2].data());    \
                                                                                                                     \
