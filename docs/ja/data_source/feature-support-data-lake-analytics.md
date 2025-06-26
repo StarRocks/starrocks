@@ -219,6 +219,7 @@ StarRocks は v3.3.2 以降、Iceberg ビューのクエリをサポートして
 - StarRocks は、Hudi の Parquet 形式のデータのクエリをサポートし、Parquet ファイルのために SNAPPY、LZ4、ZSTD、GZIP、および NO_COMPRESSION 圧縮フォーマットをサポートします。
 - StarRocks は、Hudi の Copy On Write (COW) テーブルと Merge On Read (MOR) テーブルを完全にサポートします。
 - StarRocks は v3.0.0 以降、SHOW CREATE TABLE をサポートして Hudi テーブルスキーマを表示します。
+- StarRocks v3.5.0 は Hudi 0.15.0 をサポートしています。
 
 ## Delta Lake Catalog
 
