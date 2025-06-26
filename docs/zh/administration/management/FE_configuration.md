@@ -3367,7 +3367,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：600
 - 类型：Long
-- 单位：Seconds
+- 单位：秒
 - 是否动态：否
 - 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
 - 引入版本：-
