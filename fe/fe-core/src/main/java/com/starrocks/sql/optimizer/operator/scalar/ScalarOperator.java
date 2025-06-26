@@ -45,6 +45,8 @@ public abstract class ScalarOperator implements Cloneable {
 
     protected boolean isCorrelated = false;
 
+    protected boolean isJoinDerived = false;
+
     private List<String> hints = Collections.emptyList();
 
     private boolean isIndexOnlyFilter = false;
@@ -291,6 +293,14 @@ public abstract class ScalarOperator implements Cloneable {
 
     public void setCorrelated(boolean correlated) {
         isCorrelated = correlated;
+    }
+
+    public boolean isJoinDerived() {
+        return isJoinDerived;
+    }
+
+    public void setJoinDerived(boolean isJoinDerived) {
+        this.isJoinDerived = isJoinDerived;
     }
 
     // whether ScalarOperator are equals without id

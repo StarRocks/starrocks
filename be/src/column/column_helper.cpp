@@ -25,6 +25,8 @@
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "simd/simd.h"
+#include "storage/chunk_helper.h"
+#include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/date_func.h"
 #include "util/percentile_value.h"
@@ -79,6 +81,23 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict
         // noted that here we don't need to count zero, but to check is there any non-zero.
         // filter values are 0/1, we can use memchr here.
         *all_zero = (memchr(filter->data(), 0x1, filter->size()) == nullptr);
+    }
+}
+
+void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& null_data, Filter* __restrict filter) {
+    size_t num_rows = column->size();
+
+    if (column->is_nullable()) {
+        const auto* nullable_column = as_raw_column<NullableColumn>(column);
+        const auto nulls = nullable_column->immutable_null_column_data().data();
+        for (size_t i = 0; i < num_rows; ++i) {
+            null_data[i] |= nulls[i];
+        }
+    }
+
+    auto datas = get_cpp_data<TYPE_BOOLEAN>(column);
+    for (size_t j = 0; j < num_rows; ++j) {
+        (*filter)[j] &= datas[j];
     }
 }
 

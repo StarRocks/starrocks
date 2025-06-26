@@ -908,6 +908,27 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         return;                                                  \
     }
 
+#define RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS() \
+    if (UNLIKELY(match_count > state->chunk_size())) {      \
+        _probe_state->cur_probe_index = i;                  \
+        _probe_state->cur_build_index = j;                  \
+        _probe_state->cur_nullaware_build_index = j;        \
+        _probe_state->has_remain = true;                    \
+        _probe_state->count = state->chunk_size();          \
+        return;                                             \
+    }
+
+#define RETURN_IF_CHUNK_FULL2()                                  \
+    if (UNLIKELY(match_count > state->chunk_size())) {           \
+        _probe_state->next[i] = _table_items->next[build_index]; \
+        _probe_state->cur_probe_index = i;                       \
+        _probe_state->cur_build_index = build_index;             \
+        _probe_state->has_remain = true;                         \
+        _probe_state->count = state->chunk_size();               \
+        _probe_state->cur_row_match_count = cur_row_match_count; \
+        return;                                                  \
+    }
+
 #define COWAIT_IF_CHUNK_FULL()                              \
     if (_probe_state->match_count == state->chunk_size()) { \
         _probe_state->has_remain = true;                    \
@@ -1759,12 +1780,14 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
         _probe_state->probe_index[0] = _probe_state->cur_probe_index;
         _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
-        if (_probe_state->next[i] == 0) {
+        if (_probe_state->next[i] == 0 && _probe_state->cur_nullaware_build_index >= _table_items->row_count + 1) {
             i++;
             _probe_state->cur_row_match_count = 0;
+            _probe_state->cur_nullaware_build_index = 1;
         }
     } else {
         _probe_state->cur_row_match_count = 0;
+        _probe_state->cur_nullaware_build_index = 1;
         for (size_t j = 0; j < state->chunk_size(); j++) {
             _probe_state->probe_match_index[j] = 0;
         }
@@ -1775,22 +1798,23 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
         size_t build_index = _probe_state->next[i];
         if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
             // when left table col value is null needs match all rows in right table
-            for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+            for (size_t j = _probe_state->cur_nullaware_build_index; j < _table_items->row_count + 1; j++) {
                 MATCH_RIGHT_TABLE_ROWS()
-                RETURN_IF_CHUNK_FULL()
+                RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
             }
         } else if (_table_items->key_columns[0]->is_nullable()) {
             // when left table col value not hits in hash table needs match all null value rows in right table
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
             auto& null_array = nullable_column->null_column()->get_data();
             // TODO: optimize me
-            for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+            for (size_t j = _probe_state->cur_nullaware_build_index; j < _table_items->row_count + 1; j++) {
                 if (null_array[j] == 1) {
                     MATCH_RIGHT_TABLE_ROWS()
-                    RETURN_IF_CHUNK_FULL()
+                    RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
                 }
             }
         }
+        _probe_state->cur_nullaware_build_index = _table_items->row_count + 1;
 
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
@@ -1813,6 +1837,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
             RETURN_IF_CHUNK_FULL()
         }
         _probe_state->cur_row_match_count = 0;
+        _probe_state->cur_nullaware_build_index = 1;
     }
     PROBE_OVER()
 }
