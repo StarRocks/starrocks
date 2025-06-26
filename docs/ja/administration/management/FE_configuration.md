@@ -2453,7 +2453,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - デフォルト: 3600
 - タイプ: Long
-- 単位: Seconds
+- 単位: 秒
 - 変更可能: はい
 - 説明: ストレージ・計算分離クラスター下でtablet/shard Groups。を保持する期間この期間内にあるtablet/shard Groupsは自動的にクリーンアップされません。
 - 導入バージョン: -
