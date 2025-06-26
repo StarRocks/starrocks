@@ -325,22 +325,38 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
         if (retain_info.contains_rowset(rowset.id())) {
             continue;
         }
-        for (const auto& segment : rowset.segments()) {
+
+        for (int i = 0; i < rowset.segments_size(); ++i) {
+            if (rowset.shared_segments_size() > 0 && rowset.shared_segments(i)) {
+                continue;
+            }
+
             if (rowset.bundle_file_offsets_size() > 0 && bundle_file_deleter != nullptr) {
-                RETURN_IF_ERROR(bundle_file_deleter->delete_file(join_path(base_dir, segment)));
+                RETURN_IF_ERROR(bundle_file_deleter->delete_file(join_path(base_dir, rowset.segments(i))));
             } else {
-                RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
+                RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segments(i))));
             }
         }
+
         for (const auto& del_file : rowset.del_files()) {
+            if (del_file.shared()) {
+                continue;
+            }
+
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
         }
         *garbage_data_size += rowset.data_size();
     }
+
     for (const auto& file : metadata.orphan_files()) {
+        if (file.shared()) {
+            continue;
+        }
+
         if (retain_info.contains_file(file.name())) {
             continue;
         }
+
         RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
         *garbage_data_size += file.size();
     }
@@ -990,21 +1006,30 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
         if (latest_metadata != nullptr) {
             for (const auto& rowset : latest_metadata->rowsets()) {
-                for (const auto& segment : rowset.segments()) {
+                for (int i = 0; i < rowset.segments_size(); ++i) {
+                    if (rowset.shared_segments_size() > 0 && rowset.shared_segments(i)) {
+                        continue;
+                    }
                     // if the segment file is not shared by other alive tablets, we can delete the segments directly.
                     if (rowset.bundle_file_offsets_size() == 0 ||
                         can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()])) {
-                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segments(i))));
                     }
                 }
             }
             if (latest_metadata->has_delvec_meta()) {
                 for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
+                    if (f.shared()) {
+                        continue;
+                    }
                     RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
                 }
             }
             if (latest_metadata->sstable_meta().sstables_size() > 0) {
                 for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
+                    if (sst.shared()) {
+                        continue;
+                    }
                     RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, sst.filename())));
                 }
             }

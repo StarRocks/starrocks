@@ -262,7 +262,7 @@ TEST_F(MetaFileTest, test_dcg) {
         rowset_metadata.add_segments("aaa.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
-        std::vector<std::string> orphan_files;
+        std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
         Status st = builder.finalize(next_id());
@@ -439,7 +439,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         rowset_metadata.add_segments("aaa.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
-        std::vector<std::string> orphan_files;
+        std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
         Status st = builder.finalize(next_id());
@@ -459,7 +459,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         rowset_metadata.add_del_files()->CopyFrom(delfile);
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
-        std::vector<std::string> orphan_files;
+        std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
         PersistentIndexSstablePB sstable;
@@ -501,7 +501,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         rowset_metadata.add_segments("ddd.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
-        std::vector<std::string> orphan_files;
+        std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
         PersistentIndexSstablePB sstable;
