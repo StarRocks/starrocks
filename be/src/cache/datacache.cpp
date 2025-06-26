@@ -44,8 +44,7 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
     _page_cache = std::make_shared<StoragePageCache>();
 
 #if defined(WITH_STARCACHE)
-    if (config::datacache_engine == "" || config::datacache_engine == "cachelib" ||
-        config::datacache_engine == "starcache") {
+    if (config::datacache_engine == "" || config::datacache_engine == "starcache") {
         config::datacache_engine = "starcache";
     } else {
         config::datacache_engine = "lrucache";

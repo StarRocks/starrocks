@@ -1273,11 +1273,10 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
-// DataCache engines, alternatives: starcache, lrucache, cachelib.
-// `cachelib` is not support now.
+// DataCache engines, alternatives: starcache, lrucache
 // Set the default value empty to indicate whether it is manually configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
-CONF_String_enum(datacache_engine, "", ",starcache,lrucache,cachelib");
+CONF_String_enum(datacache_engine, "", ",starcache,lrucache");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
