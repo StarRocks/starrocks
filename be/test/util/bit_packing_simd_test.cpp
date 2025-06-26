@@ -77,10 +77,10 @@ void BitPackingSIMDTest::populateBitPacked() {
             result[2].resize(kNumValues);                                                                          \
             starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),              \
                                                 source.size() * sizeof(uint64_t), kNumValues, result[0].data());   \
-            starrocks::BitPackingAdapter::UnpackValues_ARROW(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
+            starrocks::BitPacking::UnpackValues_ARROW(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
                                                              source.size() * sizeof(uint64_t), kNumValues,         \
                                                              result[1].data());                                    \
-            starrocks::BitPackingAdapter::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),       \
+            starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),       \
                                                        source.size() * sizeof(uint64_t), kNumValues,               \
                                                        result[2].data());                                          \
                                                                                                                    \

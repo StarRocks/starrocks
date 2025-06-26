@@ -104,7 +104,7 @@ void BitUnpackBench::SetUp() {
                                                                                                                     \
     void BitUnpackBench::do_bench_##WIDTH##_avx2(int bit_width) {                                                   \
         auto source = bitPackedData[bit_width];                                                                     \
-        starrocks::BitPackingAdapter::UnpackValues_ARROW(bit_width, reinterpret_cast<uint8_t*>(source.data()),      \
+        starrocks::BitPacking::UnpackValues_ARROW(bit_width, reinterpret_cast<uint8_t*>(source.data()),      \
                                                          source.size() * sizeof(uint64_t), kNumValues,              \
                                                          result##WIDTH##_.data());                                  \
     }                                                                                                               \
