@@ -225,7 +225,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
 
-    std::vector<std::string> orphan_files;
+    std::vector<FileMetaPB> orphan_files;
     std::map<int, FileInfo> replace_segments;
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);

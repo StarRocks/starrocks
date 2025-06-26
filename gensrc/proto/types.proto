@@ -200,6 +200,8 @@ message PersistentIndexSstablePB {
     // used for rebuild point of persistent index
     optional uint64 max_rss_rowid = 4;
     optional bytes encryption_meta = 5;
+    // Whether this file shared by multiple tablets
+    optional bool shared = 6 [default=false];
 }
 
 message PersistentIndexSstableMetaPB {

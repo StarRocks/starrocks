@@ -43,6 +43,8 @@ message DelvecCacheKeyPB {
 message FileMetaPB {
     optional string name = 1;
     optional int64 size = 2;
+    // Whether this file shared by multiple tablets
+    optional bool shared = 3 [default=false];
 }
 
 message DelvecMetadataPB {
@@ -60,6 +62,8 @@ message DeltaColumnGroupVerPB {
     // To do conflict check with compaction task
     repeated int64 versions = 3;
     repeated bytes encryption_metas = 4;
+    // Whether files are shared by multiple tablets
+    repeated bool shared_files = 5;
 }
 
 message DeltaColumnGroupMetadataPB {
@@ -86,6 +90,8 @@ message DelfileWithRowsetId {
     //      And rssid of them will be rowset_id + [0, 0].
     optional uint32 op_offset = 3;
     optional bytes encryption_meta = 4;
+    // Whether this file shared by multiple tablets
+    optional bool shared = 5 [default=false];
 }
 
 message RowsetMetadataPB {
@@ -110,6 +116,8 @@ message RowsetMetadataPB {
     // only be set > 0 if `overlapped` is true
     optional uint32 next_compaction_offset = 13;
     repeated int64 bundle_file_offsets = 14;
+    // Whether segments are shared by multiple tablets
+    repeated bool shared_segments = 15;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
