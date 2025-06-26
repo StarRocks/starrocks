@@ -3369,7 +3369,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Long
 - 单位：Seconds
 - 是否动态：否
-- 描述：存算分离集群下FE运行与StarMgr元数据比对清理任务的周期。
+- 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
 - 引入版本：-
 
 ##### meta_sync_force_delete_shard_meta
