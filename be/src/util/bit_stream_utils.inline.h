@@ -33,13 +33,14 @@
 // under the License.
 #pragma once
 
+#include <arrow/util/ubsan.h>
+
 #include <algorithm>
 
 #include "glog/logging.h"
 #include "util/alignment.h"
 #include "util/bit_packing.h"
 #include "util/bit_stream_utils.h"
-#include <arrow/util/ubsan.h>
 
 using starrocks::BitUtil;
 
