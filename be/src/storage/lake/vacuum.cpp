@@ -259,8 +259,11 @@ void run_clear_task_async(std::function<void()> task) {
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
                                     AsyncFileDeleter* deleter, int64_t* garbage_data_size) {
     for (const auto& rowset : metadata.compaction_inputs()) {
-        for (const auto& segment : rowset.segments()) {
-            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
+        if (rowset.bundle_file_offsets_size() == 0) {
+            // skip delete rowset with bundle file offsets
+            for (const auto& segment : rowset.segments()) {
+                RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
+            }
         }
         for (const auto& del_file : rowset.del_files()) {
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
@@ -606,8 +609,10 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             auto log = std::move(res).value();
             if (log->has_op_write()) {
                 const auto& op = log->op_write();
-                for (const auto& segment : op.rowset().segments()) {
-                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+                if (op.rowset().bundle_file_offsets_size() == 0) {
+                    for (const auto& segment : op.rowset().segments()) {
+                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+                    }
                 }
                 for (const auto& f : op.dels()) {
                     RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f)));
@@ -675,8 +680,11 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
         if (latest_metadata != nullptr) {
             for (const auto& rowset : latest_metadata->rowsets()) {
-                for (const auto& segment : rowset.segments()) {
-                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+                if (rowset.bundle_file_offsets_size() == 0) {
+                    // skip delete segments in rowset with bundle file offsets
+                    for (const auto& segment : rowset.segments()) {
+                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
+                    }
                 }
             }
             if (latest_metadata->has_delvec_meta()) {

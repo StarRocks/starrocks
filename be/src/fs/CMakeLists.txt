@@ -36,6 +36,7 @@ set(EXEC_FILES
     s3/poco_http_client.cpp
     s3/poco_common.cpp
     fs_util.cpp
+    bundle_file.cpp
     )
 
 if (NOT BUILD_FORMAT_LIB)
