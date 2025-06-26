@@ -1116,6 +1116,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP,
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseComputeResourceName(computeResource));
 
         Map<String, String> loadCounters = coord.getLoadCounters();
         if (loadCounters != null && loadCounters.size() != 0) {
@@ -1129,7 +1131,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         return profile;
     }
-
 
     public void collectProfile(boolean isAborted) {
         RuntimeProfile profile = buildTopLevelProfile(isAborted);

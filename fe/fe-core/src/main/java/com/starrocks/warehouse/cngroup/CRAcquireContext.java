@@ -76,4 +76,13 @@ public class CRAcquireContext {
     public ComputeResource getPrevComputeResource() {
         return prevComputeResource;
     }
+
+    @Override
+    public String toString() {
+        return "{" +
+                "warehouseId=" + warehouseId +
+                ", strategy=" + strategy +
+                ", prevComputeResource=" + prevComputeResource +
+                '}';
+    }
 }

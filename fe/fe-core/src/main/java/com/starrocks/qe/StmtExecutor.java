@@ -358,6 +358,8 @@ public class StmtExecutor {
         } else {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
         }
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
@@ -551,7 +553,9 @@ public class StmtExecutor {
             }
 
             // set warehouse for auditLog
-            context.getAuditEventBuilder().setWarehouse(context.getCurrentWarehouseName());
+            context.getAuditEventBuilder()
+                    .setWarehouse(context.getCurrentWarehouseName())
+                    .setCNGroup(context.getCurrentComputeResourceName());
             LOG.debug("set warehouse {} for stmt: {}", context.getCurrentWarehouseName(), parsedStmt);
 
             if (parsedStmt.isExplain()) {

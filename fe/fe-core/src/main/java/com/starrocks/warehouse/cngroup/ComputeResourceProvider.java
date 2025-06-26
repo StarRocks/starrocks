@@ -26,6 +26,14 @@ import java.util.Optional;
  */
 public interface ComputeResourceProvider {
     /**
+     * Get a ComputeResource by warehouseId and workGroupId.
+     * @param warehouseId the id of the warehouse
+     * @param workGroupId the id of the worker group
+     * @return a ComputeResource that can be used for compute
+     */
+    ComputeResource ofComputeResource(long warehouseId, long workGroupId);
+
+    /**
      * NOTE: prefer to call this infrequently, as it can come to dominate the execution time of a query in the
      *  frontend if there are many calls per request (e.g. one per partition when there are many partitions).
      *

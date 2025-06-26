@@ -229,7 +229,8 @@ public class ConnectProcessor {
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
-                .setSessionId(ctx.getSessionId().toString());
+                .setSessionId(ctx.getSessionId().toString())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -335,7 +336,8 @@ public class ConnectProcessor {
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName())
-                .setCustomQueryId(ctx.getCustomQueryId());
+                .setCustomQueryId(ctx.getCustomQueryId())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
         ctx.getState().setIsQuery(true);

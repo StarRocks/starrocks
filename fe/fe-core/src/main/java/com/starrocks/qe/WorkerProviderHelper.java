@@ -16,16 +16,20 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.system.ComputeNode;
-
-import java.util.function.IntSupplier;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 public class WorkerProviderHelper {
+    public interface NextWorkerIndexSupplier {
+        int getAsInt(ComputeResource computeResource);
+    }
+
     public static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,
-                                                          IntSupplier getNextWorkerNodeIndex) {
+                                                          NextWorkerIndexSupplier getNextWorkerNodeIndex,
+                                                          ComputeResource computeResource) {
         if (workers.isEmpty()) {
             return null;
         }
-        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
+        int index = getNextWorkerNodeIndex.getAsInt(computeResource) % workers.size();
         if (index < 0) {
             index = -index;
         }

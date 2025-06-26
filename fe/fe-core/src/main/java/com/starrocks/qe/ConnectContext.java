@@ -1011,6 +1011,21 @@ public class ConnectContext {
         return this.computeResource;
     }
 
+    public String getCurrentComputeResourceName() {
+        if (RunMode.isSharedNothingMode() || this.computeResource == null) {
+            return "";
+        }
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        return warehouseManager.getComputeResourceName(this.computeResource);
+    }
+
+    public ComputeResource getCurrentComputeResourceWithNoAcquire() {
+        if (RunMode.isSharedNothingMode()) {
+            return WarehouseManager.DEFAULT_RESOURCE;
+        }
+        return this.computeResource;
+    }
+
     public void setParentConnectContext(ConnectContext parent) {
         this.parent = parent;
     }
@@ -1526,7 +1541,10 @@ public class ConnectContext {
             } else {
                 row.add(Boolean.toString(isPending));
             }
+            // warehouse
             row.add(sessionVariable.getWarehouseName());
+            // cngroup
+            row.add(getCurrentComputeResourceName());
             return row;
         }
     }
@@ -1578,6 +1596,12 @@ public class ConnectContext {
                 // ignore
                 LOG.warn("onQueryFinished error", e);
             }
+        }
+
+        try {
+            auditEventBuilder.setCNGroup(getCurrentComputeResourceName());
+        } catch (Exception e) {
+            LOG.warn("set cn group name failed", e);
         }
     }
 }

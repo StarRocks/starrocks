@@ -732,6 +732,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return this.updateState(newState, false, System.currentTimeMillis());
     }
 
+    public ComputeResource getComputeResource() {
+        return computeResource;
+    }
+
     public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {
         if (isExportDone()) {
             LOG.warn("export job state is finished or cancelled");
