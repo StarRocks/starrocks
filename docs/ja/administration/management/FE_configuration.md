@@ -2455,7 +2455,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Long
 - 単位: 秒
 - 変更可能: はい
-- 説明: ストレージ・計算分離クラスター下でtablet/shard Groups。を保持する期間この期間内にあるtablet/shard Groupsは自動的にクリーンアップされません。
+- 説明: FE が共有データクラスター内の未使用の Tablet および Shard Group をクリーニングするまでの時間。この期間内に作成された Tablet と Shard Group はクリーニングされません。
 - 導入バージョン: -
 
 ##### star_mgr_meta_sync_interval_sec
