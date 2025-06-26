@@ -2464,7 +2464,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Long
 - 単位: 秒
 - 変更可能: いいえ
-- 説明: ストレージ・計算分離クラスター下におけるFE実行とStarMgrメタデータ照合クリーンアップタスクの周期。
+- 説明: 共有データクラスタ内の FE が StarMgr と の定期的なメタデータ同期を実行する間隔。
 - 導入バージョン: -
 
 ##### meta_sync_force_delete_shard_meta
