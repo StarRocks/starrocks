@@ -85,6 +85,16 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    void testCheckPruneColumn() throws Exception {
+        connectContext.getSessionVariable().setSelectRatioThreshold(-1);
+        String sql = "select v2 from t0 where v1 > 1 and v1 < 3 or v1 >100000 and v1 < 100010 or v1 >200000 and v1 < 200010 " +
+                "or v1 > 400000 and v1 < 500010";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "UNION");
+        assertNotContains(plan, "* v3-->");
+    }
+
+    @Test
     void testForceSplitWithPartition() throws Exception {
         connectContext.getSessionVariable().setSelectRatioThreshold(-1);
         connectContext.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
