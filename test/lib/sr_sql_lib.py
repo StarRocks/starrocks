@@ -139,6 +139,7 @@ T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
 
 SECRET_INFOS = {}
+TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
 
 
 class StarrocksSQLApiLib(object):
@@ -1947,17 +1948,6 @@ class StarrocksSQLApiLib(object):
                 return True
             return False
 
-<<<<<<< HEAD
-        # information_schema.task_runs result
-        def get_success_count(results):
-            cnt = 0
-            for _res in results:
-                if _res[0] == "SUCCESS" or _res[0] == "MERGED":
-                    cnt += 1
-            return cnt
-
-=======
->>>>>>> d2223a75e8 ([BugFix] Fix alter mv active bugs (#60291))
         max_loop_count = 180
         is_all_ok = False
         count = 0
@@ -1988,15 +1978,9 @@ class StarrocksSQLApiLib(object):
         return cnt
 
     def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
-<<<<<<< HEAD
-        show_sql = """select count(*) from information_schema.materialized_views
-            join information_schema.task_runs using(task_name)
-            where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED')
-=======
         show_sql = """select state from information_schema.materialized_views 
             join information_schema.task_runs using(task_name)
             where table_schema='{}' and table_name='{}';
->>>>>>> d2223a75e8 ([BugFix] Fix alter mv active bugs (#60291))
         """.format(
             db_name, mv_name
         )
@@ -2005,14 +1989,8 @@ class StarrocksSQLApiLib(object):
         cnt = 1
         refresh_count = 0
         while cnt < 60:
-<<<<<<< HEAD
-            res = self.execute_sql(show_sql, True)
-            print(res)
-            refresh_count = res["result"][0][0]
-=======
             res = self.retry_execute_sql(show_sql, True)
             refresh_count = self.get_task_run_success_count(res["result"])
->>>>>>> d2223a75e8 ([BugFix] Fix alter mv active bugs (#60291))
             if refresh_count >= expect_count:
                 return
             else:

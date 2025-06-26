@@ -1053,8 +1053,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void onReload() {
-<<<<<<< HEAD
-=======
         onReload(false);
     }
 
@@ -1079,7 +1077,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @param desiredActive whether the materialized view should be active after reload.
      */
     private void onReload(boolean postLoadImage, boolean desiredActive) {
->>>>>>> d2223a75e8 ([BugFix] Fix alter mv active bugs (#60291))
         try {
             active = false;
             boolean reloadActive = onReloadImpl();
@@ -1099,11 +1096,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-<<<<<<< HEAD
-        onReload();
-=======
         onReload(false, true);
->>>>>>> d2223a75e8 ([BugFix] Fix alter mv active bugs (#60291))
     }
 
     /**
