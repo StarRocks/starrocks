@@ -513,7 +513,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         try {
             if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
+<<<<<<< HEAD
                 materializedView.fixRelationship();
+=======
+                // check if the materialized view can be activated without rebuilding relationships.
+>>>>>>> 7d99e7c125 ([BugFix] Fix alter mv active bugs (backport #60291) (#60317))
                 if (materializedView.isActive()) {
                     return null;
                 }

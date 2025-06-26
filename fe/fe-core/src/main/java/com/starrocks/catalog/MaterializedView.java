@@ -1079,16 +1079,27 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Reload the materialized view with original active state.
+     * NOTE: This method will not try to activate the materialized view.
+     * @param postLoadImage: whether this reload is called after FE's image loading process.
+     */
+    public void onReload(boolean postLoadImage) {
+        onReload(postLoadImage, isActive());
+    }
+
+    /**
      * `postLoadImage` is used to distinct wether it's called after FE's image loading process,
      * such as FE startup or checkpointing.
      *
      * Note!! The `onReload` method is called in some other scenarios such as - schema change of a materialize view.
      * The reloaded flag was introduced only to increase the speed of FE startup and checkpointing.
      * It shouldn't affect the behavior of other operations which might indeed need to do a reload process.
+     *
+     * @param postLoadImage whether this reload is called after FE's image loading process.
+     * @param desiredActive whether the materialized view should be active after reload.
      */
-    public void onReload(boolean postLoadImage) {
+    private void onReload(boolean postLoadImage, boolean desiredActive) {
         try {
-            boolean desiredActive = active;
             active = false;
             boolean reloadActive = onReloadImpl(postLoadImage);
             if (desiredActive && reloadActive) {
@@ -1107,7 +1118,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
+<<<<<<< HEAD
         onReloadImpl(false);
+=======
+        onReload(false, true);
+>>>>>>> 7d99e7c125 ([BugFix] Fix alter mv active bugs (backport #60291) (#60317))
     }
 
     /**
@@ -1973,6 +1988,29 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         } catch (Exception e) {
             LOG.warn("Analyze partition exprs failed", e);
         }
+<<<<<<< HEAD
+=======
+        // analyze partition slots for ref base tables
+        analyzeRefBaseTablePartitionSlots();
+        // analyze partition columns for ref base tables
+        analyzeRefBaseTablePartitionColumns();
+        // analyze partition retention condition
+        analyzeMVRetentionCondition(connectContext);
+
+        // add a check for partition columns to ensure they are not empty if the table is partitioned.
+        // throw exception is ok which will make mv inactive to avoid using it in query rewrite.
+        if (partitionExprMaps != null && !partitionExprMaps.isEmpty()) {
+            Preconditions.checkArgument(refBaseTablePartitionColumnsOpt.isPresent() &&
+                    !refBaseTablePartitionColumnsOpt.get().isEmpty(), String.format("Ref base table " +
+                    "partition columns should not be empty:%s", refBaseTablePartitionColumnsOpt));
+            Preconditions.checkArgument(refBaseTablePartitionExprsOpt.isPresent() &&
+                    !refBaseTablePartitionExprsOpt.get().isEmpty(), String.format("Ref base table " +
+                    "partition exprs should not be empty:%s", refBaseTablePartitionExprsOpt));
+            Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
+                    !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
+                    "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
+        }
+>>>>>>> 7d99e7c125 ([BugFix] Fix alter mv active bugs (backport #60291) (#60317))
     }
 
     public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
