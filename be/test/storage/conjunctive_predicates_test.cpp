@@ -382,7 +382,15 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
 
     // col >= false will be elimated
     if (ltype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
-        ASSERT_TRUE(pred_tree.empty());
+        ASSERT_EQ(1, pred_tree.size());
+
+        const auto& root = pred_tree.root();
+        ASSERT_TRUE(root.compound_children().empty());
+        ASSERT_EQ(1, root.col_children_map().size());
+
+        const auto* predicate = root.col_children_map().find(0)->second[0].col_pred();
+        ASSERT_TRUE(predicate != nullptr);
+        ASSERT_EQ(PredicateType::kNotNull, predicate->type());
         return;
     }
 
