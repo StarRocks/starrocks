@@ -3379,7 +3379,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Allow deleting shared data meta directly bypass cleaning the remote storage files. Used only when there are too many shards to be cleaned and the clean up procedure can't keep up which leads extreme memory pressure to FE JVM. Be noticed that the data files belong to the shards/tablets will never be cleaned.
+- Description: Whether to allow deleting the metadata of the shared-data cluster directly, bypassing cleaning the remote storage files. It is recommended to set this item to `true` only when there is an excessive number of shards to be cleaned, which leads to extreme memory pressure on the FE JVM. Note that the data files belonging to the shards or tablets cannot be automatically cleaned after this feature is enabled.
 - Introduced in: v3.2.10, v3.3.3
 
 ### Other
