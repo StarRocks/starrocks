@@ -3361,7 +3361,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Protection time period for FE to clean unused tablet/shard groups in shared data mode. Tablet/shard groups won't be cleaned if created within this period.
+- Description: The time before FE cleans the unused tablet and shard groups in a shared-data cluster. Tablets and shard groups created within this threshold will not be cleaned.
 - Introduced in: -
 
 ##### star_mgr_meta_sync_interval_sec
