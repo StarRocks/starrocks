@@ -47,9 +47,7 @@ public class StorageVolumeProcNodeTest {
             public GlobalStateMgr getCurrentState() {
                 return globalStateMgr;
             }
-        };
 
-        new MockUp<GlobalStateMgr>() {
             @Mock
             public StorageVolumeMgr getStorageVolumeMgr() {
                 return storageVolumeMgr;
