@@ -155,7 +155,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_w
         RETURN_IF_ERROR(bundle_file->init());
         return std::make_unique<RandomAccessFile>(std::move(bundle_file), file->filename(), file->is_cache_hit());
     } else {
-        return new_random_access_file(opts, file_info.path);
+        return new_random_access_file(opts, file_info);
     }
 }
 
