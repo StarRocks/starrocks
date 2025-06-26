@@ -63,7 +63,6 @@ static inline int64_t NumValuesToUnpack(int bit_width, int64_t in_bytes, int64_t
     return (in_bytes * CHAR_BIT) / bit_width;
 }
 
-
 // Loop body of unrolled loop that unpacks the value. BIT_WIDTH is the bit width of
 // the packed values. 'in_buf' is the start of the input buffer and 'out_vals' is the
 // start of the output values array. This function unpacks the VALUE_IDX'th packed value

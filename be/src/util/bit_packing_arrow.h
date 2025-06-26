@@ -27,25 +27,6 @@
 
 namespace starrocks::util::bitpacking_arrow {
 
-// the in_bytes is enough for num_values, that should be checked by caller.
-template <typename OutType>
-static const uint8_t* UnpackValues_ARROW(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
-                                         int64_t num_values, OutType* __restrict__ out) {
-#pragma push_macro("UNPACK_ARROW_VALUES_CASE")
-#define UNPACK_ARROW_VALUES_CASE(ignore1, i, ignore2) \
-    case i:                                           \
-        return UnpackValues_ARROW<OutType, i>(in, in_bytes, num_values, out);
-
-    switch (bit_width) {
-        // Expand cases from 0 to 64.
-        BOOST_PP_REPEAT_FROM_TO(0, 65, UNPACK_ARROW_VALUES_CASE, ignore);
-    default:
-        DCHECK(false);
-        return nullptr;
-    }
-#pragma pop_macro("UNPACK_ARROW_VALUES_CASE")
-}
-
 template <typename OutType, int BIT_WIDTH>
 static const uint8_t* UnpackValues_ARROW(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
                                          OutType* __restrict__ out) {
@@ -108,4 +89,24 @@ static const uint8_t* UnpackValues_ARROW(const uint8_t* __restrict__ in, int64_t
     }
     return in;
 }
+
+// the in_bytes is enough for num_values, that should be checked by caller.
+template <typename OutType>
+static const uint8_t* UnpackValues_ARROW(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
+                                         int64_t num_values, OutType* __restrict__ out) {
+#pragma push_macro("UNPACK_ARROW_VALUES_CASE")
+#define UNPACK_ARROW_VALUES_CASE(ignore1, i, ignore2) \
+    case i:                                           \
+        return UnpackValues_ARROW<OutType, i>(in, in_bytes, num_values, out);
+
+    switch (bit_width) {
+        // Expand cases from 0 to 64.
+        BOOST_PP_REPEAT_FROM_TO(0, 65, UNPACK_ARROW_VALUES_CASE, ignore);
+    default:
+        DCHECK(false);
+        return nullptr;
+    }
+#pragma pop_macro("UNPACK_ARROW_VALUES_CASE")
+}
+
 } // namespace starrocks::util::bitpacking_arrow
