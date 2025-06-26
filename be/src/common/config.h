@@ -1123,7 +1123,7 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
-CONF_mBool(lake_print_delete_log, "false");
+CONF_mBool(lake_print_delete_log, "true");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes

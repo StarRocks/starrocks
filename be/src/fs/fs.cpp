@@ -149,7 +149,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_w
         const RandomAccessFileOptions& opts, const FileInfo& file_info) {
     if (file_info.bundle_file_offset.has_value() && file_info.bundle_file_offset.value() >= 0) {
         // If the file is a shared file, we need to create a new random access file with the offset.
-        ASSIGN_OR_RETURN(auto file, new_random_access_file(opts, file_info));
+        ASSIGN_OR_RETURN(auto file, new_random_access_file(opts, file_info.path));
         auto bundle_file = std::make_unique<BundleSeekableInputStream>(
                 file->stream(), file_info.bundle_file_offset.value(), file_info.size.value());
         RETURN_IF_ERROR(bundle_file->init());
