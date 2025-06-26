@@ -1082,6 +1082,7 @@ public class AggregateTest extends PlanTestBase {
     public void testOnlyFullGroupBy() throws Exception {
         long sqlmode = connectContext.getSessionVariable().getSqlMode();
         connectContext.getSessionVariable().setSqlMode(0);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
         String sql = "select v1, v2 from t0 group by v1";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0\n" +
@@ -2408,7 +2409,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select multi_distinct_count(t1a), max(t1c) from test_all_type group by t1b, t1c";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "max[([13: max, INT, true]); args: INT;");
+        assertContains(plan, "12 <-> [3: t1c, INT, true]");
 
         sql = "select sum(distinct v1), hll_union(hll_hash(v3)) from test_object group by v2";
         plan = getVerboseExplain(sql);
