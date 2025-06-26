@@ -217,6 +217,7 @@ StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only I
 - StarRocks supports querying the Parquet-formatted data in Hudi, and supports SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION compression formats for Parquet files.
 - StarRocks fully supports Hudi's Copy On Write (COW) tables and Merge On Read (MOR) tables.
 - StarRocks supports SHOW CREATE TABLE to view Hudi table schema from v3.0.0 onwards.
+- StarRocks v3.5.0 supports Hudi 0.15.0.
 
 ## Delta Lake Catalog
 
