@@ -1028,6 +1028,18 @@ Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
                     filters.emplace_back(std::move(not_null_filter));
                 }
             }
+            const bool full_range = std::visit([](auto&& range) { return range.is_full_value_range(); }, iter.second);
+            if (full_range) {
+                if constexpr (Negative) {
+                    return Status::EndOfFile("EOF, Filter by always false condition");
+                } else {
+                    auto not_null_filter = std::visit(
+                            [&](auto&& range) { return range.template to_olap_not_null_filter<ConditionType>(); },
+                            iter.second);
+                    filters.clear();
+                    filters.emplace_back(std::move(not_null_filter));
+                }
+            }
 
             for (auto& filter : filters) {
                 result_filters.emplace_back(std::move(filter));
