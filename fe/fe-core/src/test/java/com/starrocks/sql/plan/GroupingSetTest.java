@@ -289,8 +289,8 @@ public class GroupingSetTest extends PlanTestBase {
                 "select abs(v1) as x1, v2, v3, max(v3) as x2 from t0 group by v1, v2, v3) " +
                 "yy) ff group by grouping sets ((xx, x2))";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 2:Project\n" +
-                "  |  <slot 4> : 4: max\n" +
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 4> : 3: v3\n" +
                 "  |  <slot 6> : 12: if\n" +
                 "  |  <slot 7> : CAST(clone(12: if) AS SMALLINT) + 1\n" +
                 "  |  common expressions:\n" +

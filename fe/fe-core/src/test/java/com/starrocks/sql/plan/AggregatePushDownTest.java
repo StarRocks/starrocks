@@ -42,6 +42,7 @@ public class AggregatePushDownTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test
