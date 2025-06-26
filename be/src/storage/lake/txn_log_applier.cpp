@@ -139,6 +139,7 @@ public:
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
+                file_meta.set_shared(sstable.shared());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             _metadata->clear_sstable_meta();

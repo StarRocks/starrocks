@@ -480,7 +480,7 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
 
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, FileInfo>* replace_segments,
-                                          std::vector<std::string>* orphan_files) {
+                                          std::vector<FileMetaPB>* orphan_files) {
     CHECK_MEM_LIMIT("RowsetUpdateState::rewrite_segment");
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
@@ -566,7 +566,12 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     // rename segment file
     if (need_rename) {
         // after rename, add old segment to orphan files, for gc later.
-        orphan_files->push_back(rowset_meta.segments(segment_id));
+        FileMetaPB file_meta;
+        file_meta.set_name(rowset_meta.segments(segment_id));
+        if (rowset_meta.shared_segments_size() > 0) {
+            file_meta.set_shared(rowset_meta.shared_segments(segment_id));
+        }
+        orphan_files->push_back(std::move(file_meta));
     }
     TRACE("end rewrite segment");
     return Status::OK();

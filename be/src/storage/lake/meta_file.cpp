@@ -96,6 +96,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Put this `.cols` files into orphan files
             FileMetaPB file_meta;
             file_meta.set_name(dcg_ver.column_files(i));
+            if (dcg_ver.shared_files_size() > 0) {
+                file_meta.set_shared(dcg_ver.shared_files(i));
+            }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -104,7 +107,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
 }
 
 void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
-                                    const std::vector<std::string>& orphan_files) {
+                                    const std::vector<FileMetaPB>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
 
@@ -145,10 +148,8 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     // collect trash files
     for (const auto& orphan_file : orphan_files) {
-        DCHECK(is_segment(orphan_file));
-        FileMetaPB file_meta;
-        file_meta.set_name(orphan_file);
-        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+        DCHECK(is_segment(orphan_file.name()));
+        _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
     }
     if (!_tablet_meta->rowset_to_schema().empty()) {
         auto schema_id = _tablet_meta->schema().id();
@@ -162,9 +163,12 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
 
 void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write) {
     // remove all segments that only contains partial columns.
-    for (const auto& segment : op_write.rowset().segments()) {
+    for (int i = 0; i < op_write.rowset().segments_size(); ++i) {
         FileMetaPB file_meta;
-        file_meta.set_name(segment);
+        file_meta.set_name(op_write.rowset().segments(i));
+        if (op_write.rowset().shared_segments_size() > 0) {
+            file_meta.set_shared(op_write.rowset().shared_segments(i));
+        }
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -245,12 +249,17 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
         // iterate all segments in last input rowset, find if any of them exists in
         // compaction output rowset, if is, erase them from last input rowset
         size_t before = last_input_rowset.segments_size();
-        auto iter = last_input_rowset.mutable_segments()->begin();
-        while (iter != last_input_rowset.mutable_segments()->end()) {
+        auto iter = last_input_rowset.segments().begin();
+        while (iter != last_input_rowset.segments().end()) {
             auto it = std::find_if(op_compaction.output_rowset().segments().begin(),
                                    op_compaction.output_rowset().segments().end(),
                                    [iter](const std::string& segment) { return *iter == segment; });
             if (it != op_compaction.output_rowset().segments().end()) {
+                if (last_input_rowset.shared_segments_size() > 0) {
+                    last_input_rowset.mutable_shared_segments()->erase(iter - last_input_rowset.segments().begin() +
+                                                                       last_input_rowset.shared_segments().begin());
+                }
+
                 iter = last_input_rowset.mutable_segments()->erase(iter);
             } else {
                 ++iter;
@@ -271,6 +280,7 @@ void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compa
         FileMetaPB file_meta;
         file_meta.set_name(input_sstable.filename());
         file_meta.set_size(input_sstable.filesize());
+        file_meta.set_shared(input_sstable.shared());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -319,9 +329,13 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     using T_DCG = std::decay_t<decltype(*dcgs)>;
     int dcg_erase_cnt = delete_from_protobuf_map<T_DCG>(dcgs, delete_delvec_sid_range, [&](const T_DCG& gc_map) {
         for (const auto& each : gc_map) {
-            for (const auto& each_file : each.second.column_files()) {
+            const auto& dcg = each.second;
+            for (int i = 0; i < dcg.column_files_size(); ++i) {
                 FileMetaPB file_meta;
-                file_meta.set_name(each_file);
+                file_meta.set_name(dcg.column_files(i));
+                if (dcg.shared_files_size() > 0) {
+                    file_meta.set_shared(dcg.shared_files(i));
+                }
                 // Put useless `.cols` files into orphan files
                 _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
             }
@@ -390,9 +404,13 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
 void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction) {
     // add output segments to orphan files
-    for (int i = 0; i < op_compaction.output_rowset().segments_size(); i++) {
+    const auto& rowset_metadata = op_compaction.output_rowset();
+    for (int i = 0; i < rowset_metadata.segments_size(); i++) {
         FileMetaPB file_meta;
-        file_meta.set_name(op_compaction.output_rowset().segments(i));
+        file_meta.set_name(rowset_metadata.segments(i));
+        if (rowset_metadata.shared_segments_size() > 0) {
+            file_meta.set_shared(rowset_metadata.shared_segments(i));
+        }
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -510,6 +528,7 @@ void MetaFileBuilder::_sstable_meta_clean_after_alter_type() {
             FileMetaPB file_meta;
             file_meta.set_name(sstable.filename());
             file_meta.set_size(sstable.filesize());
+            file_meta.set_shared(sstable.shared());
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
         }
         // Clear the SSTable metadata.

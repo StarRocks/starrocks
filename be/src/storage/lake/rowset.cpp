@@ -128,6 +128,9 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
             op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
                     metadata().segment_encryption_metas(i));
         }
+        if (metadata().shared_segments_size() > 0) {
+            op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
+        }
 
         uncompacted_num_rows += already_compacted_segments[i]->num_rows();
         uncompacted_data_size += file_size;
@@ -139,6 +142,9 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
         op_compaction->mutable_output_rowset()->add_segments(file.path);
         op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
         op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
+        if (metadata().shared_segments_size() > 0) {
+            op_compaction->mutable_output_rowset()->add_shared_segments(false);
+        }
     }
     op_compaction->set_new_segment_count(writer->files().size());
 
@@ -163,6 +169,9 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
         if (!clear_encryption_meta) {
             op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
                     metadata().segment_encryption_metas(i));
+        }
+        if (metadata().shared_segments_size() > 0) {
+            op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
         }
 
         uncompacted_num_rows += uncompacted_segments[idx]->num_rows();
