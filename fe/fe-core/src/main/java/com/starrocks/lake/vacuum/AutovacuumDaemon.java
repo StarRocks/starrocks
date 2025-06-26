@@ -238,6 +238,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
+            vacuumRequest.retainVersions = Lists.newArrayList();
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;

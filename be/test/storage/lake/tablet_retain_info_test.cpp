@@ -158,12 +158,12 @@ TEST_F(LakeTabletRetainInfoTest, test_tablet_retain_info_normal) {
         )DEL")));
 
     TabletRetainInfo tablet_retain_info = TabletRetainInfo();
-    std::vector<int64_t> vec;
-    vec.push_back(2);
-    tablet_retain_info.init(666, vec, _tablet_mgr.get());
+    std::unordered_set<int64_t> set;
+    set.insert(2);
+    tablet_retain_info.init(666, set, _tablet_mgr.get());
 
-    EXPECT_TRUE(tablet_retain_info.contains_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
-    EXPECT_TRUE(tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));
+    EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
+    EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));
     EXPECT_TRUE(tablet_retain_info.contains_file("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec"));
     EXPECT_TRUE(tablet_retain_info.contains_file("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"));
     EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"));
