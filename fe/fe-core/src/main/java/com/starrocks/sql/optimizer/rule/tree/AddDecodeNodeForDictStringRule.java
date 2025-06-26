@@ -60,7 +60,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
@@ -199,10 +198,13 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return !couldApplyCtx.canDictOptBeApplied && couldApplyCtx.stopOptPropagateUpward;
         }
 
+<<<<<<< HEAD
         public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
             return operator.accept(new IsSimpleStrictPredicateVisitor(), null);
         }
 
+=======
+>>>>>>> 88ac67846d ([BugFix] Fix prune unused predicate column bug (#60208))
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
             if (optExpression.getOp().getProjection() != null) {
                 Projection projection = optExpression.getOp().getProjection();
@@ -1203,6 +1205,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return null;
         }
     }
+<<<<<<< HEAD
 
     // The predicate no function all, this implementation is consistent with BE olap scan node
     private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
@@ -1267,4 +1270,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     !leftType.isTime();
         }
     }
+=======
+>>>>>>> 88ac67846d ([BugFix] Fix prune unused predicate column bug (#60208))
 }

@@ -582,6 +582,7 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
 Status OlapScanConjunctsManager::build_olap_filters() {
     olap_filters.clear();
 
+<<<<<<< HEAD
     // False alert from clang-tidy-14
     // NOLINTNEXTLINE(performance-for-range-copy)
     for (auto iter : column_value_ranges) {
@@ -590,6 +591,45 @@ Status OlapScanConjunctsManager::build_olap_filters() {
         bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
         if (empty_range) {
             return Status::EndOfFile("EOF, Filter by always false condition");
+=======
+    auto process = [&]<typename ConditionType>(std::vector<ConditionType>& result_filters) {
+        result_filters.clear();
+
+        // False alert from clang-tidy-14
+        // NOLINTNEXTLINE(performance-for-range-copy)
+        for (auto& iter : column_value_ranges) {
+            std::vector<ConditionType> filters;
+            std::visit([&](auto&& range) { range.template to_olap_filter<ConditionType, Negative>(filters); },
+                       iter.second);
+            const bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
+            if (empty_range) {
+                if constexpr (!Negative) {
+                    return Status::EndOfFile("EOF, Filter by always false condition");
+                } else {
+                    auto not_null_filter = std::visit(
+                            [&](auto&& range) { return range.template to_olap_not_null_filter<ConditionType>(); },
+                            iter.second);
+                    filters.clear();
+                    filters.emplace_back(std::move(not_null_filter));
+                }
+            }
+            const bool full_range = std::visit([](auto&& range) { return range.is_full_value_range(); }, iter.second);
+            if (full_range) {
+                if constexpr (Negative) {
+                    return Status::EndOfFile("EOF, Filter by always false condition");
+                } else {
+                    auto not_null_filter = std::visit(
+                            [&](auto&& range) { return range.template to_olap_not_null_filter<ConditionType>(); },
+                            iter.second);
+                    filters.clear();
+                    filters.emplace_back(std::move(not_null_filter));
+                }
+            }
+
+            for (auto& filter : filters) {
+                result_filters.emplace_back(std::move(filter));
+            }
+>>>>>>> 88ac67846d ([BugFix] Fix prune unused predicate column bug (#60208))
         }
 
         for (auto& filter : filters) {

@@ -368,7 +368,19 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     ASSERT_OK(cm.parse_conjuncts(true, 1));
     // col >= false will be elimated
     if (ltype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
+<<<<<<< HEAD
         ASSERT_EQ(0, cm.olap_filters.size());
+=======
+        ASSERT_EQ(1, pred_tree.size());
+
+        const auto& root = pred_tree.root();
+        ASSERT_TRUE(root.compound_children().empty());
+        ASSERT_EQ(1, root.col_children_map().size());
+
+        const auto* predicate = root.col_children_map().find(0)->second[0].col_pred();
+        ASSERT_TRUE(predicate != nullptr);
+        ASSERT_EQ(PredicateType::kNotNull, predicate->type());
+>>>>>>> 88ac67846d ([BugFix] Fix prune unused predicate column bug (#60208))
         return;
     } else {
         ASSERT_EQ(1, cm.olap_filters.size());
