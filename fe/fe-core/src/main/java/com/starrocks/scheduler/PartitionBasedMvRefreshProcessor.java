@@ -344,22 +344,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }
-        return appendVirtualPartitions(tentative, mvToRefreshedPartitions);
+        return mvToRefreshedPartitions;
     }
 
     /**
      * Appends virtual partitions to the set of materialized view partitions to be refreshed.
      *
-     * @param tentative Indicates whether the operation is tentative or final.
      * @param mvToRefreshedPartitions The set of materialized view partitions to be refreshed.
      * @return A set of materialized view partitions including virtual partitions if applicable.
      */
-    private Set<String> appendVirtualPartitions(boolean tentative, Set<String> mvToRefreshedPartitions) {
-        if (tentative) {
-            return mvToRefreshedPartitions;
-        }
-        int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
-        if (CollectionUtils.isEmpty(mvToRefreshedPartitions) || mvToRefreshedPartitions.size() <= partitionRefreshNumber) {
+    private Set<String> appendVirtualPartitions(Set<String> mvToRefreshedPartitions) {
+        // Add virtual partitions when refreshing the last time
+        if (CollectionUtils.isEmpty(mvToRefreshedPartitions) || !mvContext.hasNextBatchPartition()) {
             if (mv.getVirtualPartitionMapping() == null || mv.getVirtualPartitionMapping().isEmpty()) {
                 return mvToRefreshedPartitions;
             }
@@ -506,6 +502,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, Set<String>> refTablePartitionNames = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             mvToRefreshedPartitions = checkMvToRefreshedPartitions(context, false);
+            mvToRefreshedPartitions = appendVirtualPartitions(mvToRefreshedPartitions);
             if (CollectionUtils.isEmpty(mvToRefreshedPartitions)) {
                 return Constants.TaskRunState.SKIPPED;
             }
