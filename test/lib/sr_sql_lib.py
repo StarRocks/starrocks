@@ -1990,14 +1990,8 @@ class StarrocksSQLApiLib(object):
         cnt = 1
         refresh_count = 0
         while cnt < 60:
-<<<<<<< HEAD
-            res = self.execute_sql(show_sql, True)
-            print(res)
-            refresh_count = res["result"][0][0]
-=======
             res = self.retry_execute_sql(show_sql, True)
             refresh_count = self.get_task_run_success_count(res["result"])
->>>>>>> d2223a75e8 ([BugFix] Fix alter mv active bugs (#60291))
             if refresh_count >= expect_count:
                 return
             else:
