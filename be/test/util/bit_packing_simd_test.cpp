@@ -19,8 +19,7 @@
 #include <vector>
 
 #include "bench/bit_copy.h"
-#include "util/bit_packing.inline.h"
-#include "util/bit_packing_adapter.h"
+#include "util/bit_packing.h"
 
 namespace starrocks {
 
@@ -65,30 +64,30 @@ void BitPackingSIMDTest::populateBitPacked() {
     }
 }
 
-#define BIT_PACKING_TEST(WIDTH)                                                                                    \
-    TEST_F(BitPackingSIMDTest, test_##WIDTH##_width) {                                                             \
-        auto max_result_width = std::min(32, (WIDTH));                                                             \
-        for (auto bit_width = 1; bit_width <= max_result_width; bit_width++) {                                     \
-            auto source = bitPackedData[bit_width];                                                                \
-            std::vector<std::vector<uint##WIDTH##_t>> result;                                                      \
-            result.resize(3);                                                                                      \
-            result[0].resize(kNumValues);                                                                          \
-            result[1].resize(kNumValues);                                                                          \
-            result[2].resize(kNumValues);                                                                          \
-            starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),              \
-                                                source.size() * sizeof(uint64_t), kNumValues, result[0].data());   \
-            starrocks::BitPacking::UnpackValues_ARROW(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
-                                                             source.size() * sizeof(uint64_t), kNumValues,         \
-                                                             result[1].data());                                    \
-            starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),       \
-                                                       source.size() * sizeof(uint64_t), kNumValues,               \
-                                                       result[2].data());                                          \
-                                                                                                                   \
-            for (auto i = 0; i < kNumValues; i++) {                                                                \
-                ASSERT_EQ(result[0][i], result[1][i]);                                                             \
-                ASSERT_EQ(result[0][i], result[2][i]);                                                             \
-            }                                                                                                      \
-        }                                                                                                          \
+#define BIT_PACKING_TEST(WIDTH)                                                                                   \
+    TEST_F(BitPackingSIMDTest, test_##WIDTH##_width) {                                                            \
+        auto max_result_width = std::min(32, (WIDTH));                                                            \
+        for (auto bit_width = 1; bit_width <= max_result_width; bit_width++) {                                    \
+            auto source = bitPackedData[bit_width];                                                               \
+            std::vector<std::vector<uint##WIDTH##_t>> result;                                                     \
+            result.resize(3);                                                                                     \
+            result[0].resize(kNumValues);                                                                         \
+            result[1].resize(kNumValues);                                                                         \
+            result[2].resize(kNumValues);                                                                         \
+            starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),             \
+                                                source.size() * sizeof(uint64_t), kNumValues, result[0].data());  \
+            starrocks::util::bitpacking_arrow::UnpackValues_ARROW(                                                \
+                    bit_width, reinterpret_cast<uint8_t*>(source.data()), source.size() * sizeof(uint64_t),       \
+                    kNumValues, result[1].data());                                                                \
+            starrocks::util::bitpacking_arrow::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
+                                                            source.size() * sizeof(uint64_t), kNumValues,         \
+                                                            result[2].data());                                    \
+                                                                                                                  \
+            for (auto i = 0; i < kNumValues; i++) {                                                               \
+                ASSERT_EQ(result[0][i], result[1][i]);                                                            \
+                ASSERT_EQ(result[0][i], result[2][i]);                                                            \
+            }                                                                                                     \
+        }                                                                                                         \
     }
 
 BIT_PACKING_TEST(32);
