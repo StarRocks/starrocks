@@ -36,7 +36,7 @@ Usage: $0 <options>
      --dry-run                  dry-run unit tests
      --coverage                 run coverage statistic tasks
      --dumpcase [PATH]          run dump case and save to path
-     -j                         build parallel, default is 4
+     -j [N]                     build parallel, default is ${FE_UT_PARALLEL:-4}
 
   Eg.
     $0                                            run all unit tests
