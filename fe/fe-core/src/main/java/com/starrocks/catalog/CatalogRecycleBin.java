@@ -348,6 +348,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canEraseDatabase(RecycleDatabaseInfo databaseInfo, long currentTimeMs) {
+        if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .isDbInClusterSnapshotInfo(databaseInfo.getDb().getId())) {
+            return false;
+        }
         if (!checkValidDeletionByClusterSnapshot(databaseInfo.getDb().getId())) {
             return false;
         }
@@ -360,6 +364,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
+        if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .isTableInClusterSnapshotInfo(tableInfo.getDbId(), tableInfo.getTable().getId())) {
+            return false;
+        }
+
         if (!checkValidDeletionByClusterSnapshot(tableInfo.getTable().getId())) {
             return false;
         }
@@ -376,6 +385,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
+        if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .isPartitionInClusterSnapshotInfo(partitionInfo.getDbId(),
+                                    partitionInfo.getTableId(), partitionInfo.getPartition().getId())) {
+            return false;
+        }
+
         if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartition().getId())) {
             return false;
         }
