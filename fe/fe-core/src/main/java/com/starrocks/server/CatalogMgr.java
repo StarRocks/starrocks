@@ -122,6 +122,7 @@ public class CatalogMgr {
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
                 if (serviceName == null || serviceName.isEmpty()) {
                     if (accessControl.equals("ranger")) {
+                        Authorizer.getInstance().removeAccessControl(catalogName);
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else if (accessControl.equals("allowall")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
@@ -129,6 +130,7 @@ public class CatalogMgr {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
                 } else {
+                    Authorizer.getInstance().removeAccessControl(catalogName);
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
                 }
 
@@ -359,6 +361,7 @@ public class CatalogMgr {
             String accessControl = config.getOrDefault("catalog.access.control", Config.access_control);
             if (serviceName == null || serviceName.isEmpty()) {
                 if (accessControl.equals("ranger")) {
+                    Authorizer.getInstance().removeAccessControl(catalogName);
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else if (accessControl.equals("allowall")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
@@ -366,6 +369,7 @@ public class CatalogMgr {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                 }
             } else {
+                Authorizer.getInstance().removeAccessControl(catalogName);
                 Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
