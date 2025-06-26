@@ -25,8 +25,4 @@ public class MVAdaptiveRefreshException extends StarRocksException {
     public MVAdaptiveRefreshException(String msg) {
         super(msg);
     }
-
-    public MVAdaptiveRefreshException(String msg, Throwable e) {
-        super(msg, e);
-    }
 }

@@ -480,10 +480,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
 
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
-        Map<Table, Map<String, Set<String>>> extRBTMvPartitions = mvContext.getExternalRefBaseTableMVPartitionMap();
         MVRefreshPartitionSelector mvRefreshPartitionSelector =
                 new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh,
-                        Config.mv_max_partitions_num_per_refresh, extRBTMvPartitions);
+                        Config.mv_max_partitions_num_per_refresh, mvContext.getExternalRefBaseTableMVPartitionMap());
 
         int adaptiveRefreshNumber = 0;
         while (partitionNameIter.hasNext()) {

@@ -149,6 +149,29 @@ public abstract class MVPCTRefreshPartitioner {
                                                         Set<String> mvPotentialPartitionNames,
                                                         boolean tentative);
 
+    /**
+     * Determines the number of partitions to refresh based on the given refresh strategy.
+     *
+     * <p>
+     * This method supports two refresh strategies for materialized views (MVs):
+     * <ul>
+     *     <li><b>STRICT</b> (default): Always refresh a fixed number of partitions,
+     *         as configured by {@code partition_refresh_number} in the MV's table property.</li>
+     *     <li><b>ADAPTIVE</b>: Dynamically determines how many partitions to refresh
+     *         based on the statistics (row count and data size) of the referenced base table partitions.
+     *         This strategy helps reduce refresh cost for large partitions.
+     *     </li>
+     * </ul>
+     *
+     * <p>
+     * Since external table statistics may be easily outdated or incomplete, adaptive refresh
+     * may fail due to missing or invalid metadata. In such cases, the method automatically
+     * falls back to the STRICT strategy to ensure the MV can still be refreshed correctly.
+     *
+     * @param sortedPartitionIterator Iterator over sorted partition names to be refreshed.
+     * @param refreshStrategy         The refresh strategy: either ADAPTIVE or STRICT.
+     * @return The number of partitions to refresh.
+     */
     public int getRefreshNumberByMode(Iterator<String> sortedPartitionIterator,
                                        MaterializedView.PartitionRefreshStrategy refreshStrategy) {
         try {
