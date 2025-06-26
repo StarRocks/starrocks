@@ -247,3 +247,31 @@ $$;
 
 select add_one(1);
 select add_one(2200000000);
+
+CREATE FUNCTION get_invalid_input(boolean) RETURNS
+string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "invalid"
+)
+AS
+$$
+def echo(x):
+    return type(x)
+$$;
+
+CREATE FUNCTION get_invalid_input(boolean) RETURNS
+string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "invalid",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    return type(x)
+$$;
