@@ -294,8 +294,17 @@ public class WarehouseManager implements Writable {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }
 
+    public Warehouse getBackgroundWarehouse(long tableId) {
+        return getBackgroundWarehouse();
+    }
+
     public ComputeResource getBackgroundComputeResource() {
         final Warehouse warehouse = getBackgroundWarehouse();
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
+    }
+
+    public ComputeResource getBackgroundComputeResource(long tableId) {
+        final Warehouse warehouse = getBackgroundWarehouse(tableId);
         return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
     }
 

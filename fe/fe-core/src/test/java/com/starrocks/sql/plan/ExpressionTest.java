@@ -1589,6 +1589,14 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testBoolOrAgg() throws Exception {
+        String sql = "select boolor_agg(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "bool_or");
+    }
+
+
+    @Test
     public void testConstantFoldInLikeFunction() throws Exception {
         String sql1 = "select like('AA', concat('a', 'A'))";
         String plan1 = getFragmentPlan(sql1);
