@@ -46,6 +46,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -74,12 +76,24 @@ public class AstToSQLBuilder {
         return new AST2SQLBuilderVisitor(false, false, false).visit(statement);
     }
 
+    private static final Pattern LEADING_INLINE_COMMENT_PATTERN =
+            Pattern.compile("^\\s*(/\\*.*?\\*/)", Pattern.MULTILINE | Pattern.DOTALL);
+
+    public static Optional<String> getLeadingInlineComment(String sql) {
+        Matcher matcher = LEADING_INLINE_COMMENT_PATTERN.matcher(sql);
+        if (matcher.find()) {
+            return Optional.of(matcher.group(1));
+        }
+        return Optional.empty();
+    }
+
     // return sql from ast or default sql if builder throws exception.
     // for example, `select from files` needs file schema to generate sql from ast.
     // If BE is down, the schema will be null, and an exception will be thrown when writing audit log.
     public static String toSQLOrDefault(ParseNode statement, String defaultSql) {
         try {
-            return toSQL(statement);
+            String sql = toSQL(statement);
+            return getLeadingInlineComment(defaultSql).map(comment -> comment + " " + sql).orElse(sql);
         } catch (Exception e) {
             LOG.info("Ast to sql failed.", e);
             return defaultSql;
