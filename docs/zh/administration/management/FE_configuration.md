@@ -2928,27 +2928,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 引入版本：-
 
-<!--
-##### shard_group_clean_threshold_sec
-
-- 默认值：3600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### star_mgr_meta_sync_interval_sec
-
-- 默认值：600
-- 类型：Long
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### cloud_native_meta_port
 
@@ -3374,6 +3353,33 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
+
+##### shard_group_clean_threshold_sec
+
+- 默认值：3600
+- 类型：Long
+- 单位：秒
+- 是否动态：是
+- 描述：存算分离集群中，FE 清理未使用的 Tablet 和 Shard Group 的时间阈值。在此时间阈值内创建的 Tablet 和 Shard Group 不会被自动清理。
+- 引入版本：-
+
+##### star_mgr_meta_sync_interval_sec
+
+- 默认值：600
+- 类型：Long
+- 单位：秒
+- 是否动态：否
+- 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
+- 引入版本：-
+
+##### meta_sync_force_delete_shard_meta
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许直接删除存算分离集群元数据，不清理远程存储上对应的数据。建议只在存算分离集群中待清理 Shard 数量过多，导致 FE 节点 JVM 内存压力过大的情况下将此项设为 `true`。注意，开启此功能会导致元数据被清理的 Shard 对应在远程存储上的数据文件无法被自动清理。
+- 引入版本：v3.2.10, v3.3.3
 
 ### 其他
 

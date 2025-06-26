@@ -2449,6 +2449,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 共有データクラスタでのワーカー間の tablet バランスを判断するためにシステムが使用するしきい値。アンバランスファクターは次のように計算されます: `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。ファクターが `lake_balance_tablets_threshold` を超える場合、tablet バランスがトリガーされます。この項目は `lake_enable_balance_tablets_between_workers` が `true` に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.4
 
+##### shard_group_clean_threshold_sec
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: FE が共有データクラスター内の未使用の Tablet および Shard Group をクリーニングするまでの時間。この期間内に作成された Tablet と Shard Group はクリーニングされません。
+- 導入バージョン: -
+
+##### star_mgr_meta_sync_interval_sec
+
+- デフォルト: 600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: 共有データクラスタ内の FE が StarMgr と の定期的なメタデータ同期を実行する間隔。
+- 導入バージョン: -
+
+##### meta_sync_force_delete_shard_meta
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: リモートストレージ内のファイルのクリーニングをバイパスして、共有データクラスタのメタデータを直接削除できるかどうか。この項目を `true` に設定するのは、クリーニングする Shard の数が多すぎて FE JVM のメモリが極端に圧迫される場合のみにすることを推奨します。この機能を有効にすると、Shard や Tablet に属するデータファイルは自動的にクリーニングできなくなることに注意してください。
+- 導入バージョン: v3.2.10, v3.3.3
+
 ### その他
 
 ##### tmp_dir
