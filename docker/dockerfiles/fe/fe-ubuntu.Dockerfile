@@ -32,15 +32,8 @@ ARG USER
 ARG RUN_AS_USER
 ARG GROUP=starrocks
 
-<<<<<<< HEAD
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        default-jdk mysql-client curl vim tree net-tools less tzdata locales netcat && \
-=======
-# TODO: switch to `openjdk-##-jre` when the starrocks core is ready.
-RUN OPTIONAL_PKGS="" && if [ "x$MINIMAL" = "xfalse" ] ; then OPTIONAL_PKGS="openjdk-17-jdk curl vim tree net-tools less pigz rclone" ; fi && \
-        apt-get update -y && apt-get install -y --no-install-recommends \
-        openjdk-17-jdk mysql-client tzdata locales netcat $OPTIONAL_PKGS && \
->>>>>>> 778a629d15 ([Enhancement] Add pigz and rclone to FE dockerfile (#60312))
+        default-jdk mysql-client curl pigz rclone vim tree net-tools less tzdata locales netcat && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
