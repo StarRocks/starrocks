@@ -1947,6 +1947,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: This method should be only called once in FE restart phase.
      */
     private void analyzePartitionExprs() {
+        // Don't use try-catch here, so can inactive mv if analyze failed, see #onReload()
+
         // initialize table to base table info cache
         for (BaseTableInfo tableInfo : this.baseTableInfos) {
             this.tableToBaseTableInfoCache.put(MvUtils.getTableChecked(tableInfo), tableInfo);
