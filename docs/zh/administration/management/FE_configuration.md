@@ -3358,7 +3358,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：3600
 - 类型：Long
-- 单位：Seconds
+- 单位：秒
 - 是否动态：是
 - 描述：存算分离集群下保留tablet/shard Groups的时间范围，此时间范围内的tablet/shard Groups不会被自动清理。
 - 引入版本：-
