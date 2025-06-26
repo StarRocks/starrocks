@@ -1,0 +1,104 @@
+-- name: test_mv_with_schema_change_column_rename
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null_partition` (
+  `k1` date,
+  `k2` datetime,
+  `k3` char(20),
+  `k4` varchar(20),
+  `k5` boolean,
+  `k6` tinyint
+)
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+PARTITION BY RANGE(`k1`)
+(
+  PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+  PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+  PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3;
+-- result:
+-- !result
+INSERT INTO duplicate_table_with_null_partition VALUES
+  ("2020-06-23","2020-06-23 00:00:00","beijing","haidian",-1,-128),
+  ("2020-07-23","2020-07-23 00:00:00","shanghai","pudong",0,0),
+  ("2020-07-23","2020-07-24 00:00:00","shanghai1","pudong1",1,1),
+  ("2020-08-23","2020-08-23 00:00:00","xian","zhonglou",1,127),
+  (NULL,NULL,NULL,NULL,NULL,NULL);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY k1 
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH ASYNC 
+AS SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1;
+-- result:
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+-- result:
+None
+-- !result
+function: print_hit_materialized_view("SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'test_mv1' and TABLE_SCHEMA='db_${uuid0}';
+-- result:
+true	
+-- !result
+SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1 ORDER BY k1;
+-- result:
+None	0	None	None	None	None
+2020-06-23	1	beijing	haidian	1	-128.0
+2020-07-23	2	shanghai	pudong1	1	0.5
+2020-08-23	1	xian	zhonglou	1	127.0
+-- !result
+alter table duplicate_table_with_null_partition rename column k1 to k11;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 with sync mode;
+function: print_hit_materialized_view("SELECT count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition", "test_mv1")
+-- result:
+False
+-- !result
+SELECT count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition ORDER BY count_datetime, min_char, max_varchar, sum_boolean, avg_tinyint;
+-- result:
+4	beijing	zhonglou	3	0.0
+-- !result
+INSERT INTO duplicate_table_with_null_partition VALUES ("2020-06-24","2020-06-23 00:00:00","beijing","haidian",-1,-128);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'test_mv1' and TABLE_SCHEMA='db_${uuid0}';
+-- result:
+false	base table schema changed for columns: k1
+-- !result
+alter table duplicate_table_with_null_partition rename column k11 to k1;
+-- result:
+-- !result
+INSERT INTO duplicate_table_with_null_partition VALUES ("2020-06-24","2020-06-23 00:00:00","beijing","haidian",-1,-128);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'test_mv1' and TABLE_SCHEMA='db_${uuid0}';
+-- result:
+true	
+-- !result
+function: print_hit_materialized_view("SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1 ORDER BY k1;
+-- result:
+None	0	None	None	None	None
+2020-06-23	1	beijing	haidian	1	-128.0
+2020-06-24	2	beijing	haidian	2	-128.0
+2020-07-23	2	shanghai	pudong1	1	0.5
+2020-08-23	1	xian	zhonglou	1	127.0
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
