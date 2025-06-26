@@ -192,7 +192,7 @@ public:
             SpillProcessChannelFactoryPtr spill_channel_factory)
             : OperatorFactory(id, "spillable_partitionwise_agg_sink", plan_node_id),
               _agg_op_factory(std::make_shared<AggregateBlockingSinkOperatorFactory>(
-                      id, plan_node_id, std::move(aggregator_factory), build_runtime_filters, nullptr)),
+                      id, plan_node_id, std::move(aggregator_factory), build_runtime_filters, spill_channel_factory)),
               _spill_channel_factory(std::move(spill_channel_factory)) {}
 
     ~SpillablePartitionWiseAggregateSinkOperatorFactory() override = default;

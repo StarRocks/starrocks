@@ -425,8 +425,6 @@ public:
     auto defer_notify_source() { return _pip_observable.defer_notify_source(); }
     auto defer_notify_sink() { return _pip_observable.defer_notify_sink(); }
 
-    const std::vector<SlotId>& output_group_by_slot_ids() const;
-
 protected:
     AggregatorParamsPtr _params;
 
@@ -505,7 +503,6 @@ protected:
     std::vector<ExprContext*> _group_by_expr_ctxs;
     Columns _group_by_columns;
     std::vector<ColumnType> _group_by_types;
-    mutable std::optional<std::vector<SlotId>> _opt_partition_by_slot_ids{};
 
     // Tuple into which Update()/Merge()/Serialize() results are stored.
     TupleId _intermediate_tuple_id;

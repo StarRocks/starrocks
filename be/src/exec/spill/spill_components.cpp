@@ -581,7 +581,13 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
     return Status::OK();
 }
 
+// When the skew data is detected, we will compact the skew partitions.
+// when session variable spill_partitionwise_agg_skew_elimination is true, spiller would try to choose the mem tables
+// undergoing flushing that are skewed and merge the duplicated rows into one row, so that the skewed data
+// can be eliminated.
 Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions) {
+    // opt_aggregator_params is set when spill_partitionwise_agg_skew_elimination is true, so
+    // it indicates that the skew elimination is enabled.
     if (!_spiller->options().opt_aggregator_params.has_value()) {
         return Status::OK();
     }
@@ -598,9 +604,11 @@ Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<S
         auto input_mem_size = mem_table->mem_usage();
         auto is_done = mem_table->is_done();
         mem_table->reset();
+        // invoke _compact_skew_chunks to merge the skewed data in chunks.
         RETURN_IF_ERROR(
                 _compact_skew_chunks(input_num_rows, chunks, _spiller->options().opt_aggregator_params.value()));
 
+        // if the partition are not spilttable, we can remove the hash column to save serde/flush time.
         if (!_spiller->options().splittable) {
             std::for_each(chunks.begin(), chunks.end(), [](auto& chunk) {
                 DCHECK(chunk != nullptr);
@@ -635,13 +643,21 @@ Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<S
     return Status::OK();
 }
 
+// determine if the target chunks in mem-table has single-point skew. if the skewness exists, then we
+// merge the skewed data in chunks to eliminate the skewness. the skewness means that a single group-by value's
+// repetitions exceeds 25% of the total number of rows in the mem-table. find the exactly most repetitive
+// group-by value are time-consuming, so we sample 30 hash values from the mem-table's hash column to
+// find the most repetitive, these algorithms are based on the assumption that the most repetitive group-by value
+// has an extremely high probability to be obtained in sampling process. for an example, if the most repetitive group-by
+// value's frequency is 0.25. in 30 samples, the probability of obtaining it is 1 - (1 - 0.25)^30 = 0.9999999999999999.
 Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vector<ChunkPtr>& chunks,
                                                       AggregatorParamsPtr& aggregator_params) {
-    if (num_rows < 2) {
+    if (num_rows < 30) {
         return Status::OK();
     }
-    std::random_device rd;     //Will be used to obtain a seed for the random number engine
-    std::mt19937_64 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+    // sample 30 row idx
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
     std::uniform_int_distribution<size_t> distrib(0, num_rows - 1);
     std::vector<size_t> samples(30);
     for (auto i = 0; i < samples.size(); ++i) {
@@ -652,6 +668,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     size_t curr_num_rows = chunks[curr_chunk_idx]->num_rows();
     phmap::flat_hash_map<uint32_t, size_t, StdHashWithSeed<uint32_t, PhmapSeed2>> hash_value_counts;
 
+    // get hash values from sampled rows
     for (auto idx : samples) {
         while (idx >= curr_num_rows) {
             ++curr_chunk_idx;
@@ -666,6 +683,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         auto hash_value = hash_column->get_data()[row_idx];
         ++hash_value_counts[hash_value];
     }
+    // compute frequency of sampled hash values.
     for (auto& curr_chunk : chunks) {
         if (curr_chunk == nullptr || curr_chunk->is_empty()) {
             continue;
@@ -680,12 +698,16 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         }
     }
 
+    // find the most-repetitive hash value.
     auto mode_elem_it = std::max_element(hash_value_counts.begin(), hash_value_counts.end(),
                                          [](const auto& lhs, const auto& rhs) { return lhs.second < rhs.second; });
 
+    // if the most-repetitive hash value's frequency is greater than 25%, then we consider it as skewed data.
     if (mode_elem_it->second < num_rows * 0.25) {
         return Status::OK();
     }
+
+    // use aggregator to merge the skewed data.
     auto merger = std::make_shared<Aggregator>(aggregator_params);
     merger->set_aggr_mode(AM_STREAMING_POST_CACHE);
     RuntimeProfile* profile = _runtime_state->runtime_profile()->create_child("spillable_pw_skew_elimination", true);

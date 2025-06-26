@@ -19,9 +19,6 @@
 
 namespace starrocks::pipeline {
 
-DEFINE_FAIL_POINT(spill_always_streaming);
-DEFINE_FAIL_POINT(spill_always_selection_streaming);
-
 bool SpillablePartitionWiseDistinctSinkOperator::need_input() const {
     return !is_finished() && !_distinct_op->aggregator()->is_full() &&
            !_distinct_op->aggregator()->spill_channel()->has_task();
@@ -140,12 +137,13 @@ Status SpillablePartitionWiseDistinctSinkOperator::reset_state(RuntimeState* sta
 }
 
 ChunkPtr& SpillablePartitionWiseDistinctSinkOperator::_append_hash_column(ChunkPtr& chunk) {
-    auto slot_ids = _distinct_op->aggregator()->output_group_by_slot_ids();
+    const auto& group_by_exprs = _distinct_op->aggregator()->group_by_expr_ctxs();
     size_t num_rows = chunk->num_rows();
-    auto hash_column = spill::SpillHashColumn::create(num_rows);
+    auto hash_column = spill::SpillHashColumn::create(num_rows, HashUtil::FNV_SEED);
     auto& hash_values = hash_column->get_data();
     // TODO: use different hash method
-    for (auto& slot_id : slot_ids) {
+    for (auto* expr : group_by_exprs) {
+        auto slot_id = down_cast<const ColumnRef*>(expr->root())->slot_id();
         auto column = chunk->get_column_by_slot_id(slot_id);
         column->fnv_hash(hash_values.data(), 0, num_rows);
     }
