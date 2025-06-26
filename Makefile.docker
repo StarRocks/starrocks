@@ -4,8 +4,8 @@
 .PHONY: help shell build-fe build-be build-all clean-build test-fe test-be test-all clean docker-pull
 
 # Configuration
-DOCKER_IMAGE ?= starrocks/dev-env-ubuntu:3.3.15
-DOCKER_BUILD_SCRIPT = ./docker-build.sh
+DOCKER_IMAGE ?= starrocks/dev-env-ubuntu:latest
+DOCKER_BUILD_SCRIPT = ./build-in-docker.sh
 DOCKER_DEV_SCRIPT = ./docker-dev.sh
 
 # Default target
