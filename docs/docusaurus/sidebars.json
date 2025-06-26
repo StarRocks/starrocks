@@ -596,7 +596,6 @@
             "collapsible": true,
             "items": [
                 "benchmarking/SSB_Benchmarking",
-                "benchmarking/TPC-H_Benchmarking",
                 "benchmarking/TPC_DS_Benchmark"
             ]
         },
