@@ -54,7 +54,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -145,7 +144,14 @@ public class RestoreJobTest {
     private BackupMeta backupMeta;
 
     @Before
+<<<<<<< HEAD
     public void setUp() throws AnalysisException {
+=======
+    public void setUp() throws Exception {
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new FakeEditLog();
+
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
         db = CatalogMocker.mockDb();
         backupHandler = new MockBackupHandler(globalStateMgr);
         repoMgr = new MockRepositoryMgr();
@@ -154,6 +160,14 @@ public class RestoreJobTest {
     }
 
     public void testResetPartitionForRestore() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         OlapTable localTbl = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
@@ -165,13 +179,53 @@ public class RestoreJobTest {
                     globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
 
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
+<<<<<<< HEAD
+=======
+        long newPartId = part.getId();
+        long newDefaultPartId = part.getDefaultPhysicalPartition().getId();
+        Assert.assertTrue(newPartId != oldPartId);
+        Assert.assertTrue(oldDefaultPartId != newDefaultPartId);
+
+        for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
+            Assert.assertTrue(physicalPartition.getParentId() == newPartId);
+            Assert.assertTrue(!oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
+        }
+    }
+
+    @Test
+    public void testModifyInvertedIndex() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
+
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.addRestoredTable(expectedRestoreTbl);
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return db;
+            }
+        };
+        job.setState(RestoreJob.RestoreJobState.DOWNLOAD);
+        job.replayRun();
+        job.cancelInternal(true);
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
     }
 
     @Test
     public void testRunBackupMultiSubPartitionTable() {
-        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
@@ -185,6 +239,22 @@ public class RestoreJobTest {
                 result = editLog;
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+=======
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getNodeMgr().getClusterInfo();
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -214,7 +284,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
@@ -353,10 +423,22 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupRangeTable() {
-        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
                 minTimes = 0;
                 result = db;
 
@@ -368,7 +450,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -398,7 +480,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
@@ -523,10 +605,22 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupListTable() {
-        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
                 minTimes = 0;
                 result = db;
 
@@ -568,7 +662,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
@@ -717,15 +811,28 @@ public class RestoreJobTest {
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 
-        new Expectations() {
+        new Expectations(globalStateMgr) {
             {
                 try {
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentState().getColocateTableIndex()
                                 .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
+=======
+                    globalStateMgr.getColocateTableIndex()
+                            .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
                 } catch (Exception e) {
                 }
                 result = true;
@@ -740,10 +847,22 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreView() {
-        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
                 minTimes = 0;
                 result = db;
 
@@ -751,17 +870,21 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = id.incrementAndGet();
 
+<<<<<<< HEAD
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+=======
+                globalStateMgr.getNodeMgr().getClusterInfo();
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
                 minTimes = 0;
                 result = systemInfoService;
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
@@ -927,4 +1050,88 @@ public class RestoreJobTest {
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testRestoreAddFunction() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+
+        backupMeta.setFunctions(Lists.newArrayList(f1));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        job.addRestoredFunctions(db);
+    }
+
+    @Test
+    public void testRestoreAddCatalog() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
+
+        backupMeta.setCatalogs(Lists.newArrayList(catalog));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        job.addRestoredFunctions(db);
+        job.run();
+        job.run();
+    }
+
+    @Test
+    public void testReplayAddExpiredJob() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        RestoreJob job1 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL2_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
+        RestoreJob job3 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupHandler localBackupHandler = new BackupHandler();
+        job1.setState(RestoreJob.RestoreJobState.PENDING);
+        localBackupHandler.replayAddJob(job1);
+        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isPending());
+        int oldVal = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = 0;
+        job3.setState(RestoreJob.RestoreJobState.FINISHED);
+        localBackupHandler.replayAddJob(job3);
+        Config.history_job_keep_max_second = oldVal;
+        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
+    }
+}
+>>>>>>> 39dd271a3e ([UT] Fix missing invocation in restore job test (#60298))
