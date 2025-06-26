@@ -3370,7 +3370,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: No
-- Description: The interval for FE to run the periodical meta data synchronization with StarMgr.
+- Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
 - Introduced in: -
 
 ##### meta_sync_force_delete_shard_meta
