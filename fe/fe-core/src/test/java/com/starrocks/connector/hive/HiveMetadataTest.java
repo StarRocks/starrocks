@@ -46,6 +46,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -141,6 +142,7 @@ public class HiveMetadataTest {
 
     @After
     public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
         executorForHmsRefresh.shutdown();
         executorForRemoteFileRefresh.shutdown();
         executorForPullFiles.shutdown();
@@ -250,6 +252,7 @@ public class HiveMetadataTest {
         Assert.assertEquals(0, blockDesc.getOffset());
         Assert.assertEquals(20, blockDesc.getLength());
         Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+
     }
 
     @Test

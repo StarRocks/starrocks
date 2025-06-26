@@ -15,6 +15,8 @@
 package com.starrocks.connector.hive;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.metric.CatalogHMSMetricsEntity;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -70,7 +72,8 @@ public class HiveMetaClientTest {
 
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:9030");
-        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        CatalogHMSMetricsEntity entity = HiveMetadataMetricsRegistry.getInstance().getHMSEntity("mock");
+        HiveMetaClient client = new HiveMetaClient(hiveConf, entity);
         // NOTE: this is HiveMetaClient.MAX_HMS_CONNECTION_POOL_SIZE
         int poolSize = 32;
 
@@ -95,18 +98,21 @@ public class HiveMetaClientTest {
 
         Assert.assertTrue(
                 clientNum[0] >= 1 && clientNum[0] <= poolSize);
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("mock");
     }
 
     @Test
     public void testGetHiveClient() {
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90303");
-        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        CatalogHMSMetricsEntity entity = HiveMetadataMetricsRegistry.getInstance().getHMSEntity("mock");
+        HiveMetaClient client = new HiveMetaClient(hiveConf, entity);
         try {
             client.getAllDatabaseNames();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Invalid port 90303"));
         }
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("mock");
     }
 
     @Test
@@ -131,7 +137,8 @@ public class HiveMetaClientTest {
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, "48");
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
-        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        CatalogHMSMetricsEntity entity = HiveMetadataMetricsRegistry.getInstance().getHMSEntity("mock");
+        HiveMetaClient client = new HiveMetaClient(hiveConf, entity);
         Assert.assertEquals(48, client.getMaxClientPoolSize());
         try {
             client.getTable("db", "tbl");
@@ -153,7 +160,7 @@ public class HiveMetaClientTest {
 
         client.getTable("db", "tbl");
         Assert.assertEquals(1, client.getClientSize());
-
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("mock");
     }
 
     @Test
@@ -216,8 +223,10 @@ public class HiveMetaClientTest {
 
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
-        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        CatalogHMSMetricsEntity entity = HiveMetadataMetricsRegistry.getInstance().getHMSEntity("mock");
+        HiveMetaClient client = new HiveMetaClient(hiveConf, entity);
         client.dropTable("hive_db", "hive_table");
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("mock");
     }
 
     @Test
@@ -230,8 +239,10 @@ public class HiveMetaClientTest {
         };
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
-        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        CatalogHMSMetricsEntity entity = HiveMetadataMetricsRegistry.getInstance().getHMSEntity("mock");
+        HiveMetaClient client = new HiveMetaClient(hiveConf, entity);
         Assert.assertTrue(client.tableExists("hive_db", "hive_table"));
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("mock");
     }
 
     @Test
@@ -272,7 +283,8 @@ public class HiveMetaClientTest {
         };
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
-        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        CatalogHMSMetricsEntity entity = HiveMetadataMetricsRegistry.getInstance().getHMSEntity("mock");
+        HiveMetaClient client = new HiveMetaClient(hiveConf, entity);
         client.alterTable(dbName, tblName, null);
         client.alterPartition("hive_db", "hive_table", partition);
         client.getPartitionKeys(dbName, tblName);
@@ -287,7 +299,7 @@ public class HiveMetaClientTest {
                 () -> client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), Arrays.asList()));
         client.getTableColumnStats(dbName, tblName, new ArrayList<>());
         client.getNextNotification(0, 0, null);
-
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("mock");
     }
 }
 

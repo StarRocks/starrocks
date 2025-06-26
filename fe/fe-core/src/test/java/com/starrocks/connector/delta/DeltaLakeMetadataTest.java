@@ -28,6 +28,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
@@ -52,6 +53,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -78,6 +80,11 @@ public class DeltaLakeMetadataTest {
 
         deltaLakeMetadata = new DeltaLakeMetadata(hdfsEnvironment, "delta0", deltaOps, null,
                 new ConnectorProperties(ConnectorType.DELTALAKE));
+    }
+
+    @After
+    public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
     }
 
     @Test

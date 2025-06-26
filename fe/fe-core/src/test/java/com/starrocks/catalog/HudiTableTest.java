@@ -25,6 +25,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.HudiTableFactory;
@@ -40,6 +41,7 @@ import mockit.Mocked;
 import org.apache.avro.Schema;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.exception.HoodieIOException;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -66,6 +68,11 @@ public class HudiTableTest {
                 "\"type\"  =  \"hudi\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")");
         starRocksAssert.withDatabase("db");
         hiveClient = new HiveMetastoreTest.MockedHiveMetaClient();
+    }
+
+    @After
+    public void tearDown() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
     }
 
     com.starrocks.catalog.Table createTable(CreateTableStmt stmt) throws DdlException {

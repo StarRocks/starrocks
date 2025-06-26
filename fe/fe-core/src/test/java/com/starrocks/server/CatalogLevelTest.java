@@ -25,6 +25,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -40,6 +41,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.iceberg.hive.HiveTableOperations;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -51,6 +53,11 @@ public class CatalogLevelTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        HiveMetadataMetricsRegistry.getInstance().removeHMSEntity("MockedHiveMetastore");
     }
 
     @Test

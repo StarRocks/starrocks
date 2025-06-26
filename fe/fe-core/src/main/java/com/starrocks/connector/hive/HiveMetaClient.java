@@ -22,6 +22,9 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
+import com.starrocks.metric.CatalogHMSMetricsEntity;
+import com.starrocks.metric.HistogramMetric;
+import com.starrocks.metric.HiveMetadataMetricsRegistry;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
@@ -69,16 +72,18 @@ public class HiveMetaClient {
     private final Object clientPoolLock = new Object();
 
     private final HiveConf conf;
+    private final CatalogHMSMetricsEntity entity;
 
     // Required for creating an instance of RetryingMetaStoreClient.
     private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
-    public HiveMetaClient(HiveConf conf) {
+    public HiveMetaClient(HiveConf conf, CatalogHMSMetricsEntity entity) {
         this.conf = conf;
         this.maxPoolSize = conf.getInt(HIVE_METASTORE_CONNECTION_POOL_SIZE, MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT);
+        this.entity = entity;
     }
 
-    public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
+    public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties, String catalogName) {
         HiveConf conf = new HiveConf();
         conf.addResource(env.getConfiguration());
         properties.forEach(conf::set);
@@ -90,7 +95,8 @@ public class HiveMetaClient {
                 String.valueOf(MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         conf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, poolSize);
-        return new HiveMetaClient(conf);
+        return new HiveMetaClient(conf,
+                HiveMetadataMetricsRegistry.getInstance().getHMSEntity(catalogName));
     }
 
     public class RecyclableClient {
@@ -166,6 +172,8 @@ public class HiveMetaClient {
     public <T> T callRPC(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
         RecyclableClient client = null;
         StarRocksConnectorException connectionException = null;
+        HistogramMetric histogram = entity.getHistogramMetric(methodName);
+        long startTime = System.nanoTime();
 
         try {
             client = getClient();
@@ -186,6 +194,9 @@ public class HiveMetaClient {
                 client.close();
             } else if (client != null) {
                 client.finish();
+            }
+            if (histogram != null) {
+                histogram.update(System.nanoTime() - startTime);
             }
         }
     }
@@ -313,6 +324,7 @@ public class HiveMetaClient {
         int size = partitionNames.size();
         List<Partition> partitions;
         Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionsByNames." + tblName, size + " partitions");
+        long startTime = System.nanoTime();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionsByNames")) {
             RecyclableClient client = null;
             StarRocksConnectorException connectionException = null;
@@ -342,6 +354,7 @@ public class HiveMetaClient {
                 } else if (client != null) {
                     client.finish();
                 }
+                entity.updateGetPartitionsByNamesLatency(System.nanoTime() - startTime);
             }
         }
         return partitions;
@@ -409,6 +422,7 @@ public class HiveMetaClient {
         int size = partitionNames.size();
         Map<String, List<ColumnStatisticsObj>> partitionStats;
         Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionColumnStats." + tblName, size + " partitionStats");
+        long startTime = System.nanoTime();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionColumnStats")) {
             RecyclableClient client = null;
             StarRocksConnectorException connectionException = null;
@@ -436,6 +450,7 @@ public class HiveMetaClient {
                 } else if (client != null) {
                     client.finish();
                 }
+                entity.updateGetPartitionColumnStatsLatency(System.nanoTime() - startTime);
             }
         }
         return partitionStats;

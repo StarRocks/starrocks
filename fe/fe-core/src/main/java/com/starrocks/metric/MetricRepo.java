@@ -898,6 +898,9 @@ public final class MetricRepo {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, requestParams.isMinifyMVMetrics());
         }
 
+        // Hive metadata metrics
+        HiveMetadataMetricsRegistry.collectHiveMetadataMetrics(visitor);
+
         // histogram
         SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
         for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
