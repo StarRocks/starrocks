@@ -113,7 +113,8 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -121,8 +122,9 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
-                        "s3://bucket/path/to/table", null, 0);
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -243,7 +245,8 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -251,8 +254,9 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "tbl1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
-                        "s3://bucket/path/to/table", null, 0);
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -269,7 +273,8 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -277,8 +282,9 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
-                        "s3://bucket/path/to/table", null, 0);
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 

@@ -14,17 +14,26 @@
 
 package com.starrocks.connector.metastore;
 
+import com.starrocks.credential.CloudConfiguration;
+
 public class MetastoreTable {
     private final String dbName;
     private final String tableName;
     private final String tableLocation;
     private final long createTime;
+    private final CloudConfiguration cloudConfiguration;
 
     public MetastoreTable(String dbName, String tableName, String tableLocation, long createTime) {
+        this(dbName, tableName, tableLocation, createTime, null);
+    }
+
+    public MetastoreTable(String dbName, String tableName, String tableLocation, long createTime,
+                          CloudConfiguration cloudConfiguration) {
         this.dbName = dbName;
         this.tableName = tableName;
         this.tableLocation = tableLocation;
         this.createTime = createTime;
+        this.cloudConfiguration = cloudConfiguration;
     }
 
     public String getDbName() {
@@ -41,5 +50,9 @@ public class MetastoreTable {
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
     }
 }

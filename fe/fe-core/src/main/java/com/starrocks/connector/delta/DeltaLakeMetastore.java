@@ -132,7 +132,9 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         }
 
         String path = metastoreTable.getTableLocation();
-        long createTime = metastoreTable.getCreateTime();
+        if (metastoreTable.getCloudConfiguration() != null) {
+            metastoreTable.getCloudConfiguration().applyToConfiguration(hdfsConfiguration);
+        }
         DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
         SnapshotImpl snapshot;
 
@@ -146,7 +148,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
             LOG.error("Failed to get latest snapshot for {}.{}.{}, {}", catalogName, dbName, tableName, e.getMessage());
             throw new SemanticException("Failed to get latest snapshot for " + catalogName + "." + dbName + "." + tableName);
         }
-        return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, createTime, path);
+        return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, metastoreTable);
     }
 
     @Override

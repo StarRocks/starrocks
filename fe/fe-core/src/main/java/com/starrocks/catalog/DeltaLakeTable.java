@@ -23,6 +23,8 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.connector.delta.DeltaUtils;
+import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDeltaLakeTable;
@@ -45,8 +47,8 @@ public class DeltaLakeTable extends Table {
     private String tableName;
     private List<String> partColumnNames;
     private SnapshotImpl deltaSnapshot;
-    private String tableLocation;
     private Engine deltaEngine;
+    private MetastoreTable metastoreTable;
 
     public static final String PARTITION_NULL_VALUE = "null";
 
@@ -55,17 +57,17 @@ public class DeltaLakeTable extends Table {
     }
 
     public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
-                          List<String> partitionNames, SnapshotImpl deltaSnapshot, String tableLocation,
-                          Engine deltaEngine, long createTime) {
+                          List<String> partitionNames, SnapshotImpl deltaSnapshot, Engine deltaEngine,
+                          MetastoreTable metastoreTable) {
         super(id, tableName, TableType.DELTALAKE, schema);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
         this.partColumnNames = partitionNames;
         this.deltaSnapshot = deltaSnapshot;
-        this.tableLocation = tableLocation;
         this.deltaEngine = deltaEngine;
-        this.createTime = createTime;
+        this.createTime = metastoreTable.getCreateTime();
+        this.metastoreTable = metastoreTable;
     }
 
     @Override
@@ -75,7 +77,7 @@ public class DeltaLakeTable extends Table {
 
     @Override
     public String getTableLocation() {
-        return tableLocation;
+        return metastoreTable.getTableLocation();
     }
 
     public Metadata getDeltaMetadata() {
@@ -112,6 +114,10 @@ public class DeltaLakeTable extends Table {
         } else {
             return Long.toString(id);
         }
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return metastoreTable.getCloudConfiguration();
     }
 
     @Override
