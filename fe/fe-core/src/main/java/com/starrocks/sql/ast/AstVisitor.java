@@ -1297,6 +1297,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitSplitTabletClause(SplitTabletClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     //Alter partition clause
 
     default R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {

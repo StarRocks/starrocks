@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -668,6 +669,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
         unsupportedException("Not support");
+        return null;
+    }
+
+    @Override
+    public Void visitSplitTabletClause(SplitTabletClause clause, ConnectContext context) {
+        unsupportedException("Not support: " + clause);
         return null;
     }
 

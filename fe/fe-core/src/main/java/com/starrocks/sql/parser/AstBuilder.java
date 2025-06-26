@@ -447,6 +447,7 @@ import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.StructFieldDesc;
@@ -460,6 +461,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
+import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -5052,6 +5054,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
+    @Override
+    public ParseNode visitSplitTabletClause(StarRocksParser.SplitTabletClauseContext context) {
+        return new SplitTabletClause(
+                context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
+                context.tabletList() == null ? null : (TabletList) visit(context.tabletList()),
+                getProperties(context.properties()),
+                createPos(context));
+    }
+
     // ---------Alter partition clause---------
 
     @Override
@@ -6251,6 +6262,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new PartitionNames(context.TEMPORARY() != null,
                 identifierList.stream().map(Identifier::getValue).collect(toList()),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTabletList(StarRocksParser.TabletListContext context) {
+        return new TabletList(context.INTEGER_VALUE().stream().map(ParseTree::getText)
+                .map(Long::parseLong).collect(toList()), createPos(context));
     }
 
     @Override
