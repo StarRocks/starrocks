@@ -192,6 +192,10 @@ struct HashTableProbeState {
     uint32_t cur_build_index = 0;
     uint32_t cur_row_match_count = 0;
 
+    // For nullaware left anti join there are other conjuncts, if the left or right table is null.
+    // We need to find all rows (null does not match all rows). This variable helps us keep track of which rows are currently being processed.
+    uint32_t cur_nullaware_build_index = 1;
+
     std::unique_ptr<MemPool> probe_pool = nullptr;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;

@@ -96,11 +96,14 @@ private:
     bool _is_curr_probe_chunk_finished() const;
     void iterate_enumerate_chunk(const ChunkPtr& chunk, const std::function<void(bool, size_t, size_t)>& call);
 
+    Status _eval_nullaware_anti_conjuncts(const ChunkPtr& chunk, FilterPtr* filter);
+
     // Join type check
     bool _is_left_join() const;
     bool _is_right_join() const;
     bool _is_left_semi_join() const;
     bool _is_left_anti_join() const;
+    bool _is_null_aware_left_anti_join() const;
 
 private:
     const TJoinOp::type _join_op;
