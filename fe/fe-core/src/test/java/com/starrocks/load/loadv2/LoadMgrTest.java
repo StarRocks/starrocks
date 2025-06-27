@@ -34,6 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -57,6 +58,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -330,7 +332,7 @@ public class LoadMgrTest {
         loadJob1.id = 1L;
         loadManager.replayCreateLoadJob(loadJob1);
 
-        LoadJob loadJob2 = new BrokerLoadJob(1L, "job1", null, null, null);
+        LoadJob loadJob2 = new BrokerLoadJob(1L, "job1", new BrokerDesc("DUMMY", new HashMap<>()), null, null);
         loadJob2.id = 2L;
         loadManager.replayCreateLoadJob(loadJob2);
 
