@@ -21,6 +21,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
+#include "column/row_id_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
@@ -322,6 +323,13 @@ template <>
 struct RunTimeTypeTraits<TYPE_ARRAY> {
     using CppType = DatumArray;
     using ColumnType = ArrayColumn;
+    using ProxyContainerType = void;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_ROW_ID> {
+    using CppType = DatumRowId;
+    using ColumnType = RowIdColumn;
     using ProxyContainerType = void;
 };
 

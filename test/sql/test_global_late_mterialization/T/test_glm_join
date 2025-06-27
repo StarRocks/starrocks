@@ -1,0 +1,61 @@
+-- name: test_glm_join
+create table t0 (
+	v1 bigint null,
+	v2 bigint null,
+	v3 bigint null
+) engine=olap
+duplicate key(v1)
+distributed by hash(v1) buckets 3
+properties(
+'replication_num'='1'
+);
+
+create table t1 (
+	v1 bigint null,
+	v2 bigint null,
+	v3 bigint null
+) engine=olap
+duplicate key(v1)
+distributed by hash(v1) buckets 3
+properties(
+'replication_num'='1'
+);
+create table t2 (
+	v1 bigint null,
+	v2 bigint null,
+	v3 bigint null
+) engine=olap
+duplicate key(v1)
+distributed by hash(v1) buckets 3
+properties(
+'replication_num'='1'
+);
+
+insert into t0 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 10000));
+insert into t0 values (10001, null, null), (10002, null, null), (10003, null, null);
+insert into t1 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 1000));
+insert into t1 values (10001, null, null), (10002, null, null), (10003, null, null);
+insert into t2 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 1000));
+
+set enable_global_late_materialization = true;
+
+-- 1:1 join
+select * from t0 inner join t1 on t0.v1 = t1.v1 order by t0.v1 limit 5;
+select * from t0 inner join t1 on t0.v1 = t1.v1 order by t0.v1 desc limit 5;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 inner join t1 on t0.v1 = t1.v1;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 left outer join t1 on t0.v1 = t1.v1;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 right outer join t1 on t0.v1 = t1.v1;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v1 = t1.v1;
+
+-- n:m join
+select * from t0 inner join t1 on t0.v3 = t1.v3 order by 1,2,3,4,5,6 limit 5;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 inner join t1 on t0.v3 = t1.v3;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 left outer join t1 on t0.v3 = t1.v3;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 right outer join t1 on t0.v3 = t1.v3;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v3 = t1.v3;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v1 > t1.v1;
+select count(t0.v1),count(t0.v2),count(t0.v3),count(t1.v1),count(t1.v2),count(t1.v3) from t0 full outer join t1 on t0.v3 > t1.v3;
+
+-- multiple join
+select * from t0 join t1 join t2 on t0.v1 = t1.v1 and t0.v2 = t2.v2 order by 1,2,3,4,5,6,7,8,9 limit 10;
+select * from t0 join t1 join t2 on t0.v1 = t1.v1 and t0.v1 = t2.v1 order by 1,2,3,4,5,6,7,8,9 limit 10; 

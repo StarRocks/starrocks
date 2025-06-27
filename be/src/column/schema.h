@@ -32,6 +32,7 @@ public:
     Schema& operator=(Schema&&) = default;
 
     inline static const std::string FULL_ROW_COLUMN = "__row";
+    inline static const size_t INVALID_ROW_ID_FIELD_IDX = UINT64_MAX;
 
 #ifdef BE_TEST
     explicit Schema(Fields fields);
@@ -91,6 +92,7 @@ public:
     void set_field_by_name(FieldPtr field, const std::string& name);
 
     size_t get_field_index_by_name(const std::string& name) const;
+    size_t get_row_id_field_index() const;
 
     std::vector<ColumnId> field_column_ids(bool use_rowstore = false) const;
 
@@ -131,6 +133,7 @@ private:
     mutable bool _share_name_to_index = false;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
+    [[maybe_unused]] size_t _row_id_field_idx = INVALID_ROW_ID_FIELD_IDX;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Schema& schema) {

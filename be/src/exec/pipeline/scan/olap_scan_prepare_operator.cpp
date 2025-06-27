@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/query_context.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
@@ -46,6 +47,10 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
         RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
+        if (_ctx->scan_node()->need_generate_global_rowid()) {
+            auto* glm_ctx = state->query_ctx()->global_late_materialization_ctx();
+            glm_ctx->add_captured_tablet_rowsets(_ctx->tablet_rowsets());
+        }
     }
 
     return Status::OK();

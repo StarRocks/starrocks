@@ -105,6 +105,8 @@ public:
 
     const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 
+    bool need_generate_global_rowid() const { return _need_generate_global_rowid; }
+
 private:
     friend class TabletScanner;
 
@@ -160,7 +162,7 @@ private:
 
     // scanner concurrency
     size_t _scanner_concurrency() const;
-    void _estimate_scan_and_output_row_bytes();
+    void _estimate_scan_and_output_row_bytes(const std::vector<SlotDescriptor*>& slots);
 
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
@@ -210,6 +212,8 @@ private:
     std::optional<bool> _partition_order_hint;
 
     std::vector<ExprContext*> _bucket_exprs;
+    // _need_generate_global_rowid will be true if there are late-materialized columns in this table
+    bool _need_generate_global_rowid = false;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

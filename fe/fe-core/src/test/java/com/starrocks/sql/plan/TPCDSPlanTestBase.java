@@ -230,6 +230,10 @@ public class TPCDSPlanTestBase extends PlanTestBase {
     public static final String Q98 = from("98");
     public static final String Q99 = from("99");
 
+    public static Map<String, String> getAllSQL() {
+        return SQL_MAP;
+    }
+
     public String getTPCDS(String name) {
         Class<TPCDSPlanTestBase> clazz = TPCDSPlanTestBase.class;
         try {

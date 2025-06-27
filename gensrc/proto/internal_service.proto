@@ -733,6 +733,26 @@ message PUpdateTransactionStateResponse {
     repeated StatusPB results = 1;
 }
 
+message PColumn {
+    optional int32 slot_id = 1;
+    optional int64 data_size = 2;
+    optional bytes data = 3;
+}
+// 
+message PLookUpRequest {
+    optional PUniqueId query_id = 1;
+    optional int32 lookup_node_id = 2;
+    repeated PSlotDescriptor row_id_slots = 3;
+    repeated PSlotDescriptor lookup_slots = 4;
+    repeated PColumn row_id_columns = 5;
+}
+
+message PLookUpResponse {
+    optional StatusPB status = 1;
+    repeated PColumn columns = 2;
+}
+
+
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
@@ -783,4 +803,5 @@ service PInternalService {
     rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
+    rpc lookup(PLookUpRequest) returns (PLookUpResponse);
 };
