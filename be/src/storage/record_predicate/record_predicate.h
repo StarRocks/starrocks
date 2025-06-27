@@ -29,7 +29,8 @@ using RecordPredicateUPtr = std::unique_ptr<RecordPredicate>;
 
 class RecordPredicate {
 public:
-    RecordPredicate(const RecordPredicatePB& record_predicate_pb) : _pred_type(record_predicate_pb.type()), _children() {}
+    RecordPredicate(const RecordPredicatePB& record_predicate_pb)
+            : _pred_type(record_predicate_pb.type()), _children() {}
     virtual ~RecordPredicate() = default;
 
     // @Param chunk: the chunk to be evaluated
