@@ -254,7 +254,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
@@ -399,7 +398,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
         ASSERT_OK(delta_writer->write(*chunk2, indexes2.data(), indexes2.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
@@ -432,7 +430,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
@@ -577,7 +574,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
         delta_writer->close();
         txn_ids.push_back(txn_id);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
     // publish in order
     for (int64_t txn_id : txn_ids) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1020,6 +1016,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
+    bool old_val = config::skip_pk_preload;
+    config::skip_pk_preload = false;
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->LoadDependency(
             {{"UpdateManager::preload_update_state:return", "transactions::abort_txn:enter"}});
@@ -1058,6 +1056,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     t2.join();
     ASSERT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     SyncPoint::GetInstance()->DisableProcessing();
+    config::skip_pk_preload = true;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
@@ -1293,7 +1292,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_clear_txnlog) {
         _tablet_mgr->prune_metacache();
         std::const_pointer_cast<TxnLogPB>(txn_log_st.value())->Clear();
         delta_writer->close();
-        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
