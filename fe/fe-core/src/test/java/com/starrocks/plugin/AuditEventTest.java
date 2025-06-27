@@ -39,7 +39,6 @@ public class AuditEventTest {
                 .setWarehouse("wh")
                 .setSessionId("sessionId")
                 .setCustomQueryId("customQueryId")
-                .setWarehouse("test_warehouse")
                 .setCNGroup("test_cngroup");
         AuditEvent event = builder.build();
 
@@ -61,7 +60,6 @@ public class AuditEventTest {
         Assert.assertEquals("wh", event.warehouse);
         Assert.assertEquals("sessionId", event.sessionId);
         Assert.assertEquals("customQueryId", event.customQueryId);
-        Assert.assertEquals("test_warehouse", event.warehouse);
         Assert.assertEquals("test_cngroup", event.cnGroup);
     }
 }

@@ -455,7 +455,7 @@ public class WarehouseManagerTest {
         Assert.assertEquals(2, warehouseManager.getWarehouseListeners().size());
         Assert.assertTrue(warehouseManager.getWarehouseListeners().contains(listener1));
         Assert.assertTrue(warehouseManager.getWarehouseListeners().contains(listener2));
-        Assert.assertTrue(warehouseManager.getWarehouseListeners().contains(warehouseComputeResourceProvider));
+        Assert.assertTrue(warehouseManager.getComputeResourceProvider().equals(warehouseComputeResourceProvider));
     }
 
     @Test
