@@ -354,7 +354,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @return A set of materialized view partitions including virtual partitions if applicable.
      */
     private Set<String> appendVirtualPartitions(Set<String> mvToRefreshedPartitions) {
-        // Add virtual partitions when refreshing the last time
+        // Add virtual partitions only during the final refresh batch to avoid duplicate processing
         if (CollectionUtils.isEmpty(mvToRefreshedPartitions) || !mvContext.hasNextBatchPartition()) {
             if (mv.getVirtualPartitionMapping() == null || mv.getVirtualPartitionMapping().isEmpty()) {
                 return mvToRefreshedPartitions;
