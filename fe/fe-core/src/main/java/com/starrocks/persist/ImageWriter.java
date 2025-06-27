@@ -68,18 +68,13 @@ public class ImageWriter {
     }
 
     public void saveChecksum() throws IOException {
-<<<<<<< HEAD
         if (imageFormatVersion == ImageFormatVersion.v2) {
-            Path path = Path.of(imageDir, Storage.CHECKSUM + "." + imageJournalId);
+            File checksumFile = Path.of(imageDir, Storage.CHECKSUM + "." + imageJournalId).toFile();
             String checksum = String.valueOf(checkedOutputStream.getChecksum().getValue());
-            Files.writeString(path, checksum);
-=======
-        File checksumFile = Path.of(imageDir, Storage.CHECKSUM + "." + imageJournalId).toFile();
-        String checksum = String.valueOf(checkedOutputStream.getChecksum().getValue());
-        try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
-            fos.write(checksum.getBytes(StandardCharsets.UTF_8));
-            fos.getChannel().force(true);
->>>>>>> 186a9a0c0d ([BugFix] Fix the bug causing incomplete image files due to server forced shutdown. (#60398))
+            try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
+                fos.write(checksum.getBytes(StandardCharsets.UTF_8));
+                fos.getChannel().force(true);
+            }
         }
     }
 }

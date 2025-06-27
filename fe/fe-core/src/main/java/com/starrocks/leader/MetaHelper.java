@@ -128,15 +128,11 @@ public class MetaHelper {
 
         // 2. write checksum if exists
         if (!Strings.isNullOrEmpty(checksum)) {
-<<<<<<< HEAD
-            Files.writeString(Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + version), checksum);
-=======
-            File checksumFile = Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + journalId).toFile();
+            File checksumFile = Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + version).toFile();
             try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
                 fos.write(checksum.getBytes(StandardCharsets.UTF_8));
                 fos.getChannel().force(true);
             }
->>>>>>> 186a9a0c0d ([BugFix] Fix the bug causing incomplete image files due to server forced shutdown. (#60398))
         }
 
         // 3. rename to image.xxx
