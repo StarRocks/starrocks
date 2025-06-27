@@ -20,9 +20,9 @@
 #endif
 
 #include "common/logging.h"
-#include "util/bit_packing.h"
+#include "util/bit_packing_default.h"
 
-namespace starrocks::util {
+namespace starrocks::util::bitpacking_avx2 {
 
 // Pdep instruction masks for uint8_t.
 static constexpr const uint64_t kPdepMask8[] = {0x0000000000000000, 0x0101010101010101, 0x0303030303030303,
@@ -61,7 +61,7 @@ static inline void unpackNaive(int bit_width, const uint8_t* __restrict__ in, in
     DCHECK(bit_width >= 1 && bit_width <= sizeof(T) * 8);
     DCHECK(in_bytes * 8 >= bit_width * num_values);
 
-    auto res = BitPacking::UnpackValues<T>(bit_width, in, in_bytes, num_values, out);
+    auto res = starrocks::util::bitpacking_default::UnpackValues<T>(bit_width, in, in_bytes, num_values, out);
     in = res.first;
 }
 
@@ -481,4 +481,37 @@ inline void unpack<uint32_t>(int bit_width, const uint8_t* __restrict__ in, int6
 #endif
 }
 
-} // namespace starrocks::util
+template <typename OutType>
+std::pair<const uint8_t*, int64_t> UnpackValues(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
+                                                int64_t num_values, OutType* __restrict__ out) {
+    // First unpack as many full batches as possible.
+    const int64_t values_to_read =
+            starrocks::util::bitpacking_default::NumValuesToUnpack(bit_width, in_bytes, num_values);
+    constexpr int BATCH_SIZE = 8;
+
+    // make sure don't access memory out of bound.
+    // we need make sure the last batch is not out of bound, so if there are x batch,
+    // the prior (x - 1) batch has used (x - 1) * bit_width bytes, and the last batch use
+    // (bit_width + 7) / 8 * 8 bytes, so there should be
+    // (x - 1) * bit_width + (bit_width + 7) / 8 <= in_bytes
+    const int64_t batches_to_read =
+            (in_bytes > (bit_width + 7) / 8 * 8)
+                    ? std::min((in_bytes - (bit_width + 7) / 8 * 8) / bit_width + 1, values_to_read / BATCH_SIZE)
+                    : 0;
+
+    if (batches_to_read > 0) {
+        starrocks::util::bitpacking_avx2::unpack(bit_width, in, in_bytes, batches_to_read * BATCH_SIZE, out);
+        in_bytes -= batches_to_read * bit_width;
+        in += batches_to_read * bit_width;
+        out += batches_to_read * BATCH_SIZE;
+    }
+
+    const int64_t remainder_values = values_to_read - batches_to_read * BATCH_SIZE;
+    // Then unpack the final partial batch.
+    if (remainder_values > 0) {
+        in = starrocks::util::bitpacking_default::UnpackValues(bit_width, in, in_bytes, remainder_values, out).first;
+    }
+    return std::make_pair(in, values_to_read);
+}
+
+} // namespace starrocks::util::bitpacking_avx2
