@@ -15,6 +15,7 @@ insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate
 insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'd', generate_series, generate_series from TABLE(generate_series(7, 8));
 insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'e', generate_series, generate_series from TABLE(generate_series(9, 10));
 insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'f', generate_series, generate_series from TABLE(generate_series(11, 5050000));
+set enable_plan_advisor_blacklist=false;
 set enable_plan_advisor=true;
 set enable_plan_analyzer=true;
 use iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
@@ -29,7 +30,7 @@ alter plan advisor add select count(*) from (select * from iceberg_catalog_${uui
 
 
 function: assert_explain_contains("select count(*) from (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew t1 join (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2 where t1.c1 = 'a') t", "RightChildEstimationErrorTuningGuide")
-
+set enable_plan_advisor_blacklist=true;
 truncate plan advisor;
 drop table iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew;
 drop database iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
