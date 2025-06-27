@@ -635,8 +635,20 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public Warehouse getCompactionWarehouse() {
-        return getWarehouse(Config.lake_compaction_warehouse);
+    public Warehouse getCompactionWarehouse(long tableId) {
+        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.get(tableId);
+        if (info == null) { // warehouse might be dropped or upgraded from older version
+            return getWarehouse(Config.lake_compaction_warehouse);
+        }
+        try {
+            return getWarehouse(info.getWarehouseId());
+        } catch (ErrorReportException e) {
+            if (e.getErrorCode() == ErrorCode.ERR_UNKNOWN_WAREHOUSE) {
+                return getWarehouse(Config.lake_compaction_warehouse);
+            } else {
+                throw e;
+            }
+        }
     }
 
     @Override
