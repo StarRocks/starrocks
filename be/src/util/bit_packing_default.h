@@ -12,52 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/util/bit_packing.inline.h
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 // the implement of BitPacking is from impala
 
-#include <boost/preprocessor/repetition/repeat_from_to.hpp>
+#pragma once
 
-#include "util/bit_packing.h"
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
+#include <cstdint>
+#include <utility>
+
 #include "util/bit_util.h"
 
-namespace starrocks {
+namespace starrocks::util::bitpacking_default {
 
-template <typename OutType>
-std::pair<const uint8_t*, int64_t> BitPacking::UnpackValues(int bit_width, const uint8_t* __restrict__ in,
-                                                            int64_t in_bytes, int64_t num_values,
-                                                            OutType* __restrict__ out) {
-#pragma push_macro("UNPACK_VALUES_CASE")
-#define UNPACK_VALUES_CASE(ignore1, i, ignore2) \
-    case i:                                     \
-        return UnpackValues<OutType, i>(in, in_bytes, num_values, out);
+// Utilities for manipulating bit-packed values. Bit-packing is a technique for
+// compressing integer values that do not use the full range of the integer type.
+// E.g. an array of uint32_t values with range [0, 31] only uses the lower 5 bits
+// of every uint32_t value, or an array of 0/1 booleans only uses the lowest bit
+// of each integer.
+//
+// Bit-packing always has a "bit width" parameter that determines the range of
+// representable unsigned values: [0, 2^bit_width - 1]. The packed representation
+// is logically the concatenatation of the lower bits of the input values (in
+// little-endian order). E.g. the values 1, 2, 3, 4 packed with bit width 4 results
+// in the two output bytes: [ 0 0 1 0 | 0 0 0 1 ] [ 0 1 0 0 | 0 0 1 1 ]
+//                               2         1           4         3
+//
+// Packed values can be split across words, e.g. packing 1, 17 with bit_width 5 results
+// in the two output bytes: [ 0 0 1 | 0 0 0 0 1 ] [ x x x x x x | 1 0 ]
+//            lower bits of 17--^         1         next value     ^--upper bits of 17
+//
+// Bit widths from 0 to 64 are supported (0 bit width means that every value is 0).
+// The batched unpacking functions operate on batches of 32 values. This batch size
+// is convenient because for every supported bit width, the end of a 32 value batch
+// falls on a byte boundary. It is also large enough to amortise loop overheads.
 
-    switch (bit_width) {
-        // Expand cases from 0 to 64.
-        BOOST_PP_REPEAT_FROM_TO(0, 65, UNPACK_VALUES_CASE, ignore);
-    default:
-        DCHECK(false);
-        return std::make_pair(nullptr, -1);
+static constexpr int MAX_BITWIDTH = sizeof(uint64_t) * 8;
+
+/// Compute the number of values with the given bit width that can be unpacked from
+/// an input buffer of 'in_bytes' into an output buffer with space for 'num_values'.
+
+static inline int64_t NumValuesToUnpack(int bit_width, int64_t in_bytes, int64_t num_values) {
+    // Check if we have enough input bytes to decode 'num_values'.
+    if (bit_width == 0 || BitUtil::RoundUpNumBytes(num_values * bit_width) <= in_bytes) {
+        // Limited by output space.
+        return num_values;
     }
-#pragma pop_macro("UNPACK_VALUES_CASE")
+
+    // Limited by the number of input bytes. Compute the number of values that can be
+    // unpacked from the input.
+    return (in_bytes * CHAR_BIT) / bit_width;
 }
 
 // Loop body of unrolled loop that unpacks the value. BIT_WIDTH is the bit width of
@@ -130,44 +133,10 @@ inline uint64_t ALWAYS_INLINE UnpackValue(const uint8_t* __restrict__ in_buf) {
     return word & mask;
 }
 
-template <typename OutType, int BIT_WIDTH>
-std::pair<const uint8_t*, int64_t> BitPacking::UnpackValues(const uint8_t* __restrict__ in, int64_t in_bytes,
-                                                            int64_t num_values, OutType* __restrict__ out) {
-    constexpr int BATCH_SIZE = 32;
-    const int64_t values_to_read = NumValuesToUnpack(BIT_WIDTH, in_bytes, num_values);
-    const int64_t batches_to_read = values_to_read / BATCH_SIZE;
-    const int64_t remainder_values = values_to_read % BATCH_SIZE;
-    const uint8_t* in_pos = in;
-    OutType* out_pos = out;
-
-    // First unpack as many full batches as possible.
-    for (int64_t i = 0; i < batches_to_read; ++i) {
-        in_pos = Unpack32Values<OutType, BIT_WIDTH>(in_pos, in_bytes, out_pos);
-        out_pos += BATCH_SIZE;
-        in_bytes -= (BATCH_SIZE * BIT_WIDTH) / CHAR_BIT;
-    }
-
-    // Then unpack the final partial batch.
-    if (remainder_values > 0) {
-        in_pos = UnpackUpTo31Values<OutType, BIT_WIDTH>(in_pos, in_bytes, remainder_values, out_pos);
-    }
-    return std::make_pair(in_pos, values_to_read);
-}
-
-inline int64_t BitPacking::NumValuesToUnpack(int bit_width, int64_t in_bytes, int64_t num_values) {
-    // Check if we have enough input bytes to decode 'num_values'.
-    if (bit_width == 0 || BitUtil::RoundUpNumBytes(num_values * bit_width) <= in_bytes) {
-        // Limited by output space.
-        return num_values;
-    }
-
-    // Limited by the number of input bytes. Compute the number of values that can be
-    // unpacked from the input.
-    return (in_bytes * CHAR_BIT) / bit_width;
-}
+/// Same as Unpack32Values() but templated by BIT_WIDTH.
 
 template <typename OutType, int BIT_WIDTH>
-const uint8_t* BitPacking::Unpack32Values(const uint8_t* __restrict__ in, int64_t in_bytes, OutType* __restrict__ out) {
+const uint8_t* Unpack32Values(const uint8_t* __restrict__ in, int64_t in_bytes, OutType* __restrict__ out) {
     constexpr int BYTES_TO_READ = BitUtil::RoundUpNumBytes(32 * BIT_WIDTH);
 
     // Call UnpackValue for 0 <= i < 32.
@@ -179,9 +148,15 @@ const uint8_t* BitPacking::Unpack32Values(const uint8_t* __restrict__ in, int64_
 #pragma pop_macro("UNPACK_VALUE_CALL")
 }
 
+/// Unpacks 'num_values' values with the given BIT_WIDTH from 'in' to 'out'.
+/// 'num_values' must be at most 31. 'in' must point to 'in_bytes' of addressable
+/// memory, and 'in_bytes' must be at least ceil(num_values * bit_width / 8).
+/// 'out' must have space for 'num_values' OutType values.
+/// 0 <= 'bit_width' <= 64 and 'bit_width' <= # of bits in OutType.
+
 template <typename OutType, int BIT_WIDTH>
-const uint8_t* BitPacking::UnpackUpTo31Values(const uint8_t* __restrict__ in, int64_t in_bytes, int num_values,
-                                              OutType* __restrict__ out) {
+const uint8_t* UnpackUpTo31Values(const uint8_t* __restrict__ in, int64_t in_bytes, int num_values,
+                                  OutType* __restrict__ out) {
     constexpr int MAX_BATCH_SIZE = 31;
     const int BYTES_TO_READ = BitUtil::RoundUpNumBytes(num_values * BIT_WIDTH);
 
@@ -215,4 +190,57 @@ const uint8_t* BitPacking::UnpackUpTo31Values(const uint8_t* __restrict__ in, in
 #pragma pop_macro("UNPACK_VALUES_CASE")
 }
 
-} // namespace starrocks
+template <typename OutType, int BIT_WIDTH>
+std::pair<const uint8_t*, int64_t> UnpackValues(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
+                                                OutType* __restrict__ out) {
+    constexpr int BATCH_SIZE = 32;
+    const int64_t values_to_read = NumValuesToUnpack(BIT_WIDTH, in_bytes, num_values);
+    const int64_t batches_to_read = values_to_read / BATCH_SIZE;
+    const int64_t remainder_values = values_to_read % BATCH_SIZE;
+    const uint8_t* in_pos = in;
+    OutType* out_pos = out;
+
+    // First unpack as many full batches as possible.
+    for (int64_t i = 0; i < batches_to_read; ++i) {
+        in_pos = Unpack32Values<OutType, BIT_WIDTH>(in_pos, in_bytes, out_pos);
+        out_pos += BATCH_SIZE;
+        in_bytes -= (BATCH_SIZE * BIT_WIDTH) / CHAR_BIT;
+    }
+
+    // Then unpack the final partial batch.
+    if (remainder_values > 0) {
+        in_pos = UnpackUpTo31Values<OutType, BIT_WIDTH>(in_pos, in_bytes, remainder_values, out_pos);
+    }
+    return std::make_pair(in_pos, values_to_read);
+}
+
+// Unpack bit-packed values with 'bit_width' from 'in' to 'out'. Keeps unpacking until
+// either all 'in_bytes' are read or 'num_values' values are unpacked. 'out' must have
+// enough space for 'num_values'. 0 <= 'bit_width' <= 64 and 'bit_width' <= # of bits
+// in OutType. 'in' must point to 'in_bytes' of addressable memory.
+//
+// Returns a pointer to the byte after the last byte of 'in' that was read and also the
+// number of values that were read. If the caller wants to continue reading packed
+// values after the last one returned, it must ensure that the next value to unpack
+// starts at a byte boundary. This is true if 'num_values' is a multiple of 32, or
+// more generally if (bit_width * num_values) % 8 == 0.
+
+template <typename OutType>
+std::pair<const uint8_t*, int64_t> UnpackValues(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
+                                                int64_t num_values, OutType* __restrict__ out) {
+#pragma push_macro("UNPACK_VALUES_CASE")
+#define UNPACK_VALUES_CASE(ignore1, i, ignore2) \
+    case i:                                     \
+        return UnpackValues<OutType, i>(in, in_bytes, num_values, out);
+
+    switch (bit_width) {
+        // Expand cases from 0 to 64.
+        BOOST_PP_REPEAT_FROM_TO(0, 65, UNPACK_VALUES_CASE, ignore);
+    default:
+        DCHECK(false);
+        return std::make_pair(nullptr, -1);
+    }
+#pragma pop_macro("UNPACK_VALUES_CASE")
+}
+
+} // namespace starrocks::util::bitpacking_default
