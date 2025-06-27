@@ -63,7 +63,7 @@ Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>
         for (const auto& [partition_id, logs] : txn_log_map) {
             auto task_logic = create_txn_log_task(&logs, ExecEnv::GetInstance()->lake_tablet_manager(), &has_error,
                                                   &final_status, &latch);
-            auto task = 
+            auto task =
                     std::make_shared<CancellableRunnable>(std::move(task_logic), [&latch, &has_error, &final_status]() {
                         Status st = Status::Cancelled("Task cancelled before execution");
                         mark_failure(st, &has_error, &final_status);

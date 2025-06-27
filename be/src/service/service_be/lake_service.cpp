@@ -638,14 +638,14 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
-            DeferOp defer([&] { latch.count_down(); });
-            lake::delete_tablets(_tablet_mgr, *request, response);
+                DeferOp defer([&] { latch.count_down(); });
+                lake::delete_tablets(_tablet_mgr, *request, response);
             },
             [&] {
-            Status st = Status::Cancelled("delete tablet task has been cancelled");
-            LOG(WARNING) << st;
-            st.to_protobuf(response->mutable_status());
-            latch.count_down();
+                Status st = Status::Cancelled("delete tablet task has been cancelled");
+                LOG(WARNING) << st;
+                st.to_protobuf(response->mutable_status());
+                latch.count_down();
             });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
@@ -687,14 +687,14 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
-            DeferOp defer([&] { latch.count_down(); });
-            lake::delete_txn_log(_tablet_mgr, *request, response);
+                DeferOp defer([&] { latch.count_down(); });
+                lake::delete_txn_log(_tablet_mgr, *request, response);
             },
             [&] {
-            Status st = Status::Cancelled("txn log vacuum task has been cancelled");
-            LOG(WARNING) << st;
-            st.to_protobuf(response->mutable_status());
-            latch.count_down();
+                Status st = Status::Cancelled("txn log vacuum task has been cancelled");
+                LOG(WARNING) << st;
+                st.to_protobuf(response->mutable_status());
+                latch.count_down();
             });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
@@ -1243,14 +1243,14 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
-            DeferOp defer([&] { latch.count_down(); });
-            lake::vacuum(_tablet_mgr, *request, response);
+                DeferOp defer([&] { latch.count_down(); });
+                lake::vacuum(_tablet_mgr, *request, response);
             },
             [&] {
-            Status st = Status::Cancelled("vacuum task has been cancelled");
-            LOG(WARNING) << st;
-            st.to_protobuf(response->mutable_status());
-            latch.count_down();
+                Status st = Status::Cancelled("vacuum task has been cancelled");
+                LOG(WARNING) << st;
+                st.to_protobuf(response->mutable_status());
+                latch.count_down();
             });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
@@ -1275,14 +1275,14 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
-            DeferOp defer([&] { latch.count_down(); });
-            lake::vacuum_full(_tablet_mgr, *request, response);
+                DeferOp defer([&] { latch.count_down(); });
+                lake::vacuum_full(_tablet_mgr, *request, response);
             },
             [&] {
-            Status st = Status::Cancelled("full vacuum task has been cancelled");
-            LOG(WARNING) << st;
-            st.to_protobuf(response->mutable_status());
-            latch.count_down();
+                Status st = Status::Cancelled("full vacuum task has been cancelled");
+                LOG(WARNING) << st;
+                st.to_protobuf(response->mutable_status());
+                latch.count_down();
             });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
