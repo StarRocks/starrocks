@@ -3383,6 +3383,145 @@ PARALLEL_TEST(VecStringFunctionsTest, strcmpTest) {
     ASSERT_EQ(1, v->get_data()[5]);
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, strposTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    BinaryColumn::Ptr haystack = BinaryColumn::create();
+    BinaryColumn::Ptr needle = BinaryColumn::create();
+
+    std::vector<std::string> haystacks = {"abc", "abcabc", "", "hello", "hello world", "hello", ""};
+    std::vector<std::string> needles = {"b", "abc", "something", "world", "", "xyz", "anything"};
+
+    std::vector<int64_t> expected = {2, 1, 0, 0, 1, 0, 0};
+
+    for (size_t i = 0; i < haystacks.size(); ++i) {
+        haystack->append(haystacks[i]);
+        needle->append(needles[i]);
+    }
+
+    columns.emplace_back(haystack);
+    columns.emplace_back(needle);
+
+    ColumnPtr result = StringFunctions::strpos(ctx.get(), columns).value();
+    ASSERT_EQ(haystacks.size(), result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+
+    for (size_t i = 0; i < haystacks.size(); ++i) {
+        ASSERT_EQ(expected[i], v->get_data()[i]) << "Failed for input: " << haystacks[i] << ", " << needles[i];
+    }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, strposInstanceTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Test positive instance
+    {
+        Columns columns;
+        BinaryColumn::Ptr haystack = BinaryColumn::create();
+        BinaryColumn::Ptr needle = BinaryColumn::create();
+        Int32Column::Ptr instance = Int32Column::create();
+
+        std::vector<std::string> haystacks = {"abcabc", "abcabc", "hello hello world", "hello hello world"};
+        std::vector<std::string> needles = {"abc", "abc", "hello", "hello"};
+        std::vector<int32_t> instances = {1, 2, 1, 2};
+
+        std::vector<int64_t> expected = {1, 4, 1, 7};
+
+        for (size_t i = 0; i < haystacks.size(); ++i) {
+            haystack->append(haystacks[i]);
+            needle->append(needles[i]);
+            instance->append(instances[i]);
+        }
+
+        columns.emplace_back(haystack);
+        columns.emplace_back(needle);
+        columns.emplace_back(instance);
+
+        ColumnPtr result = StringFunctions::strpos_instance(ctx.get(), columns).value();
+        ASSERT_EQ(haystacks.size(), result->size());
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+
+        for (size_t i = 0; i < haystacks.size(); ++i) {
+            ASSERT_EQ(expected[i], v->get_data()[i])
+                    << "Failed for input: " << haystacks[i] << ", " << needles[i] << ", " << instances[i];
+        }
+    }
+
+    // Test negative instance (search from end)
+    {
+        Columns columns;
+        BinaryColumn::Ptr haystack = BinaryColumn::create();
+        BinaryColumn::Ptr needle = BinaryColumn::create();
+        Int32Column::Ptr instance = Int32Column::create();
+
+        std::vector<std::string> haystacks = {"abcabc", "abcabc", "hello hello world"};
+        std::vector<std::string> needles = {"abc", "abc", "hello"};
+        std::vector<int32_t> instances = {-1, -2, -1};
+
+        std::vector<int64_t> expected = {4, 1, 7};
+
+        for (size_t i = 0; i < haystacks.size(); ++i) {
+            haystack->append(haystacks[i]);
+            needle->append(needles[i]);
+            instance->append(instances[i]);
+        }
+
+        columns.emplace_back(haystack);
+        columns.emplace_back(needle);
+        columns.emplace_back(instance);
+
+        ColumnPtr result = StringFunctions::strpos_instance(ctx.get(), columns).value();
+        ASSERT_EQ(haystacks.size(), result->size());
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+
+        for (size_t i = 0; i < haystacks.size(); ++i) {
+            ASSERT_EQ(expected[i], v->get_data()[i])
+                    << "Failed for input: " << haystacks[i] << ", " << needles[i] << ", " << instances[i];
+        }
+    }
+
+    // Test NULL values
+    {
+        Columns columns;
+        BinaryColumn::Ptr haystack = BinaryColumn::create();
+        BinaryColumn::Ptr needle = BinaryColumn::create();
+        Int32Column::Ptr instance = Int32Column::create();
+        NullColumn::Ptr nulls = NullColumn::create();
+
+        haystack->append("test");
+        needle->append("e");
+        instance->append(1);
+        nulls->append(0);
+
+        haystack->append("test");
+        needle->append("e");
+        instance->append(1);
+        nulls->append(1);
+
+        auto haystack_nullable = NullableColumn::create(haystack, NullColumn::create(*nulls));
+        auto needle_nullable = NullableColumn::create(needle->clone(), NullColumn::create(*nulls));
+        auto instance_nullable = NullableColumn::create(instance->clone(), NullColumn::create(*nulls));
+
+        columns.emplace_back(haystack_nullable);
+        columns.emplace_back(needle_nullable);
+        columns.emplace_back(instance_nullable);
+
+        ColumnPtr result = StringFunctions::strpos_instance(ctx.get(), columns).value();
+        ASSERT_EQ(2, result->size());
+        ASSERT_TRUE(result->is_nullable());
+
+        auto nullable_result = down_cast<const NullableColumn*>(result.get());
+        ASSERT_FALSE(nullable_result->is_null(0));
+        ASSERT_TRUE(nullable_result->is_null(1));
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(nullable_result->data_column());
+        ASSERT_EQ(2, v->get_data()[0]);
+    }
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllPattern) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();

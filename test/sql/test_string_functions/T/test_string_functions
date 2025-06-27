@@ -256,3 +256,43 @@ insert into t values(1, 'теКст'), (2, 'ТЕкСТ'), (3, 'теКст hello'
 (13, 'abcçdefgğhıijklmnoöprsştuüvyz'), (14, 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ'),
 (15, 'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ'), (16, 'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ');
 select id, name, lower(name), upper(name) from t order by id;
+-- name: test_strpos
+select strpos('abc', 'b');
+select strpos('abc', 'c');
+select strpos('abc', 'd');
+select strpos('abc', '');
+select strpos('', 'abc');
+select strpos('', '');
+select strpos('hello world hello', 'hello');
+
+select strpos('abc', 'b', 1);
+select strpos('abcabc', 'abc', 1);
+select strpos('abcabc', 'abc', 2);
+select strpos('abcabc', 'abc', 3);
+select strpos('hello world hello', 'hello', 1);
+select strpos('hello world hello', 'hello', 2);
+
+select strpos('abcabc', 'abc', -1);
+select strpos('abcabc', 'abc', -2);
+select strpos('abcabc', 'abc', -3);
+select strpos('hello world hello', 'hello', -1);
+select strpos('hello world hello', 'hello', -2);
+
+select strpos('abc', '', 1);
+select strpos('', 'abc', 1);
+select strpos('', '', 1);
+select strpos('abc', 'abc', 0);
+select strpos('abc', 'abc', -3);
+select strpos(null, 'abc');
+select strpos('abc', null);
+select strpos('abc', 'b', null);
+
+create table t_strpos(c0 varchar(20), c1 varchar(20), c2 int)
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+insert into t_strpos values ('hello world', 'world', 1), ('hello world', 'world', -1), ('abcabc', 'abc', 2);
+select c0, c1, strpos(c0, c1) from t_strpos;
+select c0, c1, c2, strpos(c0, c1, c2) from t_strpos;
+
