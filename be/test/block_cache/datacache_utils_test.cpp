@@ -20,6 +20,7 @@
 
 #include "fs/fs_util.h"
 #include "gen_cpp/DataCache_types.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 class DataCacheUtilsTest : public ::testing::Test {};
@@ -143,6 +144,65 @@ TEST_F(DataCacheUtilsTest, get_device_id_func) {
     ASSERT_GT(DataCacheUtils::disk_device_id("./not_exist"), 0);
     ASSERT_GT(DataCacheUtils::disk_device_id("./not_exist1/not_exist2"), 0);
     ASSERT_EQ(DataCacheUtils::disk_device_id("./not_exist"), DataCacheUtils::disk_device_id("./not_exist1/not_exist2"));
+}
+
+TEST_F(DataCacheUtilsTest, clean_stale_cache_data) {
+    const std::string old_dir = "./old_disk_cache_path";
+    const std::string old_dir2 = "./old_disk_cache_path2";
+    const std::string new_dir = "./new_disk_cache_path";
+    ASSERT_OK(fs::create_directories(old_dir));
+    ASSERT_OK(fs::create_directories(old_dir2));
+    ASSERT_OK(fs::create_directories(new_dir));
+
+    size_t file_count = 10;
+    {
+        for (size_t i = 0; i < file_count; ++i) {
+            std::string filename1 = fmt::format("{}/blockfile_{}", old_dir, i);
+            std::string filename2 = fmt::format("{}/blockfile_{}", old_dir2, i);
+            std::string filename3 = fmt::format("{}/blockfile_{}", new_dir, i);
+            ASSERT_OK(fs::new_writable_file(filename1));
+            ASSERT_OK(fs::new_writable_file(filename2));
+            ASSERT_OK(fs::new_writable_file(filename3));
+        }
+        ASSERT_OK(fs::create_directories(fmt::format("{}/meta", old_dir2)));
+
+        std::vector<std::string> files;
+        auto st = fs::get_children(old_dir, &files);
+        ASSERT_EQ(files.size(), file_count);
+
+        files.clear();
+        st = fs::get_children(old_dir2, &files);
+        ASSERT_EQ(files.size(), file_count + 1);
+
+        files.clear();
+        st = fs::get_children(new_dir, &files);
+        ASSERT_EQ(files.size(), file_count);
+    }
+
+    std::string stale_data_path_conf = fmt::format("{};{};{}", old_dir, old_dir2, new_dir);
+    std::vector<std::string> cur_cache_paths = {std::filesystem::absolute(std::filesystem::path(new_dir))};
+    DataCacheUtils::clean_stale_datacache(stale_data_path_conf, cur_cache_paths);
+
+    {
+        // clean successfully
+        std::vector<std::string> files;
+        auto st = fs::get_children(old_dir, &files);
+        ASSERT_EQ(files.size(), 0);
+
+        // skip cleaning because it is persistent cache path
+        files.clear();
+        st = fs::get_children(old_dir2, &files);
+        ASSERT_EQ(files.size(), file_count + 1);
+
+        // skip cleaning because it is in use
+        files.clear();
+        st = fs::get_children(new_dir, &files);
+        ASSERT_EQ(files.size(), file_count);
+    }
+
+    fs::remove_all(old_dir);
+    fs::remove_all(old_dir2);
+    fs::remove_all(new_dir);
 }
 
 TEST_F(DataCacheUtilsTest, change_cache_path_suc) {
