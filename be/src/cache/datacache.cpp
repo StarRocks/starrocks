@@ -69,6 +69,8 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
         if (config::block_cache_enable) {
             RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
         }
+#else
+        return Status::InternalError("starcache engine is not supported");
 #endif
     } else {
         RETURN_IF_ERROR(_init_lrucache_engine(cache_options));
