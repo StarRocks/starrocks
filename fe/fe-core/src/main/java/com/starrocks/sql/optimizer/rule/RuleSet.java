@@ -477,7 +477,6 @@ public class RuleSet {
                 EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_RIGHT_SINGLE_VALUE_RULE
         ));
 
-<<<<<<< HEAD
         REWRITE_RULES.put(RuleSetType.META_SCAN_REWRITE, ImmutableList.of(
                 new PushDownAggToMetaScanRule(),
                 new PushDownFlatJsonMetaToMetaScanRule(),
@@ -488,16 +487,6 @@ public class RuleSet {
                 new MinMaxCountOptOnScanRule()
         ));
     }
-=======
-    public static final Rule META_SCAN_REWRITE_RULES =
-            new CombinationRule(RuleType.GP_META_SCAN_REWRITE, ImmutableList.of(
-                    new PushDownAggToMetaScanRule(),
-                    new PushDownFlatJsonMetaToMetaScanRule(),
-                    new RewriteSimpleAggToMetaScanRule(),
-                    RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
-                    new MinMaxCountOptOnScanRule()
-            ));
->>>>>>> d6e15c60d5 ([BugFix] merge project operator after rewriting `count(1)` (#60365))
 
     public RuleSet() {
         // Add common transform rule
