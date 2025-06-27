@@ -14,14 +14,18 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.SlotDescriptor;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class IcebergUtil {
     private IcebergUtil() {
@@ -34,16 +38,31 @@ public final class IcebergUtil {
     public static class MinMaxValue {
         Object minValue;
         Object maxValue;
+        int nullValueCount;
     }
 
-    public static Map<Integer, MinMaxValue> parseMinMaxValueOfSlots(Schema schema,
-                                                                    Map<Integer, ByteBuffer> lowerBound,
-                                                                    Map<Integer, ByteBuffer> upperBound,
+    private static final Set<Type.TypeID> MIN_MAX_SUPPORTED_TYPES = Set.of(
+            Type.TypeID.BOOLEAN,
+            Type.TypeID.INTEGER,
+            Type.TypeID.LONG,
+            Type.TypeID.FLOAT,
+            Type.TypeID.DOUBLE,
+            Type.TypeID.DATE,
+            Type.TypeID.TIME
+    );
+
+    public static Map<Integer, MinMaxValue> parseMinMaxValueBySlots(Schema schema,
+                                                                    Map<Integer, ByteBuffer> lowerBounds,
+                                                                    Map<Integer, ByteBuffer> upperBounds,
+                                                                    Map<Integer, Integer> nullValueCounts,
                                                                     List<SlotDescriptor> slots) {
-        lowerBound = lowerBound == null ? Map.of() : lowerBound;
-        upperBound = upperBound == null ? Map.of() : upperBound;
-        Map<Integer, MinMaxValue> minMaxValues = Map.of();
+
+        Preconditions.checkArgument(nullValueCounts != null, "nullValueCounts cannot be null");
+        lowerBounds = lowerBounds == null ? Map.of() : lowerBounds;
+        upperBounds = upperBounds == null ? Map.of() : upperBounds;
+        Map<Integer, MinMaxValue> minMaxValues = new HashMap<>();
         for (SlotDescriptor slot : slots) {
+            // has to be a scalar type
             if (!slot.getType().isScalarType()) {
                 continue;
             }
@@ -55,6 +74,29 @@ public final class IcebergUtil {
             if (!type.isPrimitiveType()) {
                 continue;
             }
+
+            // create the min/max value object to put into map
+            MinMaxValue minMaxValue = new MinMaxValue();
+            minMaxValues.put(field.fieldId(), minMaxValue);
+
+            // check if there is null value
+            if (nullValueCounts.containsKey(field.fieldId())) {
+                minMaxValue.nullValueCount = nullValueCounts.get(field.fieldId());
+            } else {
+                minMaxValue.nullValueCount = 0;
+            }
+            if (minMaxValue.nullValueCount != 0) {
+                continue; // If there are null values, we don't need to parse min/max values
+                // because the result will be null.
+            }
+            if (!MIN_MAX_SUPPORTED_TYPES.contains(type.typeId())) {
+                continue; // Skip unsupported types
+            }
+            // parse lower and upper bounds
+            Object low = Conversions.fromByteBuffer(field.type(), lowerBounds.get(field.fieldId()));
+            Object high = Conversions.fromByteBuffer(field.type(), upperBounds.get(field.fieldId()));
+            minMaxValue.minValue = low;
+            minMaxValue.maxValue = high;
         }
         return minMaxValues;
     }
