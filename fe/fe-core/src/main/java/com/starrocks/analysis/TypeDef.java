@@ -159,7 +159,8 @@ public class TypeDef implements ParseNode {
             case DECIMALV2:
             case DECIMAL32:
             case DECIMAL64:
-            case DECIMAL128: {
+            case DECIMAL128:
+            case DECIMAL256: {
                 final String name = scalarType.getPrimitiveType().name();
                 final int precision = scalarType.decimalPrecision();
                 final int scale = scalarType.decimalScale();
