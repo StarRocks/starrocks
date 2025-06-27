@@ -60,6 +60,7 @@ public class MaterializedViewOptimizer {
         optimizerOptions.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
         optimizerOptions.disableRule(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE);
         optimizerOptions.disableRule(RuleType.TF_MV_TRANSPARENT_REWRITE_RULE);
+        optimizerOptions.disableRule(RuleType.TF_PUSH_DOWN_AGG_FUN_PREDICATE);
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG);
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG_FUNCTION);
         optimizerOptions.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
