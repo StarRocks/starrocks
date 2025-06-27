@@ -601,3 +601,132 @@ select id, name, lower(name), upper(name) from t order by id;
 15	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ
 16	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ
 -- !result
+-- name: test_strpos
+-- function: strpos basic tests
+select strpos('abc', 'b');
+-- result:
+2
+-- !result
+select strpos('abc', 'c');
+-- result:
+3
+-- !result
+select strpos('abc', 'd');
+-- result:
+0
+-- !result
+select strpos('abc', '');
+-- result:
+1
+-- !result
+select strpos('', 'abc');
+-- result:
+0
+-- !result
+select strpos('', '');
+-- result:
+1
+-- !result
+select strpos('hello world hello', 'hello');
+-- result:
+1
+-- !result
+select strpos('abc', 'b', 1);
+-- result:
+2
+-- !result
+select strpos('abcabc', 'abc', 1);
+-- result:
+1
+-- !result
+select strpos('abcabc', 'abc', 2);
+-- result:
+4
+-- !result
+select strpos('abcabc', 'abc', 3);
+-- result:
+0
+-- !result
+select strpos('hello world hello', 'hello', 1);
+-- result:
+1
+-- !result
+select strpos('hello world hello', 'hello', 2);
+-- result:
+13
+-- !result
+select strpos('abcabc', 'abc', -1);
+-- result:
+4
+-- !result
+select strpos('abcabc', 'abc', -2);
+-- result:
+1
+-- !result
+select strpos('abcabc', 'abc', -3);
+-- result:
+0
+-- !result
+select strpos('hello world hello', 'hello', -1);
+-- result:
+13
+-- !result
+select strpos('hello world hello', 'hello', -2);
+-- result:
+1
+-- !result
+select strpos('abc', '', 1);
+-- result:
+1
+-- !result
+select strpos('', 'abc', 1);
+-- result:
+0
+-- !result
+select strpos('', '', 1);
+-- result:
+1
+-- !result
+select strpos('abc', 'abc', 0);
+-- result:
+0
+-- !result
+select strpos('abc', 'abc', -3);
+-- result:
+0
+-- !result
+select strpos(null, 'abc');
+-- result:
+None
+-- !result
+select strpos('abc', null);
+-- result:
+None
+-- !result
+select strpos('abc', 'b', null);
+-- result:
+None
+-- !result
+create table t_strpos(c0 varchar(20), c1 varchar(20), c2 int)
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_strpos values ('hello world', 'world', 1), ('hello world', 'world', -1), ('abcabc', 'abc', 2);
+-- result:
+-- !result
+select c0, c1, strpos(c0, c1) from t_strpos;
+-- result:
+abcabc	abc	1
+hello world	world	7
+hello world	world	7
+-- !result
+select c0, c1, c2, strpos(c0, c1, c2) from t_strpos;
+-- result:
+abcabc	abc	2	4
+hello world	world	1	7
+hello world	world	-1	7
+-- !result
+
