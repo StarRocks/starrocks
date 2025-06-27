@@ -40,6 +40,7 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -117,7 +118,7 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
             return result;
         }
 
-        Map<String, Integer> func2Range = new HashMap<>();
+        Map<String, List<Integer>> func2Range = new HashMap<>();
         for (Expr unionExpr : mv.getUnionOtherOutputExpression()) {
             if (!(unionExpr instanceof FunctionCallExpr functionCallExpr)) {
                 continue;
@@ -139,7 +140,8 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
                                 return result;
                             }
                         } else if (timestampArithmeticExprChild instanceof IntLiteral intLiteralChild) {
-                            func2Range.put(functionName, Integer.valueOf(intLiteralChild.getStringValue()));
+                            func2Range.computeIfAbsent(functionName, k -> new ArrayList<>())
+                                    .add(Integer.valueOf(intLiteralChild.getStringValue()));
                         }
                     }
                 }
@@ -150,35 +152,55 @@ public class MVEagerRangePartitionMapper extends MVRangePartitionMapper {
         }
 
         // Find the max range function
-        Map.Entry<String, Integer> maxRange = func2Range.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .get();
+        Map<String, Integer> calculateMaxRanges = calculateMaxRanges(func2Range);
+        calculateMaxRanges.forEach((functionName, maxRange) -> {
+            // Generate partition mapping set
+            // For example, func2Range: DATE_ADD->1, if the original partition mappings are:
+            // 2023-10-01 00:00:00, 2023-10-02 00:00:00
+            // 2023-10-02 00:00:00, 2023-10-03 00:00:00
+            // 2023-10-10 00:00:00, 2023-10-11 00:00:00
+            // Generate the virtual partitions:
+            // 2023-10-03 00:00:00, 2023-10-04 00:00:00
+            // 2023-10-11 00:00:00, 2023-10-12 00:00:00
+            for (PartitionMapping originMapping : originMappings) {
+                PartitionMapping tempMapping = new PartitionMapping(
+                        originMapping.getLowerDateTime(), originMapping.getUpperDateTime());
 
-        String functionName = maxRange.getKey();
-        // Generate partition mapping set
-        // For example, func2Range: DATE_ADD->1, if the original partition mappings are:
-        // 2023-10-01 00:00:00, 2023-10-02 00:00:00
-        // 2023-10-02 00:00:00, 2023-10-03 00:00:00
-        // 2023-10-10 00:00:00, 2023-10-11 00:00:00
-        // Generate the virtual partitions:
-        // 2023-10-03 00:00:00, 2023-10-04 00:00:00
-        // 2023-10-11 00:00:00, 2023-10-12 00:00:00
-        for (PartitionMapping originMapping : originMappings) {
-            PartitionMapping tempMapping = new PartitionMapping(
-                    originMapping.getLowerDateTime(), originMapping.getUpperDateTime());
-
-            for (int i = 0; i < maxRange.getValue(); i++) {
-                LocalDateTime lowerDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getLowerDateTime(),
-                        granularity, functionName);
-                LocalDateTime upperDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getUpperDateTime(),
-                        granularity, functionName);
-                PartitionMapping nextMapping = new PartitionMapping(lowerDateTime, upperDateTime);
-                tempMapping = nextMapping;
-                result.add(nextMapping);
+                for (int i = 0; i < maxRange; i++) {
+                    LocalDateTime lowerDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getLowerDateTime(),
+                            granularity, functionName);
+                    LocalDateTime upperDateTime = SyncPartitionUtils.nextUpperDateTime(tempMapping.getUpperDateTime(),
+                            granularity, functionName);
+                    PartitionMapping nextMapping = new PartitionMapping(lowerDateTime, upperDateTime);
+                    tempMapping = nextMapping;
+                    result.add(nextMapping);
+                }
             }
 
-        }
+        });
+
         result.removeAll(originMappings);
+        return result;
+    }
+
+    /**
+     * Calculates the maximum range value for each function in the given map.
+     *
+     * Example:
+     * Input: {"DATE_ADD": [1, 2, 3], "DATE_SUB": [5, 6]}
+     * Output: {"DATE_ADD": 3, "DATE_SUB": 6}
+     *Add commentMore actions
+     * @param func2Range A map where the key is a function name and the value is a list of integers representing ranges.
+     * @return A map where the key is a function name and the value is the maximum integer range for that function.
+     */
+    private Map<String, Integer> calculateMaxRanges(Map<String, List<Integer>> func2Range) {
+        Map<String, Integer> result = new HashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : func2Range.entrySet()) {
+            String function = entry.getKey();
+            List<Integer> values = entry.getValue();
+            int max = values.stream().mapToInt(Integer::intValue).max().orElse(0);
+            result.put(function, max);
+        }
         return result;
     }
 
