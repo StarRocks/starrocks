@@ -416,6 +416,7 @@ public class FeExecuteCoordinator extends Coordinator {
                     case DECIMAL32:
                     case DECIMAL64:
                     case DECIMAL128:
+                    case DECIMAL256:
                         int scale = ((ScalarType) constantOperator.getType()).getScalarScale();
                         BigDecimal val1 = constantOperator.getDecimal();
                         DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale));

@@ -71,10 +71,11 @@ public:
     void register_boolean();
 
     const std::vector<LogicalType>& aggregate_types() const {
-        const static std::vector<LogicalType> kTypes{
-                TYPE_BOOLEAN,   TYPE_TINYINT,   TYPE_SMALLINT,  TYPE_INT,        TYPE_BIGINT, TYPE_LARGEINT,
-                TYPE_FLOAT,     TYPE_DOUBLE,    TYPE_VARCHAR,   TYPE_CHAR,       TYPE_DATE,   TYPE_DATETIME,
-                TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_HLL,    TYPE_OBJECT};
+        const static std::vector<LogicalType> kTypes{TYPE_BOOLEAN,    TYPE_TINYINT,   TYPE_SMALLINT,  TYPE_INT,
+                                                     TYPE_BIGINT,     TYPE_LARGEINT,  TYPE_FLOAT,     TYPE_DOUBLE,
+                                                     TYPE_VARCHAR,    TYPE_CHAR,      TYPE_DATE,      TYPE_DATETIME,
+                                                     TYPE_DECIMALV2,  TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                                                     TYPE_DECIMAL256, TYPE_HLL,       TYPE_OBJECT};
         return kTypes;
     }
 
@@ -222,7 +223,7 @@ public:
 
     template <LogicalType ArgLT, LogicalType ResultLT, bool IsWindowFunc, bool IsNull>
     std::enable_if_t<isArithmeticLT<ArgLT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
-        static_assert(lt_is_decimal128<ResultLT>);
+        static_assert(lt_is_decimal128<ResultLT> || lt_is_decimal256<ResultLT>);
         if constexpr (IsNull) {
             using ResultType = RunTimeCppType<ResultLT>;
             if (name == "decimal_avg") {

@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSetMultimap;
-import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -143,25 +142,6 @@ public enum PrimitiveType {
                     .addAll(TIME_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
                     .build();
-
-    private static final ImmutableSortedSet<String> VARIABLE_TYPE_SET =
-            ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
-                    .add(PrimitiveType.CHAR.toString())
-                    .add(PrimitiveType.VARCHAR.toString())
-                    .add(PrimitiveType.DECIMALV2.toString())
-                    .add(PrimitiveType.DECIMAL32.toString())
-                    .add(PrimitiveType.DECIMAL64.toString())
-                    .add(PrimitiveType.DECIMAL128.toString())
-                    .add("DECIMAL") // generic name for all decimal types
-                    .build();
-
-    public static boolean isVariableType(String typeName) {
-        return VARIABLE_TYPE_SET.contains(typeName);
-    }
-
-    public static boolean isStaticType(String typeName) {
-        return !VARIABLE_TYPE_SET.contains(typeName);
-    }
 
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
@@ -312,6 +292,10 @@ public enum PrimitiveType {
      */
     public static PrimitiveType getWiderDecimalV3Type(PrimitiveType t1, PrimitiveType t2) {
         Preconditions.checkState(t1.isDecimalV3Type() && t2.isDecimalV3Type());
+        // TODO(stephen): support auto scale up decimal precision
+        if (t1.equals(DECIMAL256) || t2.equals(DECIMAL256)) {
+            return DECIMAL256;
+        }
         if (t1.equals(DECIMAL32)) {
             return t2;
         } else if (t2.equals(DECIMAL32)) {
@@ -382,6 +366,8 @@ public enum PrimitiveType {
             return DECIMAL64;
         } else if (precision <= getMaxPrecisionOfDecimal(DECIMAL128)) {
             return DECIMAL128;
+        } else  if (precision <= getMaxPrecisionOfDecimal(DECIMAL256)) {
+            return DECIMAL256;
         }
         Preconditions.checkState(type.isDecimalOfAnyVersion());
         return type;

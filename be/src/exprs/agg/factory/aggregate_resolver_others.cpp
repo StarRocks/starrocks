@@ -87,6 +87,7 @@ void AggregateFuncResolver::register_others() {
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
+    add_decimal_mapping<TYPE_DECIMAL256, TYPE_DECIMAL256>("decimal_multi_distinct_sum");
 
     // This first type is the 4th type input of windowfunnel.
     // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).

@@ -20,6 +20,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "storage/uint24.h"
+#include "types/int256.h"
 
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
@@ -124,12 +125,34 @@ inline uint64_t hash_128(uint64_t seed, int128_t val) {
     return seed;
 }
 
+inline uint64_t hash_256(uint64_t seed, const int256_t& val) {
+    uint64_t parts[4];
+    parts[0] = static_cast<uint64_t>(val.low);
+    parts[1] = static_cast<uint64_t>(val.low >> 64);
+    parts[2] = static_cast<uint64_t>(static_cast<uint128_t>(val.high));
+    parts[3] = static_cast<uint64_t>(static_cast<uint128_t>(val.high) >> 64);
+
+    uint64_t hash = seed;
+    for (int i = 0; i < 4; ++i) {
+        hash_combine(hash, parts[i]);
+    }
+    return hash;
+}
+
 template <PhmapSeed seed>
 struct Hash128WithSeed {
     std::size_t operator()(int128_t value) const {
         return phmap_mix_with_seed<sizeof(size_t), seed>()(hash_128(seed, value));
     }
 };
+
+template <PhmapSeed seed>
+struct Hash256WithSeed {
+    std::size_t operator()(const int256_t& value) const {
+        return phmap_mix_with_seed<sizeof(size_t), seed>()(hash_256(seed, value));
+    }
+};
+
 template <typename T>
 struct HashTypeTraits {
     using HashFunc = StdHashWithSeed<T, PhmapSeed2>;
@@ -139,6 +162,11 @@ struct HashTypeTraits<int128_t> {
     using HashFunc = Hash128WithSeed<PhmapSeed2>;
 };
 
+template <>
+struct HashTypeTraits<int256_t> {
+    using HashFunc = Hash256WithSeed<PhmapSeed2>;
+};
+
 template <LogicalType LT, PhmapSeed seed>
 struct PhmapDefaultHashFunc {
     std::size_t operator()(const RunTimeCppType<LT>& value) const {
@@ -146,6 +174,8 @@ struct PhmapDefaultHashFunc {
 
         if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
             return Hash128WithSeed<seed>()(value);
+        } else if constexpr (lt_is_decimal256<LT>) {
+            return Hash256WithSeed<seed>()(value);
         } else if constexpr (lt_is_fixedlength<LT>) {
             return StdHashWithSeed<RunTimeCppType<LT>, seed>()(value);
         } else if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {

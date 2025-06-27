@@ -92,6 +92,7 @@ import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
 import static com.starrocks.catalog.PrimitiveType.DATE;
 import static com.starrocks.catalog.PrimitiveType.DATETIME;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
+import static com.starrocks.catalog.PrimitiveType.DECIMAL256;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL32;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL64;
 import static com.starrocks.catalog.PrimitiveType.DECIMALV2;
@@ -1037,7 +1038,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "add", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "add", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "add", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "add", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "add", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "add", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator addDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().add(second.getDecimal()));
@@ -1072,7 +1074,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "subtract", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "subtract", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "subtract", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "subtract", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "subtract", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "subtract", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator subtractDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().subtract(second.getDecimal()));
@@ -1103,11 +1106,13 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDouble(first.getDouble() * second.getDouble());
     }
 
+    // TODO(stephen): support auto scale up decimal precision
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "multiply", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "multiply", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "multiply", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "multiply", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "multiply", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "multiply", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator multiplyDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().multiply(second.getDecimal()));
@@ -1130,7 +1135,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "divide", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "divide", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "divide", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "divide", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "divide", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "divide", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator divideDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
@@ -1208,7 +1214,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "mod", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "mod", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "mod", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "mod", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "mod", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "mod", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator modDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {

@@ -459,6 +459,7 @@ public class ColumnDef implements ParseNode {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
+                case DECIMAL256:
                     DecimalLiteral decimalLiteral = new DecimalLiteral(defaultValue);
                     decimalLiteral.checkPrecisionAndScale(scalarType,
                             scalarType.getScalarPrecision(), scalarType.getScalarScale());

@@ -43,6 +43,7 @@
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
+#include "types/int256.h"
 #include "types/large_int_value.h"
 #include "util/mysql_global.h"
 
@@ -126,6 +127,9 @@ void MysqlRowBuffer::push_number_binary_format(T data) {
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, __int128>) {
         std::string value = LargeIntValue::to_string(data);
         _push_string_normal(value.data(), value.size());
+    } else if constexpr (std::is_same_v<T, int256_t>) {
+        std::string value = data.to_string();
+        _push_string_normal(value.data(), value.size());
     } else {
         CHECK(false) << "unhandled data type";
     }
@@ -133,7 +137,7 @@ void MysqlRowBuffer::push_number_binary_format(T data) {
 
 template <typename T>
 void MysqlRowBuffer::push_number(T data, bool is_binary_protocol) {
-    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, __int128>);
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, __int128> || std::is_same_v<T, int256_t>);
 
     if (is_binary_protocol) {
         return push_number_binary_format(data);
@@ -169,6 +173,10 @@ void MysqlRowBuffer::push_number(T data, bool is_binary_protocol) {
         length = end - pos - length_prefix_bytes;
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, __int128>) {
         pos = _resize_extra(2 + 40);
+        end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
+        length = end - pos - length_prefix_bytes;
+    } else if constexpr (std::is_same_v<T, int256_t>) {
+        pos = _resize_extra(2 + 80);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
         length = end - pos - length_prefix_bytes;
     } else {
@@ -346,6 +354,7 @@ template void MysqlRowBuffer::push_number<uint16_t>(uint16_t, bool);
 template void MysqlRowBuffer::push_number<uint32_t>(uint32_t, bool);
 template void MysqlRowBuffer::push_number<uint64_t>(uint64_t, bool);
 template void MysqlRowBuffer::push_number<__int128>(__int128, bool);
+template void MysqlRowBuffer::push_number<int256_t>(int256_t, bool);
 template void MysqlRowBuffer::push_number<float>(float, bool);
 template void MysqlRowBuffer::push_number<double>(double, bool);
 

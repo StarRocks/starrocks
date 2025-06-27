@@ -121,7 +121,7 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
     }
 
     auto is_decimal_type = [](LogicalType lt) {
-        return lt == TYPE_DECIMAL32 || lt == TYPE_DECIMAL64 || lt == TYPE_DECIMAL128;
+        return lt == TYPE_DECIMAL32 || lt == TYPE_DECIMAL64 || lt == TYPE_DECIMAL128 || lt == TYPE_DECIMAL256;
     };
     if (func_version > 2 && is_decimal_type(arg_type)) {
         if (name == "sum") {

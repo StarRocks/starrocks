@@ -947,4 +947,289 @@ TEST_F(Int256ArithmeticTest, division_truncation_behavior) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, multiplication_both_over_128bit) {
+    // Test cases where both operands are over 128 bits
+    // These tests focus on multiply_core_256bit logic coverage
+
+    // Test case 1: Both operands have significant high parts
+    {
+        int256_t a(0x123456789ABCDEF0ULL, 0xFEDCBA9876543210ULL); // > 128 bit
+        int256_t b(0x0FEDCBA987654321ULL, 0x123456789ABCDEF0ULL); // > 128 bit
+
+        int256_t result = a * b;
+
+        // Since this will overflow, we mainly check that:
+        // 1. The operation doesn't crash
+        // 2. The result is deterministic
+        int256_t result2 = a * b;
+        ASSERT_EQ(result, result2); // Should be deterministic
+
+        // Check commutativity (even with overflow)
+        int256_t result_comm = b * a;
+        ASSERT_EQ(result, result_comm);
+    }
+
+    // Test case 2: Large positive numbers
+    {
+        int256_t large1(0x7FFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL);
+        int256_t large2(0x3FFFFFFFFFFFFFFFULL, 0x8000000000000000ULL);
+
+        int256_t result = large1 * large2;
+
+        // Verify the multiplication is consistent
+        ASSERT_EQ(result, large1 * large2);
+        ASSERT_EQ(result, large2 * large1);
+
+        // The result should not be zero (unless there's a specific overflow pattern)
+        // This is a sanity check for the core multiplication logic
+        ASSERT_NE(result, int256_t(0));
+    }
+
+    // Test case 3: Mixed sign large numbers
+    {
+        int256_t pos_large(0x1234567890ABCDEFULL, 0xFEDCBA0987654321ULL);
+        int256_t neg_large = -pos_large;
+
+        int256_t result_pos_neg = pos_large * neg_large;
+        int256_t result_neg_pos = neg_large * pos_large;
+
+        // Should be commutative
+        ASSERT_EQ(result_pos_neg, result_neg_pos);
+    }
+
+    // Test case 4: Numbers close to 2^128
+    {
+        int256_t just_over_128(1, 0x1000000000000000ULL); // Slightly over 2^128
+        int256_t another_large(0x8000000000000000ULL, 0); // 2^127 * 2^64
+
+        int256_t result = just_over_128 * another_large;
+
+        // Check deterministic behavior
+        ASSERT_EQ(result, just_over_128 * another_large);
+        ASSERT_EQ(result, another_large * just_over_128);
+    }
+
+    // Test case 5: Maximum high parts
+    {
+        int256_t max_high1(0xFFFFFFFFFFFFFFFFULL, 0x123456789ABCDEF0ULL);
+        int256_t max_high2(0xFFFFFFFFFFFFFFFFULL, 0xFEDCBA0987654321ULL);
+
+        int256_t result = max_high1 * max_high2;
+
+        // This will definitely overflow, but should be consistent
+        ASSERT_EQ(result, max_high1 * max_high2);
+        ASSERT_EQ(result, max_high2 * max_high1);
+    }
+
+    // Test case 6: Patterns that test different code paths in multiply_core_256bit
+    {
+        // Test with alternating bit patterns
+        int256_t pattern1(0xAAAAAAAAAAAAAAAAULL, 0x5555555555555555ULL);
+        int256_t pattern2(0x5555555555555555ULL, 0xAAAAAAAAAAAAAAAAULL);
+
+        int256_t result = pattern1 * pattern2;
+
+        // Verify consistency
+        ASSERT_EQ(result, pattern1 * pattern2);
+        ASSERT_EQ(result, pattern2 * pattern1);
+    }
+
+    // Test case 7: Powers of 2 over 128 bits
+    {
+        int256_t power_129(2, 0); // 2^129
+        int256_t power_130(4, 0); // 2^130
+
+        int256_t result = power_129 * power_130;
+        // This should be 2^259, which will overflow significantly
+
+        // Check that it's consistent
+        ASSERT_EQ(result, power_129 * power_130);
+        ASSERT_EQ(result, power_130 * power_129);
+    }
+
+    // Test case 8: Large numbers with specific bit positions set
+    {
+        int256_t sparse1(0x8000000000000001ULL, 0x0000000000000001ULL);
+        int256_t sparse2(0x0000000000000001ULL, 0x8000000000000001ULL);
+
+        int256_t result = sparse1 * sparse2;
+
+        // Verify deterministic behavior
+        ASSERT_EQ(result, sparse1 * sparse2);
+        ASSERT_EQ(result, sparse2 * sparse1);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, multiplication_overflow_patterns) {
+    // Test specific overflow patterns to ensure multiply_core_256bit handles them correctly
+
+    // Test case 1: Multiplication that causes carry propagation
+    {
+        int256_t carry_test1(0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL);
+        int256_t carry_test2(0x0000000000000002ULL, 0x0000000000000001ULL);
+
+        int256_t result = carry_test1 * carry_test2;
+
+        // This tests carry propagation through all 64-bit chunks
+        ASSERT_EQ(result, carry_test1 * carry_test2);
+        ASSERT_EQ(result, carry_test2 * carry_test1);
+    }
+
+    // Test case 2: Multiplication with maximum values
+    {
+        int256_t near_max(INT256_MAX.high, INT256_MAX.low - 1000);
+        int256_t multiplier(0x0000000000000001ULL, 0x0000000000000002ULL);
+
+        int256_t result = near_max * multiplier;
+
+        // Should handle near-maximum values without crashing
+        ASSERT_EQ(result, near_max * multiplier);
+        ASSERT_EQ(result, multiplier * near_max);
+    }
+
+    // Test case 3: Test all four 64-bit chunk combinations
+    {
+        int256_t chunk_test(0x123456789ABCDEF0ULL, 0xFEDCBA9876543210ULL);
+        int256_t chunk_mult(0x0FEDCBA987654321ULL, 0x0123456789ABCDEFULL);
+
+        int256_t result = chunk_test * chunk_mult;
+
+        // This exercises all combinations of 64-bit chunk multiplications
+        // in multiply_core_256bit
+        ASSERT_EQ(result, chunk_test * chunk_mult);
+        ASSERT_EQ(result, chunk_mult * chunk_test);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, multiplication_edge_bit_boundaries) {
+    // Test multiplications at various bit boundaries to ensure proper handling
+
+    // Test at 129-bit boundary
+    {
+        int256_t just_129_bit(1, 1);                   // 2^128 + 1
+        int256_t multiplier(0, 0x8000000000000000ULL); // 2^63
+
+        int256_t result = just_129_bit * multiplier;
+
+        ASSERT_EQ(result, just_129_bit * multiplier);
+        ASSERT_EQ(result, multiplier * just_129_bit);
+    }
+
+    // Test at 192-bit boundary
+    {
+        int256_t val_192(0x1000000000000000ULL, 0); // 2^192
+        int256_t val_128(1, 0);                     // 2^128
+
+        int256_t result = val_192 * val_128;
+
+        ASSERT_EQ(result, val_192 * val_128);
+        ASSERT_EQ(result, val_128 * val_192);
+    }
+
+    // Test with values that span multiple 64-bit boundaries
+    {
+        int256_t span_test(0x00000000FFFFFFFFULL, 0xFFFFFFFF00000000ULL);
+        int256_t span_mult(0xFFFFFFFF00000000ULL, 0x00000000FFFFFFFFULL);
+
+        int256_t result = span_test * span_mult;
+
+        ASSERT_EQ(result, span_test * span_mult);
+        ASSERT_EQ(result, span_mult * span_test);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, multiplication_stress_large_numbers) {
+    // Stress test with various large number combinations
+
+    std::vector<int256_t> large_test_values = {
+            int256_t(0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL), // Near max positive
+            int256_t(0x8000000000000000ULL, 0x0000000000000000ULL), // 2^191
+            int256_t(0x7FFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL), // Large positive
+            int256_t(0x1234567890ABCDEFULL, 0xFEDCBA9876543210ULL), // Random large
+            int256_t(0xFEDCBA9876543210ULL, 0x1234567890ABCDEFULL), // Random large 2
+            int256_t(0xAAAAAAAAAAAAAAAAULL, 0x5555555555555555ULL), // Alternating bits
+            int256_t(0x5555555555555555ULL, 0xAAAAAAAAAAAAAAAAULL), // Alternating bits 2
+    };
+
+    // Test all combinations
+    for (size_t i = 0; i < large_test_values.size(); ++i) {
+        for (size_t j = i; j < large_test_values.size(); ++j) {
+            const auto& a = large_test_values[i];
+            const auto& b = large_test_values[j];
+
+            int256_t result = a * b;
+
+            // Basic consistency checks
+            ASSERT_EQ(result, a * b) << "Multiplication not deterministic for values at indices " << i << ", " << j;
+            ASSERT_EQ(result, b * a) << "Multiplication not commutative for values at indices " << i << ", " << j;
+
+            // Test with negatives
+            int256_t neg_a = -a;
+            int256_t neg_b = -b;
+
+            int256_t result_neg_pos = neg_a * b;
+            int256_t result_pos_neg = a * neg_b;
+            // These should be equal (both negative * positive)
+            ASSERT_EQ(result_neg_pos, result_pos_neg) << "Sign handling inconsistent for indices " << i << ", " << j;
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(Int256ArithmeticTest, multiplication_256bit_core_coverage) {
+    // Specific tests to ensure multiply_core_256bit gets proper coverage
+
+    // Test case 1: Force all partial products to be non-zero
+    {
+        int256_t full_bits(0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL);
+        int256_t partial_bits(0x0F0F0F0F0F0F0F0FULL, 0xF0F0F0F0F0F0F0F0ULL);
+
+        int256_t result = full_bits * partial_bits;
+
+        // This should exercise all partial product calculations
+        ASSERT_EQ(result, full_bits * partial_bits);
+        ASSERT_EQ(result, partial_bits * full_bits);
+    }
+
+    // Test case 2: Test carry chain propagation
+    {
+        int256_t carry_gen(0x8000000000000000ULL, 0x8000000000000000ULL);
+        int256_t carry_prop(0x0000000000000002ULL, 0x0000000000000002ULL);
+
+        int256_t result = carry_gen * carry_prop;
+
+        // This should test carry propagation between 64-bit chunks
+        ASSERT_EQ(result, carry_gen * carry_prop);
+        ASSERT_EQ(result, carry_prop * carry_gen);
+    }
+
+    // Test case 3: Mixed zero and non-zero chunks
+    {
+        int256_t mixed1(0xFFFFFFFFFFFFFFFFULL, 0x0000000000000000ULL);
+        int256_t mixed2(0x0000000000000000ULL, 0xFFFFFFFFFFFFFFFFULL);
+
+        int256_t result = mixed1 * mixed2;
+
+        // This tests the case where some 64-bit chunks are zero
+        ASSERT_EQ(result, mixed1 * mixed2);
+        ASSERT_EQ(result, mixed2 * mixed1);
+    }
+
+    // Test case 4: Boundary values for each 64-bit chunk
+    {
+        int256_t boundary1(0x7FFFFFFFFFFFFFFFULL, 0x8000000000000000ULL);
+        int256_t boundary2(0x8000000000000000ULL, 0x7FFFFFFFFFFFFFFFULL);
+
+        int256_t result = boundary1 * boundary2;
+
+        // This tests sign bit boundaries in each chunk
+        ASSERT_EQ(result, boundary1 * boundary2);
+        ASSERT_EQ(result, boundary2 * boundary1);
+    }
+}
+
 } // end namespace starrocks

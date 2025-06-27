@@ -242,6 +242,7 @@ public class FilterSelectivityEvaluator {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
+                case DECIMAL256:
                     return true;
                 default:
                     return false;
