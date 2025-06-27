@@ -63,8 +63,6 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 public class IcebergRESTCatalog implements IcebergCatalog {
 
     private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
-
-    public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
     public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
     public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
 
