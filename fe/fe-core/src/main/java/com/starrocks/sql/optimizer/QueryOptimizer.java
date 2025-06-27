@@ -681,6 +681,7 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
+        scheduler.rewriteOnce(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
         // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
         scheduler.rewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
