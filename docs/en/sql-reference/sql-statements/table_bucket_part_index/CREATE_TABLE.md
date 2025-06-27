@@ -52,7 +52,7 @@ If you would like to use the deprecated `EXTERNAL` keyword please expand **`EXTE
 
 <details>
 
-<summary>`EXTERNAL` keyword details`</summary>
+<summary>`EXTERNAL` keyword details</summary>
 
 To create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
 
