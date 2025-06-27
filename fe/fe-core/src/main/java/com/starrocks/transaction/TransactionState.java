@@ -579,6 +579,7 @@ public class TransactionState implements Writable {
 
     public TxnStateChangeCallback beforeStateTransform(TransactionStatus transactionStatus)
             throws TransactionException {
+<<<<<<< HEAD
         // callback will pass to afterStateTransform since it may be deleted from
         // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
@@ -616,6 +617,36 @@ public class TransactionState implements Writable {
         if (callback != null) {
             if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
                 callback.afterVisible(this, txnOperated);
+=======
+        for (Long callbackId : getCallbackId()) {
+            // callback will pass to afterStateTransform since it may be deleted from
+            // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
+            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getCallbackFactory().getCallback(callbackId);
+            // before status changed
+            if (callback != null) {
+                switch (transactionStatus) {
+                    case ABORTED:
+                        callback.beforeAborted(this);
+                        break;
+                    case COMMITTED:
+                        callback.beforeCommitted(this);
+                        break;
+                    case PREPARED:
+                        callback.beforePrepared(this);
+                        break;
+                    default:
+                        break;
+                }
+            } else if (callbackId > 0) {
+                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED
+                        && this.sourceType != LoadJobSourceType.BACKEND_STREAMING) {
+                    // BACKEND_STREAMING allows callback to be null
+                    // Maybe listener has been deleted. The txn need to be aborted later.
+                    throw new TransactionException(
+                            "Failed to commit txn when callback " + callbackId + "could not be found");
+                }
+>>>>>>> f571745fa6 ([BugFix]Fix backend stream callback loss. (#60243))
             }
         }
     }
