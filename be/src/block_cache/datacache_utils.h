@@ -36,7 +36,10 @@ public:
                                                    const std::string& config_disk_size, bool ignore_broken_disk,
                                                    std::vector<DirSpace>* disk_spaces);
 
-    static void clean_residual_datacache(const std::string& disk_path);
+    static void clean_residual_datacache(const std::string& disk_path, bool ignore_persistent_cache);
+
+    static void clean_stale_datacache(const std::string& stale_data_path_conf,
+                                      std::vector<std::string> cur_cache_paths);
 
     static Status change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path);
 
