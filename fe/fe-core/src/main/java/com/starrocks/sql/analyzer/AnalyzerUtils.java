@@ -1257,7 +1257,8 @@ public class AnalyzerUtils {
                 if (convertDouble) {
                     newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
                 }
-            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
+            } else if (PrimitiveType.DECIMAL256 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),

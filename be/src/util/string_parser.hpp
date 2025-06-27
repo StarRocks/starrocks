@@ -608,6 +608,11 @@ inline int StringParser::StringParseTraits<__int128>::max_ascii_len() {
     return 39;
 }
 
+template <>
+inline int StringParser::StringParseTraits<int256_t>::max_ascii_len() {
+    return 77;
+}
+
 template <typename T>
 inline T StringParser::string_to_decimal(const char* s, int len, int type_precision, int type_scale,
                                          ParseResult* result) {

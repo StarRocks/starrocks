@@ -1385,8 +1385,15 @@ public class FunctionSet {
             }
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
+            Type retType;
+            // TODO(stephen): support auto scale up decimal precision
+            if (type.isDecimal256()) {
+                retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
+            }
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(type), Type.DECIMAL128, Type.DECIMAL128,
+                    Lists.newArrayList(type), retType, retType,
                     false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(name,
@@ -1411,8 +1418,15 @@ public class FunctionSet {
             }
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
+            Type retType = Type.DECIMAL128;
+            // TODO(stephen): support auto scale up decimal precision
+            if (type.isDecimal256()) {
+                retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
+            }
             addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
-                    Lists.newArrayList(type), Type.DECIMAL128, Type.VARBINARY,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
                     false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
@@ -1505,8 +1519,15 @@ public class FunctionSet {
                     false, true, false));
         }
         for (ScalarType type : Type.DECIMAL_TYPES) {
+            Type retType;
+            // TODO(stephen): support auto scale up decimal precision
+            if (type.isDecimal256()) {
+                retType = Type.DECIMAL256;
+            } else {
+                retType = Type.DECIMAL128;
+            }
             addBuiltin(AggregateFunction.createBuiltin(AVG,
-                    Lists.newArrayList(type), Type.DECIMAL128, Type.VARBINARY,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
                     false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(AVG,

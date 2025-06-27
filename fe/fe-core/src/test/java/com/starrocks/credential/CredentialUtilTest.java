@@ -15,10 +15,12 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
-import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogProperties;
+import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
+import org.apache.iceberg.aws.AwsProperties;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -55,9 +57,29 @@ public class CredentialUtilTest {
     @Test
     public void testMaskIcebergRestCatalogCredential() {
         Map<String, String> properties = new HashMap<>();
-        properties.put(IcebergRESTCatalog.KEY_CREDENTIAL_WITH_PREFIX, "7758258");
+        String key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                OAuth2SecurityConfig.OAUTH2_CREDENTIAL;
+        properties.put(key, "7758258");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("77******58", properties.get(IcebergRESTCatalog.KEY_CREDENTIAL_WITH_PREFIX));
+        Assert.assertEquals("77******58", properties.get(key));
+
+        key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                OAuth2SecurityConfig.OAUTH2_TOKEN;
+        properties.put(key, "1223344565");
+        CredentialUtil.maskCredential(properties);
+        Assert.assertEquals("12******65", properties.get(key));
+
+        key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                AwsProperties.REST_ACCESS_KEY_ID;
+        properties.put(key, "7758258");
+        CredentialUtil.maskCredential(properties);
+        Assert.assertEquals("77******58", properties.get(key));
+
+        key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                AwsProperties.REST_SECRET_ACCESS_KEY;
+        properties.put(key, "7758258");
+        CredentialUtil.maskCredential(properties);
+        Assert.assertEquals("77******58", properties.get(key));
     }
 
     @Test

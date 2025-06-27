@@ -2935,27 +2935,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 - Introduced in: -
 
-<!--
-##### shard_group_clean_threshold_sec
-
-- Default: 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### star_mgr_meta_sync_interval_sec
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### cloud_native_meta_port
 
@@ -3375,6 +3354,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
+
+##### shard_group_clean_threshold_sec
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time before FE cleans the unused tablet and shard groups in a shared-data cluster. Tablets and shard groups created within this threshold will not be cleaned.
+- Introduced in: -
+
+##### star_mgr_meta_sync_interval_sec
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
+- Introduced in: -
+
+##### meta_sync_force_delete_shard_meta
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow deleting the metadata of the shared-data cluster directly, bypassing cleaning the remote storage files. It is recommended to set this item to `true` only when there is an excessive number of shards to be cleaned, which leads to extreme memory pressure on the FE JVM. Note that the data files belonging to the shards or tablets cannot be automatically cleaned after this feature is enabled.
+- Introduced in: v3.2.10, v3.3.3
 
 ### Other
 

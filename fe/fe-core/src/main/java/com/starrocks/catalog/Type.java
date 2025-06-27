@@ -318,6 +318,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[TINYINT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[TINYINT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[TINYINT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[TINYINT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[TINYINT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[TINYINT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
@@ -340,6 +341,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[SMALLINT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[SMALLINT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[SMALLINT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[SMALLINT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[SMALLINT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[SMALLINT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
@@ -360,6 +362,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[INT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[INT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[INT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[INT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[INT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[INT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
@@ -380,6 +383,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[BIGINT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[BIGINT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[BIGINT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[BIGINT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[BIGINT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[BIGINT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
@@ -398,6 +402,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[LARGEINT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.DECIMAL32;
         compatibilityMatrix[LARGEINT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.DECIMAL64;
         compatibilityMatrix[LARGEINT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.DECIMAL128;
+        compatibilityMatrix[LARGEINT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.DECIMAL256;
         compatibilityMatrix[LARGEINT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[LARGEINT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
@@ -415,6 +420,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[FLOAT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[FLOAT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[FLOAT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[FLOAT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[FLOAT.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[FLOAT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
@@ -431,6 +437,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[DOUBLE.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[DOUBLE.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[DOUBLE.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[DOUBLE.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[DOUBLE.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // DATE
@@ -471,6 +478,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[CHAR.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[CHAR.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[CHAR.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[CHAR.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[CHAR.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // VARCHAR
@@ -482,6 +490,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[VARCHAR.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARCHAR.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARCHAR.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARCHAR.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[VARCHAR.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // DECIMALV2
@@ -502,6 +511,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[DECIMAL32.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.DECIMAL32;
         compatibilityMatrix[DECIMAL32.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.DECIMAL64;
         compatibilityMatrix[DECIMAL32.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.DECIMAL128;
+        compatibilityMatrix[DECIMAL32.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.DECIMAL256;
         compatibilityMatrix[DECIMAL32.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // DECIMAL64
@@ -512,6 +522,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[DECIMAL64.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.DECIMAL32;
         compatibilityMatrix[DECIMAL64.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.DECIMAL64;
         compatibilityMatrix[DECIMAL64.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.DECIMAL128;
+        compatibilityMatrix[DECIMAL64.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.DECIMAL256;
         compatibilityMatrix[DECIMAL64.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // DECIMAL128
@@ -523,6 +534,16 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[DECIMAL128.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.DECIMAL64;
         compatibilityMatrix[DECIMAL128.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.DECIMAL128;
         compatibilityMatrix[DECIMAL128.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
+
+        // DECIMAL256
+        compatibilityMatrix[DECIMAL256.ordinal()][HLL.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[DECIMAL256.ordinal()][TIME.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[DECIMAL256.ordinal()][BITMAP.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[DECIMAL256.ordinal()][PERCENTILE.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[DECIMAL256.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.DECIMAL32;
+        compatibilityMatrix[DECIMAL256.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.DECIMAL64;
+        compatibilityMatrix[DECIMAL256.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.DECIMAL128;
+        compatibilityMatrix[DECIMAL256.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // HLL
         compatibilityMatrix[HLL.ordinal()][TIME.ordinal()] = PrimitiveType.INVALID_TYPE;
@@ -556,6 +577,7 @@ public abstract class Type implements Cloneable {
         compatibilityMatrix[JSON.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[JSON.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[JSON.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[JSON.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // binary type
         for (PrimitiveType type : PrimitiveType.BINARY_INCOMPATIBLE_TYPE_LIST) {
@@ -695,6 +717,10 @@ public abstract class Type implements Cloneable {
         return isDecimalV2() || isDecimalV3();
     }
 
+    public boolean isDecimal256() {
+        return this.getPrimitiveType() == PrimitiveType.DECIMAL256;
+    }
+
     public boolean isStringType() {
         return PrimitiveType.STRING_TYPE_LIST.contains(this.getPrimitiveType());
     }
@@ -760,6 +786,8 @@ public abstract class Type implements Cloneable {
                 return Type.DECIMAL64;
             case DECIMAL128:
                 return Type.DECIMAL128;
+            case DECIMAL256:
+                return Type.DECIMAL256;
             case JSON:
                 return Type.JSON;
             case FUNCTION:
@@ -1283,7 +1311,8 @@ public abstract class Type implements Cloneable {
                             scalarType.getScale());
                 } else if (scalarType.getType() == TPrimitiveType.DECIMAL32 ||
                         scalarType.getType() == TPrimitiveType.DECIMAL64 ||
-                        scalarType.getType() == TPrimitiveType.DECIMAL128) {
+                        scalarType.getType() == TPrimitiveType.DECIMAL128 ||
+                        scalarType.getType() == TPrimitiveType.DECIMAL256) {
                     Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
                     type = ScalarType.createDecimalV3Type(
                             PrimitiveType.fromThrift(scalarType.getType()),
@@ -1446,6 +1475,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return t.decimalPrecision();
             default:
                 return null;
@@ -1478,6 +1508,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return t.decimalScale();
             default:
                 return null;
@@ -1512,6 +1543,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return this;
             case FUNCTION:
                 return FUNCTION;
@@ -1586,6 +1618,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return this;
             default:
                 return Type.INVALID;
@@ -1640,6 +1673,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 // precision + (scale > 0 ? 1 : 0) + (unsigned_flag || !precision ? 0 : 1));
                 ScalarType decimalType = (ScalarType) this;
                 int length = decimalType.getScalarPrecision();
@@ -1690,6 +1724,7 @@ public abstract class Type implements Cloneable {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return ((ScalarType) this).getScalarScale();
             case FLOAT:
             case DOUBLE:

@@ -63,15 +63,18 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
             new RewriteSimpleAggToHDFSScanRule(false);
 
+    public static final RewriteSimpleAggToHDFSScanRule SCAN_AND_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule();
+
     private final boolean hasProjectOperator;
 
-    private RewriteSimpleAggToHDFSScanRule(boolean withoutProject) {
+    private RewriteSimpleAggToHDFSScanRule(boolean /* unused */ noProject) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(MultiOpPattern.of(SUPPORTED)));
-        hasProjectOperator = withoutProject;
+        hasProjectOperator = false;
     }
 
-    public RewriteSimpleAggToHDFSScanRule() {
+    private RewriteSimpleAggToHDFSScanRule() {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).addChildren(MultiOpPattern.of(SUPPORTED))));
         hasProjectOperator = true;
