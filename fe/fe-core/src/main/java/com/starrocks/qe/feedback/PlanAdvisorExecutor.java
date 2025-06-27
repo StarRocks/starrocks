@@ -93,7 +93,7 @@ public class PlanAdvisorExecutor {
 
         @Override
         public ShowResultSet visitDelPlanAdvisorStatement(DelPlanAdvisorStmt stmt, ConnectContext context) {
-            PlanTuningAdvisor.getInstance().deleteTuningGuides(UUID.fromString(stmt.getAdvisorId()));
+            PlanTuningAdvisor.getInstance().deleteTuningGuides(UUID.fromString(stmt.getAdvisorId()), false);
             return null;
         }
 
