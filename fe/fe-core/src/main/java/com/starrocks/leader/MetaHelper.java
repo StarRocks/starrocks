@@ -55,6 +55,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -96,7 +97,7 @@ public class MetaHelper {
         String destFilename = Storage.IMAGE + "." + version;
         File partFile = new File(destDir, destFilename + MetaHelper.PART_SUFFIX);
         // 1. download to a tmp file image.xxx.part
-        try (OutputStream out = new FileOutputStream(partFile)) {
+        try (FileOutputStream out = new FileOutputStream(partFile)) {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
             conn.setConnectTimeout(timeout);
@@ -112,11 +113,13 @@ public class MetaHelper {
             BufferedInputStream bin = new BufferedInputStream(conn.getInputStream());
 
             // Do not limit speed in client side.
-            long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, true);
-
+            long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, false);
             if ((imageSize > 0) && (bytes != imageSize)) {
                 throw new IOException("Unexpected image size, expected: " + imageSize + ", actual: " + bytes);
             }
+
+            out.getChannel().force(true);
+
             checksum = conn.getHeaderField(X_IMAGE_CHECKSUM);
         } finally {
             if (conn != null) {
@@ -126,7 +129,11 @@ public class MetaHelper {
 
         // 2. write checksum if exists
         if (!Strings.isNullOrEmpty(checksum)) {
-            Files.writeString(Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + version), checksum);
+            File checksumFile = Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + version).toFile();
+            try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
+                fos.write(checksum.getBytes(StandardCharsets.UTF_8));
+                fos.getChannel().force(true);
+            }
         }
 
         // 3. rename to image.xxx
