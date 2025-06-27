@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -510,6 +511,8 @@ public class TaskRunManagerTest {
     public void testReplayUpdateTaskRunRunningToFailed() {
         TaskManager taskManager = new TaskManager();
         Task task = new Task("test");
+        task.setSource(Constants.TaskSource.MV);
+
         task.setDefinition("select 1");
         taskManager.replayCreateTask(task);
 
@@ -517,6 +520,7 @@ public class TaskRunManagerTest {
         TaskRunStatus status = new TaskRunStatus();
         status.setTaskName("test");
         status.setQueryId("query_123");
+        status.setSource(Constants.TaskSource.MV);
         status.setCreateTime(System.currentTimeMillis());
         status.setState(Constants.TaskRunState.PENDING);
         status.setExpireTime(System.currentTimeMillis() + 3600000);
@@ -532,7 +536,9 @@ public class TaskRunManagerTest {
         changeToFailed.setErrorMessage("Task failed during execution");
         changeToFailed.setErrorCode(-2);
         changeToFailed.setFinishTime(System.currentTimeMillis());
-        changeToFailed.setExtraMessage("Extra error info");
+        MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
+        String extraMessage = mvTaskRunExtraMessage.toString();
+        changeToFailed.setExtraMessage(extraMessage);
         taskManager.replayUpdateTaskRun(changeToFailed);
 
         // Should be removed from running and added to history
@@ -541,11 +547,14 @@ public class TaskRunManagerTest {
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
         Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.FAILED, history.get(0).getState());
-        Assert.assertEquals("Task failed during execution", history.get(0).getErrorMessage());
-        Assert.assertEquals(-2, history.get(0).getErrorCode());
-        Assert.assertEquals("Extra error info", history.get(0).getExtraMessage());
-        Assert.assertEquals(100, history.get(0).getProgress());
+
+        TaskRunStatus taskRunStatus = history.get(0);
+        Assert.assertEquals(Constants.TaskSource.MV, taskRunStatus.getSource());
+        Assert.assertEquals(Constants.TaskRunState.FAILED, taskRunStatus.getState());
+        Assert.assertEquals("Task failed during execution", taskRunStatus.getErrorMessage());
+        Assert.assertEquals(-2, taskRunStatus.getErrorCode());
+        Assert.assertEquals(extraMessage, taskRunStatus.getExtraMessage());
+        Assert.assertEquals(100, taskRunStatus.getProgress());
     }
 
     @Test
@@ -582,7 +591,7 @@ public class TaskRunManagerTest {
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
         Assert.assertEquals(1, history.size());
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
-        Assert.assertEquals("Task completed successfully", history.get(0).getExtraMessage());
+        Assert.assertEquals("", history.get(0).getExtraMessage());
         Assert.assertEquals(100, history.get(0).getProgress());
     }
 
@@ -674,7 +683,7 @@ public class TaskRunManagerTest {
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
         Assert.assertEquals(1, history.size());
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
-        Assert.assertEquals("Task completed after restart", history.get(0).getExtraMessage());
+        Assert.assertEquals("", history.get(0).getExtraMessage());
     }
 
     @Test
