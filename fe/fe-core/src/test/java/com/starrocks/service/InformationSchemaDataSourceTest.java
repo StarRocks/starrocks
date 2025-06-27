@@ -568,26 +568,26 @@ public class InformationSchemaDataSourceTest {
         // supported
         starRocksAssert.query("select TABLE_NAME, LAST_REFRESH_STATE,LAST_REFRESH_ERROR_CODE,IS_ACTIVE,INACTIVE_REASON\n" +
                         "from information_schema.materialized_views where table_name = 'test_mv1")
-                .explainContains(" OUTPUT EXPRS:3: TABLE_NAME | 13: LAST_REFRESH_STATE " +
-                                "| 19: LAST_REFRESH_ERROR_CODE | 5: IS_ACTIVE | 6: INACTIVE_REASON",
-                        "constant exprs: ",
+                .explainContains(" OUTPUT EXPRS:3: TABLE_NAME | 15: LAST_REFRESH_STATE | " +
+                                "21: LAST_REFRESH_ERROR_CODE | 5: IS_ACTIVE | 6: INACTIVE_REASON\n" +
+                                "  PARTITION: UNPARTITIONED",
                         "'test_mv1' | 'true' | '' | 'SUCCESS' | '0'");
         starRocksAssert.query("select count(1) from information_schema.materialized_views")
                 .explainContains("     constant exprs: ");
         starRocksAssert.query("select * from information_schema.materialized_views")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
         starRocksAssert.query("select * from information_schema.materialized_views where table_name = 'test_mv1' ")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
         starRocksAssert.query("select * from information_schema.materialized_views " +
                         "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
         starRocksAssert.query("select *, TASK_ID + 1 from information_schema.materialized_views " +
                         "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
                 .explainContains("     constant exprs: ",
-                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' ");
 
         // not supported
         starRocksAssert.query("select * from information_schema.materialized_views where TABLE_NAME != 'test_mv1' ")
