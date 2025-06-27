@@ -111,11 +111,12 @@ public class MetaHelper {
 
             // Do not limit speed in client side.
             long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, false);
-            out.getChannel().force(true);
-
             if ((imageSize > 0) && (bytes != imageSize)) {
                 throw new IOException("Unexpected image size, expected: " + imageSize + ", actual: " + bytes);
             }
+
+            out.getChannel().force(true);
+
             checksum = conn.getHeaderField(X_IMAGE_CHECKSUM);
         } finally {
             if (conn != null) {
