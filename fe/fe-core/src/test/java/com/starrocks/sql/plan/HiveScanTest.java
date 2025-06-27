@@ -87,9 +87,12 @@ public class HiveScanTest extends ConnectorPlanTestBase {
         // positive cases.
         {
             String[] sqlString = {
+                    "select count(*) + 1 from lineitem_par",
+                    "select count(*) + 1 from lineitem_par where l_shipdate = '1998-01-01'",
+                    "select count(*) + 1, l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate",
                     "select count(*) from lineitem_par",
                     "select count(*) from lineitem_par where l_shipdate = '1998-01-01'",
-                    "select count(*), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate"
+                    "select count(*), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate",
             };
             for (int i = 0; i < sqlString.length; i++) {
                 String sql = sqlString[i];
@@ -134,6 +137,10 @@ public class HiveScanTest extends ConnectorPlanTestBase {
         // positive cases.
         {
             String[] sqlString = {
+                    "select count(*) + 1 from iceberg0.partitioned_db.t1",
+                    "select count(*) + 1 from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
+                    "select count(*) + 1, date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
+                            "group by date",
                     "select count(*) from iceberg0.partitioned_db.t1",
                     "select count(*) from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
                     "select count(*), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
