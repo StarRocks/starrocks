@@ -946,7 +946,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
 #define RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS() \
     if (UNLIKELY(match_count > state->chunk_size())) {      \
         _probe_state->cur_probe_index = i;                  \
-        _probe_state->cur_build_index = j;                  \
         _probe_state->cur_nullaware_build_index = j;        \
         _probe_state->has_remain = true;                    \
         _probe_state->count = state->chunk_size();          \
@@ -957,7 +956,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     if (UNLIKELY(match_count > state->chunk_size())) {           \
         _probe_state->next[i] = _table_items->next[build_index]; \
         _probe_state->cur_probe_index = i;                       \
-        _probe_state->cur_build_index = build_index;             \
         _probe_state->has_remain = true;                         \
         _probe_state->count = state->chunk_size();               \
         _probe_state->cur_row_match_count = cur_row_match_count; \
