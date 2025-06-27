@@ -36,6 +36,7 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.kudu.KuduMetadata;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -304,7 +305,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             List<String> partitionNames = new ArrayList<>();
             long createTime = System.currentTimeMillis();
             DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,
-                    columns, partitionNames, null, null, null, createTime);
+                    columns, partitionNames, null, null, new MetastoreTable(MOCKED_DB_NAME,
+                    MOCKED_TABLE_NAME, "file://path/to/delta/table", createTime));
 
             MOCK_TABLE_MAP.put(MOCKED_TABLE_NAME, table);
         }

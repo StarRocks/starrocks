@@ -21,6 +21,7 @@ import com.starrocks.connector.delta.DeltaLakeMetastore;
 import com.starrocks.connector.delta.DeltaLakeSnapshot;
 import com.starrocks.connector.delta.DeltaMetastoreOperations;
 import com.starrocks.connector.delta.DeltaUtils;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.qe.ConnectContext;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
@@ -111,7 +112,7 @@ public class DeltaUnityMetadataTest {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
             }
         };
 
@@ -119,8 +120,8 @@ public class DeltaUnityMetadataTest {
             @Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "databricks0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList(), null, "s3://bucket/path/to/table", null,
-                        0);
+                        Lists.newArrayList(), Lists.newArrayList(), null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
             }
         };
 
@@ -142,7 +143,7 @@ public class DeltaUnityMetadataTest {
             @mockit.Mock
             public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
             }
         };
 
@@ -150,8 +151,8 @@ public class DeltaUnityMetadataTest {
             @Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot deltaLakeSnapshot) {
                 return new DeltaLakeTable(1, "databricks0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
-                        "s3://bucket/path/to/table", null, 0);
+                        Lists.newArrayList(), Lists.newArrayList("ts"), snapshot, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
             }
         };
 
