@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.thrift.TExprMinMaxValue;
@@ -37,7 +38,7 @@ public final class IcebergUtil {
     public static class MinMaxValue {
         Object minValue;
         Object maxValue;
-        int nullValueCount;
+        long nullValueCount;
 
         private boolean toThrift(SlotDescriptor slot, TExprMinMaxValue texpr) {
             texpr.setHas_null(nullValueCount > 0);
@@ -98,11 +99,12 @@ public final class IcebergUtil {
             Type.TypeID.TIME
     );
 
+    @VisibleForTesting
     public static Map<Integer, MinMaxValue> parseMinMaxValueBySlots(Schema schema,
-                                                                    Map<Integer, ByteBuffer> lowerBounds,
-                                                                    Map<Integer, ByteBuffer> upperBounds,
-                                                                    Map<Integer, Integer> nullValueCounts,
-                                                                    List<SlotDescriptor> slots) {
+                                                                     Map<Integer, ByteBuffer> lowerBounds,
+                                                                     Map<Integer, ByteBuffer> upperBounds,
+                                                                     Map<Integer, Long> nullValueCounts,
+                                                                     List<SlotDescriptor> slots) {
 
         Preconditions.checkArgument(nullValueCounts != null, "nullValueCounts cannot be null");
         lowerBounds = lowerBounds == null ? Map.of() : lowerBounds;
@@ -145,5 +147,24 @@ public final class IcebergUtil {
             minMaxValue.maxValue = high;
         }
         return minMaxValues;
+    }
+
+    public static Map<Integer, TExprMinMaxValue> toThriftMinMaxValueBySlots(Schema schema,
+                                                                            Map<Integer, ByteBuffer> lowerBounds,
+                                                                            Map<Integer, ByteBuffer> upperBounds,
+                                                                            Map<Integer, Long> nullValueCounts,
+                                                                            List<SlotDescriptor> slots) {
+        Map<Integer, TExprMinMaxValue> result = new HashMap<>();
+        Map<Integer, MinMaxValue> minMaxValues =
+                parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
+        for (SlotDescriptor slot : slots) {
+            int slotId = slot.getId().asInt();
+            MinMaxValue minMaxValue = minMaxValues.get(slotId);
+            if (minMaxValue == null) {
+                continue; // No min/max value for this slot
+            }
+            minMaxValue.toThrift(result, slot);
+        }
+        return result;
     }
 }
