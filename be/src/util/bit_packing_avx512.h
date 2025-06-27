@@ -15,14 +15,9 @@
 #pragma once
 
 #include "util/bit_packing_default.h"
-#include "util/bit_util.h"
-#include "util/bitpacking/extend_16u.h"
-#include "util/bitpacking/extend_32u.h"
-#include "util/bitpacking/extend_8u.h"
 #include "util/bitpacking/unpack_16u.h"
 #include "util/bitpacking/unpack_32u.h"
 #include "util/bitpacking/unpack_8u.h"
-#include "util/bitpacking/unpack_def.h"
 
 namespace starrocks::util::bitpacking_avx512 {
 
@@ -33,8 +28,8 @@ constexpr bool IsSupportedUnpackingType() {
 }
 
 template <typename OutType>
-std::pair<const uint8_t*, int64_t> UnpackValuesSIMD(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
-                                                    int64_t num_values, OutType* __restrict__ out) {
+std::pair<const uint8_t*, int64_t> UnpackValues(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
+                                                int64_t num_values, OutType* __restrict__ out) {
     static_assert(IsSupportedUnpackingType<OutType>(), "Only unsigned integers are supported.");
 
     const int64_t values_to_read = bitpacking_default::NumValuesToUnpack(bit_width, in_bytes, num_values);

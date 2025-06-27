@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "util/bit_packing_avx512.h"
 #include "util/bit_packing_default.h"
 
 namespace starrocks::util::bitpacking_default {
@@ -94,8 +95,8 @@ TEST(BitPacking, UnpackValues) {
     }
 }
 
-TEST(BitPacking, UnpackValuesSIMD) {
-    uint8_t data[BitPacking::MAX_BITWIDTH * 48 / 8];
+TEST(BitPacking, UnpackValuesAVX512) {
+    uint8_t data[MAX_BITWIDTH * 48 / 8];
     for (unsigned char& i : data) {
         i = 0x8;
     }
@@ -103,7 +104,7 @@ TEST(BitPacking, UnpackValuesSIMD) {
     uint64_t result[48];
     const uint8_t* pos = nullptr;
     int64_t num = 0;
-    std::tie(pos, num) = BitPacking::UnpackValuesSIMD<uint64_t>(4, data, 4 * 48 / 8, 48, result);
+    std::tie(pos, num) = bitpacking_avx512::UnpackValues<uint64_t>(4, data, 4 * 48 / 8, 48, result);
     ASSERT_EQ(pos, data + 4 * 48 / 8);
     ASSERT_EQ(num, 48);
 
@@ -116,4 +117,4 @@ TEST(BitPacking, UnpackValuesSIMD) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::util::bitpacking_default

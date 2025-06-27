@@ -66,16 +66,28 @@ void BitPackingSIMDTest::populateBitPacked() {
     }
 }
 
+#ifdef USE_AVX512
+#define AVX512_UNPACK                                                                                      \
+    starrocks::util::bitpacking_avx512::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
+                                                     source.size() * sizeof(uint64_t), kNumValues, result[3].data())
+#define AVX512_VALID ASSERT_EQ(result[0][i], result[3][i])
+#else
+#define AVX512_UNPACK
+#define AVX512_VALID
+#endif
+
 #define BIT_PACKING_TEST(WIDTH)                                                                                     \
     TEST_F(BitPackingSIMDTest, test_##WIDTH##_width) {                                                              \
         auto max_result_width = std::min(32, (WIDTH));                                                              \
         for (auto bit_width = 1; bit_width <= max_result_width; bit_width++) {                                      \
             auto source = bitPackedData[bit_width];                                                                 \
             std::vector<std::vector<uint##WIDTH##_t>> result;                                                       \
-            result.resize(3);                                                                                       \
+            result.resize(4);                                                                                       \
             result[0].resize(kNumValues);                                                                           \
             result[1].resize(kNumValues);                                                                           \
             result[2].resize(kNumValues);                                                                           \
+            result[3].resize(kNumValues);                                                                           \
+                                                                                                                    \
             starrocks::util::bitpacking_default::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
                                                               source.size() * sizeof(uint64_t), kNumValues,         \
                                                               result[0].data());                                    \
@@ -84,10 +96,12 @@ void BitPackingSIMDTest::populateBitPacked() {
                                                             result[1].data());                                      \
             starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),               \
                                                 source.size() * sizeof(uint64_t), kNumValues, result[2].data());    \
+            AVX512_UNPACK;                                                                                          \
                                                                                                                     \
             for (auto i = 0; i < kNumValues; i++) {                                                                 \
                 ASSERT_EQ(result[0][i], result[1][i]);                                                              \
                 ASSERT_EQ(result[0][i], result[2][i]);                                                              \
+                AVX512_VALID;                                                                                       \
             }                                                                                                       \
         }                                                                                                           \
     }
