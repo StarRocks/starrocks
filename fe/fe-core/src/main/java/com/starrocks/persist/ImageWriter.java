@@ -22,11 +22,12 @@ import com.starrocks.persist.metablock.SRMetaBlockWriterV1;
 import com.starrocks.persist.metablock.SRMetaBlockWriterV2;
 
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedOutputStream;
@@ -67,10 +68,18 @@ public class ImageWriter {
     }
 
     public void saveChecksum() throws IOException {
+<<<<<<< HEAD
         if (imageFormatVersion == ImageFormatVersion.v2) {
             Path path = Path.of(imageDir, Storage.CHECKSUM + "." + imageJournalId);
             String checksum = String.valueOf(checkedOutputStream.getChecksum().getValue());
             Files.writeString(path, checksum);
+=======
+        File checksumFile = Path.of(imageDir, Storage.CHECKSUM + "." + imageJournalId).toFile();
+        String checksum = String.valueOf(checkedOutputStream.getChecksum().getValue());
+        try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
+            fos.write(checksum.getBytes(StandardCharsets.UTF_8));
+            fos.getChannel().force(true);
+>>>>>>> 186a9a0c0d ([BugFix] Fix the bug causing incomplete image files due to server forced shutdown. (#60398))
         }
     }
 }
