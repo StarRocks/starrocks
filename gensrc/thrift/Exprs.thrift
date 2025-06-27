@@ -267,3 +267,10 @@ struct TPartitionLiteral {
 struct TExpr {
   1: required list<TExprNode> nodes
 }
+
+struct TExprMinMaxValue {
+  1: required TExprNodeType type
+  2: required has_null
+  3: optional i64 int_value
+  4: optional double float_value
+}
