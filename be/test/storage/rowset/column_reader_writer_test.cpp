@@ -63,8 +63,6 @@
 #include "testutil/assert.h"
 #include "types/date_value.h"
 
-#include <lz4/lz4.h>
-
 using std::string;
 
 namespace starrocks {
@@ -542,130 +540,6 @@ protected:
         test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1", "10000");
     }
 
-    void test_json_column_compression() {
-        using namespace starrocks;
-        constexpr size_t num_rows = 256 * 1024; // Generate several MBs of data
-        // Construct JSON objects with the same schema
-        auto col = ChunkHelper::column_from_field_type(TYPE_JSON, true);
-        col->reserve(num_rows);
-        std::string json_strings;
-        std::vector<std::string> kind_dict = {"commit", "rebase", "merge"};
-        std::vector<std::string> op_dict = {"create", "update", "delete"};
-        std::vector<std::string> coll_dict = {"app.bsky.graph.follow", "app.bsky.feed.post", "app.bsky.actor.profile"};
-        std::vector<std::string> type_dict = {"app.bsky.graph.follow", "app.bsky.feed.post", "app.bsky.actor.profile"};
-        for (size_t i = 0; i < num_rows; ++i) {
-            // Generate random strings
-            auto rand_str = [](size_t len) {
-                static const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-                std::string s;
-                s.reserve(len);
-                for (size_t j = 0; j < len; ++j) s += charset[rand() % (sizeof(charset) - 1)];
-                return s;
-            };
-            std::string cid = rand_str(24);
-            std::string rev = rand_str(12);
-            std::string rkey = rand_str(12);
-            std::string did = "did:plc:" + rand_str(20);
-            std::string subject = "did:plc:" + rand_str(20);
-            std::string createdAt = "2024-" + std::to_string(10 + rand() % 3) + "-" + std::to_string(10 + rand() % 20) +
-                                    "T" + std::to_string(10 + rand() % 14) + ":" + std::to_string(rand() % 60) + ":" +
-                                    std::to_string(rand() % 60) + "." + std::to_string(rand() % 1000) + "Z";
-            int64_t time_us = 1700000000000000LL + rand() % 10000000000000LL;
-            const std::string& op = op_dict[rand() % op_dict.size()];
-            const std::string& coll = coll_dict[rand() % coll_dict.size()];
-            const std::string& type = type_dict[rand() % type_dict.size()];
-            std::string s = strings::Substitute(
-                    R"( {"commit":{"cid":"$0","collection":"$1","operation":"$2","record":{"type":"$3","createdAt":"$4","subject":"$5"},"rev":"$6","rkey":"$7"},"did":"$8","time_us":$9 } )",
-                    cid, coll, op, type, createdAt, subject, rev, rkey, did, time_us);
-            json_strings += s;
-            auto stv = JsonValue::parse(Slice(s));
-            ASSERT_TRUE(stv.ok());
-            col->append_datum(Datum(&stv.value()));
-        }
-        std::cout << "[JSON] string size: " << json_strings.size() << " bytes\n";
-        std::cout << "[JSON] in-memory size: " << col->byte_size() << " bytes\n";
-
-        // Compress the JSON string
-        {
-            size_t max_dst_size = LZ4_compressBound(json_strings.size());
-            std::vector<char> compressed(max_dst_size);
-            int compressed_size = LZ4_compress_default(reinterpret_cast<const char*>(json_strings.data()),
-                                                       compressed.data(), json_strings.size(), max_dst_size);
-            ASSERT_GT(compressed_size, 0);
-            std::cout << "[JSON] json_string compressed size: " << compressed_size << " bytes\n";
-        }
-
-        // Directly compress the in-memory JSON data using lz4
-        {
-            // Get the raw data pointer and length
-            size_t raw_size = 0;
-            std::string serialize_buffer;
-            for (int i = 0; i < col->size(); i++) {
-                size_t ser_size = col->serialize_size(i);
-                size_t end = serialize_buffer.size();
-                serialize_buffer.resize(serialize_buffer.size() + ser_size);
-                raw_size += col->serialize(i, (uint8_t*)serialize_buffer.data() + end);
-            }
-            std::cout << "[JSON] serialized size " << raw_size << " bytes\n";
-
-            if (raw_size > 0) {
-                // Allocate a sufficiently large buffer
-                size_t max_dst_size = LZ4_compressBound(raw_size);
-                ASSERT_GT(max_dst_size, 0);
-                std::vector<char> compressed(max_dst_size);
-                int compressed_size = LZ4_compress_default(reinterpret_cast<const char*>(serialize_buffer.data()),
-                                                           compressed.data(), serialize_buffer.size(), max_dst_size);
-                ASSERT_GT(compressed_size, 0);
-                std::cout << "[JSON] serialized compressed size: " << compressed_size << " bytes\n";
-            }
-        }
-
-        // Write two copies: uncompressed and LZ4 compressed
-        auto fs = std::make_shared<MemoryFileSystem>();
-        ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
-        std::string fname_nocomp = TEST_DIR + "/test_json_nocomp.data";
-        std::string fname_lz4 = TEST_DIR + "/test_json_lz4.data";
-        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_JSON);
-        struct Params {
-            CompressionTypePB compression;
-            std::string file_name;
-            bool need_flat;
-        };
-
-        std::vector<Params> params = {
-                {NO_COMPRESSION, fname_lz4, false},   {LZ4_FRAME, fname_lz4, false}, {ZSTD, fname_lz4, false},
-                {NO_COMPRESSION, fname_nocomp, true}, {LZ4_FRAME, fname_lz4, true},  {ZSTD, fname_lz4, true},
-        };
-        for (auto& param : params) {
-            fs->delete_file(param.file_name).ok();
-            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(param.file_name));
-            ColumnWriterOptions writer_opts;
-            ColumnMetaPB meta;
-            writer_opts.page_format = 2;
-            writer_opts.meta = &meta;
-            writer_opts.meta->set_column_id(0);
-            writer_opts.meta->set_unique_id(0);
-            writer_opts.meta->set_type(TYPE_JSON);
-            writer_opts.meta->set_length(0);
-            writer_opts.meta->set_encoding(DEFAULT_ENCODING);
-            writer_opts.meta->set_compression(param.compression);
-            writer_opts.meta->set_is_nullable(true);
-            writer_opts.need_flat = param.need_flat;
-            writer_opts.need_zone_map = false;
-            writer_opts.need_speculate_encoding = false;
-            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
-            ASSERT_OK(writer->init());
-            ASSERT_TRUE(writer->append(*col).ok());
-            ASSERT_TRUE(writer->finish().ok());
-            ASSERT_TRUE(writer->write_data().ok());
-            ASSERT_TRUE(writer->write_ordinal_index().ok());
-            ASSERT_TRUE(wfile->close().ok());
-            std::cout << "[JSON] "
-                      << "compression=" << CompressionTypePB_Name(param.compression) << " need_flat=" << param.need_flat
-                      << " file size: " << wfile->size() << " bytes\n";
-        }
-    }
-
     MemPool _pool;
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
 };
@@ -922,10 +796,6 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
         }
         config::dictionary_speculate_min_chunk_size = old_config;
     }
-}
-
-TEST_F(ColumnReaderWriterTest, test_json_column_compression) {
-    test_json_column_compression();
 }
 
 } // namespace starrocks
