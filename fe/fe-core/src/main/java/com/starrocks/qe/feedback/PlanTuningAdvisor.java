@@ -18,6 +18,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.feedback.skeleton.ScanNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,11 +34,20 @@ public class PlanTuningAdvisor {
 
     private final Cache<PlanTuningCacheKey, OperatorTuningGuides> cache;
 
+    // Record and permanently disable tuning guide usage for patterns with poor performance
+    private final Cache<PlanTuningCacheKey, Boolean> tuningGuideBlacklist;
+
     private final Map<UUID, OperatorTuningGuides.OptimizedRecord> optimizedQueryRecords;
     private PlanTuningAdvisor() {
         this.cache = Caffeine.newBuilder()
                 .maximumSize(300)
                 .build();
+
+
+        this.tuningGuideBlacklist = Caffeine.newBuilder()
+                .maximumSize(300)
+                .build();
+
         this.optimizedQueryRecords = Maps.newConcurrentMap();
     }
 
@@ -72,6 +82,12 @@ public class PlanTuningAdvisor {
         }
 
         PlanTuningCacheKey key = new PlanTuningCacheKey(sql, skeletonNode);
+        if (tuningGuideBlacklist.getIfPresent(key) != null) {
+            Tracers.record(Tracers.Module.BASE, "IgnoreBlacklistTuningGuide",
+                    "Pattern previously marked as ineffective, ignoring new analyzed tuning guide");
+            return;
+        }
+
         List<PlanTuningCacheKey> matchingKeys = findMatchingKeys(key, true);
 
         if (matchingKeys.isEmpty()) {
@@ -114,12 +130,18 @@ public class PlanTuningAdvisor {
     public void clearAllAdvisor() {
         cache.invalidateAll();
         optimizedQueryRecords.clear();
+        tuningGuideBlacklist.invalidateAll();
     }
 
-    public void deleteTuningGuides(UUID queryId) {
+    public void deleteTuningGuides(UUID queryId, boolean preventFutureTuning) {
         for (Map.Entry<PlanTuningCacheKey, OperatorTuningGuides> entry : cache.asMap().entrySet()) {
             if (entry.getValue().getOriginalQueryId().equals(queryId)) {
                 cache.invalidate(entry.getKey());
+                if (preventFutureTuning) {
+                    tuningGuideBlacklist.put(entry.getKey(), Boolean.TRUE);
+                    Tracers.record(Tracers.Module.BASE, "AddBlacklistTuningGuide", "The tuning guides for the current " +
+                            "query pattern are ineffective and will be removed and permanently disabled.");
+                }
             }
         }
         optimizedQueryRecords.remove(queryId);
