@@ -211,9 +211,6 @@ public class WarehouseManager implements Writable {
      * @return: the compute resource name, empty if the compute resource is not available
      */
     public String getComputeResourceName(ComputeResource computeResource) {
-        if (!RunMode.isSharedDataMode() || computeResource == null) {
-            return "";
-        }
         return "";
     }
 
