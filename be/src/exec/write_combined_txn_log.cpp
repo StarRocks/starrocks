@@ -63,19 +63,26 @@ Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>
         for (const auto& [partition_id, logs] : txn_log_map) {
             auto task_logic = create_txn_log_task(&logs, ExecEnv::GetInstance()->lake_tablet_manager(), &has_error,
                                                   &final_status, &latch);
-            auto task = std::make_shared<CancellableRunnable>(std::move(task_logic), [&latch, &has_error, &final_status]() {
-                Status st = Status::Cancelled("Task cancelled before execution");
-                mark_failure(st, &has_error, &final_status);
-                latch.count_down();
-            });
+            auto task = 
+                    std::make_shared<CancellableRunnable>(std::move(task_logic), [&latch, &has_error, &final_status]() {
+                        Status st = Status::Cancelled("Task cancelled before execution");
+                        mark_failure(st, &has_error, &final_status);
+                        latch.count_down();
+                    });
             tasks.emplace_back(std::move(task));
         }
+        bool submit_failed = false;
         for (const auto& task : tasks) {
+            if (submit_failed) {
+                latch.count_down(); // Skip further tasks if one has already failed
+                continue;
+            }
+
             Status submit_status = ExecEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(task);
             if (!submit_status.ok()) {
+                submit_failed = true;
                 mark_failure(submit_status, &has_error, &final_status);
                 latch.count_down();
-                // can not break to ensure the following tasks will task latch count_down correctly
             }
         }
     }

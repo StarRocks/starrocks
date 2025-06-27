@@ -265,7 +265,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 },
                 [&] {
                     g_publish_version_failed_tasks << 1;
-                    Status st = Status::Cancelled(fmt::format("publish version task has been cancelled, tablet_id={}", tablet_id));
+                    Status st = Status::Cancelled(
+                            fmt::format("publish version task has been cancelled, tablet_id={}", tablet_id));
                     LOG(WARNING) << st;
                     std::lock_guard l(response_mtx);
                     response->add_failed_tablets(tablet_id);
@@ -464,7 +465,8 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
                 },
                 [&] {
                     g_publish_version_failed_tasks << 1;
-                    LOG(WARNING) << "submit publish log version task has been cancelled: " << " tablet_id=" << tablet_id;
+                    LOG(WARNING) << "submit publish log version task has been cancelled: "
+                                 << " tablet_id=" << tablet_id;
                     std::lock_guard l(response_mtx);
                     response->add_failed_tablets(tablet_id);
                     latch.count_down();
@@ -607,7 +609,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
             [&] {
                 LOG(WARNING) << "abort transaction task has been cancelled";
                 latch.count_down();
-            } );
+            });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit abort transaction task: " << st;
@@ -634,16 +636,17 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         return;
     }
     auto latch = BThreadCountDownLatch(1);
-    auto task = std::make_shared<CancellableRunnable>([&] {
-                                                        DeferOp defer([&] { latch.count_down(); });
-                                                        lake::delete_tablets(_tablet_mgr, *request, response);
-                                                      },
-                                                      [&] {
-                                                        Status st = Status::Cancelled("delete tablet task has been cancelled");
-                                                        LOG(WARNING) << st;
-                                                        st.to_protobuf(response->mutable_status());
-                                                        latch.count_down();
-                                                      });
+    auto task = std::make_shared<CancellableRunnable>(
+            [&] {
+            DeferOp defer([&] { latch.count_down(); });
+            lake::delete_tablets(_tablet_mgr, *request, response);
+            },
+            [&] {
+            Status st = Status::Cancelled("delete tablet task has been cancelled");
+            LOG(WARNING) << st;
+            st.to_protobuf(response->mutable_status());
+            latch.count_down();
+            });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit delete tablet task: " << st;
@@ -682,16 +685,17 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
     }
 
     auto latch = BThreadCountDownLatch(1);
-    auto task = std::make_shared<CancellableRunnable>([&] {
-                                                        DeferOp defer([&] { latch.count_down(); });
-                                                        lake::delete_txn_log(_tablet_mgr, *request, response);
-                                                      },
-                                                      [&] {
-                                                        Status st = Status::Cancelled("txn log vacuum task has been cancelled");
-                                                        LOG(WARNING) << st;
-                                                        st.to_protobuf(response->mutable_status());
-                                                        latch.count_down();
-                                                      });
+    auto task = std::make_shared<CancellableRunnable>(
+            [&] {
+            DeferOp defer([&] { latch.count_down(); });
+            lake::delete_txn_log(_tablet_mgr, *request, response);
+            },
+            [&] {
+            Status st = Status::Cancelled("txn log vacuum task has been cancelled");
+            LOG(WARNING) << st;
+            st.to_protobuf(response->mutable_status());
+            latch.count_down();
+            });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
@@ -775,7 +779,8 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
                 }
             },
             [&] {
-                Status st = Status::Cancelled(fmt::format("drop table task has been cancelled, tablet id: {}", request->tablet_id()));
+                Status st = Status::Cancelled(
+                        fmt::format("drop table task has been cancelled, tablet id: {}", request->tablet_id()));
                 LOG(WARNING) << st;
                 st.to_protobuf(response->mutable_status());
                 latch.count_down();
@@ -1236,16 +1241,17 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
     TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
 
     auto latch = BThreadCountDownLatch(1);
-    auto task = std::make_shared<CancellableRunnable>([&] {
-                                                        DeferOp defer([&] { latch.count_down(); });
-                                                        lake::vacuum(_tablet_mgr, *request, response);
-                                                      },
-                                                      [&] {
-                                                        Status st = Status::Cancelled("vacuum task has been cancelled");
-                                                        LOG(WARNING) << st;
-                                                        st.to_protobuf(response->mutable_status());
-                                                        latch.count_down();
-                                                      });
+    auto task = std::make_shared<CancellableRunnable>(
+            [&] {
+            DeferOp defer([&] { latch.count_down(); });
+            lake::vacuum(_tablet_mgr, *request, response);
+            },
+            [&] {
+            Status st = Status::Cancelled("vacuum task has been cancelled");
+            LOG(WARNING) << st;
+            st.to_protobuf(response->mutable_status());
+            latch.count_down();
+            });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
@@ -1267,16 +1273,17 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
         return;
     }
     auto latch = BThreadCountDownLatch(1);
-    auto task = std::make_shared<CancellableRunnable>([&] {
-                                                        DeferOp defer([&] { latch.count_down(); });
-                                                        lake::vacuum_full(_tablet_mgr, *request, response);
-                                                     },
-                                                     [&] {
-                                                        Status st = Status::Cancelled("full vacuum task has been cancelled");
-                                                        LOG(WARNING) << st;
-                                                        st.to_protobuf(response->mutable_status());
-                                                        latch.count_down();
-                                                     });
+    auto task = std::make_shared<CancellableRunnable>(
+            [&] {
+            DeferOp defer([&] { latch.count_down(); });
+            lake::vacuum_full(_tablet_mgr, *request, response);
+            },
+            [&] {
+            Status st = Status::Cancelled("full vacuum task has been cancelled");
+            LOG(WARNING) << st;
+            st.to_protobuf(response->mutable_status());
+            latch.count_down();
+            });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
