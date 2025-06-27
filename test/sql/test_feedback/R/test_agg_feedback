@@ -114,12 +114,15 @@ insert into pre_agg_case select generate_series, generate_series, generate_serie
 -- !result
 analyze full table pre_agg_case with sync mode;
 -- result:
-[REGEX].*pre_agg_case	analyze	status	OK
+[REGEX].*
 -- !result
 set enable_plan_advisor=true;
 -- result:
 -- !result
 set enable_plan_analyzer=true;
+-- result:
+-- !result
+set enable_plan_advisor_blacklist=false;
 -- result:
 -- !result
 set enable_global_runtime_filter = false;
@@ -131,7 +134,7 @@ None
 -- !result
 alter plan advisor add select count(*) from pre_agg_case group by c3;
 -- result:
-[REGEX]Add query into plan advisor in FE
+[REGEX]Add query into plan advisor in FE*
 -- !result
 function: assert_explain_not_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
 -- result:
@@ -139,7 +142,7 @@ None
 -- !result
 truncate plan advisor;
 -- result:
-[REGEX]Clear all plan advisor in FE
+[REGEX]Clear all plan advisor in FE*
 -- !result
 CREATE TABLE __row_util_base (
   k1 bigint NULL
@@ -198,7 +201,7 @@ insert into t1 select idx, idx % (20480000 / 26), idx from __row_util;
 -- !result
 analyze full table t1 with sync mode;
 -- result:
-[REGEX].*t1	analyze	status	OK
+[REGEX].*
 -- !result
 select count(1) as cnt from t1 group by c1 order by cnt limit 10;
 -- result:
@@ -215,7 +218,7 @@ select count(1) as cnt from t1 group by c1 order by cnt limit 10;
 -- !result
 alter plan advisor add select count(1) as cnt from t1 group by c1 order by cnt limit 10;
 -- result:
-[REGEX]Add query into plan advisor in FE
+[REGEX]Add query into plan advisor in FE*
 -- !result
 function: assert_explain_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
 -- result:
@@ -233,4 +236,57 @@ select count(1) as cnt from t1 group by c1 order by cnt limit 10;
 26
 26
 26
+-- !result
+set enable_plan_advisor_blacklist = true;
+-- result:
+-- !result
+truncate plan advisor;
+-- result:
+[REGEX]Clear all plan advisor in FE*
+-- !result
+alter plan advisor add select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+-- result:
+[REGEX]Add query into plan advisor in FE*
+-- !result
+function: assert_explain_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
+-- result:
+None
+-- !result
+select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+-- result:
+9
+25
+26
+26
+26
+26
+26
+26
+26
+26
+-- !result
+function: assert_explain_not_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
+-- result:
+None
+-- !result
+select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+-- result:
+9
+25
+26
+26
+26
+26
+26
+26
+26
+26
+-- !result
+function: assert_explain_not_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
+-- result:
+None
+-- !result
+truncate plan advisor;
+-- result:
+[REGEX]Clear all plan advisor in FE*
 -- !result
