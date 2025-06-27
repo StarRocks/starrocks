@@ -33,12 +33,13 @@
 // under the License.
 #pragma once
 
+#include <arrow/util/ubsan.h>
+
 #include <algorithm>
 
 #include "glog/logging.h"
 #include "util/alignment.h"
-#include "util/bit_packing.inline.h"
-#include "util/bit_packing_adapter.h"
+#include "util/bit_packing.h"
 #include "util/bit_stream_utils.h"
 
 using starrocks::BitUtil;
@@ -184,8 +185,8 @@ inline bool BitReader::GetBatch(int num_bits, T* v, int num_values) {
     if (i < num_values) {
         DCHECK(bit_offset_ == 0);
         int expected_values = num_values - i;
-        auto ret = BitPackingAdapter::UnpackValues(num_bits, buffer_ + byte_offset_, max_bytes_ - byte_offset_,
-                                                   expected_values, v + i);
+        auto ret = BitPacking::UnpackValues(num_bits, buffer_ + byte_offset_, max_bytes_ - byte_offset_,
+                                            expected_values, v + i);
         if (ret.second != expected_values) {
             return false;
         }
@@ -372,8 +373,7 @@ inline bool BatchedBitReader::skip_bytes(int num_bytes) {
 template <typename T>
 inline int BatchedBitReader::unpack_batch(int bit_width, int num_values, T* v) {
     int64_t num_read;
-    std::tie(_buffer_pos, num_read) =
-            BitPackingAdapter::UnpackValues(bit_width, _buffer_pos, _bytes_left(), num_values, v);
+    std::tie(_buffer_pos, num_read) = BitPacking::UnpackValues(bit_width, _buffer_pos, _bytes_left(), num_values, v);
     return static_cast<int>(num_read);
 }
 
