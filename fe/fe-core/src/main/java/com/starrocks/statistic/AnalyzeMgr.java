@@ -110,9 +110,10 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void addAnalyzeJob(AnalyzeJob job) throws AlreadyExistsException {
-        try {
-            for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+        for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+            try {
                 if (analyzeJob.getCatalogName().equals(job.getCatalogName()) &&
+                        analyzeJob.getDbName().equals(job.getDbName()) &&
                         analyzeJob.getColumns().stream().sorted().collect(Collectors.toList())
                         .equals(job.getColumns().stream().sorted().collect(Collectors.toList())) &&
                         analyzeJob.getTableName().equals(job.getTableName()) &&
@@ -121,10 +122,11 @@ public class AnalyzeMgr implements Writable {
                         analyzeJob.getProperties().equals(job.getProperties())) {
                     throw new AlreadyExistsException("AnalyzeJob Already Exists");
                 }
+            } catch (MetaNotFoundException e) {
+                LOG.warn("add analyze job failed", e);
             }
-        } catch (MetaNotFoundException e) {
-            LOG.warn("add analyze job failed", e);
         }
+
         long id = GlobalStateMgr.getCurrentState().getNextId();
         job.setId(id);
         analyzeJobMap.put(id, job);
