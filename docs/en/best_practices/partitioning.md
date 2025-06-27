@@ -1,3 +1,7 @@
+---
+sidebar_position: 10
+---
+
 # Partitioning
 
 Fast analytics in StarRocks begin with a table layout that matches your query patterns. This guide distills hands‑on experience into clear rules for **partitioning**, helping you:

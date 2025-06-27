@@ -1,3 +1,7 @@
+---
+sidebar_position: 20
+---
+
 # Table clustering
 
 A thoughtful sort‑key is the highest‑leverage physical‑design knob in StarRocks. This guide explains how the sort key works under the hood, the systemic benefits it unlocks, and a concrete playbook for picking an effective key for your own workload.
@@ -42,7 +46,7 @@ The impact of a sort key starts the moment a row is written and persists through
 | ------------- | ------------- | ------------------------------ |
 | Partition | A coarse‑grained logical slice of a table (e.g., date or tenant_id). | Enables planner‑time partition pruning and isolates lifecycle ops (TTL, bulk load). |
 | Tablet | A hash/random bucket within a partition, independently replicated across Back‑End nodes. | Unit whose rows are physically ordered by the sort key; all intra‑partition pruning starts here. |
-| MemTable | In‑memory write buffer (~96 MB) that sorts by the declared key before flushing to disk. | Guarantees that every on‑disk Segment is already ordered — No external sort needed later. |
+| MemTable | In‑memory write buffer (~96 MB) that sorts by the declared key before flushing to disk. | Guarantees that every on‑disk Segment is already ordered—No external sort needed later. |
 | Rowset | Immutable bundle of one or more Segments produced by a flush, streaming load, or compaction cycle. | Append‑only design lets StarRocks ingest concurrently while readers stay lock‑free. |
 | Segment | Self‑contained columnar file (~512 MB) inside a Rowset carrying data pages plus pruning indexes. | Segment‑level zone‑maps and prefix indexes rely on the order established at the MemTable stage. |
 
@@ -85,7 +89,7 @@ WHERE tenant_id = 42
 With SORT BY (tenant_id, ts) only the segments whose first key equals 42 are considered, and within them only the pages whose ts window overlaps those seven days. A 100 B‑row table may scan less than 1 B rows, turning minutes into seconds.
 
 ---
-2. Millisecond Point  Look‑Ups — Sparse Prefix Index
+2. Millisecond Point  Look‑Ups—Sparse Prefix Index
 
 How it works A sparse prefix index stores every ~1 Kth sort‑key value. A binary search lands on the right page, then a single disk read (often already cached) returns the row.
 
