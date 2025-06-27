@@ -143,6 +143,8 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             //                             Colocate Join
             //                             /          \
             //     Bucket Shuffle Join (right join)    One-Phase Agg
+            querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "full join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
             querys.add("with prober as (\n" +
                     "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
                     "), builder as (\n" +
