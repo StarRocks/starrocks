@@ -418,7 +418,7 @@ public class RuleSet {
                     new PushDownAggToMetaScanRule(),
                     new PushDownFlatJsonMetaToMetaScanRule(),
                     new RewriteSimpleAggToMetaScanRule(),
-                    new RewriteSimpleAggToHDFSScanRule(),
+                    RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
                     new MinMaxCountOptOnScanRule()
             ));
 
