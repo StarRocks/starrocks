@@ -50,7 +50,7 @@ The impact of a sort key starts the moment a row is written and persists through
 | Rowset | Immutable bundle of one or more Segments produced by a flush, streaming load, or compaction cycle. | Append‑only design lets StarRocks ingest concurrently while readers stay lock‑free. |
 | Segment | Self‑contained columnar file (~512 MB) inside a Rowset carrying data pages plus pruning indexes. | Segment‑level zone‑maps and prefix indexes rely on the order established at the MemTable stage. |
 
-3  Inside a Segment File
+3.  Inside a Segment File
 
    ![write path steps](../_assets/best_practices/table_clustering-2.png)
 
