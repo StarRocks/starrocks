@@ -78,12 +78,9 @@ under the License.
         <!-- azure native sdk -->
         <azure.version>1.2.34</azure.version>
         <fastutil.version>8.5.15</fastutil.version>
-<<<<<<< HEAD
         <async-profiler.version>4.0</async-profiler.version>
-=======
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
->>>>>>> 7b39acd554 ([Enhancement] upgrade hudi-common and fix CVEs (#59501))
     </properties>
 
     <profiles>
