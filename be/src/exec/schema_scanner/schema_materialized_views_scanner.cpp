@@ -31,12 +31,12 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"IS_ACTIVE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"INACTIVE_REASON", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"PARTITION_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TASK_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TASK_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 
         {"LAST_REFRESH_START_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LAST_REFRESH_FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"LAST_REFRESH_DURATION", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"LAST_REFRESH_DURATION", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), true},
         {"LAST_REFRESH_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"LAST_REFRESH_FORCE_REFRESH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
          true},
@@ -53,7 +53,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
          true},
         {"LAST_REFRESH_ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
          true},
-        {"TABLE_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLE_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"MATERIALIZED_VIEW_DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
          true},
         {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
@@ -93,10 +93,10 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
 }
 
 Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
-    if (_table_index >= _mv_results.materialized_views.size()) {
+    if (_table_index >= _mv_results.materialized_views.size() || _table_index < 0) {
         return Status::OK();
     }
-    if (_db_index > _db_result.dbs.size()) {
+    if (_db_index > _db_result.dbs.size() || _db_index <= 0) {
         return Status::OK();
     }
     const TMaterializedViewStatus& info = _mv_results.materialized_views[_table_index];
@@ -113,16 +113,13 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
         switch (slot_id) {
         case 1: {
             // id
-            if (info.__isset.id) {
-                try {
-                    int64_t value = std::stoll(info.id);
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-                } catch (const std::exception& e) {
-                    fill_data_column_with_null(column.get());
-                }
-            } else {
-                fill_data_column_with_null(column.get());
+            int64_t value = 0;
+            try {
+                value = std::stoll(info.id);
+            } catch (const std::exception& e) {
+                // ingore exception
             }
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
             break;
         }
         case 2: {

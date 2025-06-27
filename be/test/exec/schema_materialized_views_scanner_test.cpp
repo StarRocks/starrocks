@@ -129,24 +129,24 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_empty_database_list) {
     EXPECT_EQ(0, chunk->num_rows());
 }
 
-// TEST_F(SchemaMaterializedViewsScannerTest, test_empty_materialized_views) {
-//     SchemaMaterializedViewsScanner scanner;
+TEST_F(SchemaMaterializedViewsScannerTest, test_empty_materialized_views) {
+    SchemaMaterializedViewsScanner scanner;
 
-//     EXPECT_OK(scanner.init(&_params, &_pool));
+    EXPECT_OK(scanner.init(&_params, &_pool));
 
-//     // Mock database with no materialized views
-//     scanner._db_result.dbs = {"test_db"};
-//     scanner._db_index = 0;
-//     scanner._table_index = 0;
-//     scanner._mv_results.materialized_views.clear();
+    // Mock database with no materialized views
+    scanner._db_result.dbs = {"test_db"};
+    scanner._db_index = 1;
+    scanner._table_index = 0;
+    scanner._mv_results.materialized_views.clear();
 
-//     auto chunk = create_chunk(scanner.get_slot_descs());
-//     bool eos = false;
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
 
-//     EXPECT_OK(scanner.get_next(&chunk, &eos));
-//     EXPECT_TRUE(eos);
-//     EXPECT_EQ(0, chunk->num_rows());
-// }
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+    EXPECT_EQ(0, chunk->num_rows());
+}
 
 TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     SchemaMaterializedViewsScanner scanner;
@@ -155,7 +155,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
 
     // Mock database and materialized view data
     scanner._db_result.dbs = {"test_db"};
-    scanner._db_index = 0;
+    scanner._db_index = 1;
     scanner._table_index = 0;
 
     TMaterializedViewStatus mv;
@@ -193,7 +193,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     bool eos = false;
 
     EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_TRUE(eos);
+    EXPECT_FALSE(eos);
     EXPECT_EQ(1, chunk->num_rows());
 
     auto row = chunk->debug_row(0);
@@ -230,7 +230,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_multiple_materialized_views) {
 
     // Mock database and multiple materialized views
     scanner._db_result.dbs = {"test_db"};
-    scanner._db_index = 0;
+    scanner._db_index = 1;
     scanner._table_index = 0;
 
     std::vector<TMaterializedViewStatus> mvs;
@@ -295,7 +295,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_null_values) {
 
     // Mock database and materialized view with null values
     scanner._db_result.dbs = {"test_db"};
-    scanner._db_index = 0;
+    scanner._db_index = 1;
     scanner._table_index = 0;
 
     TMaterializedViewStatus mv;
@@ -328,7 +328,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_invalid_numeric_values) {
 
     // Mock database and materialized view with invalid numeric values
     scanner._db_result.dbs = {"test_db"};
-    scanner._db_index = 0;
+    scanner._db_index = 1;
     scanner._table_index = 0;
 
     TMaterializedViewStatus mv;
