@@ -84,10 +84,8 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("TASK_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TASK_NAME", ScalarType.createVarchar(50))
                         .column("LAST_REFRESH_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_REFRESH_PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("LAST_REFRESH_FINISHED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("LAST_REFRESH_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("LAST_REFRESH_JOB_ID", ScalarType.createVarchar(64))
                         .column("LAST_REFRESH_STATE", ScalarType.createVarchar(20))
                         .column("LAST_REFRESH_FORCE_REFRESH", ScalarType.createVarchar(8))
                         .column("LAST_REFRESH_START_PARTITION", ScalarType.createVarchar(1024))
@@ -102,6 +100,8 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(1024))
                         .column("QUERY_REWRITE_STATUS", ScalarType.createVarcharType(64))
                         .column("CREATOR", ScalarType.createVarchar(64))
+                        .column("LAST_REFRESH_PROCESS_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("LAST_REFRESH_JOB_ID", ScalarType.createVarchar(64))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 
