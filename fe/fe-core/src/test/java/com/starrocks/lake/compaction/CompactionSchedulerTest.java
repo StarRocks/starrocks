@@ -39,6 +39,7 @@ import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -128,10 +129,11 @@ public class CompactionSchedulerTest {
                 return new PhysicalPartition(123, "aaa", 123, new MaterializedIndex());
             }
         };
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo(0, "aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        Assert.assertNull(compactionScheduler.startCompaction(snapshot));
+        Assert.assertNull(compactionScheduler.startCompaction(snapshot, info));
         table.setState(OlapTable.OlapTableState.NORMAL);
-        Assert.assertNull(compactionScheduler.startCompaction(snapshot));
+        Assert.assertNull(compactionScheduler.startCompaction(snapshot, info));
     }
 
     @Test
@@ -150,12 +152,12 @@ public class CompactionSchedulerTest {
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
                 PhysicalPartition partition1 = new PhysicalPartition(123, "aaa", 123, null);
                 PhysicalPartition partition2 = new PhysicalPartition(124, "bbb", 124, null);
-                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false);
+                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null);
                 try {
                     Thread.sleep(10);
                 } catch (InterruptedException e) {
                 }
-                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false);
+                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null);
                 r.put(partitionIdentifier1, job1);
                 r.put(partitionIdentifier2, job2);
                 return r;
@@ -174,7 +176,7 @@ public class CompactionSchedulerTest {
         int defaultValue = Config.lake_compaction_max_tasks;
         // explicitly set config to a value bigger than default -1
         Config.lake_compaction_max_tasks = 10;
-        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit());
+        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit(WarehouseManager.DEFAULT_RESOURCE));
 
         // reset config to default value
         Config.lake_compaction_max_tasks = defaultValue;
@@ -191,7 +193,7 @@ public class CompactionSchedulerTest {
             }
         };
         mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(b1, c1, c2));
-        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
+        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit(WarehouseManager.DEFAULT_RESOURCE));
     }
 
     @Test
@@ -210,6 +212,7 @@ public class CompactionSchedulerTest {
         ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
 
         MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        mockedWarehouseManager.initDefaultWarehouse();
         new MockUp<GlobalStateMgr>() {
             @Mock
             public WarehouseManager getWarehouseMgr() {
@@ -231,17 +234,19 @@ public class CompactionSchedulerTest {
 
         new MockUp<CompactionScheduler>() {
             @Mock
-            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+                    CompactionWarehouseInfo info) {
                 Database db = new Database();
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
-                return new CompactionJob(db, table, partition, 100, false);
+                return new CompactionJob(db, table, partition, 100, false, info.computeResource);
             }
         };
         compactionScheduler.runOneCycle();
         Assert.assertEquals(2, compactionScheduler.getRunningCompactions().size());
 
+        long old = CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND;
         CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND = 0;
         new MockUp<MetaUtils>() {
             @Mock
@@ -261,6 +266,7 @@ public class CompactionSchedulerTest {
         };
         compactionScheduler.runOneCycle();
         Assert.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+        CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND = old;
     }
 
     @Test
@@ -297,9 +303,10 @@ public class CompactionSchedulerTest {
                 globalTransactionMgr, globalStateMgr, "");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class);
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class);
         method.setAccessible(true);
-        CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority);
+        CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
+                WarehouseManager.DEFAULT_RESOURCE);
 
         Assert.assertNotNull(task);
         Assert.assertTrue(task instanceof AggregateCompactionTask);
@@ -350,5 +357,71 @@ public class CompactionSchedulerTest {
 
         Assert.assertTrue(foundNode1);
         Assert.assertTrue(foundNode2);
+    }
+
+    @Test
+    public void testCompactionWarehouseLimit() {
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier partition3 = new PartitionIdentifier(1, 2, 5);
+
+        compactionManager.handleLoadingFinished(partition1, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(10d)));
+        compactionManager.handleLoadingFinished(partition2, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(10d)));
+        compactionManager.handleLoadingFinished(partition3, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(10d)));
+
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
+
+        int old = Config.lake_compaction_max_tasks;
+        Config.lake_compaction_max_tasks = 2;
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        mockedWarehouseManager.initDefaultWarehouse();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(c1, c2));
+
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+                    CompactionWarehouseInfo info) {
+                Database db = new Database();
+                Table table = new LakeTable();
+                long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
+                PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
+                CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource);
+                return job;
+            }
+        };
+        new MockUp<CompactionJob>() {
+            @Mock
+            public int getNumTabletCompactionTasks() {
+                return 1;
+            }
+        };
+        compactionScheduler.runOneCycle();
+        Assert.assertEquals(2, compactionScheduler.getRunningCompactions().size());
+
+        Config.lake_compaction_max_tasks = old;
     }
 }
