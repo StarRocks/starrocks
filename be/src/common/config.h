@@ -1584,7 +1584,7 @@ CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
-CONF_mBool(skip_pk_preload, "false");
+CONF_mBool(skip_pk_preload, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:
