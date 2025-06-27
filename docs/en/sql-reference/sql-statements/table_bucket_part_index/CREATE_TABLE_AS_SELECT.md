@@ -67,8 +67,6 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 
   - The sort keys are the first three columns, and the storage space of the data types of these three columns does not exceed 36 bytes.
 
-- The CTAS statement does not support setting indexes for a newly created table.
-
 - If the CTAS statement fails to execute due to reasons, such as an FE restart, one of the following issues may occur:
   - A new table is created successfully but does not contain data.
 
