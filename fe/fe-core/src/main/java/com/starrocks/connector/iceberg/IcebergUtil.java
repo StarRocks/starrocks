@@ -39,6 +39,9 @@ public final class IcebergUtil {
         Object minValue;
         Object maxValue;
         int nullValueCount;
+
+        //        public void toThrift(SlotDescriptor slot, TExprMinMaxValue minValue, TExprMinMaxValue maxValue) {
+        //        }
     }
 
     private static final Set<Type.TypeID> MIN_MAX_SUPPORTED_TYPES = Set.of(
