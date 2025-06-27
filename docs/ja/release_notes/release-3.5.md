@@ -2,9 +2,9 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks バージョン 3.5
+# StarRocks Version 3.5
 
-## v3.5.0-RC01
+## v3.5.0
 
 リリース日： 2025 年 6 月 13 日
 
