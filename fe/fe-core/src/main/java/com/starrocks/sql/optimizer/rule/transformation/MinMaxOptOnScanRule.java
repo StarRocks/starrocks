@@ -53,9 +53,6 @@ public class MinMaxOptOnScanRule extends TransformationRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         Operator operator = input.getInputs().get(0).getInputs().get(0).getOp();
-        if (!(operator instanceof LogicalScanOperator)) {
-            return false;
-        }
         LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
 
         // we can only apply this rule to the queries met all the following conditions:
@@ -90,25 +87,18 @@ public class MinMaxOptOnScanRule extends TransformationRule {
             AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
             String functionName = aggregateFunction.functionName();
 
-            // min/max/count(a)
-            if (!(functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN) ||
-                    (functionName.equals(FunctionSet.COUNT) && !aggregator.isDistinct()))) {
+            // min/max/
+            if (!(functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN))) {
                 return false;
             }
 
-            // check arguments
-            // 1. simple type
-            // 2. no expr
+            // one argument which is slot ref.
             List<ScalarOperator> arguments = aggregator.getArguments();
             if (arguments == null || arguments.size() != 1) {
                 return false;
             }
             ScalarOperator arg = arguments.get(0);
             if (!arg.isColumnRef()) {
-                return false;
-            }
-            ColumnRefOperator columnRefOperator = (ColumnRefOperator) arg;
-            if (columnRefOperator.getType().isComplexType()) {
                 return false;
             }
             return true;
