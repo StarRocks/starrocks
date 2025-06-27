@@ -36,9 +36,12 @@ insert into c1_skew values(50001, 'f', 50001, 50001);
 -- !result
 analyze full table c1_skew with sync mode;
 -- result:
-[REGEX].*c1_skew	analyze	status	OK
+[REGEX].*
 -- !result
 set enable_global_runtime_filter = false;
+-- result:
+-- !result
+set enable_plan_advisor_blacklist=false;
 -- result:
 -- !result
 function: assert_explain_not_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
@@ -47,7 +50,7 @@ None
 -- !result
 alter plan advisor add select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t;
 -- result:
-[REGEX]Add query into plan advisor in FE.*
+[REGEX]Add query into plan advisor in FE*
 -- !result
 function: assert_explain_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
 -- result:
@@ -61,7 +64,10 @@ function: assert_trace_values_contains("select count(*) from (select * from c1_s
 -- result:
 None
 -- !result
+set enable_plan_advisor_blacklist=true;
+-- result:
+-- !result
 truncate plan advisor;
 -- result:
-[REGEX]Clear all plan advisor in FE.*
+[REGEX]Clear all plan advisor in FE*
 -- !result

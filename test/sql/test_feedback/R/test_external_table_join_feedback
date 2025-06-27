@@ -28,6 +28,9 @@ insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate
 insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'f', generate_series, generate_series from TABLE(generate_series(11, 5050000));
 -- result:
 -- !result
+set enable_plan_advisor_blacklist=false;
+-- result:
+-- !result
 set enable_plan_advisor=true;
 -- result:
 -- !result
@@ -54,6 +57,9 @@ alter plan advisor add select count(*) from (select * from iceberg_catalog_${uui
 function: assert_explain_contains("select count(*) from (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew t1 join (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2 where t1.c1 = 'a') t", "RightChildEstimationErrorTuningGuide")
 -- result:
 None
+-- !result
+set enable_plan_advisor_blacklist=true;
+-- result:
 -- !result
 truncate plan advisor;
 -- result:

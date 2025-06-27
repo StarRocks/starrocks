@@ -39,6 +39,9 @@ test_feedback.test_feedback_parameterized	analyze	status	OK
 set enable_global_runtime_filter = false;
 -- result:
 -- !result
+set enable_plan_advisor_blacklist=false;
+-- result:
+-- !result
 truncate plan advisor;
 -- result:
 [REGEX]Clear all plan advisor in FE.*
@@ -110,6 +113,9 @@ None
 function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 550) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
 -- result:
 None
+-- !result
+set enable_plan_advisor_blacklist=true;
+-- result:
 -- !result
 truncate plan advisor;
 -- result:
