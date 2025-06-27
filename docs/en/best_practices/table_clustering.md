@@ -14,7 +14,7 @@ Suppose you run a telemetry system that receives billions of rows per day, each 
 - Aggregations like `GROUP BY device_id` benefit from streaming aggregation.
 - Compression improves due to runs of nearby timestamps per device.
 
-This simple two-column sort key delivers I/O reduction, CPU savings, and more stable query performance across billions of rows.
+This simple two-column sort key `ORDER BY (device_id, ts)`  delivers I/O reduction, CPU savings, and more stable query performance across billions of rows.
 
 ```sql
 CREATE TABLE telemetry (
