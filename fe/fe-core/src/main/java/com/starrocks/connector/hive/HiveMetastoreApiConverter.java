@@ -198,7 +198,15 @@ public class HiveMetastoreApiConverter {
         apiTable.setDbName(table.getDbName());
         apiTable.setTableName(table.getTableName());
         apiTable.setTableType(table.getHiveTableType().name());
-        apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
+        
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null && StringUtils.isNotBlank(ctx.getQualifiedUser())) {
+            apiTable.setOwner(ctx.getQualifiedUser());
+        } else {
+            String hadoopUserName = System.getenv("HADOOP_USER_NAME");
+            apiTable.setOwner(hadoopUserName);
+        }
+        
         apiTable.setParameters(toApiTableProperties(table));
         apiTable.setPartitionKeys(table.getPartitionColumns().stream()
                 .map(HiveMetastoreApiConverter::toMetastoreApiFieldSchema)
