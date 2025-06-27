@@ -697,8 +697,6 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
         latch.count_down();
-    } else {
-        Status::OK().to_protobuf(response->mutable_status());
     }
 
     latch.wait();

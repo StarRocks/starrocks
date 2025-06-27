@@ -2597,6 +2597,43 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
     }
 
     {
+        AbortTxnRequest request;
+        request.add_tablet_ids(_tablet_id);
+        request.set_skip_cleanup(false);
+        request.add_txn_ids(next_id());
+        AbortTxnResponse response;
+        _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+    }
+
+    {
+        brpc::Controller cntl;
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(_tablet_id);
+        _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    {
+        std::vector<TxnLog> logs;
+
+        // TxnLog with 2 segments
+        logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+        brpc::Controller cntl;
+        DeleteTxnLogRequest request;
+        DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(logs.back().txn_id());
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    {
         ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
         DropTableRequest request;
         DropTableResponse response;
@@ -2618,6 +2655,29 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
         _lake_service.delete_data(nullptr, &request, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    }
+
+    {
+        TabletStatRequest request;
+        TabletStatResponse response;
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(_tablet_id);
+        info->set_version(1);
+
+        // Prune metadata cache before getting tablet stats
+        _tablet_mgr->metacache()->prune();
+
+        _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.tablet_stats_size());
+    }
+
+    {
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
     }
 }
 
