@@ -1288,7 +1288,7 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;
         st.to_protobuf(response->mutable_status());
-        latch.count_down(); 
+        latch.count_down();
     }
 
     latch.wait();
