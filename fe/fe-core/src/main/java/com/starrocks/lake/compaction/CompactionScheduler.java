@@ -438,7 +438,7 @@ public class CompactionScheduler extends Daemon {
         LakeAggregator aggregator = new LakeAggregator();
         ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
         if (aggregatorNode == null) {
-            throw new NoAliveBackendException("No alive compute node for handle aggregate compaction");
+            throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }
         LakeService service = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
 
