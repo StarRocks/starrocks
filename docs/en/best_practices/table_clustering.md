@@ -28,6 +28,95 @@ PARTITION BY RANGE (date_trunc('day', ts))
 DISTRIBUTED BY HASH(device_id) BUCKETS 16
 ORDER BY (device_id, ts);
 ```
+---
+
+## Benefits in Depth
+
+1. Massive I/O Elimination—Segment & Page Pruning
+
+    How it works:
+
+    Each segment and 64 KB page stores min/max values for all columns. If a predicate falls outside that range, StarRocks skips the entire chunk and never touches the disk.
+
+    Example:
+
+    ```sql
+    SELECT count(*)
+    FROM events
+    WHERE tenant_id = 42
+      AND ts BETWEEN '2025-05-01' AND '2025-05-07';
+    ```
+
+    With `ORDER BY (tenant_id, ts)` only the segments whose first key equals 42 are considered, and within them only the pages whose ts window overlaps those seven days. A 100 B‑row table may scan less than 1 B rows, turning minutes into seconds.
+
+---
+2. Millisecond Point  Look‑Ups—Sparse Prefix Index
+
+    How it works:
+
+    A sparse prefix index stores every ~1 Kth sort‑key value. A binary search lands on the right page, then a single disk read (often already cached) returns the row.
+
+    Example:
+
+    ```sql
+    SELECT *
+    FROM orders
+    WHERE order_id = 982347234;
+    ```
+
+    With `ORDER BY (order_id)` the probe needs ≈ 50 key comparisons across a 50 B‑row table—sub‑10 ms latency even on cold data cache.
+
+---
+3. Faster Sorted Aggregation
+
+    How it works:
+
+    When the sort key aligns with the GROUP BY clause, StarRocks performs streaming aggregation as it scans—no sorting or hash-table needed.
+    
+    This sorted-aggregation plan scans rows in sort-key order and emits groups on the fly, exploiting CPU cache locality and skipping intermediate materialisation.
+    
+    Example:
+
+    ```sql
+    SELECT device_id, COUNT(*)
+    FROM   telemetry
+    WHERE  ts BETWEEN '2025-01-01' AND '2025-01-31'
+    GROUP  BY device_id;
+    ```
+
+    If the table is `ORDER BY (device_id, ts)`, the engine groups rows as they stream in—without building a hash table or re-sorting. For high-cardinality keys like device_id, this can reduce both CPU and memory usage dramatically.
+    
+    Streaming aggregation with sorted input typically improves throughput by 2–3× over hash-aggregation for large group cardinalities.
+
+---
+4. Higher  Compression &  Hotter  Caches
+
+    How it works:
+
+    Sorted data shows small deltas or long runs, accelerating dictionary, RLE, and frame‑of‑reference encodings. Compact pages stream sequentially through CPU caches.
+
+    Example:
+
+    A telemetry table sorted by (device_id, ts) achieved 1.8 × better compression (LZ4) and 25 % lower CPU/scan than the same data ingested unsorted.
+
+---
+5. Faster Merge‑On‑Write  for  Primary‑Key Tables
+
+    How it works:
+
+    During upsert, the engine rewrites only the slice whose key range overlaps the batch instead of the whole tablet.
+
+    Example:
+
+    ```sql
+    UPDATE balances
+    SET    amount = amount + 100
+    WHERE  account_id = 123;
+    ```
+
+    With `ORDER BY (account_id)` less than 1 % of segment data is touched versus 100 % if unsorted—yielding 2–4 × higher write throughput on update‑heavy workloads.
+
+---
 
 ## How the Sort Key Works
 
@@ -56,105 +145,37 @@ The impact of a sort key starts the moment a row is written and persists through
 
 Each Segment is self‑describing. From top to bottom you’ll find:
 
-1. Column data pages 64 KB blocks encoded (Dictionary, RLE, Delta) and compressed (LZ4 default).
-2. Ordinal index Maps a row ordinal → page offset so the engine can jump directly to page n.
-3. Zone‑map index min, max, and has_null per page and for the whole Segment—first line of defence for pruning.
-4. Short‑key (prefix) index Sparse binary‑search table of the first 36 bytes of the sort key every ~1 K rows—enables millisecond point/range seeks.
-5. Footer & magic number Offsets to every index and a checksum for integrity; lets StarRocks memory‑map just the tail to discover the rest.
+    - Column data pages 64 KB blocks encoded (Dictionary, RLE, Delta) and compressed (LZ4 default).
+    - Ordinal index Maps a row ordinal → page offset so the engine can jump directly to page n.
+    - Zone‑map index min, max, and has_null per page and for the whole Segment—first line of defence for pruning.
+    - Short‑key (prefix) index Sparse binary‑search table of the first 36 bytes of the sort key every ~1 K rows—enables millisecond point/range seeks.
+    - Footer & magic number Offsets to every index and a checksum for integrity; lets StarRocks memory‑map just the tail to discover the rest.
+
 Because the pages are already sorted by the key, those indexes are tiny yet brutally effective.
 
-4  Read Path
+4. Read Path
 
-1. Partition pruning (planner‑time) If the WHERE clause constrains the partition key (e.g. dt BETWEEN '2025‑05‑01' AND '2025‑05‑07'), the optimizer opens only matching partition directories.
-2. Tablet pruning(planner-time) When the equality filter includes the hash distribution column, StarRocks computes the target tablet IDs and schedules just those Tablets.
-3. Prefix‑index seek A sparse short‑key index on the leading sort columns homes in on the exact segment or page.
-4. Zone‑map pruning min/max metadata per Segment and 64 KB page discards blocks that miss the predicate window.
-5. Vectorized scan & late materialization Surviving column pages stream sequentially through CPU caches; only referenced rows&columns are materialized, keeping memory tight.
-Because data is committed in key order on every flush, each read‑time pruning layer compounds on the one before it, delivering sub‑second scans on multi‑billion‑row tables.
+    1. Partition pruning (planner‑time) If the WHERE clause constrains the partition key (e.g. `dt BETWEEN '2025‑05‑01' AND '2025‑05‑07'`), the optimizer opens only matching partition directories.
+    2. Tablet pruning(planner-time) When the equality filter includes the hash distribution column, StarRocks computes the target tablet IDs and schedules just those Tablets.
+    3. Prefix‑index seek A sparse short‑key index on the leading sort columns homes in on the exact segment or page.
+    4. Zone‑map pruning min/max metadata per Segment and 64 KB page discards blocks that miss the predicate window.
+    5. Vectorized scan & late materialization Surviving column pages stream sequentially through CPU caches; only referenced rows&columns are materialized, keeping memory tight.
 
----
-Benefits in Depth
-1 Massive I/O Elimination—Segment & Page Pruning
-How it works Each segment and 64 KB page stores min/max values for all columns. If a predicate falls outside that range, StarRocks skips the entire chunk and never touches the disk.
-
-Example
-
-```sql
-SELECT count(*)
-FROM events
-WHERE tenant_id = 42
-  AND ts BETWEEN '2025-05-01' AND '2025-05-07';
-```
-
-With `ORDER BY (tenant_id, ts)` only the segments whose first key equals 42 are considered, and within them only the pages whose ts window overlaps those seven days. A 100 B‑row table may scan less than 1 B rows, turning minutes into seconds.
-
----
-2. Millisecond Point  Look‑Ups—Sparse Prefix Index
-
-How it works A sparse prefix index stores every ~1 Kth sort‑key value. A binary search lands on the right page, then a single disk read (often already cached) returns the row.
-
-Example
-
-```sql
-SELECT *
-FROM orders
-WHERE order_id = 982347234;
-With SORT BY (order_id) the probe needs ≈ 50 key comparisons across a 50 B‑row table—sub‑10 ms latency even on cold data cache.
-```
-
----
-3. Faster Sorted Aggregation
-
-How it works When the sort key aligns with the GROUP BY clause, StarRocks performs streaming aggregation as it scans—no sorting or hash-table needed.
-This sorted-aggregation plan scans rows in sort-key order and emits groups on the fly, exploiting CPU cache locality and skipping intermediate materialisation.
-
-Example
-
-```sql
-SELECT device_id, COUNT(*)
-FROM   telemetry
-WHERE  ts BETWEEN '2025-01-01' AND '2025-01-31'
-GROUP  BY device_id;
-```
-
-If the table is SORT BY (device_id, ts), the engine groups rows as they stream in—without building a hash table or re-sorting. For high-cardinality keys like device_id, this can reduce both CPU and memory usage dramatically.
-Streaming aggregation with sorted input typically improves throughput by 2–3× over hash-aggregation for large group cardinalities.
-
----
-4. Higher  Compression &  Hotter  Caches
-
-How it works Sorted data shows small deltas or long runs, accelerating dictionary, RLE, and frame‑of‑reference encodings. Compact pages stream sequentially through CPU caches.
-
-Example A telemetry table sorted by (device_id, ts) achieved 1.8 × better compression (LZ4) and 25 % lower CPU/scan than the same data ingested unsorted.
-
----
-5. Faster Merge‑On‑Write  for  Primary‑Key Tables
-
-How it works During upsert, the engine rewrites only the slice whose key range overlaps the batch instead of the whole tablet.
-
-Example
-
-```sql
-UPDATE balances
-SET    amount = amount + 100
-WHERE  account_id = 123;
-```
-
-With SORT BY (account_id) less than 1 % of segment data is touched versus 100 % if unsorted—yielding 2–4 × higher write throughput on update‑heavy workloads.
+    Because data is committed in key order on every flush, each read‑time pruning layer compounds on the one before it, delivering sub‑second scans on multi‑billion‑row tables.
 
 ---
 ## How to Choose an Effective Sort Key
 
 1.  Start with Workload Intelligence
 
-Analyse the top‑N query patterns first:
+    Analyse the top‑N query patterns first:
 
-- Equality predicates (`=` / `IN`). Columns almost always filtered by equality make ideal leading candidates.
-- Range predicates. Timestamps and numeric ranges typically follow equality columns in the sort key.
-- Aggregation keys. If a range column also appears in `GROUP BY` clauses, placing it earlier in the key (after selective filters) can enable sorted aggregation.
-- Join/group-by keys. Consider placing join or grouping keys early if they are common
+    - Equality predicates (`=` / `IN`). Columns almost always filtered by equality make ideal leading candidates.
+    - Range predicates. Timestamps and numeric ranges typically follow equality columns in the sort key.
+    - Aggregation keys. If a range column also appears in `GROUP BY` clauses, placing it earlier in the key (after selective filters) can enable sorted aggregation.
+    - Join/group-by keys. Consider placing join or grouping keys early if they are common
 
-Measure column cardinality: high‑cardinality columns (millions of distinct values) prune best. 
+    Measure column cardinality: high‑cardinality columns (millions of distinct values) prune best. 
 
 2.  Heuristics & Rules of Thumb
 
