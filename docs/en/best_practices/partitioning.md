@@ -46,6 +46,7 @@ Understanding the distinction between partitioning and bucketing is fundamental 
 
 ## Picking granularity
 
+The granularity of `PARTITION BY date_trunc('day', dt)` should be adjusted based on the use case. You can use "hour," "day," or "month," etc. See [`date_trunc`](../sql-reference/sql-functions/date-time-functions/date_trunc.md)
 | Granularity | Use when | Pros | Cons |
 | ----------- | -------- | ---- | ---- |
 | Daily (default) | Most BI & reporting | Few partitions (365/yr); simple TTL | Less precise for "last 3 h" queries |
