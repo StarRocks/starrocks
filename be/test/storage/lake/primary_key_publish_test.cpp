@@ -1017,6 +1017,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
+    bool old_val = config::skip_pk_preload;
+    config::skip_pk_preload = false;
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->LoadDependency(
             {{"UpdateManager::preload_update_state:return", "transactions::abort_txn:enter"}});
@@ -1055,6 +1057,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     t2.join();
     ASSERT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     SyncPoint::GetInstance()->DisableProcessing();
+    config::skip_pk_preload = true;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
