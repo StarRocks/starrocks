@@ -68,12 +68,7 @@ public class IcebergUtilTest {
         {
             var nullValueCounts = new HashMap<Integer, Integer>();
             var result = IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
-            assertEquals(2, result.size());
-            assertEquals(1, result.get(3).minValue);
-            assertEquals(10, result.get(3).maxValue);
-            // not supported type, should be null
-            assertEquals(null, result.get(5).minValue);
-            assertEquals(null, result.get(5).maxValue);
+            assertEquals(0, result.size());
         }
         {
             var nullValueCounts = Map.of(3, 1, 5, 0);

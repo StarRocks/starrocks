@@ -39,9 +39,6 @@ public final class IcebergUtil {
         Object minValue;
         Object maxValue;
         int nullValueCount;
-
-        //        public void toThrift(SlotDescriptor slot, TExprMinMaxValue minValue, TExprMinMaxValue maxValue) {
-        //        }
     }
 
     private static final Set<Type.TypeID> MIN_MAX_SUPPORTED_TYPES = Set.of(
@@ -77,20 +74,19 @@ public final class IcebergUtil {
             if (!type.isPrimitiveType()) {
                 continue;
             }
-
+            // we are not sure if there are null values or not.
+            // so result maybe is null, so we can not use min/max value.
+            if (!nullValueCounts.containsKey(field.fieldId())) {
+                continue;
+            }
             // create the min/max value object to put into map
             MinMaxValue minMaxValue = new MinMaxValue();
             minMaxValues.put(field.fieldId(), minMaxValue);
-
-            // check if there is null value
-            if (nullValueCounts.containsKey(field.fieldId())) {
-                minMaxValue.nullValueCount = nullValueCounts.get(field.fieldId());
-            } else {
-                minMaxValue.nullValueCount = 0;
-            }
+            minMaxValue.nullValueCount = nullValueCounts.get(field.fieldId());
             if (minMaxValue.nullValueCount != 0) {
-                continue; // If there are null values, we don't need to parse min/max values
-                // because the result will be null.
+                // If there are null values, we don't need to parse min/max values
+                // because the result of min/max will be null for sure.
+                continue;
             }
             if (!MIN_MAX_SUPPORTED_TYPES.contains(type.typeId())) {
                 continue; // Skip unsupported types
