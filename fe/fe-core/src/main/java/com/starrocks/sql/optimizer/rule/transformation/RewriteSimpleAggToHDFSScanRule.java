@@ -67,6 +67,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN);
 
+<<<<<<< HEAD
     final OperatorType scanOperatorType;
     final boolean hasProjectOperator;
 
@@ -78,6 +79,20 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     }
 
     private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
+=======
+    public static final RewriteSimpleAggToHDFSScanRule SCAN_AND_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule();
+
+    private final boolean hasProjectOperator;
+
+    private RewriteSimpleAggToHDFSScanRule(boolean /* unused */ noProject) {
+        super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
+                .addChildren(MultiOpPattern.of(SUPPORTED)));
+        hasProjectOperator = false;
+    }
+
+    private RewriteSimpleAggToHDFSScanRule() {
+>>>>>>> d6e15c60d5 ([BugFix] merge project operator after rewriting `count(1)` (#60365))
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, logicalOperatorType)));
         hasProjectOperator = true;
