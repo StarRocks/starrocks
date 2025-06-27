@@ -433,6 +433,9 @@ struct THdfsScanRange {
 
     // is this scan range the first split of this file?
     34: optional bool is_first_split
+
+    // min/max value of slots
+    35: optional map<i32, Exprs.TExprMinMaxValue> min_max_values;
 }
 
 struct TBinlogScanRange {
