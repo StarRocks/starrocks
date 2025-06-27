@@ -199,6 +199,8 @@ public:
 
     static FieldPtr convert_to_dict_field(const Field& field);
 
+    bool is_row_id_field() const { return _type->type() == TYPE_ROW_ID; }
+
 private:
     constexpr static int kIsKeyShift = 0;
     constexpr static int kNullableShift = 1;

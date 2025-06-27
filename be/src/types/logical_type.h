@@ -73,9 +73,11 @@ enum LogicalType {
 
     TYPE_JSON = 54,
 
+    TYPE_ROW_ID = 55,
+
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 55
+    TYPE_MAX_VALUE = 56
 };
 
 // TODO(lism): support varbinary for zone map.
@@ -162,6 +164,7 @@ inline bool is_scalar_field_type(LogicalType type) {
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
     case TYPE_DECIMAL256:
+    case TYPE_ROW_ID:
         return false;
     default:
         return true;
