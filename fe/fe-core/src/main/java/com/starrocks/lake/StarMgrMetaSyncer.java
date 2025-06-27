@@ -110,8 +110,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     if (pickBackendId == -1) {
                         ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource);
                         if (cn == null) {
-                            LOG.error("No alive compute node for aggregate operation.");
-                            throw new NoAliveBackendException("No alive compute node for aggregate operation");
+                            LOG.error("No available compute node found for the operation.");
+                            throw new NoAliveBackendException("No available compute node found for the operation");
                         }
                         pickBackendId = cn.getId();
                     }
