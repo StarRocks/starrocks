@@ -42,7 +42,7 @@ public abstract class MVRangePartitionMapper {
      * @param baseRangeMap base ref table's partition range map
      * @param granularity mv partition expr's granularity
      * @param partitionType mv partition expr's type
-     * @return mv partition range map
+     * @return wrapper containing both regular and virtual partition range maps
      */
     public abstract PartitionRangeWrapper toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                      String granularity,

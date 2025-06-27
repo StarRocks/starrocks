@@ -387,10 +387,10 @@ public class MaterializedViewAnalyzer {
             // columns' order may be changed for sort keys' reorder, need to
             // change `queryStatement.getQueryRelation`'s outputs at the same time.
             QueryRelation queryRelation = queryStatement.getQueryRelation();
-            List<Expr> unionOtherOutputExpression;
             if (queryRelation instanceof UnionRelation) {
-                // if the query relation is union relation, we need to get the other output expression
-                unionOtherOutputExpression = ((UnionRelation) queryRelation).getOtherOutputExpression();
+                // Extract output expressions from all union branches except the first to support
+                // virtual partition mapping for union-based materialized views
+                List<Expr> unionOtherOutputExpression = ((UnionRelation) queryRelation).getOtherOutputExpression();
                 statement.setUnionOtherOutputExpression(unionOtherOutputExpression);
             }
             List<Expr> outputExpressions = queryRelation.getOutputExpression();

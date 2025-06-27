@@ -559,8 +559,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private boolean reloaded = false;
 
     // This is used to store the virtual partition of union expressions.
-    private volatile Map<String, Range<PartitionKey>> virtualPartitionMapping;
-    private volatile List<Expr> unionOtherOutputExpression;
+    private transient Map<String, Range<PartitionKey>> virtualPartitionMapping;
+    private transient List<Expr> unionOtherOutputExpression;
     @SerializedName(value = "serializedUnionOtherOutputExprs")
     private List<ExpressionSerializedObject> serializedUnionOtherOutputExprs;
 

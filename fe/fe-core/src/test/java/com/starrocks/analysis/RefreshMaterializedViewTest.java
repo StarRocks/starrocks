@@ -1491,7 +1491,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
     @Test
     public void testUnionSupportMultipleExpr() throws Exception {
-        FeConstants.runningUnitTest = false;
         starRocksAssert
                 .createDatabaseIfNotExists("mvuniontest")
                 .useDatabase("mvuniontest")
@@ -1539,7 +1538,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
     @Test
     public void testUnionSupportMultipleExprWithSkipPartition() throws Exception {
-        FeConstants.runningUnitTest = false;
         starRocksAssert
                 .createDatabaseIfNotExists("mvuniontest")
                 .useDatabase("mvuniontest")
@@ -1552,7 +1550,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         "PARTITION BY RANGE(`datekey`)\n" +
                         "(\n" +
                         "PARTITION p20250101 VALUES [(\"2025-01-01\"), (\"2025-01-02\")),\n" +
-                        "PARTITION p20250102 VALUES [(\"2025-01-02\"), (\"2025-01-03\"))\n," +
+                        "PARTITION p20250102 VALUES [(\"2025-01-02\"), (\"2025-01-03\")),\n" +
                         "PARTITION p20250110 VALUES [(\"2025-01-10\"), (\"2025-01-11\"))\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(`datekey`, `item_id`)"
