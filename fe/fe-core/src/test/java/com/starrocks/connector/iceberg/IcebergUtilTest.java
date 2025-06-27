@@ -56,7 +56,7 @@ public class IcebergUtilTest {
         var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
                 5, ByteBuffer.wrap("2023-01-10".getBytes()));
         {
-            var nullValueCounts = Map.of(3, 0, 5, 0);
+            var nullValueCounts = Map.of(3, (long) 0, 5, (long) 0);
             var result = IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
             assertEquals(2, result.size());
             assertEquals(1, result.get(3).minValue);
@@ -66,12 +66,12 @@ public class IcebergUtilTest {
             assertEquals(null, result.get(5).maxValue);
         }
         {
-            var nullValueCounts = new HashMap<Integer, Integer>();
+            var nullValueCounts = new HashMap<Integer, Long>();
             var result = IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
             assertEquals(0, result.size());
         }
         {
-            var nullValueCounts = Map.of(3, 1, 5, 0);
+            var nullValueCounts = Map.of(3, (long) 1, 5, (long) 0);
             var result = IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
             assertEquals(2, result.size());
             assertEquals(null, result.get(3).minValue);
