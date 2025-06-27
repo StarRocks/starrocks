@@ -58,6 +58,7 @@
         <avro.version>1.12.0</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
         <kryo.version>4.0.2</kryo.version>
+        <commons-beanutils.version>1.11.0</commons-beanutils.version>
     </properties>
 
     <dependencyManagement>
@@ -160,6 +161,13 @@
                     </exclusion>
                 </exclusions>
             </dependency>
+
+            <dependency>
+                <groupId>commons-beanutils</groupId>
+                <artifactId>commons-beanutils</artifactId>
+                <version>${commons-beanutils.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-hdfs-client</artifactId>
