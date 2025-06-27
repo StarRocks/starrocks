@@ -703,6 +703,19 @@ bool ColumnValueRange<T>::is_empty_value_range() const {
 }
 
 template <class T>
+bool ColumnValueRange<T>::is_full_value_range() const {
+    if (_is_init_state || is_fixed_value_range()) {
+        return false;
+    }
+
+    bool full_low = (_low_value == _type_min && _low_op == FILTER_LARGER_OR_EQUAL) ||
+                    (_low_value < _type_min && _low_op == FILTER_LARGER);
+    bool full_high = (_high_value == _type_max && _high_op == FILTER_LESS_OR_EQUAL) ||
+                     (_high_value > _type_max && _high_op == FILTER_LESS);
+    return full_high && full_low;
+}
+
+template <class T>
 bool ColumnValueRange<T>::is_fixed_value_convertible() const {
     if (is_fixed_value_range()) {
         return false;

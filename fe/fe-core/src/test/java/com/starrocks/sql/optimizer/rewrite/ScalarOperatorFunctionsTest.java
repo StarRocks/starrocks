@@ -112,6 +112,23 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void xxHash64() {
+        ConstantOperator operator = ScalarOperatorFunctions.xxHash64(ConstantOperator.createNull(Type.VARCHAR));
+        assertTrue(operator.isNull());
+        assertEquals(Type.BIGINT, operator.getType());
+
+        assertEquals(-2612172575022167352L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("NULL")).getBigint());
+
+        assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070")).getBigint());
+
+        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070"),
+                ConstantOperator.createVarchar("cd824fbe-8134-8015-7f4a-000004ffffff")).getBigint());
+    }
+
+    @Test
     public void timeDiff() {
         assertEquals(-2534400.0, ScalarOperatorFunctions.timeDiff(O_DT_20101102_183010, O_DT_20101202_023010).getTime(),
                 1);
@@ -1625,5 +1642,53 @@ public class ScalarOperatorFunctionsTest {
                             tc.mode);
             assertEquals(String.format("test case failed: %s, result = %d", tc, result), tc.value, result);
         }
+    }
+
+    @Test
+    public void testLastDayDefaultMonth() {
+        Object[][] testCases = {
+                // date, expected last day of month
+                {"2023-05-10T10:00:00", "2023-05-31"},
+                {"2024-02-01T00:00:00", "2024-02-29"}, // Leap year
+                {"2021-02-01T00:00:00", "2021-02-28"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input);
+            assertEquals("Failed case: " + Arrays.toString(tc), tc[1], result.getDate().toLocalDate().toString());
+        }
+    }
+
+    @Test
+    public void testLastDayWithUnit() {
+        Object[][] testCases = {
+                {"2023-03-15T00:00:00", "month", "2023-03-31"},
+                {"2023-03-15T00:00:00", "quarter", "2023-03-31"},
+                {"2023-05-01T00:00:00", "quarter", "2023-06-30"},
+                {"2023-05-01T00:00:00", "year", "2023-12-31"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator unit = ConstantOperator.createVarchar((String) tc[1]);
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+            assertEquals("Failed case: " + Arrays.toString(tc), tc[2], result.getDate().toLocalDate().toString());
+        }
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testLastDayWithInvalidUnit() {
+        ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse("2023-05-10T00:00:00"));
+        ConstantOperator unit = ConstantOperator.createVarchar("invalid");
+        ScalarOperatorFunctions.lastDay(input, unit);
+    }
+
+    @Test
+    public void testLastDayWithNull() {
+        ConstantOperator input = ConstantOperator.createNull(Type.DATETIME);
+        ConstantOperator unit = ConstantOperator.createVarchar("month");
+        ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+        assertEquals(true, result.isNull());
     }
 }

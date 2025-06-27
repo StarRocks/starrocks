@@ -94,6 +94,8 @@ public:
 
     bool is_empty_value_range() const;
 
+    bool is_full_value_range() const;
+
     bool is_init_state() const { return _is_init_state; }
 
     bool is_fixed_value_convertible() const;

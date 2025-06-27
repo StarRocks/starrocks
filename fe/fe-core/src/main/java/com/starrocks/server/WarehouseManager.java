@@ -65,6 +65,7 @@ public class WarehouseManager implements Writable {
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
+    public static final long INVALID_WAREHOUSE_ID = -1L;
 
     // default compute resource
     public static final ComputeResource DEFAULT_RESOURCE = WarehouseComputeResource.DEFAULT;
@@ -86,10 +87,14 @@ public class WarehouseManager implements Writable {
 
     public void initDefaultWarehouse() {
         // gen a default warehouse
+        // Be sure to make this initialization idempotent, the upper level may invoke it multiple times without
+        // knowing it is initialized or not.
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
-            nameToWh.put(wh.getName(), wh);
-            idToWh.put(wh.getId(), wh);
+            if (!nameToWh.containsKey(DEFAULT_WAREHOUSE_NAME)) {
+                Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
+                nameToWh.put(wh.getName(), wh);
+                idToWh.put(wh.getId(), wh);
+            }
         }
     }
 
@@ -281,7 +286,7 @@ public class WarehouseManager implements Writable {
         return nextComputeNodeIndex;
     }
 
-    public Warehouse getCompactionWarehouse() {
+    public Warehouse getCompactionWarehouse(long tableId) {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }
 
@@ -289,8 +294,17 @@ public class WarehouseManager implements Writable {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }
 
+    public Warehouse getBackgroundWarehouse(long tableId) {
+        return getBackgroundWarehouse();
+    }
+
     public ComputeResource getBackgroundComputeResource() {
         final Warehouse warehouse = getBackgroundWarehouse();
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
+    }
+
+    public ComputeResource getBackgroundComputeResource(long tableId) {
+        final Warehouse warehouse = getBackgroundWarehouse(tableId);
         return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
     }
 
@@ -345,6 +359,14 @@ public class WarehouseManager implements Writable {
         throw new DdlException("CnGroup is not implemented");
     }
 
+    public void recordWarehouseInfoForTable(long tableId, long warehouseId) {
+
+    }
+
+    public void removeTableWarehouseInfo(long tableId) {
+
+    }
+
     public Set<String> getAllWarehouseNames() {
         return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
     }
@@ -370,6 +392,11 @@ public class WarehouseManager implements Writable {
 
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        // Create the default warehouse during the WarehouseManager::load() invoked by loadImage()
+        // The default_warehouse is not persisted through WarehouseManager::save(), but some of the image loads and
+        // postImageLoad actions may depend on default_warehouse to perform actions.
+        // The default_warehouse must be ready before postImageLoad.
+        initDefaultWarehouse();
     }
 
     public void addWarehouse(Warehouse warehouse) {

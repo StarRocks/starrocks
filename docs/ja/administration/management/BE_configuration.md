@@ -144,6 +144,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: thrift RPC のタイムアウト。
 - 導入バージョン: -
 
+##### thrift_rpc_strict_mode
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Thrift の Strict 実行モードが有効かどうか。Thrift の Strict モードについては、[Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md) を参照してください。
+- 導入バージョン: -
+
+##### thrift_rpc_max_body_size
+
+- デフォルト: 0
+- タイプ: Int
+- 単位:
+- 変更可能: いいえ
+- 説明: RPC の文字列ボディの最大サイズ。`0` は無制限であることを示す。
+- 導入バージョン: -
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- デフォルト: 5000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: いいえ
+- 説明: Thrift RPC 接続の最大有効時間。コネクションプールにこの値以上存在すると、コネクションは閉じられます。この値は FE 設定 `thrift_client_timeout_ms` と一致するように設定する必要があります。
+
 #### bRPC
 
 ##### brpc_port
@@ -1516,6 +1542,50 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: BE ノードの CPU コアごとに Pipeline Connector に割り当てられるスキャンスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
 - 導入バージョン: -
+
+##### pipeline_scan_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_thread_num
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジン PREPARE Fragment スレッドプールのスレッド数。`0` はシステムの VCPU コア数と同じであることを示す。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
+- 導入バージョン: -
+
+##### pipeline_poller_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、ドライバがポーラの 1 回のディスパッチに `pipeline_poller_timeout_guard_ms` 以上の時間がかかると、ドライバとオペレータの情報が出力される。
+- 導入バージョン: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、PREPARE 処理中にプランの Fragment が `pipeline_prepare_timeout_guard_ms` を超えると、プランの Fragment のスタックトレースが出力される。
 
 ##### max_hdfs_file_handle
 

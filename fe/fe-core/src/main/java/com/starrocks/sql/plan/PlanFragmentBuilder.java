@@ -60,6 +60,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -196,13 +197,17 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
-import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -235,6 +240,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -603,10 +609,10 @@ public class PlanFragmentBuilder {
             // ------------------------------------------------------------------------------------
             Set<Integer> pushdownPredUsedColumnIds = new HashSet<>();
             Set<Integer> nonPushdownPredUsedColumnIds = new HashSet<>();
+            IsSimpleStrictPredicateVisitor checkVistor = new IsSimpleStrictPredicateVisitor(sessionVariable);
             for (ScalarOperator predicate : predicates) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
-                boolean isPushdown =
-                        DecodeVisitor.isSimpleStrictPredicate(predicate, sessionVariable.isEnablePushdownOrPredicate())
+                boolean isPushdown = predicate.accept(checkVistor, null)
                                 && Arrays.stream(usedColumns.getColumnIds()).noneMatch(nonPushdownColumnIds::contains);
                 if (isPushdown) {
                     for (int cid : usedColumns.getColumnIds()) {
@@ -627,6 +633,89 @@ public class PlanFragmentBuilder {
                     .filter(cid -> !nonPushdownPredUsedColumnIds.contains(cid) && !outputColumnIds.contains(cid))
                     .collect(Collectors.toSet());
             scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
+        }
+
+        // The predicate no function all, this implementation is consistent with BE olap scan node
+        private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
+
+            private final boolean enablePushDownOrPredicate;
+
+            private final boolean enablePushDownExprPredicate;
+
+            public IsSimpleStrictPredicateVisitor(SessionVariable variable) {
+                this.enablePushDownOrPredicate = variable.isEnablePushdownOrPredicate();
+                this.enablePushDownExprPredicate = variable.isEnableColumnExprPredicate();
+            }
+
+            @Override
+            public Boolean visit(ScalarOperator scalarOperator, Void context) {
+                return false;
+            }
+
+            @Override
+            public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+                if (!enablePushDownOrPredicate) {
+                    return false;
+                }
+
+                if (!predicate.isAnd() && !predicate.isOr() && !enablePushDownExprPredicate) {
+                    return false;
+                }
+
+                return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
+            }
+
+            @Override
+            public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+                if (predicate.getBinaryType() == EQ_FOR_NULL) {
+                    return false;
+                }
+                if (predicate.getUsedColumns().cardinality() > 1) {
+                    return false;
+                }
+                if (!predicate.getChild(1).isConstant()) {
+                    return false;
+                }
+
+                if (!checkTypeCanPushDown(predicate)) {
+                    return false;
+                }
+
+                return predicate.getChild(0).isColumnRef();
+            }
+
+            @Override
+            public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
+                if (!checkTypeCanPushDown(predicate)) {
+                    return false;
+                }
+
+                return predicate.getChild(0).isColumnRef() && predicate.allValuesMatch(ScalarOperator::isConstantRef);
+            }
+
+            @Override
+            public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+                if (!checkTypeCanPushDown(predicate)) {
+                    return false;
+                }
+
+                return predicate.getChild(0).isColumnRef();
+            }
+
+            @Override
+            public Boolean visitMatchExprOperator(MatchExprOperator predicate, Void context) {
+                // match expression is always satisfy the following format:
+                // SlotRef MATCH StringLiteral which is always SimpleStrictPredicate
+                return true;
+            }
+
+            // These type predicates couldn't be pushed down to storage engine,
+            // which are consistent with BE implementations.
+            private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
+                Type leftType = scalarOperator.getChild(0).getType();
+                return !leftType.isFloatingPointType() && !leftType.isComplexType() && !leftType.isJsonType() &&
+                        !leftType.isTime();
+            }
         }
 
         @Override
@@ -1725,7 +1814,9 @@ public class PlanFragmentBuilder {
                                 scanNode.setLabel(constantOperator.getVarchar());
                                 break;
                             case "JOB_ID":
-                                scanNode.setJobId(constantOperator.getBigint());
+                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
                                 break;
                             case "ID":
                                 if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME)
@@ -2686,7 +2777,8 @@ public class PlanFragmentBuilder {
         }
 
         private List<Expr> extractConjuncts(ScalarOperator predicate, ExecPlan context) {
-            return Utils.extractConjuncts(predicate).stream()
+            return Utils.extractConjuncts(predicate).stream().sorted((l, r) ->
+                            Boolean.compare(r.isJoinDerived(), l.isJoinDerived()))
                     .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
@@ -3651,7 +3743,7 @@ public class PlanFragmentBuilder {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
-            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).collect(Collectors.toList());
+            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).toList();
             Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             for (BinaryPredicateOperator s : eqOnPredicates) {

@@ -1929,8 +1929,10 @@ class StarrocksSQLApiLib(object):
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
+            if len(results) == 0:
+                return False
             for _res in results:
-                last_refresh_state = _res[12]
+                last_refresh_state = _res[14]
                 if last_refresh_state not in TASK_RUN_SUCCESS_STATES:
                     print("mv %s last refresh state is %s, not in %s" % (mv_name, last_refresh_state, TASK_RUN_SUCCESS_STATES))
                     return False
@@ -1948,6 +1950,8 @@ class StarrocksSQLApiLib(object):
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
+            if len(results) == 0:
+                return False
             for _res in results:
                 if _res[0] not in TASK_RUN_SUCCESS_STATES:
                     return False
@@ -1963,18 +1967,10 @@ class StarrocksSQLApiLib(object):
             res = self.retry_execute_sql(show_sql, True)
             if not res["status"]:
                 tools.assert_true(False, "show mv state error")
-            success_cnt = get_success_count(res["result"])
+            success_cnt = self.get_task_run_success_count(res["result"])
             if success_cnt >= check_count:
                 return True
             return False
-
-        # information_schema.task_runs result
-        def get_success_count(results):
-            cnt = 0
-            for _res in results:
-                if _res[0] in TASK_RUN_SUCCESS_STATES:
-                    cnt += 1
-            return cnt
 
         max_loop_count = 180
         is_all_ok = False
@@ -1997,10 +1993,18 @@ class StarrocksSQLApiLib(object):
                 count += 1
         tools.assert_equal(True, is_all_ok, "wait async materialized view finish error")
 
+    # information_schema.task_runs result
+    def get_task_run_success_count(self, results):
+        cnt = 0
+        for _res in results:
+            if _res[0] in TASK_RUN_SUCCESS_STATES:
+                cnt += 1
+        return cnt
+
     def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
-        show_sql = """select count(*) from information_schema.materialized_views 
+        show_sql = """select state from information_schema.materialized_views 
             join information_schema.task_runs using(task_name)
-            where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED'  or state = 'SKIPPED')
+            where table_schema='{}' and table_name='{}';
         """.format(
             db_name, mv_name
         )
@@ -2010,8 +2014,7 @@ class StarrocksSQLApiLib(object):
         refresh_count = 0
         while cnt < 60:
             res = self.retry_execute_sql(show_sql, True)
-            print(res)
-            refresh_count = res["result"][0][0]
+            refresh_count = self.get_task_run_success_count(res["result"])
             if refresh_count >= expect_count:
                 return
             else:
@@ -2804,9 +2807,28 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
     def print_table_partitions_num(self, table_name) -> str:
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
-        tools.assert_true(res["status"], "show schema change task error")
+        tools.assert_true(res["status"], "show table partitions error")
         ans = res["result"]
         return str(len(ans))
+
+    def print_plan_partition_selected_num(self, sql, table_name) -> str:
+        res = self.execute_sql("EXPLAIN %s" % sql, True)
+        tools.assert_true(res["status"], "explain sql error")
+        plan = res["result"]
+        tools.assert_true(len(plan) > 0, "explain sql result is empty")
+
+        lines = str(plan).split('\n')
+        # Search for the table scan node for the specified table
+        for line in lines:
+            if f'TABLE: {table_name}'.lower() in line.lower():
+                # Now look forward in the following lines for the partitions information
+                idx = lines.index(line)
+                for i in range(idx, min(idx + 10, len(lines))):  # Check next 10 lines max
+                    if 'partitions=' in lines[i]:
+                        parts = lines[i].split('partitions=')
+                        if len(parts) > 1:
+                            partition_info = parts[1].split(',')[0].replace('\'', '').strip()
+                            return partition_info
 
     def assert_table_partitions_num(self, table_name, expect_num):
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)

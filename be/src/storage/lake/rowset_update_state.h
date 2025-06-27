@@ -157,7 +157,7 @@ public:
 
     // Handle `segment_id`-th segment file's partial update request.
     Status rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
-                           std::map<int, FileInfo>* replace_segments, std::vector<std::string>* orphan_files);
+                           std::map<int, FileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
 
     // Release `segment_id`-th segment file's state.
     void release_segment(uint32_t segment_id);

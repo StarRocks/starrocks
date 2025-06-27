@@ -17,6 +17,7 @@ package com.starrocks.connector.delta;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
@@ -94,7 +95,8 @@ public class DeltaUtilsTest {
         };
 
         DeltaLakeTable deltaLakeTable = DeltaUtils.convertDeltaSnapshotToSRTable("catalog0",
-                new DeltaLakeSnapshot("db0", "table0", null, snapshot, 123, "path"));
+                new DeltaLakeSnapshot("db0", "table0", null, snapshot,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123)));
         Assert.assertEquals(2, deltaLakeTable.getFullSchema().size());
         Assert.assertEquals("catalog0", deltaLakeTable.getCatalogName());
         Assert.assertEquals("db0", deltaLakeTable.getCatalogDBName());

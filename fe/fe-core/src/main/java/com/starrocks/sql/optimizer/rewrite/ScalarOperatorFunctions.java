@@ -49,6 +49,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
@@ -66,6 +67,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Month;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -230,6 +232,29 @@ public class ScalarOperatorFunctions {
             Pair<Long, Long> value = computeYearWeekValue(year, month, day, weekBehaviour | 2);
             return value.first * 100 + value.second;
         }
+    }
+
+    public static class HashFunctions {
+        private static final long XX_HASH3_64_SEED = 0;
+
+        public static long hash64(String value, long seed) {
+            byte[] data = value.getBytes();
+            LongHashFunction hasher = LongHashFunction.xx3(seed);
+            return hasher.hashBytes(data, 0, data.length);
+        }
+    }
+
+    @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT)
+    public static ConstantOperator xxHash64(ConstantOperator... input) {
+        Preconditions.checkArgument(input.length > 0);
+        long hashValue = HashFunctions.XX_HASH3_64_SEED;
+        for (ConstantOperator constantOperator : input) {
+            if (constantOperator.isNull()) {
+                return ConstantOperator.createNull(Type.BIGINT);
+            }
+            hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
+        }
+        return ConstantOperator.createBigint(hashValue);
     }
 
     /**
@@ -436,6 +461,47 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "last_day", argTypes = {DATE}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATE, VARCHAR}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE, isMonotonic = true),
+    })
+    public static ConstantOperator lastDay(ConstantOperator date, ConstantOperator... unitArgs) {
+        if (date.isNull()) {
+            return ConstantOperator.createNull(date.getType());
+        }
+
+        String unit = "month";
+        if (unitArgs.length > 0) {
+            if (unitArgs[0].isNull()) {
+                return ConstantOperator.createNull(date.getType());
+            }
+            unit = unitArgs[0].getVarchar().toLowerCase();
+        }
+
+        LocalDateTime dt = date.getDatetime();
+        LocalDate resultDate;
+        switch (unit) {
+            case "month":
+                resultDate = dt.with(TemporalAdjusters.lastDayOfMonth()).toLocalDate();
+                break;
+            case "quarter":
+                int currentQuarter = (dt.getMonthValue() - 1) / 3;
+                Month lastMonthOfQuarter = Month.of((currentQuarter + 1) * 3);
+                LocalDate quarterEnd = LocalDate.of(dt.getYear(), lastMonthOfQuarter, 1)
+                        .with(TemporalAdjusters.lastDayOfMonth());
+                resultDate = quarterEnd;
+                break;
+            case "year":
+                resultDate = LocalDate.of(dt.getYear(), 12, 31);
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid unit for last_day(): " + unit);
+        }
+
+        return ConstantOperator.createDateOrNull(resultDate.atStartOfDay());
+    }
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),

@@ -32,6 +32,8 @@ public class ShowClustersStmt extends ShowStmt {
                     .addColumn(new Column("ComputeNodeIds", ScalarType.createVarchar(4096)))
                     .addColumn(new Column("Pending", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Running", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Enabled", ScalarType.createVarchar(10)))
+                    .addColumn(new Column("Properties", ScalarType.createVarchar(1024)))
                     .build();
 
     public ShowClustersStmt(String warehouseName) {

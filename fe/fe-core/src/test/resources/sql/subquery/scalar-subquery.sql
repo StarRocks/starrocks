@@ -647,9 +647,9 @@ INNER JOIN (join-predicate [20: add = 17: max AND add(19: cast, 2: v2) = add(1: 
         EXCHANGE BROADCAST
             SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{17: max=max(17: max)}] group by [[19: cast, 10: t1d]] having [17: max IS NOT NULL]
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[19: cast, 10: t1d]] having [10: t1d IS NOT NULL]
             EXCHANGE SHUFFLE[19, 10]
-                AGGREGATE ([LOCAL] aggregate [{17: max=max(10: t1d)}] group by [[19: cast, 10: t1d]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{}] group by [[19: cast, 10: t1d]] having [null]
                     SCAN (columns[9: t1c, 10: t1d] predicate[9: t1c = 1])
 [end]
 

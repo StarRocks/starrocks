@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.persist;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
@@ -57,6 +58,9 @@ public class TaskRunStatus implements Writable {
     // You can use the startTaskRunId to find the batch of task runs.
     @SerializedName("startTaskRunId")
     private String startTaskRunId;
+
+    @SerializedName("taskRunId")
+    private String taskRunId;
 
     @SerializedName("queryId")
     private String queryId;
@@ -152,6 +156,14 @@ public class TaskRunStatus implements Writable {
 
     public void setStartTaskRunId(String startTaskRunId) {
         this.startTaskRunId = startTaskRunId;
+    }
+
+    public String getTaskRunId() {
+        return taskRunId;
+    }
+
+    public void setTaskRunId(String taskRunId) {
+        this.taskRunId = taskRunId;
     }
 
     public String getQueryId() {
@@ -359,26 +371,43 @@ public class TaskRunStatus implements Writable {
     }
 
     public Constants.TaskRunState getLastRefreshState() {
+        if (!source.isMVTask()) {
+            return state;
+        }
+
         if (isRefreshFinished()) {
             Preconditions.checkArgument(state.isFinishState(), String.format("state %s must be finish state", state));
             return state;
         } else {
-            // {@code processStartTime == 0} means taskRun have not been scheduled, its state should be pending.
-            // TODO: how to distinguish TaskRunStatus per partition.
-            return processStartTime == 0 ? state : Constants.TaskRunState.RUNNING;
+            if (state.equals(Constants.TaskRunState.SUCCESS)) {
+                return Constants.TaskRunState.RUNNING;
+            }
+            String startTaskRunId = getStartTaskRunId();
+            if (startTaskRunId != null && startTaskRunId.equals(taskRunId)) {
+                // if startTaskRunId equals taskRunId, it means this is the first task run in the batch
+                // so we return the current state
+                return state;
+            } else {
+                // if startTaskRunId is not equals taskRunId, it means this is a sub task run in the batch
+                // so we return RUNNING state
+                return processStartTime == 0 ? state : Constants.TaskRunState.RUNNING;
+            }
         }
     }
 
+    @VisibleForTesting
     public boolean isRefreshFinished() {
-        if (state.equals(Constants.TaskRunState.FAILED)) {
-            return true;
-        }
         if (!state.isFinishState()) {
             return false;
+        } else {
+            if (!state.equals(Constants.TaskRunState.SUCCESS)) {
+                return true;
+            }
+            // if state is success, we should check if the mvTaskRunExtraMessage is empty
+            return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
+                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
         }
-        return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
-                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
-                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
     }
 
     public long calculateRefreshProcessDuration() {
@@ -442,13 +471,12 @@ public class TaskRunStatus implements Writable {
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
-
-
     @Override
     public String toString() {
         return "TaskRunStatus{" +
                 "queryId='" + queryId + '\'' +
                 ", taskName='" + taskName + '\'' +
+                ", taskRunId='" + taskRunId + '\'' +
                 ", startTaskRunId='" + startTaskRunId + '\'' +
                 ", createTime=" + createTime +
                 ", finishTime=" + finishTime +

@@ -274,11 +274,11 @@ insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 values('测试2');
 insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 values('测试3');
 -- result:
 -- !result
-select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4;
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 order by c1;
 -- result:
-测试3
 测试1
 测试2
+测试3
 -- !result
 function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 where c1="测试2"', 'partitions=1/1')
 -- result:
@@ -346,6 +346,62 @@ select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 where c1 is NULL
 -- result:
 None
 -- !result
+CREATE TABLE IF NOT EXISTS iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t7 (
+    id int,
+    v1 int,
+    v2 int,
+    dt datetime
+)
+PARTITION BY day(dt);
+-- result:
+-- !result
+INSERT INTO iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t7 (id, dt, v1, v2) VALUES
+                (1,"2025-05-15",1,1),(2,"2025-05-18",2,2),(3,"2025-05-21",3,3),(4,"2025-05-24",4,4),(5, NULL, NULL, NULL),
+                (1,"2025-06-15",1,1),(2,"2025-06-18",2,2),(3,"2025-06-21",3,3),(4,"2025-06-24",4,4),(5, NULL, NULL, NULL),
+                (1,"2025-07-15",1,1),(2,"2025-07-18",2,2),(3,"2025-07-21",3,3),(4,"2025-07-24",4,4),(5, NULL, NULL, NULL);
+-- result:
+-- !result
+create database default_catalog.iceberg_sink_db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW default_catalog.iceberg_sink_db_${uuid0}.test_mv_case_iceberg_transform_day_1
+properties (
+    "replication_num"="1"
+)
+DISTRIBUTED BY RANDOM
+PARTITION BY date_trunc('day', dt)
+AS
+SELECT dt, sum(v1), count(v2) FROM iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t7 where id > 1 and dt >= '2025-06-01' group by dt;
+-- result:
+-- !result
+refresh materialized view default_catalog.iceberg_sink_db_${uuid0}.test_mv_case_iceberg_transform_day_1 with sync mode;
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, sum(v1), count(v2) FROM iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t7 where id > 1 and dt >= '2025-06-01' group by dt order by dt;
+-- result:
+2025-06-18 00:00:00	2	1
+2025-06-21 00:00:00	3	1
+2025-06-24 00:00:00	4	1
+2025-07-18 00:00:00	2	1
+2025-07-21 00:00:00	3	1
+2025-07-24 00:00:00	4	1
+-- !result
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SELECT dt, sum(v1), count(v2) FROM iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t7 where id > 1 and dt >= '2025-06-01' group by dt order by dt;
+-- result:
+2025-06-18 00:00:00	2	1
+2025-06-21 00:00:00	3	1
+2025-06-24 00:00:00	4	1
+2025-07-18 00:00:00	2	1
+2025-07-21 00:00:00	3	1
+2025-07-24 00:00:00	4	1
+-- !result
+drop database default_catalog.iceberg_sink_db_${uuid0};
+-- result:
+-- !result
 drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 force;
 -- result:
 -- !result
@@ -362,6 +418,9 @@ drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 force;
 -- result:
 -- !result
 drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 force;
+-- result:
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t7 force;
 -- result:
 -- !result
 drop database iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0};
