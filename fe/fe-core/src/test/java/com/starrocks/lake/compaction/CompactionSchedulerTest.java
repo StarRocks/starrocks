@@ -462,11 +462,13 @@ public class CompactionSchedulerTest {
                 globalTransactionMgr, globalStateMgr, "");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class);
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class,
+                ComputeResource.class);
         method.setAccessible(true);
         ExceptionChecker.expectThrows(InvocationTargetException.class,
                 () -> {
-                    method.invoke(scheduler, currentVersion, beToTablets, txnId, priority);
+                    method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
+                            WarehouseManager.DEFAULT_RESOURCE);
                 });
     }
 }
