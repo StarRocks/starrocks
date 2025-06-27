@@ -86,7 +86,7 @@ enum TExprNodeType {
 
   // query DICTIONARY object
   DICTIONARY_GET_EXPR,
-  
+
   JIT_EXPR,
 
   MATCH_EXPR,
@@ -270,7 +270,7 @@ struct TExpr {
 
 struct TExprMinMaxValue {
   1: required TExprNodeType type
-  2: required has_null
+  2: required bool has_null
   3: optional i64 int_value
   4: optional double float_value
 }
