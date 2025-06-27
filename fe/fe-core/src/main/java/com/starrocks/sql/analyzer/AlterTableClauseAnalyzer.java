@@ -304,7 +304,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
                                     " cannot be updated now because this table contains LakeRollup created in old version."  + 
-                                    "You can rebuild the Rollup and retry");
+                                    " You can rebuild the Rollup and retry");
             }
 
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
