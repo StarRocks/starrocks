@@ -29,7 +29,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -1590,7 +1589,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
 
     @Test
-    public void testUnionSupportMultipleExprWithDiffFunc() throws Exception {
+    public void testUnionSupportMultipleExpr2() throws Exception {
         starRocksAssert
                 .createDatabaseIfNotExists("mvuniontest")
                 .useDatabase("mvuniontest")
