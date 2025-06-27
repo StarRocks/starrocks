@@ -3016,7 +3016,7 @@ public class PlanFragmentBuilder {
                 } else if (!leftExecGroup.isDisableColocateGroup() &&
                         (distributionMode.equals(JoinNode.DistributionMode.BROADCAST) ||
                                 (distributionMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET) &&
-                                        !joinOperator.isRightJoin()))) {
+                                        !joinOperator.isRightJoin() && !joinOperator.isFullOuterJoin()))) {
                     // case 1: broadcast join
                     // case 2: local bucket shuffle (no-right) join
                     // do nothing
