@@ -1606,6 +1606,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         ")\n" +
                         "DISTRIBUTED BY HASH(`datekey`, `item_id`)"
                 );
+
         executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-01 00:00:00', '1', 1);");
         executeInsertSql(connectContext, "INSERT INTO mvuniontest.par_tbl1 values ('2025-01-02 00:00:00', '1', 1);");
 
