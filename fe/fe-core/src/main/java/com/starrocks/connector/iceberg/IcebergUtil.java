@@ -14,10 +14,48 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.analysis.SlotDescriptor;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.types.Type;
+import org.apache.iceberg.types.Types;
+
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
+
 public final class IcebergUtil {
-    private IcebergUtil() {}
+    private IcebergUtil() {
+    }
 
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    public static class MinMaxValue {
+        Object minValue;
+        Object maxValue;
+    }
+
+    public static Map<Integer, MinMaxValue> parseMinMaxValueOfSlots(Schema schema,
+                                                                    Map<Integer, ByteBuffer> lowerBound,
+                                                                    Map<Integer, ByteBuffer> upperBound,
+                                                                    List<SlotDescriptor> slots) {
+        lowerBound = lowerBound == null ? Map.of() : lowerBound;
+        upperBound = upperBound == null ? Map.of() : upperBound;
+        Map<Integer, MinMaxValue> minMaxValues = Map.of();
+        for (SlotDescriptor slot : slots) {
+            if (!slot.getType().isScalarType()) {
+                continue;
+            }
+            Types.NestedField field = schema.findField(slot.getColumn().getName());
+            if (field == null) {
+                continue;
+            }
+            Type type = field.type();
+            if (!type.isPrimitiveType()) {
+                continue;
+            }
+        }
+        return minMaxValues;
     }
 }
