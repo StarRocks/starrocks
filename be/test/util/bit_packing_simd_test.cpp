@@ -22,6 +22,9 @@
 #include "util/bit_packing.h"
 #include "util/bit_packing_arrow.h"
 #include "util/bit_packing_default.h"
+#ifdef USE_AVX512
+#include "util/bit_packing_avx512.h"
+#endif
 
 namespace starrocks {
 
