@@ -157,7 +157,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.hive_column_names = _scanner_params.hive_column_names;
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
-    ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
+    ctx.can_use_min_max_opt = _scanner_params.can_use_min_max_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
