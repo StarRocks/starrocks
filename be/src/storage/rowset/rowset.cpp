@@ -465,18 +465,11 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
                             _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
 
-                    RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
-                    std::set<std::string> files;
-                    RETURN_IF_ERROR(fs::list_dirs_files(src_inverted_file_path, nullptr, &files));
-                    for (const auto& file : files) {
-                        auto src_absolute_path = fmt::format("{}/{}", src_inverted_file_path, file);
-                        auto dst_absolute_path = fmt::format("{}/{}", dst_inverted_link_path, file);
-
-                        if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
-                            PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
-                            return Status::RuntimeError(strings::Substitute("Fail to link index gin file from $0 to $1",
-                                                                            src_absolute_path, dst_absolute_path));
-                        }
+                    if (link(src_inverted_file_path.c_str(), dst_inverted_link_path.c_str()) != 0) {
+                        PLOG(WARNING) << "Fail to link " << src_inverted_file_path << " to " << dst_inverted_link_path;
+                        return Status::RuntimeError(strings::Substitute("Fail to link index gin file from $0 to $1",
+                                                                        src_inverted_file_path,
+                                                                        dst_inverted_link_path));
                     }
                 } else if (index.index_type() == VECTOR) {
                     std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
@@ -584,23 +577,11 @@ StatusOr<int64_t> Rowset::copy_files_to(KVStore* kvstore, const std::string& dir
                     std::string src_index_path = IndexDescriptor::inverted_index_file_path(
                             _rowset_path, rowset_id().to_string(), i, index.index_id());
 
-                    std::set<std::string> files;
-                    RETURN_IF_ERROR(fs::list_dirs_files(src_index_path, nullptr, &files));
-                    for (const auto& file : files) {
-                        auto src_absolute_path = fmt::format("{}/{}", src_index_path, file);
-                        auto dst_absolute_path =
-                                fmt::format("{}/{}_{}_{}_{}", dir, rowset_id().to_string(), i, index.index_id(), file);
-
-                        copy_st = fs::copy_file(src_absolute_path, dst_absolute_path);
-                        if (!copy_st.ok()) {
-                            LOG(WARNING) << "Error to copy index. src:" << src_absolute_path
-                                         << ", dst:" << dst_absolute_path << ", errno=" << std::strerror(Errno::no());
-                            return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ",
-                                                               src_absolute_path, dst_absolute_path,
-                                                               std::strerror(Errno::no())));
-                        } else {
-                            ncopy += copy_st.value();
-                        }
+                    if (!fs::copy_file(src_index_path, dst_index_path).ok()) {
+                        LOG(WARNING) << "Error to copy index. src:" << src_index_path << ", dst:" << dst_index_path
+                                     << ", errno=" << std::strerror(Errno::no());
+                        return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ",
+                                                           src_index_path, dst_index_path, std::strerror(Errno::no())));
                     }
                 }
             }

@@ -228,6 +228,21 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
             std::string new_file_name = file.substr(p3 - file.data() + 1, file.data() + file.size() - p3);
             RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file,
                                                                inverted_index_path + "/" + new_file_name));
+        } else if (file.ends_with(".ivt")) {
+            auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
+            auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
+            auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
+            if (p1 == nullptr || p2 == nullptr || p3 == nullptr) {
+                return Status::InternalError("invalid index file name: " + file);
+            }
+
+            std::string rowsetid = file.substr(0, p1 - file.data());
+            std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
+            std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
+            std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
+                    clone_dir, rowsetid, std::stoi(segment_id), std::stoi(index_id));
+
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file, inverted_index_path));
         }
     }
 
@@ -796,20 +811,12 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
                                 clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
                         std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
                                 clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
-
-                        RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
-                        std::set<std::string> files;
-                        RETURN_IF_ERROR(fs::list_dirs_files(src_inverted_file_path, nullptr, &files));
-                        for (const auto& file : files) {
-                            auto src_absolute_path = fmt::format("{}/{}", src_inverted_file_path, file);
-                            auto dst_absolute_path = fmt::format("{}/{}", dst_inverted_link_path, file);
-
-                            if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
-                                PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
-                                return Status::RuntimeError(
-                                        strings::Substitute("Fail to link index inverted file from $0 to $1",
-                                                            src_absolute_path, dst_absolute_path));
-                            }
+                        if (link(src_inverted_file_path.c_str(), dst_inverted_link_path.c_str()) != 0) {
+                            PLOG(WARNING)
+                                    << "Fail to link " << src_inverted_file_path << " to " << dst_inverted_link_path;
+                            return Status::RuntimeError(
+                                    strings::Substitute("Fail to link index inverted file from $0 to $1",
+                                                        src_inverted_file_path, dst_inverted_link_path));
                         }
                     } else if (index.index_type() == VECTOR) {
                         std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
