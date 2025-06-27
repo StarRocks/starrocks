@@ -86,7 +86,7 @@ WHERE tenant_id = 42
   AND ts BETWEEN '2025-05-01' AND '2025-05-07';
 ```
 
-With SORT BY (tenant_id, ts) only the segments whose first key equals 42 are considered, and within them only the pages whose ts window overlaps those seven days. A 100 B‑row table may scan less than 1 B rows, turning minutes into seconds.
+With `ORDER BY (tenant_id, ts)` only the segments whose first key equals 42 are considered, and within them only the pages whose ts window overlaps those seven days. A 100 B‑row table may scan less than 1 B rows, turning minutes into seconds.
 
 ---
 2. Millisecond Point  Look‑Ups—Sparse Prefix Index
