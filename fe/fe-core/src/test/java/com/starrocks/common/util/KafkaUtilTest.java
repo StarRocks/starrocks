@@ -30,7 +30,6 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

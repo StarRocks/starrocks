@@ -109,10 +109,12 @@ public class LogicalSlotTest {
         ctx.registerListener(listener1);
         ctx.registerListener(listener2);
 
-        new Expectations() {{
-            listener1.onQueryFinished(ctx);
-            listener2.onQueryFinished(ctx);
-        }};
+        new Expectations() {
+            {
+                listener1.onQueryFinished(ctx);
+                listener2.onQueryFinished(ctx);
+            }
+        };
 
         ctx.onQueryFinished();
     }
@@ -122,10 +124,12 @@ public class LogicalSlotTest {
         ConnectContext ctx = new ConnectContext();
         ctx.registerListener(listener1);
 
-        new Expectations() {{
-            listener1.onQueryFinished(ctx);
-            result = new RuntimeException("Listener error");
-        }};
+        new Expectations() {
+            {
+                listener1.onQueryFinished(ctx);
+                result = new RuntimeException("Listener error");
+            }
+        };
 
         ctx.onQueryFinished();
         // Verify that the warning log is generated (log verification depends on the logging framework used)
