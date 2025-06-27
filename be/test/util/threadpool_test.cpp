@@ -43,6 +43,7 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "gutil/walltime.h"
+#include "testutil/assert.h"
 #include "util/await.h"
 #include "util/countdown_latch.h"
 #include "util/metrics.h"
@@ -50,7 +51,6 @@
 #include "util/random.h"
 #include "util/scoped_cleanup.h"
 #include "util/spinlock.h"
-#include "testutil/assert.h"
 
 using std::atomic;
 using std::shared_ptr;
