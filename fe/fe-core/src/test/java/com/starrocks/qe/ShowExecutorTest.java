@@ -1013,7 +1013,6 @@ public class ShowExecutorTest {
                 "\"storage_medium\" = \"SSD\"\n" +
                 ")\n" +
                 "AS select col1, col2 from table1;";
-
         Assert.assertTrue(resultSet.next());
         List<Column> mvSchemaTable = MaterializedViewsSystemTable.create().getFullSchema();
         Assert.assertEquals("1000", resultSet.getString(0));
@@ -1027,21 +1026,21 @@ public class ShowExecutorTest {
         Assert.assertEquals("", resultSet.getString(8));
         Assert.assertEquals("\\N", resultSet.getString(9));
         Assert.assertEquals("\\N", resultSet.getString(10));
-        Assert.assertEquals("\\N", resultSet.getString(11));
-        Assert.assertEquals("0.000", resultSet.getString(12));
-        Assert.assertEquals("", resultSet.getString(13));
-        Assert.assertEquals("", resultSet.getString(14));
-        Assert.assertEquals("false", resultSet.getString(15));
+        Assert.assertEquals("0.000", resultSet.getString(11));
+        Assert.assertEquals("", resultSet.getString(12));
+        Assert.assertEquals("false", resultSet.getString(13));
         System.out.println(resultSet.getResultRows());
-        for (int i = 16; i < mvSchemaTable.size() - 5; i++) {
+        for (int i = 14; i < 20; i++) {
             System.out.println(i);
             Assert.assertEquals("", resultSet.getString(i));
         }
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 5));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 4));
-        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 3));
-        Assert.assertTrue(resultSet.getString(mvSchemaTable.size() - 2).contains("UNKNOWN"));
-        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(20));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(21));
+        Assert.assertEquals("", resultSet.getString(22));
+        Assert.assertTrue(resultSet.getString(23).contains("UNKNOWN"));
+        Assert.assertEquals("", resultSet.getString(24));
+        Assert.assertEquals("\\N", resultSet.getString(25));
+        Assert.assertEquals("", resultSet.getString(26));
         Assert.assertFalse(resultSet.next());
     }
 

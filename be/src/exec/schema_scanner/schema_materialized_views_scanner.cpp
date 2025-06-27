@@ -349,8 +349,12 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // TABLE_ROWS
             if (info.__isset.rows) {
                 if (info.__isset.rows) {
-                    int64_t value = std::stoll(info.rows);
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                    try {
+                        int64_t value = std::stoll(info.rows);
+                        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                    } catch (const std::exception& e) {
+                        fill_data_column_with_null(column.get());
+                    }
                 } else {
                     fill_data_column_with_null(column.get());
                 }
