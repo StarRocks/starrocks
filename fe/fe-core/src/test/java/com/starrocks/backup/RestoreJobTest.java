@@ -160,7 +160,7 @@ public class RestoreJobTest {
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
         MetricRepo.init();
 
-        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
+        globalStateMgr.getWarehouseMgr().initDefaultWarehouse();
 
         new Expectations(globalStateMgr) {
             {
