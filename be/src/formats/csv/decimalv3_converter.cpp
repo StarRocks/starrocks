@@ -56,5 +56,6 @@ bool DecimalV3Converter<T>::read_quoted_string(Column* column, const Slice& s, c
 template class DecimalV3Converter<int32_t>;
 template class DecimalV3Converter<int64_t>;
 template class DecimalV3Converter<int128_t>;
+template class DecimalV3Converter<int256_t>;
 
 } // namespace starrocks::csv

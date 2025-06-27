@@ -175,7 +175,7 @@ public:
 
     void set_to_min(void* buf) const override {
         auto* data = reinterpret_cast<CppType*>(buf);
-        *data = 1 - get_scale_factor<CppType>(_precision);
+        *data = CppType(1) - get_scale_factor<CppType>(_precision);
     }
 
     size_t size() const override { return _delegate->size(); }

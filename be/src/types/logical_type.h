@@ -277,6 +277,7 @@ constexpr bool support_column_expr_predicate(LogicalType ltype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
+    case TYPE_DECIMAL256: /* 27 */
     case TYPE_STRUCT:
         return true;
     default:
@@ -318,6 +319,7 @@ VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
 VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
 VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)
 VALUE_GUARD(LogicalType, Decimal128LTGuard, lt_is_decimal128, TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, Decimal256LTGuard, lt_is_decimal256, TYPE_DECIMAL256)
 VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
             TYPE_DECIMAL256)
 VALUE_GUARD(LogicalType, SumDecimal64LTGuard, lt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)

@@ -1,0 +1,413 @@
+-- name: test_decimal256_aggregate_function
+
+DROP DATABASE IF EXISTS test_decimal256_agg_func;
+CREATE DATABASE test_decimal256_agg_func;
+USE test_decimal256_agg_func;
+
+DROP TABLE IF EXISTS decimal256_agg_test;
+CREATE TABLE decimal256_agg_test (
+    id INT,
+    category VARCHAR(10),
+    p40s10 DECIMAL(40,10),    -- 30 integer digits + 10 decimal digits
+    p50s15 DECIMAL(50,15),    -- 35 integer digits + 15 decimal digits
+    p76s20 DECIMAL(76,20),    -- 56 integer digits + 20 decimal digits
+    p76s0 DECIMAL(76,0)       -- 76 integer digits + 0 decimal digits
+) properties("replication_num"="1");
+
+-- Insert test data (simple values with duplicates for testing)
+INSERT INTO decimal256_agg_test VALUES
+-- Duplicate group 1 - for testing distinct
+(1, 'A', 100.1234567890, 100.123456789012345, 100.12345678901234567890, 100),
+(2, 'A', 100.1234567890, 100.123456789012345, 100.12345678901234567890, 100),
+(3, 'A', 100.1234567890, 100.123456789012345, 100.12345678901234567890, 100),
+
+-- Duplicate group 2
+(4, 'B', 200.5555555555, 200.555555555555555, 200.55555555555555555555, 200),
+(5, 'B', 200.5555555555, 200.555555555555555, 200.55555555555555555555, 200),
+
+-- Duplicate group 3 - zero values
+(6, 'C', 0.0000000000, 0.000000000000000, 0.00000000000000000000, 0),
+(7, 'C', 0.0000000000, 0.000000000000000, 0.00000000000000000000, 0),
+(8, 'C', 0.0000000000, 0.000000000000000, 0.00000000000000000000, 0),
+
+-- Duplicate group 4 - negative values
+(9, 'D', -50.9876543210, -50.987654321098765, -50.98765432109876543210, -50),
+(10, 'D', -50.9876543210, -50.987654321098765, -50.98765432109876543210, -50),
+
+-- Unique data
+(11, 'E', 300.1111111111, 300.111111111111111, 300.11111111111111111111, 300),
+(12, 'F', 400.2222222222, 400.222222222222222, 400.22222222222222222222, 400),
+(13, 'G', 500.3333333333, 500.333333333333333, 500.33333333333333333333, 500),
+
+-- Large number duplicates
+(14, 'H', 999999999999999999999999999999.9999999999,
+          99999999999999999999999999999999999.999999999999999,
+          99999999999999999999999999999999999999999999999999999999.99999999999999999999,
+          9999999999999999999999999999999999999999999999999999999999999999999999999999),
+(15, 'H', 999999999999999999999999999999.9999999999,
+          99999999999999999999999999999999999.999999999999999,
+          99999999999999999999999999999999999999999999999999999999.99999999999999999999,
+          9999999999999999999999999999999999999999999999999999999999999999999999999999),
+
+-- Small decimal duplicates
+(16, 'I', 0.0000000001, 0.000000000000001, 0.00000000000000000001, 1),
+(17, 'I', 0.0000000001, 0.000000000000001, 0.00000000000000000001, 1),
+
+-- NULL values
+(18, 'J', NULL, NULL, NULL, NULL),
+(19, 'J', 600.4444444444, 600.444444444444444, 600.44444444444444444444, 600),
+
+-- Mixed duplicates (partial column duplicates)
+(20, 'K', 777.7777777777, 777.777777777777777, 777.77777777777777777777, 777),
+(21, 'K', 777.7777777777, 888.888888888888888, 999.99999999999999999999, 777),
+(22, 'K', 777.7777777777, 777.777777777777777, 777.77777777777777777777, 888);
+
+-- =====================================================
+-- Non-DISTINCT aggregate function test cases
+-- =====================================================
+
+-- Test 1: Basic COUNT test
+SELECT 'Test1_COUNT_BASIC' as test_name, COUNT(*) as total_rows FROM decimal256_agg_test;
+
+SELECT
+    'Test1_COUNT_NON_NULL' as test_name,
+    COUNT(p40s10) as count_p40s10,
+    COUNT(p50s15) as count_p50s15,
+    COUNT(p76s20) as count_p76s20,
+    COUNT(p76s0) as count_p76s0
+FROM decimal256_agg_test;
+
+-- Test 2: SUM test
+SELECT
+    'Test2_SUM' as test_name,
+    SUM(p40s10) as sum_p40s10,
+    SUM(p50s15) as sum_p50s15,
+    SUM(p76s20) as sum_p76s20,
+    SUM(p76s0) as sum_p76s0
+FROM decimal256_agg_test;
+
+-- Test 3: AVG test
+SELECT
+    'Test3_AVG' as test_name,
+    AVG(p40s10) as avg_p40s10,
+    AVG(p50s15) as avg_p50s15,
+    AVG(p76s20) as avg_p76s20,
+    AVG(p76s0) as avg_p76s0
+FROM decimal256_agg_test;
+
+-- Test 4: MIN/MAX test
+SELECT
+    'Test4_MIN_MAX' as test_name,
+    MIN(p40s10) as min_p40s10,
+    MAX(p40s10) as max_p40s10,
+    MIN(p50s15) as min_p50s15,
+    MAX(p50s15) as max_p50s15,
+    MIN(p76s20) as min_p76s20,
+    MAX(p76s20) as max_p76s20,
+    MIN(p76s0) as min_p76s0,
+    MAX(p76s0) as max_p76s0
+FROM decimal256_agg_test;
+
+-- Test 5: Group by aggregation (non-DISTINCT)
+SELECT
+    'Test5_GROUP_BY_CATEGORY' as test_name,
+    category,
+    COUNT(*) as row_count,
+    SUM(p40s10) as sum_p40s10,
+    AVG(p40s10) as avg_p40s10,
+    MIN(p50s15) as min_p50s15,
+    MAX(p76s20) as max_p76s20
+FROM decimal256_agg_test
+GROUP BY category
+ORDER BY category;
+
+-- Test 6: Group by decimal column (non-DISTINCT)
+SELECT
+    'Test6_GROUP_BY_P40S10' as test_name,
+    p40s10,
+    COUNT(*) as row_count,
+    SUM(p50s15) as sum_p50s15,
+    AVG(p50s15) as avg_p50s15,
+    MIN(p76s0) as min_p76s0,
+    MAX(p76s0) as max_p76s0
+FROM decimal256_agg_test
+WHERE p40s10 IS NOT NULL
+GROUP BY p40s10
+ORDER BY p40s10;
+
+-- =====================================================
+-- DISTINCT test cases - each case tests both planners
+-- =====================================================
+
+-- Test 7: COUNT DISTINCT test
+
+set new_planner_agg_stage=0;
+SELECT
+    'Test7_COUNT_DISTINCT_planner0' as test_name,
+    COUNT(DISTINCT p40s10) as distinct_p40s10,
+    COUNT(DISTINCT p50s15) as distinct_p50s15,
+    COUNT(DISTINCT p76s20) as distinct_p76s20,
+    COUNT(DISTINCT p76s0) as distinct_p76s0
+FROM decimal256_agg_test;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test7_COUNT_DISTINCT_planner2' as test_name,
+    COUNT(DISTINCT p40s10) as distinct_p40s10,
+    COUNT(DISTINCT p50s15) as distinct_p50s15,
+    COUNT(DISTINCT p76s20) as distinct_p76s20,
+    COUNT(DISTINCT p76s0) as distinct_p76s0
+FROM decimal256_agg_test;
+set new_planner_agg_stage=0;
+
+-- Test 8: SUM DISTINCT test
+set new_planner_agg_stage=0;
+SELECT
+    'Test8_SUM_DISTINCT_planner0' as test_name,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    SUM(DISTINCT p50s15) as sum_distinct_p50s15,
+    SUM(DISTINCT p76s20) as sum_distinct_p76s20,
+    SUM(DISTINCT p76s0) as sum_distinct_p76s0
+FROM decimal256_agg_test;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test8_SUM_DISTINCT_planner2' as test_name,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    SUM(DISTINCT p50s15) as sum_distinct_p50s15,
+    SUM(DISTINCT p76s20) as sum_distinct_p76s20,
+    SUM(DISTINCT p76s0) as sum_distinct_p76s0
+FROM decimal256_agg_test;
+set new_planner_agg_stage=0;
+
+-- Test 9: AVG DISTINCT test
+set new_planner_agg_stage=0;
+SELECT
+    'Test9_AVG_DISTINCT_planner0' as test_name,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10,
+    AVG(DISTINCT p50s15) as avg_distinct_p50s15,
+    AVG(DISTINCT p76s20) as avg_distinct_p76s20,
+    AVG(DISTINCT p76s0) as avg_distinct_p76s0
+FROM decimal256_agg_test;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test9_AVG_DISTINCT_planner2' as test_name,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10,
+    AVG(DISTINCT p50s15) as avg_distinct_p50s15,
+    AVG(DISTINCT p76s20) as avg_distinct_p76s20,
+    AVG(DISTINCT p76s0) as avg_distinct_p76s0
+FROM decimal256_agg_test;
+set new_planner_agg_stage=0;
+
+-- Test 10: Group by COUNT DISTINCT test
+set new_planner_agg_stage=0;
+SELECT
+    'Test10_GROUP_COUNT_DISTINCT_planner0' as test_name,
+    category,
+    COUNT(*) as row_count,
+    COUNT(DISTINCT p40s10) as distinct_p40s10,
+    COUNT(DISTINCT p76s0) as distinct_p76s0
+FROM decimal256_agg_test
+GROUP BY category
+ORDER BY category;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test10_GROUP_COUNT_DISTINCT_planner2' as test_name,
+    category,
+    COUNT(*) as row_count,
+    COUNT(DISTINCT p40s10) as distinct_p40s10,
+    COUNT(DISTINCT p76s0) as distinct_p76s0
+FROM decimal256_agg_test
+GROUP BY category
+ORDER BY category;
+set new_planner_agg_stage=0;
+
+-- Test 11: Group by SUM DISTINCT test
+set new_planner_agg_stage=0;
+SELECT
+    'Test11_GROUP_SUM_DISTINCT_planner0' as test_name,
+    category,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    SUM(DISTINCT p50s15) as sum_distinct_p50s15
+FROM decimal256_agg_test
+GROUP BY category
+ORDER BY category;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test11_GROUP_SUM_DISTINCT_planner2' as test_name,
+    category,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    SUM(DISTINCT p50s15) as sum_distinct_p50s15
+FROM decimal256_agg_test
+GROUP BY category
+ORDER BY category;
+set new_planner_agg_stage=0;
+
+-- Test 12: Group by AVG DISTINCT test
+set new_planner_agg_stage=0;
+SELECT
+    'Test12_GROUP_AVG_DISTINCT_planner0' as test_name,
+    category,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10,
+    AVG(DISTINCT p76s0) as avg_distinct_p76s0
+FROM decimal256_agg_test
+GROUP BY category
+ORDER BY category;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test12_GROUP_AVG_DISTINCT_planner2' as test_name,
+    category,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10,
+    AVG(DISTINCT p76s0) as avg_distinct_p76s0
+FROM decimal256_agg_test
+GROUP BY category
+ORDER BY category;
+set new_planner_agg_stage=0;
+
+-- Test 13: Group by decimal column DISTINCT test
+set new_planner_agg_stage=0;
+SELECT
+    'Test13_GROUP_BY_DECIMAL_DISTINCT_planner0' as test_name,
+    p76s0,
+    COUNT(*) as row_count,
+    COUNT(DISTINCT p40s10) as distinct_p40s10,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10
+FROM decimal256_agg_test
+WHERE p76s0 IS NOT NULL
+GROUP BY p76s0
+ORDER BY p76s0;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test13_GROUP_BY_DECIMAL_DISTINCT_planner2' as test_name,
+    p76s0,
+    COUNT(*) as row_count,
+    COUNT(DISTINCT p40s10) as distinct_p40s10,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10
+FROM decimal256_agg_test
+WHERE p76s0 IS NOT NULL
+GROUP BY p76s0
+ORDER BY p76s0;
+set new_planner_agg_stage=0;
+
+-- Test 14: SELECT DISTINCT single column test
+set new_planner_agg_stage=0;
+SELECT DISTINCT 'Test14_SELECT_DISTINCT_SINGLE_planner0' as test_name, p40s10
+FROM decimal256_agg_test
+WHERE p40s10 IS NOT NULL
+ORDER BY p40s10;
+
+set new_planner_agg_stage=2;
+SELECT DISTINCT 'Test14_SELECT_DISTINCT_SINGLE_planner2' as test_name, p40s10
+FROM decimal256_agg_test
+WHERE p40s10 IS NOT NULL
+ORDER BY p40s10;
+set new_planner_agg_stage=0;
+
+-- Test 15: SELECT DISTINCT multiple columns test
+set new_planner_agg_stage=0;
+SELECT DISTINCT 'Test15_SELECT_DISTINCT_MULTI_planner0' as test_name, p40s10, p50s15, p76s0
+FROM decimal256_agg_test
+WHERE p40s10 IS NOT NULL
+ORDER BY p40s10, p50s15;
+
+set new_planner_agg_stage=2;
+SELECT DISTINCT 'Test15_SELECT_DISTINCT_MULTI_planner2' as test_name, p40s10, p50s15, p76s0
+FROM decimal256_agg_test
+WHERE p40s10 IS NOT NULL
+ORDER BY p40s10, p50s15;
+set new_planner_agg_stage=0;
+
+-- Test 16: Complex DISTINCT query test
+set new_planner_agg_stage=0;
+SELECT
+    'Test16_COMPLEX_DISTINCT_planner0' as test_name,
+    COUNT(DISTINCT p40s10) as count_distinct_p40s10,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10,
+    COUNT(DISTINCT p76s0) as count_distinct_p76s0,
+    SUM(DISTINCT p76s0) as sum_distinct_p76s0,
+    AVG(DISTINCT p76s0) as avg_distinct_p76s0
+FROM decimal256_agg_test;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test16_COMPLEX_DISTINCT_planner2' as test_name,
+    COUNT(DISTINCT p40s10) as count_distinct_p40s10,
+    SUM(DISTINCT p40s10) as sum_distinct_p40s10,
+    AVG(DISTINCT p40s10) as avg_distinct_p40s10,
+    COUNT(DISTINCT p76s0) as count_distinct_p76s0,
+    SUM(DISTINCT p76s0) as sum_distinct_p76s0,
+    AVG(DISTINCT p76s0) as avg_distinct_p76s0
+FROM decimal256_agg_test;
+set new_planner_agg_stage=0;
+
+-- Test 17: HAVING with DISTINCT test
+set new_planner_agg_stage=0;
+SELECT
+    'Test17_HAVING_DISTINCT_planner0' as test_name,
+    p40s10,
+    COUNT(*) as row_count,
+    COUNT(DISTINCT p50s15) as distinct_p50s15,
+    SUM(DISTINCT p50s15) as sum_distinct_p50s15
+FROM decimal256_agg_test
+WHERE p40s10 IS NOT NULL
+GROUP BY p40s10
+HAVING COUNT(*) > 1
+ORDER BY p40s10;
+
+set new_planner_agg_stage=2;
+SELECT
+    'Test17_HAVING_DISTINCT_planner2' as test_name,
+    p40s10,
+    COUNT(*) as row_count,
+    COUNT(DISTINCT p50s15) as distinct_p50s15,
+    SUM(DISTINCT p50s15) as sum_distinct_p50s15
+FROM decimal256_agg_test
+WHERE p40s10 IS NOT NULL
+GROUP BY p40s10
+HAVING COUNT(*) > 1
+ORDER BY p40s10;
+set new_planner_agg_stage=0;
+
+-- =====================================================
+-- Edge case tests
+-- =====================================================
+
+-- Test 18: Empty result set
+SELECT
+    'Test18_EMPTY_RESULT' as test_name,
+    COUNT(*) as count_all,
+    SUM(p40s10) as sum_p40s10,
+    AVG(p40s10) as avg_p40s10,
+    MIN(p50s15) as min_p50s15,
+    MAX(p76s20) as max_p76s20
+FROM decimal256_agg_test
+WHERE id > 1000;
+
+-- Test 19: NULL values only
+SELECT
+    'Test19_NULL_ONLY' as test_name,
+    COUNT(*) as count_all,
+    COUNT(p40s10) as count_p40s10,
+    SUM(p50s15) as sum_p50s15,
+    AVG(p50s15) as avg_p50s15
+FROM decimal256_agg_test
+WHERE id = 18;
+
+-- Test 20: Single row result
+SELECT
+    'Test20_SINGLE_ROW' as test_name,
+    COUNT(*) as count_all,
+    SUM(p40s10) as sum_p40s10,
+    AVG(p40s10) as avg_p40s10,
+    MIN(p50s15) as min_p50s15,
+    MAX(p76s20) as max_p76s20
+FROM decimal256_agg_test
+WHERE id = 11;
