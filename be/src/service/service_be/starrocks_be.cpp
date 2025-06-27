@@ -128,6 +128,18 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
             total_quota_bytes += disk_size;
         }
 
+        // Automatically clean the old stale datacache to free disk space.
+        if (!config::block_cache_disk_path.empty()) {
+            LOG(WARNING) << "The `datacache_disk_path` and `block_cache_disk_path` have been deprecated and will be "
+                         << "ignored, currently the cache data is located in `${storage_root_path}/datacache`.";
+            std::vector<std::string> cur_cache_paths;
+            cur_cache_paths.reserve(cache_options.disk_spaces.size());
+            for (auto& space : cache_options.disk_spaces) {
+                cur_cache_paths.push_back(space.path);
+            }
+            DataCacheUtils::clean_stale_datacache(config::block_cache_disk_path, cur_cache_paths);
+        }
+
         if (cache_options.disk_spaces.empty() || total_quota_bytes != 0) {
             config::datacache_auto_adjust_enable = false;
         }
