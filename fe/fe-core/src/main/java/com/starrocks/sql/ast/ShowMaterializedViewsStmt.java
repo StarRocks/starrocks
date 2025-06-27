@@ -53,10 +53,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("task_id", ScalarType.createType(PrimitiveType.BIGINT))
                     .column("task_name", ScalarType.createVarchar(50))
                     .column("last_refresh_start_time", ScalarType.createType(PrimitiveType.DATETIME))
-                    .column("last_refresh_process_time", ScalarType.createType(PrimitiveType.DATETIME))
                     .column("last_refresh_finished_time", ScalarType.createType(PrimitiveType.DATETIME))
                     .column("last_refresh_duration", ScalarType.createType(PrimitiveType.DOUBLE))
-                    .column("last_refresh_job_id", ScalarType.createVarchar(64))
                     .column("last_refresh_state", ScalarType.createVarchar(20))
                     .column("last_refresh_force_refresh", ScalarType.createVarchar(8))
                     .column("last_refresh_start_partition", ScalarType.createVarchar(1024))
@@ -70,6 +68,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("extra_message", ScalarType.createVarchar(1024))
                     .column("query_rewrite_status", ScalarType.createVarchar(64))
                     .column("creator", ScalarType.createVarchar(64))
+                    .column("last_refresh_process_time", ScalarType.createType(PrimitiveType.DATETIME))
+                    .column("last_refresh_job_id", ScalarType.createVarchar(64))
                     .build();
 
     private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(

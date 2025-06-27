@@ -63,20 +63,20 @@ public class ShowMaterializedViewStatusTest {
         Assert.assertEquals("0", resultSet.get(7)); // task id
         Assert.assertEquals("", resultSet.get(8)); // task name
         Assert.assertEquals("\\N", resultSet.get(9)); // start time
-        Assert.assertEquals("\\N", resultSet.get(10)); // process start time
-        Assert.assertEquals("\\N", resultSet.get(11)); // process finish time
-        Assert.assertEquals("0.000", resultSet.get(12)); // process duration
-        Assert.assertEquals("", resultSet.get(13)); // last refresh job id
-        Assert.assertEquals("", resultSet.get(14)); // last refresh state
-        Assert.assertEquals("false", resultSet.get(15)); // force refresh
-        Assert.assertEquals("", resultSet.get(16)); // partition start
-        Assert.assertEquals("", resultSet.get(17)); // partition end
-        Assert.assertEquals("", resultSet.get(18)); // base partitions
-        Assert.assertEquals("", resultSet.get(19)); // mv partitions
-        Assert.assertEquals("", resultSet.get(20)); // error code
-        Assert.assertEquals("", resultSet.get(21)); // error message
-        Assert.assertEquals("0", resultSet.get(22)); // extra message
-        Assert.assertEquals("", resultSet.get(23)); // query rewrite status
-        Assert.assertEquals("", resultSet.get(24)); // owner
+        Assert.assertEquals("\\N", resultSet.get(10)); // process finish time
+        Assert.assertEquals("0.000", resultSet.get(11)); // process duration
+        Assert.assertEquals("", resultSet.get(12)); // last refresh state
+        Assert.assertEquals("false", resultSet.get(13)); // force refresh
+        Assert.assertEquals("", resultSet.get(14)); // partition start
+        Assert.assertEquals("", resultSet.get(15)); // partition end
+        Assert.assertEquals("", resultSet.get(16)); // base partitions
+        Assert.assertEquals("", resultSet.get(17)); // mv partitions
+        Assert.assertEquals("", resultSet.get(18)); // error code
+        Assert.assertEquals("", resultSet.get(19)); // error message
+        Assert.assertEquals("0", resultSet.get(20)); // extra message
+        Assert.assertEquals("", resultSet.get(21)); // query rewrite status
+        Assert.assertEquals("", resultSet.get(22)); // owner
+        Assert.assertEquals("", resultSet.get(23)); // process start time
+        Assert.assertEquals("", resultSet.get(24)); // last refresh job id
     }
 }

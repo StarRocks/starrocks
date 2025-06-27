@@ -1932,7 +1932,7 @@ class StarrocksSQLApiLib(object):
             if len(results) == 0:
                 return False
             for _res in results:
-                last_refresh_state = _res[14]
+                last_refresh_state = _res[12]
                 if last_refresh_state not in TASK_RUN_SUCCESS_STATES:
                     print("mv %s last refresh state is %s, not in %s" % (mv_name, last_refresh_state, TASK_RUN_SUCCESS_STATES))
                     return False

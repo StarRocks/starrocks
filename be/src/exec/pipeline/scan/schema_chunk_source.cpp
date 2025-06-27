@@ -66,6 +66,24 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
                 slot_desc->type().type = TYPE_DATETIME;
             }
         }
+    } else if (schema_table->schema_table_type() == TSchemaTableType::SCH_MATERIALIZED_VIEWS) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "MATERIALIZED_VIEW_ID")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "TASK_ID")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "LAST_REFRESH_START_TIME")) {
+                slot_desc->type().type = TYPE_DATETIME;
+            } else if (slot_desc->type().type == TYPE_VARCHAR &&
+                       boost::iequals(col_name, "LAST_REFRESH_FINISHED_TIME")) {
+                slot_desc->type().type = TYPE_DATETIME;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "TABLE_ROWS")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "LAST_REFRESH_DURATION")) {
+                slot_desc->type().type = TYPE_DOUBLE;
+            }
+        }
     }
 
     int slot_num = dest_slot_descs.size();

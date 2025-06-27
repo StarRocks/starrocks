@@ -1,10 +1,13 @@
 -- name: test_show_materialized_view
+
 set enable_rewrite_bitmap_union_to_bitamp_agg = false;
 create database test_show_materialized_view;
 use test_show_materialized_view;
 create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
-create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;
-
+create materialized view user_tags_mv1 
+distributed by hash(user_id) 
+REFRESH DEFERRED MANUAL
+as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;
 
 show create materialized view user_tags_mv1;
 show create table user_tags_mv1;
@@ -45,5 +48,21 @@ set @this_refresh_time = (
 select if(@last_refresh_time != @this_refresh_time, 
     'refreshed', concat('no refresh after ', @last_refresh_time));
 
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%';
+select TABLE_NAME, LAST_REFRESH_ERROR_CODE, IS_ACTIVE, INACTIVE_REASON from information_schema.materialized_views where TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%bad_name%';
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name = 'user_tags_mv1';
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like 'user_tags_mv1';
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%user_tags_mv1%';
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%%';
+[UC] SELECT * FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'test_show_materialized_view' and table_name like '%bad_name%';
+[UC] show materialized views from test_show_materialized_view where name like 'user_tags_mv1';
+[UC] show materialized views from test_show_materialized_view where name like '%user_tags_mv1%';
+[UC] show materialized views from test_show_materialized_view where name = 'user_tags_mv1';
+[UC] show materialized views where name like 'user_tags_mv1';
+[UC] show materialized views where name like '%user_tags_mv1%';
+[UC] show materialized views where name = 'user_tags_mv1';
 
 drop database test_show_materialized_view;
