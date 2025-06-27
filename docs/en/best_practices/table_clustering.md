@@ -7,7 +7,7 @@ sidebar_position: 20
 A thoughtful sort‑key is the highest‑leverage physical‑design knob in StarRocks. This guide explains how the sort key works under the hood, the systemic benefits it unlocks, and a concrete playbook for picking an effective key for your own workload.
 
 ## Example
-Suppose you run a telemetry system that receives billions of rows per day, each tagged with a `device_id` and `ts` (timestamp). Defining `SORT BY (device_id, ts)` on your fact table ensures:
+Suppose you run a telemetry system that receives billions of rows per day, each tagged with a `device_id` and `ts` (timestamp). Defining `ORDER BY (device_id, ts)` on your fact table ensures:
 
 - Point queries on `device_id` return in milliseconds.
 - Dashboards filter recent time windows for each device prune most data.
