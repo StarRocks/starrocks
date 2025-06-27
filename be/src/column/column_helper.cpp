@@ -83,6 +83,8 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict
 void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& null_data, Filter* __restrict filter) {
     size_t num_rows = column->size();
 
+    auto* data_column = get_data_column(column.get());
+
     if (column->is_nullable()) {
         const auto* nullable_column = as_raw_column<NullableColumn>(column);
         const auto nulls = nullable_column->immutable_null_column_data().data();
@@ -91,7 +93,7 @@ void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& nul
         }
     }
 
-    auto datas = get_cpp_data<TYPE_BOOLEAN>(column);
+    auto datas = down_cast<const UInt8Column*>(data_column)->get_data();
     for (size_t j = 0; j < num_rows; ++j) {
         (*filter)[j] &= datas[j];
     }
