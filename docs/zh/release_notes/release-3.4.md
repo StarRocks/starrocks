@@ -132,7 +132,6 @@ displayed_sidebar: docs
 
 - [Experimental] 初步支持 Query Feedback 功能，用于慢查询的自动优化。系统将收集慢查询的执行详情，自动分析查询计划中是否存在需要调优的地方，并生成专属的 Tuning Guide。当后续相同查询生成相同的 Bad Plan 时，系统会基于先前生成的 Tuning Guide 局部调优该 Query Plan。更多内容，参考 [Query Feedback](https://docs.starrocks.io/zh/docs/using_starrocks/query_feedback/)。
 - [Experimental] 支持 Python UDF，相较于 Java UDF 提供了更便捷的函数自定义能力。更多内容，参考 [Python UDF](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Python_UDF/)。
-- [Experimental] 支持 Arrow Flight 接口，可更高效读取大数据量的查询结果，并使 BE 替代 FE 直接处理返回结果，显著降低 FE 压力，特别适用于大数据分析、处理和机器学习等场景。
 - 支持多列 OR 谓词的下推，允许带有多列 OR 条件（如 `a = xxx OR b = yyy`）的查询利用对应列索引，从而减少数据读取量并提升查询性能。
 - 优化了 TPC-DS 查询性能。在 TPC-DS 1TB Iceberg 数据集下，查询性能提升20%。优化手段包括利用主外键做表裁剪和聚合列裁剪，以及聚合下推位置改进等。
 
