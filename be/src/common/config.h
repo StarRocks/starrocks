@@ -1311,7 +1311,10 @@ CONF_String(datacache_eviction_policy, "slru");
 // the old configuration files.
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
-CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+// The `block_cache_disk_path` and `datacache_disk_path` has been deprecated,
+// users should not configure it.
+CONF_String(block_cache_disk_path, "");
+CONF_Alias(block_cache_disk_path, datacache_disk_path);
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB

@@ -125,11 +125,17 @@ Status DataCacheUtils::parse_conf_datacache_disk_paths(const std::string& config
     return Status::OK();
 }
 
-void DataCacheUtils::clean_residual_datacache(const std::string& disk_path) {
+void DataCacheUtils::clean_residual_datacache(const std::string& disk_path, bool ignore_persistent_cache) {
     if (!FileSystem::Default()->path_exists(disk_path).ok()) {
         // ignore none existed disk path
         return;
     }
+
+    // Skip cleaning it if the directory contains persistent cache data and ignore_persistent_cache is true.
+    if (ignore_persistent_cache && FileSystem::Default()->path_exists(disk_path + "/meta").ok()) {
+        return;
+    }
+
     auto st = FileSystem::Default()->iterate_dir2(disk_path, [&](DirEntry entry) {
         if (!entry.is_dir.value_or(false) && entry.name.find("blockfile_") == 0) {
             auto file = fmt::format("{}/{}", disk_path, entry.name);
@@ -140,6 +146,35 @@ void DataCacheUtils::clean_residual_datacache(const std::string& disk_path) {
         return true;
     });
     LOG_IF(WARNING, !st.ok()) << "fail to clean residual datacache data, reason: " << st.message();
+}
+
+void DataCacheUtils::clean_stale_datacache(const std::string& stale_data_path_conf,
+                                           std::vector<std::string> cur_cache_paths) {
+    std::vector<std::string> path_vec = strings::Split(stale_data_path_conf, ";", strings::SkipWhitespace());
+    for (auto& item : path_vec) {
+        StripWhiteSpace(&item);
+        item.erase(item.find_last_not_of('/') + 1);
+        std::filesystem::path stale_path(item);
+        if (!std::filesystem::exists(stale_path)) {
+            continue;
+        }
+
+        bool in_use = false;
+        for (auto& path : cur_cache_paths) {
+            std::filesystem::path cache_path(path);
+            if (!std::filesystem::exists(cache_path)) {
+                continue;
+            }
+            std::error_code ec;
+            if (std::filesystem::equivalent(stale_path, cache_path, ec)) {
+                in_use = true;
+                break;
+            }
+        }
+        if (!in_use) {
+            clean_residual_datacache(stale_path, true);
+        }
+    }
 }
 
 Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path) {

@@ -329,7 +329,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     }
 
     cache->shutdown();
-    DataCacheUtils::clean_residual_datacache(cache_dir);
+    DataCacheUtils::clean_residual_datacache(cache_dir, true);
 
     {
         std::vector<std::string> files;
