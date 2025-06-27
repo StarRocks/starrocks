@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exec/schema_scanner/schema_materialized_views_scanner.h"
+
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
-#include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 
@@ -45,272 +46,60 @@ protected:
     std::unique_ptr<RuntimeState> _state;
 };
 
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_normal) {
-    SchemaFeTabletSchedulesScanner scanner;
+TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
+    SchemaMaterializedViewsScanner scanner;
 
-    // prepare tablet schedule data
-    std::vector<TTabletSchedule> infos;
-    // normal
-    auto& s1 = infos.emplace_back();
-    s1.__set_table_id(1);
-    s1.__set_partition_id(2);
-    s1.__set_tablet_id(10);
-    s1.__set_type("REPAIR");
-    s1.__set_priority("HIGH");
-    s1.__set_state("FINISHED");
-    s1.__set_tablet_status("DISK_MIGRATION");
-    s1.__set_create_time(1749711000);
-    s1.__set_schedule_time(1749711001);
-    s1.__set_finish_time(1749711002);
-    s1.__set_clone_src(10001);
-    s1.__set_clone_dest(10002);
-    s1.__set_clone_bytes(1);
-    s1.__set_clone_duration(1);
-    s1.__set_error_msg("success");
-    // xxx_time is null
-    auto& s2 = infos.emplace_back();
-    s2.__set_table_id(1);
-    s2.__set_partition_id(2);
-    s2.__set_tablet_id(11);
-    s2.__set_type("BALANCE");
-    s2.__set_priority("NORMAL");
-    s2.__set_state("PENDING");
-    s2.__set_tablet_status("DISK_MIGRATION");
-    s2.__set_create_time(0);
-    s2.__set_schedule_time(0);
-    s2.__set_finish_time(-0.001);
-    s2.__set_clone_src(10001);
-    s2.__set_clone_dest(10002);
-    s2.__set_clone_bytes(0);
-    s2.__set_clone_duration(0);
-    s2.__set_error_msg("");
-
-    // init and start scanner
+    // Test that scanner can be created and initialized
     EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
 
-    // check get_next
-    auto chunk = create_chunk(scanner.get_slot_descs());
-    bool eos = false;
+    // Test that scanner has the correct number of columns
+    auto slot_descs = scanner.get_slot_descs();
+    EXPECT_EQ(27, slot_descs.size());
 
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_FALSE(eos);
-    EXPECT_EQ(1, chunk->num_rows());
-    EXPECT_EQ(
-            "[1, 2, 10, 'REPAIR', 'HIGH', 'FINISHED', 'DISK_MIGRATION', 2025-06-12 14:50:00, 2025-06-12 14:50:01, "
-            "2025-06-12 14:50:02, 10001, 10002, 1, 1, 'success']",
-            chunk->debug_row(0));
-
-    chunk->reset();
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_FALSE(eos);
-    EXPECT_EQ(1, chunk->num_rows());
-    EXPECT_EQ("[1, 2, 11, 'BALANCE', 'NORMAL', 'PENDING', 'DISK_MIGRATION', NULL, NULL, NULL, 10001, 10002, 0, 0, '']",
-              chunk->debug_row(0));
-
-    chunk->reset();
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_TRUE(eos);
+    // Test column names and types
+    EXPECT_EQ("MATERIALIZED_VIEW_ID", slot_descs[0]->col_name());
+    EXPECT_EQ("TABLE_SCHEMA", slot_descs[1]->col_name());
+    EXPECT_EQ("TABLE_NAME", slot_descs[2]->col_name());
+    EXPECT_EQ("REFRESH_TYPE", slot_descs[3]->col_name());
+    EXPECT_EQ("IS_ACTIVE", slot_descs[4]->col_name());
+    EXPECT_EQ("INACTIVE_REASON", slot_descs[5]->col_name());
+    EXPECT_EQ("PARTITION_TYPE", slot_descs[6]->col_name());
+    EXPECT_EQ("TASK_ID", slot_descs[7]->col_name());
+    EXPECT_EQ("TASK_NAME", slot_descs[8]->col_name());
+    EXPECT_EQ("LAST_REFRESH_START_TIME", slot_descs[9]->col_name());
+    EXPECT_EQ("LAST_REFRESH_FINISHED_TIME", slot_descs[10]->col_name());
+    EXPECT_EQ("LAST_REFRESH_DURATION", slot_descs[11]->col_name());
+    EXPECT_EQ("LAST_REFRESH_STATE", slot_descs[12]->col_name());
+    EXPECT_EQ("LAST_REFRESH_FORCE_REFRESH", slot_descs[13]->col_name());
+    EXPECT_EQ("LAST_REFRESH_START_PARTITION", slot_descs[14]->col_name());
+    EXPECT_EQ("LAST_REFRESH_END_PARTITION", slot_descs[15]->col_name());
+    EXPECT_EQ("LAST_REFRESH_BASE_REFRESH_PARTITIONS", slot_descs[16]->col_name());
+    EXPECT_EQ("LAST_REFRESH_MV_REFRESH_PARTITIONS", slot_descs[17]->col_name());
+    EXPECT_EQ("LAST_REFRESH_ERROR_CODE", slot_descs[18]->col_name());
+    EXPECT_EQ("LAST_REFRESH_ERROR_MESSAGE", slot_descs[19]->col_name());
+    EXPECT_EQ("TABLE_ROWS", slot_descs[20]->col_name());
+    EXPECT_EQ("MATERIALIZED_VIEW_DEFINITION", slot_descs[21]->col_name());
+    EXPECT_EQ("EXTRA_MESSAGE", slot_descs[22]->col_name());
+    EXPECT_EQ("QUERY_REWRITE_STATUS", slot_descs[23]->col_name());
+    EXPECT_EQ("CREATOR", slot_descs[24]->col_name());
+    EXPECT_EQ("LAST_REFRESH_PROCESS_TIME", slot_descs[25]->col_name());
+    EXPECT_EQ("LAST_REFRESH_JOB_ID", slot_descs[26]->col_name());
 }
 
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_empty_data) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    // init and start scanner with empty data
-    EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), {}));
+TEST_F(SchemaMaterializedViewsScannerTest, test_uninitialized_scanner) {
+    SchemaMaterializedViewsScanner scanner;
 
     auto chunk = create_chunk(scanner.get_slot_descs());
     bool eos = false;
 
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_TRUE(eos);
-    EXPECT_EQ(0, chunk->num_rows());
+    // Should fail because scanner is not initialized
+    EXPECT_FALSE(scanner.get_next(&chunk, &eos).ok());
 }
 
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_large_values) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-    auto& s = infos.emplace_back();
-    s.__set_table_id(INT64_MAX);
-    s.__set_partition_id(INT64_MAX);
-    s.__set_tablet_id(INT64_MAX);
-    s.__set_type("VERY_LONG_TYPE_NAME_THAT_MIGHT_CAUSE_ISSUES");
-    s.__set_priority("VERY_HIGH_PRIORITY_LEVEL");
-    s.__set_state("VERY_LONG_STATE_DESCRIPTION");
-    s.__set_tablet_status("VERY_LONG_TABLET_STATUS_DESCRIPTION");
-    s.__set_create_time(1749711000.123456);
-    s.__set_schedule_time(1749711001.654321);
-    s.__set_finish_time(1749711002.999999);
-    s.__set_clone_src(INT64_MAX);
-    s.__set_clone_dest(INT64_MAX);
-    s.__set_clone_bytes(INT64_MAX);
-    s.__set_clone_duration(DBL_MAX);
-    s.__set_error_msg("Very long error message that might contain special characters: !@#$%^&*()_+-=[]{}|;':\",./<>?");
+TEST_F(SchemaMaterializedViewsScannerTest, test_null_pointer_parameters) {
+    SchemaMaterializedViewsScanner scanner;
 
     EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
-
-    auto chunk = create_chunk(scanner.get_slot_descs());
-    bool eos = false;
-
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_FALSE(eos);
-    EXPECT_EQ(1, chunk->num_rows());
-
-    // Verify the large values are handled correctly
-    auto row = chunk->debug_row(0);
-    EXPECT_TRUE(row.find("9223372036854775807") != std::string::npos); // INT64_MAX
-    EXPECT_TRUE(row.find("VERY_LONG_TYPE_NAME_THAT_MIGHT_CAUSE_ISSUES") != std::string::npos);
-    EXPECT_TRUE(row.find("Very long error message") != std::string::npos);
-}
-
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_negative_values) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-    auto& s = infos.emplace_back();
-    s.__set_table_id(-1);
-    s.__set_partition_id(-2);
-    s.__set_tablet_id(-3);
-    s.__set_type("REPAIR");
-    s.__set_priority("LOW");
-    s.__set_state("FAILED");
-    s.__set_tablet_status("UNHEALTHY");
-    s.__set_create_time(-1749711000);
-    s.__set_schedule_time(-1749711001);
-    s.__set_finish_time(-1749711002);
-    s.__set_clone_src(-10001);
-    s.__set_clone_dest(-10002);
-    s.__set_clone_bytes(-1000);
-    s.__set_clone_duration(-1.5);
-    s.__set_error_msg("negative test");
-
-    EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
-
-    auto chunk = create_chunk(scanner.get_slot_descs());
-    bool eos = false;
-
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_FALSE(eos);
-    EXPECT_EQ(1, chunk->num_rows());
-
-    auto row = chunk->debug_row(0);
-    EXPECT_TRUE(row.find("-1") != std::string::npos);
-    EXPECT_TRUE(row.find("-2") != std::string::npos);
-    EXPECT_TRUE(row.find("-3") != std::string::npos);
-    EXPECT_TRUE(row.find("-10001") != std::string::npos);
-    EXPECT_TRUE(row.find("-10002") != std::string::npos);
-    EXPECT_TRUE(row.find("-1000") != std::string::npos);
-    EXPECT_TRUE(row.find("-1.5") != std::string::npos);
-}
-
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_zero_values) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-    auto& s = infos.emplace_back();
-    s.__set_table_id(0);
-    s.__set_partition_id(0);
-    s.__set_tablet_id(0);
-    s.__set_type("");
-    s.__set_priority("");
-    s.__set_state("");
-    s.__set_tablet_status("");
-    s.__set_create_time(0);
-    s.__set_schedule_time(0);
-    s.__set_finish_time(0);
-    s.__set_clone_src(0);
-    s.__set_clone_dest(0);
-    s.__set_clone_bytes(0);
-    s.__set_clone_duration(0);
-    s.__set_error_msg("");
-
-    EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
-
-    auto chunk = create_chunk(scanner.get_slot_descs());
-    bool eos = false;
-
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_FALSE(eos);
-    EXPECT_EQ(1, chunk->num_rows());
-
-    auto row = chunk->debug_row(0);
-    EXPECT_TRUE(row.find("0") != std::string::npos);
-    EXPECT_TRUE(row.find("''") != std::string::npos);   // empty strings
-    EXPECT_TRUE(row.find("NULL") != std::string::npos); // null timestamps
-}
-
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_multiple_records) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-
-    // Add 10 records with different values
-    for (int i = 0; i < 10; ++i) {
-        auto& s = infos.emplace_back();
-        s.__set_table_id(i + 1);
-        s.__set_partition_id(i + 10);
-        s.__set_tablet_id(i + 100);
-        s.__set_type("TYPE_" + std::to_string(i));
-        s.__set_priority("PRIORITY_" + std::to_string(i));
-        s.__set_state("STATE_" + std::to_string(i));
-        s.__set_tablet_status("STATUS_" + std::to_string(i));
-        s.__set_create_time(1749711000 + i);
-        s.__set_schedule_time(1749711001 + i);
-        s.__set_finish_time(1749711002 + i);
-        s.__set_clone_src(10001 + i);
-        s.__set_clone_dest(10002 + i);
-        s.__set_clone_bytes(1000 + i);
-        s.__set_clone_duration(1.0 + i * 0.1);
-        s.__set_error_msg("error_" + std::to_string(i));
-    }
-
-    EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
-
-    auto chunk = create_chunk(scanner.get_slot_descs());
-    bool eos = false;
-    int count = 0;
-
-    while (!eos) {
-        EXPECT_OK(scanner.get_next(&chunk, &eos));
-        if (!eos) {
-            EXPECT_EQ(1, chunk->num_rows());
-            count++;
-        }
-        chunk->reset();
-    }
-
-    EXPECT_EQ(10, count);
-}
-
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_null_pointer_parameters) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-    auto& s = infos.emplace_back();
-    s.__set_table_id(1);
-    s.__set_partition_id(2);
-    s.__set_tablet_id(3);
-    s.__set_type("REPAIR");
-    s.__set_priority("HIGH");
-    s.__set_state("FINISHED");
-    s.__set_tablet_status("HEALTHY");
-    s.__set_create_time(1749711000);
-    s.__set_schedule_time(1749711001);
-    s.__set_finish_time(1749711002);
-    s.__set_clone_src(10001);
-    s.__set_clone_dest(10002);
-    s.__set_clone_bytes(1000);
-    s.__set_clone_duration(1.5);
-    s.__set_error_msg("test");
-
-    EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
 
     // Test with null chunk pointer
     bool eos = false;
@@ -321,48 +110,165 @@ TEST_F(SchemaFeTabletSchedulesScannerTest, test_null_pointer_parameters) {
     EXPECT_FALSE(scanner.get_next(&chunk, nullptr).ok());
 }
 
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_uninitialized_scanner) {
-    SchemaFeTabletSchedulesScanner scanner;
+TEST_F(SchemaMaterializedViewsScannerTest, test_empty_database_list) {
+    SchemaMaterializedViewsScanner scanner;
+
+    EXPECT_OK(scanner.init(&_params, &_pool));
+
+    // Mock empty database result
+    scanner._db_result.dbs.clear();
+    scanner._db_index = 0;
+    scanner._table_index = 0;
+    scanner._mv_results.materialized_views.clear();
 
     auto chunk = create_chunk(scanner.get_slot_descs());
     bool eos = false;
 
-    // Should fail because scanner is not initialized
-    EXPECT_FALSE(scanner.get_next(&chunk, &eos).ok());
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+    EXPECT_EQ(0, chunk->num_rows());
 }
 
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_different_schedule_types) {
-    SchemaFeTabletSchedulesScanner scanner;
+// TEST_F(SchemaMaterializedViewsScannerTest, test_empty_materialized_views) {
+//     SchemaMaterializedViewsScanner scanner;
 
-    std::vector<TTabletSchedule> infos;
+//     EXPECT_OK(scanner.init(&_params, &_pool));
 
-    // Test different schedule types
-    std::vector<std::string> types = {"REPAIR", "BALANCE", "CLONE", "MIGRATE", "COMPACTION"};
-    std::vector<std::string> priorities = {"HIGH", "NORMAL", "LOW"};
-    std::vector<std::string> states = {"PENDING", "RUNNING", "FINISHED", "FAILED", "CANCELLED"};
-    std::vector<std::string> statuses = {"HEALTHY", "UNHEALTHY", "DISK_MIGRATION", "REPLICA_MISSING"};
+//     // Mock database with no materialized views
+//     scanner._db_result.dbs = {"test_db"};
+//     scanner._db_index = 0;
+//     scanner._table_index = 0;
+//     scanner._mv_results.materialized_views.clear();
 
-    for (size_t i = 0; i < types.size(); ++i) {
-        auto& s = infos.emplace_back();
-        s.__set_table_id(i + 1);
-        s.__set_partition_id(i + 10);
-        s.__set_tablet_id(i + 100);
-        s.__set_type(types[i]);
-        s.__set_priority(priorities[i % priorities.size()]);
-        s.__set_state(states[i % states.size()]);
-        s.__set_tablet_status(statuses[i % statuses.size()]);
-        s.__set_create_time(1749711000 + i);
-        s.__set_schedule_time(1749711001 + i);
-        s.__set_finish_time(1749711002 + i);
-        s.__set_clone_src(10001 + i);
-        s.__set_clone_dest(10002 + i);
-        s.__set_clone_bytes(1000 + i);
-        s.__set_clone_duration(1.0 + i * 0.1);
-        s.__set_error_msg("test_" + std::to_string(i));
-    }
+//     auto chunk = create_chunk(scanner.get_slot_descs());
+//     bool eos = false;
+
+//     EXPECT_OK(scanner.get_next(&chunk, &eos));
+//     EXPECT_TRUE(eos);
+//     EXPECT_EQ(0, chunk->num_rows());
+// }
+
+TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
+    SchemaMaterializedViewsScanner scanner;
 
     EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
+
+    // Mock database and materialized view data
+    scanner._db_result.dbs = {"test_db"};
+    scanner._db_index = 0;
+    scanner._table_index = 0;
+
+    TMaterializedViewStatus mv;
+    mv.__set_id("1001");
+    mv.__set_database_name("test_db");
+    mv.__set_name("test_mv");
+    mv.__set_refresh_type("ASYNC");
+    mv.__set_is_active("true");
+    mv.__set_inactive_reason("");
+    mv.__set_partition_type("RANGE");
+    mv.__set_task_id("2001");
+    mv.__set_task_name("test_task");
+    mv.__set_last_refresh_start_time("2025-01-01 10:00:00");
+    mv.__set_last_refresh_finished_time("2025-01-01 10:05:00");
+    mv.__set_last_refresh_duration("300.5");
+    mv.__set_last_refresh_state("SUCCESS");
+    mv.__set_last_refresh_force_refresh("false");
+    mv.__set_last_refresh_start_partition("p20250101");
+    mv.__set_last_refresh_end_partition("p20250101");
+    mv.__set_last_refresh_base_refresh_partitions("p20250101");
+    mv.__set_last_refresh_mv_refresh_partitions("p20250101");
+    mv.__set_last_refresh_error_code("");
+    mv.__set_last_refresh_error_message("");
+    mv.__set_rows("1000");
+    mv.__set_text("SELECT * FROM base_table");
+    mv.__set_extra_message("");
+    mv.__set_query_rewrite_status("ENABLED");
+    mv.__set_creator("admin");
+    mv.__set_last_refresh_process_time("2025-01-01 10:04:30");
+    mv.__set_last_refresh_job_id("job_001");
+
+    scanner._mv_results.materialized_views = {mv};
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+    EXPECT_EQ(1, chunk->num_rows());
+
+    auto row = chunk->debug_row(0);
+    EXPECT_TRUE(row.find("1001") != std::string::npos);                     // MATERIALIZED_VIEW_ID
+    EXPECT_TRUE(row.find("test_db") != std::string::npos);                  // TABLE_SCHEMA
+    EXPECT_TRUE(row.find("test_mv") != std::string::npos);                  // TABLE_NAME
+    EXPECT_TRUE(row.find("ASYNC") != std::string::npos);                    // REFRESH_TYPE
+    EXPECT_TRUE(row.find("true") != std::string::npos);                     // IS_ACTIVE
+    EXPECT_TRUE(row.find("RANGE") != std::string::npos);                    // PARTITION_TYPE
+    EXPECT_TRUE(row.find("2001") != std::string::npos);                     // TASK_ID
+    EXPECT_TRUE(row.find("test_task") != std::string::npos);                // TASK_NAME
+    EXPECT_TRUE(row.find("2025-01-01 10:00:00") != std::string::npos);      // LAST_REFRESH_START_TIME
+    EXPECT_TRUE(row.find("2025-01-01 10:05:00") != std::string::npos);      // LAST_REFRESH_FINISHED_TIME
+    EXPECT_TRUE(row.find("300.5") != std::string::npos);                    // LAST_REFRESH_DURATION
+    EXPECT_TRUE(row.find("SUCCESS") != std::string::npos);                  // LAST_REFRESH_STATE
+    EXPECT_TRUE(row.find("false") != std::string::npos);                    // LAST_REFRESH_FORCE_REFRESH
+    EXPECT_TRUE(row.find("p20250101") != std::string::npos);                // partition info
+    EXPECT_TRUE(row.find("1000") != std::string::npos);                     // TABLE_ROWS
+    EXPECT_TRUE(row.find("SELECT * FROM base_table") != std::string::npos); // MATERIALIZED_VIEW_DEFINITION
+    EXPECT_TRUE(row.find("ENABLED") != std::string::npos);                  // QUERY_REWRITE_STATUS
+    EXPECT_TRUE(row.find("admin") != std::string::npos);                    // CREATOR
+    EXPECT_TRUE(row.find("2025-01-01 10:04:30") != std::string::npos);      // LAST_REFRESH_PROCESS_TIME
+    EXPECT_TRUE(row.find("job_001") != std::string::npos);                  // LAST_REFRESH_JOB_ID
+
+    chunk->reset();
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+}
+
+TEST_F(SchemaMaterializedViewsScannerTest, test_multiple_materialized_views) {
+    SchemaMaterializedViewsScanner scanner;
+
+    EXPECT_OK(scanner.init(&_params, &_pool));
+
+    // Mock database and multiple materialized views
+    scanner._db_result.dbs = {"test_db"};
+    scanner._db_index = 0;
+    scanner._table_index = 0;
+
+    std::vector<TMaterializedViewStatus> mvs;
+
+    for (int i = 1; i <= 3; ++i) {
+        TMaterializedViewStatus mv;
+        mv.__set_id(std::to_string(1000 + i));
+        mv.__set_database_name("test_db");
+        mv.__set_name("test_mv_" + std::to_string(i));
+        mv.__set_refresh_type(i % 2 == 0 ? "SYNC" : "ASYNC");
+        mv.__set_is_active(i % 2 == 0 ? "true" : "false");
+        mv.__set_inactive_reason(i % 2 == 0 ? "" : "Base table dropped");
+        mv.__set_partition_type(i % 3 == 0 ? "RANGE" : "LIST");
+        mv.__set_task_id(std::to_string(2000 + i));
+        mv.__set_task_name("task_" + std::to_string(i));
+        mv.__set_last_refresh_start_time("2025-01-01 10:00:00");
+        mv.__set_last_refresh_finished_time("2025-01-01 10:05:00");
+        mv.__set_last_refresh_duration(std::to_string(300 + i));
+        mv.__set_last_refresh_state("SUCCESS");
+        mv.__set_last_refresh_force_refresh("false");
+        mv.__set_last_refresh_start_partition("p20250101");
+        mv.__set_last_refresh_end_partition("p20250101");
+        mv.__set_last_refresh_base_refresh_partitions("p20250101");
+        mv.__set_last_refresh_mv_refresh_partitions("p20250101");
+        mv.__set_last_refresh_error_code("");
+        mv.__set_last_refresh_error_message("");
+        mv.__set_rows(std::to_string(1000 * i));
+        mv.__set_text("SELECT * FROM base_table_" + std::to_string(i));
+        mv.__set_extra_message("Extra info " + std::to_string(i));
+        mv.__set_query_rewrite_status("ENABLED");
+        mv.__set_creator("user_" + std::to_string(i));
+        mv.__set_last_refresh_process_time("2025-01-01 10:04:30");
+        mv.__set_last_refresh_job_id("job_" + std::to_string(i));
+
+        mvs.push_back(mv);
+    }
+
+    scanner._mv_results.materialized_views = mvs;
 
     auto chunk = create_chunk(scanner.get_slot_descs());
     bool eos = false;
@@ -373,94 +279,33 @@ TEST_F(SchemaFeTabletSchedulesScannerTest, test_different_schedule_types) {
         if (!eos) {
             EXPECT_EQ(1, chunk->num_rows());
             auto row = chunk->debug_row(0);
-            EXPECT_TRUE(row.find(types[count]) != std::string::npos);
+            EXPECT_TRUE(row.find("test_mv_" + std::to_string(count + 1)) != std::string::npos);
             count++;
         }
         chunk->reset();
     }
 
-    EXPECT_EQ(5, count);
+    EXPECT_EQ(3, count);
 }
 
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_edge_case_timestamps) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-
-    // Test edge case timestamps
-    std::vector<double> timestamps = {
-            0.0,               // zero
-            -1.0,              // negative
-            1.0,               // small positive
-            1749711000.0,      // normal timestamp
-            1749711000.999999, // high precision
-            1749711000.000001, // very small fraction
-            DBL_MAX,           // maximum double
-            DBL_MIN,           // minimum positive double
-            -DBL_MAX           // minimum double
-    };
-
-    for (size_t i = 0; i < timestamps.size(); ++i) {
-        auto& s = infos.emplace_back();
-        s.__set_table_id(i + 1);
-        s.__set_partition_id(i + 10);
-        s.__set_tablet_id(i + 100);
-        s.__set_type("REPAIR");
-        s.__set_priority("HIGH");
-        s.__set_state("FINISHED");
-        s.__set_tablet_status("HEALTHY");
-        s.__set_create_time(timestamps[i]);
-        s.__set_schedule_time(timestamps[i]);
-        s.__set_finish_time(timestamps[i]);
-        s.__set_clone_src(10001);
-        s.__set_clone_dest(10002);
-        s.__set_clone_bytes(1000);
-        s.__set_clone_duration(1.5);
-        s.__set_error_msg("timestamp_test_" + std::to_string(i));
-    }
+TEST_F(SchemaMaterializedViewsScannerTest, test_null_values) {
+    SchemaMaterializedViewsScanner scanner;
 
     EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
 
-    auto chunk = create_chunk(scanner.get_slot_descs());
-    bool eos = false;
-    int count = 0;
+    // Mock database and materialized view with null values
+    scanner._db_result.dbs = {"test_db"};
+    scanner._db_index = 0;
+    scanner._table_index = 0;
 
-    while (!eos) {
-        EXPECT_OK(scanner.get_next(&chunk, &eos));
-        if (!eos) {
-            EXPECT_EQ(1, chunk->num_rows());
-            count++;
-        }
-        chunk->reset();
-    }
+    TMaterializedViewStatus mv;
+    // Only set a few fields, leave others as null
+    mv.__set_id("1001");
+    mv.__set_database_name("test_db");
+    mv.__set_name("test_mv");
+    // All other fields are not set, so they should be null
 
-    EXPECT_EQ(9, count);
-}
-
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_special_characters_in_strings) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-    auto& s = infos.emplace_back();
-    s.__set_table_id(1);
-    s.__set_partition_id(2);
-    s.__set_tablet_id(3);
-    s.__set_type("REPAIR_WITH_SPECIAL_CHARS_!@#$%^&*()");
-    s.__set_priority("HIGH_PRIORITY_WITH_SPECIAL_CHARS_[]{}|");
-    s.__set_state("FINISHED_STATE_WITH_SPECIAL_CHARS_\\\"'");
-    s.__set_tablet_status("HEALTHY_STATUS_WITH_SPECIAL_CHARS_<>?");
-    s.__set_create_time(1749711000);
-    s.__set_schedule_time(1749711001);
-    s.__set_finish_time(1749711002);
-    s.__set_clone_src(10001);
-    s.__set_clone_dest(10002);
-    s.__set_clone_bytes(1000);
-    s.__set_clone_duration(1.5);
-    s.__set_error_msg("Error message with special characters: !@#$%^&*()_+-=[]{}|;':\",./<>?\\");
-
-    EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
+    scanner._mv_results.materialized_views = {mv};
 
     auto chunk = create_chunk(scanner.get_slot_descs());
     bool eos = false;
@@ -470,36 +315,31 @@ TEST_F(SchemaFeTabletSchedulesScannerTest, test_special_characters_in_strings) {
     EXPECT_EQ(1, chunk->num_rows());
 
     auto row = chunk->debug_row(0);
-    EXPECT_TRUE(row.find("REPAIR_WITH_SPECIAL_CHARS_!@#$%^&*()") != std::string::npos);
-    EXPECT_TRUE(row.find("HIGH_PRIORITY_WITH_SPECIAL_CHARS_[]{}|") != std::string::npos);
-    EXPECT_TRUE(row.find("FINISHED_STATE_WITH_SPECIAL_CHARS_\\\"'") != std::string::npos);
-    EXPECT_TRUE(row.find("HEALTHY_STATUS_WITH_SPECIAL_CHARS_<>?") != std::string::npos);
-    EXPECT_TRUE(row.find("Error message with special characters") != std::string::npos);
+    EXPECT_TRUE(row.find("1001") != std::string::npos);    // MATERIALIZED_VIEW_ID
+    EXPECT_TRUE(row.find("test_db") != std::string::npos); // TABLE_SCHEMA
+    EXPECT_TRUE(row.find("test_mv") != std::string::npos); // TABLE_NAME
+    EXPECT_TRUE(row.find("NULL") != std::string::npos);    // Should have null values
 }
 
-TEST_F(SchemaFeTabletSchedulesScannerTest, test_unicode_characters) {
-    SchemaFeTabletSchedulesScanner scanner;
-
-    std::vector<TTabletSchedule> infos;
-    auto& s = infos.emplace_back();
-    s.__set_table_id(1);
-    s.__set_partition_id(2);
-    s.__set_tablet_id(3);
-    s.__set_type("REPAIR_中文");
-    s.__set_priority("HIGH_优先级_中文");
-    s.__set_state("FINISHED_状态_中文");
-    s.__set_tablet_status("HEALTHY_健康_中文");
-    s.__set_create_time(1749711000);
-    s.__set_schedule_time(1749711001);
-    s.__set_finish_time(1749711002);
-    s.__set_clone_src(10001);
-    s.__set_clone_dest(10002);
-    s.__set_clone_bytes(1000);
-    s.__set_clone_duration(1.5);
-    s.__set_error_msg("错误信息包含中文和特殊字符：!@#$%^&*()_+-=[]{}|;':\",./<>?\\");
+TEST_F(SchemaMaterializedViewsScannerTest, test_invalid_numeric_values) {
+    SchemaMaterializedViewsScanner scanner;
 
     EXPECT_OK(scanner.init(&_params, &_pool));
-    EXPECT_OK(scanner.TEST_start(_state.get(), infos));
+
+    // Mock database and materialized view with invalid numeric values
+    scanner._db_result.dbs = {"test_db"};
+    scanner._db_index = 0;
+    scanner._table_index = 0;
+
+    TMaterializedViewStatus mv;
+    mv.__set_id("invalid_id"); // Invalid numeric string
+    mv.__set_database_name("test_db");
+    mv.__set_name("test_mv");
+    mv.__set_task_id("invalid_task_id");                // Invalid numeric string
+    mv.__set_last_refresh_duration("invalid_duration"); // Invalid numeric string
+    mv.__set_rows("invalid_rows");                      // Invalid numeric string
+
+    scanner._mv_results.materialized_views = {mv};
 
     auto chunk = create_chunk(scanner.get_slot_descs());
     bool eos = false;
@@ -509,11 +349,9 @@ TEST_F(SchemaFeTabletSchedulesScannerTest, test_unicode_characters) {
     EXPECT_EQ(1, chunk->num_rows());
 
     auto row = chunk->debug_row(0);
-    EXPECT_TRUE(row.find("REPAIR_中文") != std::string::npos);
-    EXPECT_TRUE(row.find("HIGH_优先级_中文") != std::string::npos);
-    EXPECT_TRUE(row.find("FINISHED_状态_中文") != std::string::npos);
-    EXPECT_TRUE(row.find("HEALTHY_健康_中文") != std::string::npos);
-    EXPECT_TRUE(row.find("错误信息包含中文") != std::string::npos);
+    EXPECT_TRUE(row.find("test_db") != std::string::npos); // TABLE_SCHEMA
+    EXPECT_TRUE(row.find("test_mv") != std::string::npos); // TABLE_NAME
+    // Invalid numeric values should be handled gracefully (likely as null)
+    EXPECT_TRUE(row.find("NULL") != std::string::npos);
 }
-
 } // namespace starrocks

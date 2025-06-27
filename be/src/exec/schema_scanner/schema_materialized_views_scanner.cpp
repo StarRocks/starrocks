@@ -93,10 +93,16 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
 }
 
 Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
-    auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
+    if (_table_index >= _mv_results.materialized_views.size()) {
+        return Status::OK();
+    }
+    if (_db_index > _db_result.dbs.size()) {
+        return Status::OK();
+    }
     const TMaterializedViewStatus& info = _mv_results.materialized_views[_table_index];
     VLOG(2) << "info: " << apache::thrift::ThriftDebugString(info);
 
+    auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
     for (const auto& [slot_id, index] : slot_id_map) {
         if (slot_id < 1 || slot_id > std::size(SchemaMaterializedViewsScanner::_s_tbls_columns)) {
@@ -435,6 +441,9 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
 }
 
 Status SchemaMaterializedViewsScanner::get_materialized_views() {
+    if (_db_index >= _db_result.dbs.size()) {
+        return Status::OK();
+    }
     TGetTablesParams table_params;
     table_params.__set_db(_db_result.dbs[_db_index++]);
     // table_name
