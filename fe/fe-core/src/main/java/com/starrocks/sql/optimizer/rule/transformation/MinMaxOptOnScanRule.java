@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -32,14 +33,20 @@ import java.util.List;
 import java.util.Set;
 
 // for a simple min/max/count aggregation query like
-// 'select min(c1),max(c2),count(c3) from table',
+// 'select min(c1),max(c2) from table',
 // we add a label on scan node to indicates that pattern for further optimization
 
-public class MinMaxCountOptOnScanRule extends TransformationRule {
-    public MinMaxCountOptOnScanRule() {
-        // agg -> project -> scan[checked in `check`]
+public class MinMaxOptOnScanRule extends TransformationRule {
+    private static final Set<OperatorType> SUPPORTED = Set.of(
+            OperatorType.LOGICAL_ICEBERG_SCAN
+    );
+
+    public MinMaxOptOnScanRule() {
+        // agg -> project -> iceberg scan
         super(RuleType.TF_REWRITE_MIN_MAX_COUNT_AGG,
-                Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT)));
+                Pattern.create(OperatorType.LOGICAL_AGGR).
+                        addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).
+                                addChildren(MultiOpPattern.of(SUPPORTED))));
     }
 
     @Override
@@ -126,7 +133,7 @@ public class MinMaxCountOptOnScanRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        scanOperator.getScanOptimizeOption().setCanUseMinMaxCountOpt(true);
+        scanOperator.getScanOptimizeOption().setCanUseMinMaxOpt(true);
         return Collections.emptyList();
     }
 }
