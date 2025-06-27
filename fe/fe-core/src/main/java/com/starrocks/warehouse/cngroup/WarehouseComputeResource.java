@@ -14,6 +14,7 @@
 
 package com.starrocks.warehouse.cngroup;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -32,6 +33,7 @@ import java.util.Optional;
 public final class WarehouseComputeResource implements ComputeResource {
     private static final Logger LOG = LogManager.getLogger(WarehouseComputeResource.class);
     // The warehouseId is used to identify the warehouse.
+    @SerializedName("warehouseId")
     private final long warehouseId;
 
     public static final ComputeResource DEFAULT = new WarehouseComputeResource(WarehouseManager.DEFAULT_WAREHOUSE_ID);

@@ -17,7 +17,6 @@ package com.starrocks.common.util;
 import com.google.common.collect.Lists;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.StatusPB;
@@ -31,6 +30,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,6 +40,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -70,11 +71,10 @@ public class KafkaUtilTest {
             }
         };
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                minTimes = 0;
-                result = Lists.newArrayList(1L);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                return Lists.newArrayList(1L);
             }
         };
 
@@ -93,7 +93,7 @@ public class KafkaUtilTest {
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
         Assert.assertEquals(
-                "Failed to send get kafka partition info request. err: Warehouse default_warehouse is not available.",
+                "Failed to send get kafka partition info request. err: No alive backends or compute nodes",
                 e.getMessage());
     }
 
@@ -225,6 +225,6 @@ public class KafkaUtilTest {
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
         Assert.assertEquals("Failed to send get kafka partition info request. err: " +
-                "Warehouse default_warehouse is not available.", e.getMessage());
+                "Warehouse id: 1 not exist.", e.getMessage());
     }
 }
