@@ -196,6 +196,35 @@ Status HdfsScanner::_build_scanner_context() {
     if (ctx.scan_range->__isset.is_first_split) {
         ctx.is_first_split = ctx.scan_range->is_first_split;
     }
+
+    // print slots
+    if (VLOG_FILE_IS_ON) {
+        std::stringstream ss;
+        ss << "HdfsScannerContext: materialized columns = [";
+        for (const auto& column : ctx.materialized_columns) {
+            ss << column.slot_desc->col_name() << ", ";
+        }
+        ss << "], partition columns = [";
+        for (const auto& column : ctx.partition_columns) {
+            ss << column.slot_desc->col_name() << ", ";
+        }
+        ss << "], extended columns = [";
+        for (const auto& column : ctx.extended_columns) {
+            ss << column.slot_desc->col_name() << ", ";
+        }
+        ss << "]";
+        VLOG_FILE << ss.str();
+    }
+    // print min_max_values in hdfs_scan_range
+    if (VLOG_FILE_IS_ON) {
+        std::stringstream ss;
+        ss << "HdfsScannerContext: min_max_values = [";
+        for (const auto& min_max : ctx.scan_range->min_max_values) {
+            ss << min_max.first << ": " << min_max.second << ", ";
+        }
+        ss << "]";
+        VLOG_FILE << ss.str();
+    }
     return Status::OK();
 }
 
@@ -560,6 +589,22 @@ Status HdfsScannerContext::update_return_count_columns() {
     return Status::OK();
 }
 
+Status HdfsScannerContext::update_min_max_columns() {
+    std::vector<ColumnInfo> updated_columns;
+    const std::map<int32_t, TExprMinMaxValue>& min_max_values = scan_range->min_max_values;
+    for (auto& column : materialized_columns) {
+        if (min_max_values.find(column.slot_id()) != min_max_values.end()) {
+            // handled in non existed slot
+            update_with_none_existed_slot(column.slot_desc);
+            continue;
+        } else {
+            updated_columns.emplace_back(column);
+        }
+    }
+    materialized_columns.swap(updated_columns);
+    return Status::OK();
+}
+
 Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
     std::vector<ColumnInfo> updated_columns;
     for (auto& column : materialized_columns) {
@@ -570,7 +615,6 @@ Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<
             updated_columns.emplace_back(column);
         }
     }
-
     materialized_columns.swap(updated_columns);
     return Status::OK();
 }
