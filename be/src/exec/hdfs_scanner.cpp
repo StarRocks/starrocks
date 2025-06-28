@@ -16,6 +16,7 @@
 
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
+#include "column/type_traits.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
@@ -28,7 +29,6 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
-
 namespace starrocks {
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
@@ -197,10 +197,11 @@ Status HdfsScanner::_build_scanner_context() {
         ctx.is_first_split = ctx.scan_range->is_first_split;
     }
 
+    // TODO(yan): debugging
     // print slots
     if (VLOG_FILE_IS_ON) {
         std::stringstream ss;
-        ss << "HdfsScannerContext: materialized columns = [";
+        ss << "[XXX] HdfsScannerContext: materialized columns = [";
         for (const auto& column : ctx.materialized_columns) {
             ss << column.slot_desc->col_name() << ", ";
         }
@@ -218,14 +219,23 @@ Status HdfsScanner::_build_scanner_context() {
     // print min_max_values in hdfs_scan_range
     if (VLOG_FILE_IS_ON) {
         std::stringstream ss;
-        ss << "HdfsScannerContext: min_max_values = [";
+        ss << "[XXX] HdfsScannerContext: min_max_values = [";
         for (const auto& min_max : ctx.scan_range->min_max_values) {
             ss << min_max.first << ": " << min_max.second << ", ";
         }
         ss << "]";
         VLOG_FILE << ss.str();
     }
+    ctx.update_min_max_columns();
     return Status::OK();
+}
+
+bool HdfsScannerContext::can_use_return_count_optimization() const {
+    return return_count_column && can_use_file_record_count;
+}
+
+bool HdfsScannerContext::can_use_min_max_optimization() const {
+    return can_use_min_max_opt && materialized_columns.empty();
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -237,7 +247,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     }
 
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.return_count_column && _scanner_ctx.can_use_file_record_count) {
+    if (_scanner_ctx.can_use_min_max_optimization()) {
         int64_t file_record_count = 0;
         if (_scanner_ctx.is_first_split) {
             file_record_count = _scanner_ctx.scan_range->record_count;
@@ -247,6 +257,18 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, 1);
         _scanner_ctx.no_more_chunks = true;
         _app_stats.rows_read += 1;
+        return Status::OK();
+    }
+
+    // short circuit for min/max optimization.
+    if (_scanner_ctx.can_use_min_max_optimization()) {
+        // 3 means we output 3 values: min, max, and null
+        _scanner_ctx.append_or_update_min_max_column_to_chunk(chunk, 3);
+        size_t row_count = (*chunk)->num_rows();
+        _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, row_count);
+        _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, row_count);
+        _scanner_ctx.no_more_chunks = true;
+        _app_stats.rows_read += row_count;
         return Status::OK();
     }
 
@@ -274,7 +296,8 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     _opened = true;
     RETURN_IF_ERROR(_build_scanner_context());
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.return_count_column && _scanner_ctx.can_use_file_record_count) {
+    // short circuit for min/max optimization.
+    if (_scanner_ctx.can_use_return_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
         return Status::OK();
     }
     RETURN_IF_ERROR(do_open(runtime_state));
@@ -290,7 +313,8 @@ void HdfsScanner::close() noexcept {
         return;
     }
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.return_count_column && _scanner_ctx.can_use_file_record_count) {
+    // short circuit for min/max optimization.
+    if (_scanner_ctx.can_use_return_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
         return;
     }
     VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
@@ -589,7 +613,10 @@ Status HdfsScannerContext::update_return_count_columns() {
     return Status::OK();
 }
 
-Status HdfsScannerContext::update_min_max_columns() {
+void HdfsScannerContext::update_min_max_columns() {
+    if (!can_use_min_max_opt) {
+        return;
+    }
     std::vector<ColumnInfo> updated_columns;
     const std::map<int32_t, TExprMinMaxValue>& min_max_values = scan_range->min_max_values;
     for (auto& column : materialized_columns) {
@@ -602,7 +629,6 @@ Status HdfsScannerContext::update_min_max_columns() {
         }
     }
     materialized_columns.swap(updated_columns);
-    return Status::OK();
 }
 
 Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
@@ -621,6 +647,7 @@ Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<
 
 Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.empty()) return Status::OK();
+
     ChunkPtr& ck = (*chunk);
 
     if (return_count_column) {
@@ -638,7 +665,17 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
         return Status::OK();
     }
 
+    if (can_use_min_max_opt) {
+        append_or_update_min_max_column_to_chunk(chunk, row_count);
+    }
+
     for (auto* slot_desc : not_existed_slots) {
+        if (can_use_min_max_opt &&
+            scan_range->min_max_values.find(slot_desc->id()) != scan_range->min_max_values.end()) {
+            // handled in min max column
+            continue;
+        }
+
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
             col->append_default(row_count);
@@ -659,6 +696,73 @@ void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk,
     col->append_datum(int64_t(row_count));
     ck->append_or_update_column(std::move(col), slot_desc->id());
     ck->set_num_rows(1);
+}
+
+void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    for (SlotDescriptor* slot_desc : not_existed_slots) {
+        auto it = scan_range->min_max_values.find(slot_desc->id());
+        if (it == scan_range->min_max_values.end()) {
+            continue;
+        }
+        const TExprMinMaxValue& min_max_value = it->second;
+        MutableColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
+        (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
+    }
+}
+
+MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor* slot_desc,
+                                                                 const TExprMinMaxValue& value, size_t row_count) {
+    auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+    std::vector<Datum> data;
+    if (value.has_null) {
+        data.emplace_back(kNullDatum);
+    }
+    switch (slot_desc->type().type) {
+#define HANDLE_TYPE(T)                                             \
+    case T: {                                                      \
+        data.emplace_back((RunTimeCppType<T>)value.min_int_value); \
+        data.emplace_back((RunTimeCppType<T>)value.max_int_value); \
+        break;                                                     \
+    }
+        HANDLE_TYPE(TYPE_BOOLEAN);
+        HANDLE_TYPE(TYPE_TINYINT);
+        HANDLE_TYPE(TYPE_SMALLINT);
+        HANDLE_TYPE(TYPE_INT);
+        HANDLE_TYPE(TYPE_BIGINT);
+        HANDLE_TYPE(TYPE_FLOAT);
+        HANDLE_TYPE(TYPE_DOUBLE);
+#undef HANDLE_TYPE
+        // https://iceberg.apache.org/spec/#binary-single-value-serialization
+    case TYPE_DATE:
+        data.emplace_back(DateValue::from_days_since_unix_epoch(value.min_int_value));
+        data.emplace_back(DateValue::from_days_since_unix_epoch(value.max_int_value));
+        break;
+    case TYPE_TIME:
+        data.emplace_back((double)value.min_int_value * 1e-6);
+        data.emplace_back((double)value.max_int_value * 1e-6);
+        break;
+    default:
+        break;
+    }
+
+    // if this is the first split, we use null/min/max order
+    // otherwise, we reverse it. In that way, we can make sure
+    // null/min/max values all output from this file.
+    if (!is_first_split) {
+        std::reverse(data.begin(), data.end());
+    }
+    for (int i = 0; i < data.size() && row_count > 0; i++) {
+        row_count -= 1;
+        if (data[i].is_null()) {
+            col->append_nulls(1);
+        } else {
+            col->append_datum(data[i]);
+        }
+    }
+    // the rest values does not matter, so we just copy the first value.
+    // it's noted that we can not use `append_default` here, we can only put null(maybe)/min/max
+    col->assign(row_count, 0);
+    return col;
 }
 
 Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
@@ -684,7 +788,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    append_or_update_not_existed_columns_to_chunk(&chunk, 1);
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);

@@ -372,12 +372,16 @@ struct HdfsScannerContext {
 
     RuntimeScanRangePruner* rf_scan_range_pruner = nullptr;
 
+    bool can_use_return_count_optimization() const;
+
+    bool can_use_min_max_optimization() const;
+
     // update none_existed_slot
     // update conjunct
     void update_with_none_existed_slot(SlotDescriptor* slot);
 
     Status update_return_count_columns();
-    Status update_min_max_columns();
+    void update_min_max_columns();
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
@@ -394,6 +398,8 @@ struct HdfsScannerContext {
     // otherwise update partition column in chunk
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
