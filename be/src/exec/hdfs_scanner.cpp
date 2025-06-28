@@ -712,6 +712,9 @@ void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chun
         }
         const TExprMinMaxValue& min_max_value = it->second;
         MutableColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
+        VLOG_FILE << "[xxx] append min/max column for slot: " << slot_desc->col_name()
+                  << ", min_max_value: " << it->second << ", row_count: " << row_count
+                  << ", column = " << col->debug_string();
         (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
     }
 }
@@ -765,9 +768,15 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
             col->append_datum(data[i]);
         }
     }
-    // the rest values does not matter, so we just copy the first value.
-    // it's noted that we can not use `append_default` here, we can only put null(maybe)/min/max
-    col->assign(row_count, 0);
+    if (row_count > 0) {
+        // the rest values does not matter, so we just copy the first value.
+        // it's noted that we can not use `append_default` here, we can only put null(maybe)/min/max
+        auto col_tail = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        // data[1] is the non-null value for sure.
+        col_tail->append_datum(data[1]);
+        col_tail->assign(row_count, 0);
+        col->append(*col_tail);
+    }
     return col;
 }
 
