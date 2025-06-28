@@ -134,8 +134,6 @@ public class TaskRunStatusChange implements Writable {
         return GsonUtils.GSON.fromJson(json, TaskRunStatusChange.class);
     }
 
-
-
     @Override
     public String toString() {
         return "TaskRunStatus{" +
