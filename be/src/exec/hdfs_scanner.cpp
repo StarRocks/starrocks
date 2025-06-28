@@ -197,6 +197,7 @@ Status HdfsScanner::_build_scanner_context() {
         ctx.is_first_split = ctx.scan_range->is_first_split;
     }
 
+    ctx.update_min_max_columns();
     // TODO(yan): debugging
     // print slots
     if (VLOG_FILE_IS_ON) {
@@ -226,7 +227,6 @@ Status HdfsScanner::_build_scanner_context() {
         ss << "]";
         VLOG_FILE << ss.str();
     }
-    ctx.update_min_max_columns();
     return Status::OK();
 }
 
@@ -247,7 +247,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     }
 
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.can_use_min_max_optimization()) {
+    if (_scanner_ctx.can_use_return_count_optimization()) {
         int64_t file_record_count = 0;
         if (_scanner_ctx.is_first_split) {
             file_record_count = _scanner_ctx.scan_range->record_count;
@@ -269,6 +269,12 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, row_count);
         _scanner_ctx.no_more_chunks = true;
         _app_stats.rows_read += row_count;
+        VLOG_FILE << "[xxx] row_count = " << row_count << ", file_path = " << _scanner_params.path << ", scan_range = ["
+                  << _scanner_params.scan_range->offset << ", "
+                  << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset) << "]";
+        for (int i = 0; i < row_count; i++) {
+            VLOG_FILE << (*chunk)->debug_row(i);
+        }
         return Status::OK();
     }
 
