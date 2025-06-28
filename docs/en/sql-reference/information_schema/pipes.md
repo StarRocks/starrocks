@@ -19,6 +19,7 @@ The following fields are provided in `pipes`:
 | DATABASE_NAME | The name of the database in which the pipe is stored.        |
 | PIPE_ID       | The unique ID of the pipe.                                   |
 | PIPE_NAME     | The name of the pipe.                                        |
+| PROPERTIES    | The properties of the pipe.                                  |
 | TABLE_NAME    | The name of the destination table. Format: `<database_name>.<table_name>`. |
 | STATE         | The status of the pipe. Valid values: `RUNNING`, `FINISHED`, `SUSPENDED`, and `ERROR`. |
 | LOAD_STATUS   | The overall status of the data files to be loaded via the pipe, including the following sub-fields:<ul><li>`loadedFiles`: the number of data files that have been loaded.</li><li>`loadedBytes`: the volume of data that has been loaded, measured in bytes.</li><li>`loadingFiles`: the number of data files that are being loaded.</li></ul> |
