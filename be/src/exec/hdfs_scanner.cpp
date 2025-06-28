@@ -788,7 +788,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
