@@ -377,6 +377,7 @@ struct HdfsScannerContext {
     void update_with_none_existed_slot(SlotDescriptor* slot);
 
     Status update_return_count_columns();
+    Status update_min_max_columns();
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
