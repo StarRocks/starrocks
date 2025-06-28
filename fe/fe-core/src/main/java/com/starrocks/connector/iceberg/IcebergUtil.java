@@ -41,9 +41,8 @@ public final class IcebergUtil {
         long nullValueCount;
 
         private boolean toThrift(SlotDescriptor slot, TExprMinMaxValue texpr) {
-            texpr.setHas_null(nullValueCount > 0);
             if (minValue == null || maxValue == null) {
-                return (nullValueCount > 0);
+                return false;
             }
             switch (slot.getType().getPrimitiveType()) {
                 case BOOLEAN:
@@ -101,10 +100,10 @@ public final class IcebergUtil {
 
     @VisibleForTesting
     public static Map<Integer, MinMaxValue> parseMinMaxValueBySlots(Schema schema,
-                                                                     Map<Integer, ByteBuffer> lowerBounds,
-                                                                     Map<Integer, ByteBuffer> upperBounds,
-                                                                     Map<Integer, Long> nullValueCounts,
-                                                                     List<SlotDescriptor> slots) {
+                                                                    Map<Integer, ByteBuffer> lowerBounds,
+                                                                    Map<Integer, ByteBuffer> upperBounds,
+                                                                    Map<Integer, Long> nullValueCounts,
+                                                                    List<SlotDescriptor> slots) {
 
         Preconditions.checkArgument(nullValueCounts != null, "nullValueCounts cannot be null");
         lowerBounds = lowerBounds == null ? Map.of() : lowerBounds;
@@ -120,11 +119,10 @@ public final class IcebergUtil {
                 continue;
             }
             Type type = field.type();
-            if (!type.isPrimitiveType()) {
+            // Skip unsupported types
+            if (!MIN_MAX_SUPPORTED_TYPES.contains(type.typeId())) {
                 continue;
             }
-            // we are not sure if there are null values or not.
-            // so result maybe is null, so we can not use min/max value.
             if (!nullValueCounts.containsKey(field.fieldId())) {
                 continue;
             }
@@ -132,14 +130,6 @@ public final class IcebergUtil {
             MinMaxValue minMaxValue = new MinMaxValue();
             minMaxValues.put(field.fieldId(), minMaxValue);
             minMaxValue.nullValueCount = nullValueCounts.get(field.fieldId());
-            if (minMaxValue.nullValueCount != 0) {
-                // If there are null values, we don't need to parse min/max values
-                // because the result of min/max will be null for sure.
-                continue;
-            }
-            if (!MIN_MAX_SUPPORTED_TYPES.contains(type.typeId())) {
-                continue; // Skip unsupported types
-            }
             // parse lower and upper bounds
             Object low = Conversions.fromByteBuffer(field.type(), lowerBounds.get(field.fieldId()));
             Object high = Conversions.fromByteBuffer(field.type(), upperBounds.get(field.fieldId()));
