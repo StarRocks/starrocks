@@ -391,7 +391,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD_DEPTH = "cbo_prune_json_subfield_depth";
     public static final String CBO_PUSH_DOWN_AGG_WITH_MULTI_COLUMN_STATS = "cbo_push_down_aggregate_with_multi_column_stats";
-    public static final String CBO_USE_HISTOGRAM_EVALUDATE_LIST_PARTITION =  "cbo_use_histogram_evaluate_list_partition";
+    public static final String CBO_USE_HISTOGRAM_EVALUDATE_LIST_PARTITION = "cbo_use_histogram_evaluate_list_partition";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
     public static final String ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION =
@@ -700,6 +700,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
     public static final String ENABLE_REWRITE_PARTITION_COLUMN_MINMAX = "enable_rewrite_partition_column_minmax";
+    public static final String ENABLE_MIN_MAX_OPTIMIZATION = "enable_min_max_optimization";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
@@ -888,7 +889,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
     public static final String ENABLE_PARQUET_READER_BLOOM_FILTER = "enable_parquet_reader_bloom_filter";
     public static final String ENABLE_PARQUET_READER_PAGE_INDEX = "enable_parquet_reader_page_index";
-
 
     public static final String ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN = "enable_rewrite_or_to_union_all_join";
 
@@ -1493,7 +1493,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
-
     @VariableMgr.VarAttr(name = ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionLevelCardinalityEstimation = true;
 
@@ -1771,7 +1770,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PLAN_ADVISOR_BLACKLIST)
     private boolean enablePlanAdvisorBlacklist = true;
-
 
     @VarAttr(name = COUNT_DISTINCT_IMPLEMENTATION)
     private String countDistinctImplementation = "default";
@@ -2358,6 +2356,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    @VarAttr(name = ENABLE_MIN_MAX_OPTIMIZATION)
+    private boolean enableMinMaxOptimization = true;
+
     @VariableMgr.VarAttr(name = WAREHOUSE_NAME, flag = VariableMgr.SESSION_ONLY)
     private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
@@ -2463,7 +2464,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (Strings.isNullOrEmpty(annParams)) {
             return Maps.newHashMap();
         }
-        Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {}.getType();
+        Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {
+        }.getType();
         return GsonUtils.GSON.fromJson(annParams, type);
     }
 
@@ -3170,7 +3172,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
         this.bigQueryProfileThreshold = bigQueryProfileThreshold;
     }
-
 
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
@@ -4579,6 +4580,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCountStarOptimization(boolean v) {
         enableCountStarOptimization = v;
+    }
+
+    public boolean isEnableMinMaxOptimization() {
+        return enableMinMaxOptimization;
     }
 
     public boolean isEnablePartitionColumnValueOnlyOptimization() {
