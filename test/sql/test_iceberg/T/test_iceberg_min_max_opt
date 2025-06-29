@@ -133,6 +133,137 @@ select min(c_tinyint) as min_tinyint,
        min(c_string) as min_string, 
        max(c_string) as max_string from ice_tbl_${uuid0};
 
+-- mixed with null values
+INSERT INTO ice_tbl_${uuid0} (
+    c_tinyint,
+    c_smallint,
+    c_int,
+    c_bigint,
+    c_bool,
+    c_float,
+    c_double,
+    c_decimal,
+    c_datetime,
+    c_string,
+    c_date,
+    c_time
+) VALUES
+(null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
+
+set enable_min_max_optimization = true;
+
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,       
+       min(c_date) as min_date, 
+       max(c_date) as max_date,     
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+
+set enable_min_max_optimization = false;
+
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,       
+       min(c_date) as min_date, 
+       max(c_date) as max_date,     
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+
+
+
+-- mixed with null values
+INSERT overwrite ice_tbl_${uuid0} (
+    c_tinyint,
+    c_smallint,
+    c_int,
+    c_bigint,
+    c_bool,
+    c_float,
+    c_double,
+    c_decimal,
+    c_datetime,
+    c_string,
+    c_date,
+    c_time
+) VALUES
+(null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
+
+set enable_min_max_optimization = true;
+
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,       
+       min(c_date) as min_date, 
+       max(c_date) as max_date,     
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+
+set enable_min_max_optimization = false;
+
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,       
+       min(c_date) as min_date, 
+       max(c_date) as max_date,     
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
 
 drop table ice_tbl_${uuid0} force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
