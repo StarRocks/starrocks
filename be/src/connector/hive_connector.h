@@ -167,6 +167,7 @@ private:
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
     bool _use_min_max_opt = false;
+    bool _use_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     bool _has_scan_range_indicate_const_column = false;
